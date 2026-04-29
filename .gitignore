@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+packages/*/dist/
+/tmp/
+.vitest-cache/
