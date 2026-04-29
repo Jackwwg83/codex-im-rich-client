@@ -135,7 +135,116 @@ What Phase 0–6 actually needs is **all in stable**:
 
 ## Wire spike results
 
-(Populated by Task 0.3.)
+**Captured on Codex CLI 0.125.0** via `node /tmp/codex-spike/spike.mjs` (one-shot stdin write, hold up to 5s for first stdout line, capture stderr separately). Five cases run; case 6 (server-initiated request) deferred to Section J Task 9.3 `smoke:real-turn` since it requires a real model turn.
+
+> ⚠️ NOT GUARANTEED STABLE. Mitigations in place: `pnpm check:codex-version` (Task 1.5), `packages/testkit/fixtures/codex-0.125.0/` (raw wire frames committed), `pnpm test:contract` (Section I Task 8.4 replays fixtures).
+
+### Case 1 — numeric id, valid initialize
+
+**Input** (single line):
+```json
+{"id":1,"method":"initialize","params":{"clientInfo":{"name":"phase0-spike","version":"0.0.0"}}}
+```
+
+**Stdout** (single line, captured to `packages/testkit/fixtures/codex-0.125.0/initialize-response.jsonl`):
+```json
+{"id":1,"result":{"userAgent":"phase0-spike/0.125.0 (Mac OS 26.1.0; arm64) iTerm.app/3.6.6 (phase0-spike; 0.0.0)","codexHome":"/Users/jackwu/.codex","platformFamily":"unix","platformOs":"macos"}}
+```
+
+**Findings**:
+- ✅ `id` type echoed: **number** (1)
+- ✅ **No `jsonrpc` field** in response — confirms JSON-RPC lite
+- ✅ Response shape: `{ userAgent, codexHome, platformFamily, platformOs }` — note **split** of platformFamily / platformOs (NOT a single `platform` field as some older docs may suggest)
+- `userAgent` is rich: client name, codex version, OS, terminal info — usable for Phase 1 health/version checks
+
+### Case 2 — string id, valid initialize
+
+**Input**:
+```json
+{"id":"str-1","method":"initialize","params":{"clientInfo":{"name":"phase0-spike","version":"0.0.0"}}}
+```
+
+**Stdout** (`string-id-initialize-response.jsonl`):
+```json
+{"id":"str-1","result":{"userAgent":"...","codexHome":"...","platformFamily":"unix","platformOs":"macos"}}
+```
+
+**Findings**:
+- ✅ String id is accepted and echoed verbatim
+- Our `JsonRpcId = number | string` type definition (Task 3.4) is correct
+- For OUTGOING client requests we'll use monotonic number; for INCOMING server-initiated requests we must accept both
+
+### Case 3 — unknown method
+
+**Input**:
+```json
+{"id":99,"method":"does/not/exist","params":{}}
+```
+
+**Stdout** (`unknown-method-error.jsonl`, 2066 bytes — full method registry leaked into error.message):
+```json
+{"error":{"code":-32600,"message":"Invalid request: unknown variant `does/not/exist`, expected one of `initialize`, `thread/start`, `thread/resume`, ... [88 methods enumerated]"},"id":99}
+```
+
+**Findings**:
+- ✅ `error.code` = **-32600** (Invalid Request)
+- ✅ **No `error.data` field** — only `code` and `message`
+- ✅ `id` echoed back (99)
+- 🔥 BONUS: server enumerates **all 88 accepted methods** in the error message — usable as a runtime sanity probe (e.g., on startup, send a deliberate bad method and parse the registry to detect drift). Will design as a Phase 1 health check.
+
+### Case 4 — invalid params (initialize with wrong shape)
+
+**Input**:
+```json
+{"id":100,"method":"initialize","params":{"wrong":"shape"}}
+```
+
+**Stdout** (`invalid-params-error.jsonl`):
+```json
+{"error":{"code":-32600,"message":"Invalid request: missing field `clientInfo`"},"id":100}
+```
+
+**Findings**:
+- ⚠️ **Same `-32600` code as unknown-method** (NOT `-32602` "Invalid params" as JSON-RPC 2.0 spec defines)
+- This means clients **cannot distinguish error category by code alone** — must parse `error.message` keywords:
+  - `unknown variant` → unknown method
+  - `missing field` / `invalid type` / `unknown field` → invalid params
+  - other → unclassified
+- Phase 1 EventNormalizer / error renderer will need a small classifier helper.
+- ✅ No `error.data` field
+
+### Case 5 — malformed JSON
+
+**Input** (literally not JSON):
+```
+not json at all
+```
+
+**Stdout**: empty (0 bytes).
+**Stderr** (`malformed-json.stderr.txt`, 168 bytes, **with ANSI color codes**):
+```
+[2m2026-04-29T07:14:23.647290Z[0m [31mERROR[0m [2mcodex_app_server::transport[0m[2m:[0m Failed to deserialize JSONRPCMessage: expected ident at line 1 column 2
+```
+
+**Findings**:
+- ✅ Confirms Codex outside-voice finding: malformed JSON does **NOT** generate a JSON-RPC error response. Only stderr.
+- Stderr lines carry **ANSI color escapes** (`[2m`, `[31m`, `[0m`) for tracing log formatting.
+- Implication for `StdioTransport`: stderr handler must treat input as plaintext, never attempt JSON parse, and tolerate ANSI codes (pino logger will record them as-is — fine for debugging).
+- 90% of "weird codex behavior" Phase 1+ debug sessions will look at this stderr stream — keep it visible.
+
+### Case 6 — server-initiated request
+
+**Status**: DEFERRED to Section J Task 9.3 (`smoke:real-turn`) per plan, since it requires a real turn to start running for codex to issue a server-side approval / tool / elicitation request. Will capture into `packages/testkit/fixtures/codex-0.125.0/server-request-sample.jsonl` at that time.
+
+### Implications for code design
+
+1. **`JsonRpcId = number | string`** — both types must round-trip. Outgoing: monotonic number. Incoming server requests: trust whatever they send.
+2. **No `jsonrpc` field anywhere** — `JsonRpcRequest`/`Response`/`Notification` types should NOT carry it.
+3. **`JsonRpcError = { code: number; message: string; data?: unknown }`** — `data` field is optional (absent in 0.125.0 but defensively typed for future).
+4. **Error code `-32600` is overloaded** — Phase 1+ may want a `categorizeJsonRpcError(error)` helper that string-matches `error.message` for diagnostics.
+5. **Stderr handler in `StdioTransport`** must NOT parse stderr as JSON. Plaintext + ANSI is the contract.
+6. **`InitializeResult` shape** uses `platformFamily` + `platformOs` (split). The generated `InitializeResponse.ts` from `codex-protocol` will be the canonical type — `performInitializeHandshake` returns it.
+7. **Error.message can be huge** (case 3: ~2 KB enumerating method registry). Client should not assume `error.message` is short; pino logging may want to truncate to e.g. 500 chars in default level.
 
 ## Real-turn smoke results
 

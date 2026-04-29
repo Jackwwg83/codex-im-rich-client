@@ -1,0 +1,38 @@
+{
+  "codexVersion": "0.125.0",
+  "platform": "darwin",
+  "platformOs": "macos",
+  "platformFamily": "unix",
+  "machine": "arm64",
+  "capturedAt": "2026-04-29",
+  "capturedBy": "Phase 0 Section A Tasks 0.1–0.4",
+  "experimentalFlag": false,
+  "spikeMethod": "node spike.mjs (single-shot stdin write, hold for ≤5s waiting for first response line)",
+  "wireObservations": {
+    "jsonRpcVersionField": "absent — codex app-server uses JSON-RPC lite without the `jsonrpc` envelope field",
+    "idType": "echoes whatever client sent — observed both number (case 1) and string (case 2) work; client should default to monotonic number for outgoing requests",
+    "errorDataField": "absent in 0.125.0 — both unknown-method and invalid-params errors return only {code, message}",
+    "errorCodeForUnknownMethod": -32600,
+    "errorCodeForInvalidParams": -32600,
+    "errorCodeCollision": "Codex 0.125.0 collapses unknown-method and invalid-params into the same -32600 code. Client must parse error.message to distinguish — keyword `unknown variant` for unknown-method vs `missing field`/`invalid type` for invalid-params.",
+    "malformedJsonBehavior": "no JSON-RPC error response is sent on stdout. Codex writes a tracing log line to stderr with ANSI color codes. Client must treat stderr as plaintext, never JSON.",
+    "initializeResponseShape": "{ userAgent, codexHome, platformFamily, platformOs } — note `platformFamily` and `platformOs` are SPLIT, not a single `platform` field as 05-PROTOCOL.md older drafts may suggest"
+  },
+  "fixtures": {
+    "initialize-response.jsonl": "Case 1: numeric id initialize round-trip. Single response line.",
+    "string-id-initialize-response.jsonl": "Case 2: string id initialize. Confirms server echoes string IDs verbatim.",
+    "unknown-method-error.jsonl": "Case 3: unknown method `does/not/exist`. Returns -32600 with full method registry enumerated in error.message.",
+    "invalid-params-error.jsonl": "Case 4: initialize with wrong params shape. Returns -32600 + `missing field clientInfo`.",
+    "malformed-json.stderr.txt": "Case 5: non-JSON input. Empty stdout, ANSI-decorated tracing log on stderr."
+  },
+  "notes": [
+    "id type observed: number (case 1) AND string (case 2) both accepted",
+    "jsonrpc field observed: absent — wire is JSON-RPC lite",
+    "error.data observed: absent on 0.125.0 (both -32600 cases lack data)",
+    "malformed JSON: no JSON-RPC error response, stderr only (with ANSI color codes)",
+    "approval method names from old 05-PROTOCOL.md are stale; the real names are item/{commandExecution,fileChange,permissions,tool}/{requestApproval,requestUserInput} on the server-initiated side, plus thread/approveGuardianDeniedAction on the client side",
+    "codex 0.125.0 client method registry leaked verbatim in case-3 error.message — usable as a runtime sanity probe",
+    "InitializeResult shape uses platformFamily + platformOs split, not single platform field"
+  ],
+  "supersedes": null
+}

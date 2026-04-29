@@ -1,0 +1,4 @@
+# placeholder: no server-initiated request captured during Phase 0 wire spike (Task 0.3 case 6)
+# Reason: capturing one requires a real model turn (case 6 deferred to Section J Task 9.3 smoke:real-turn).
+# When smoke:real-turn first observes a server-initiated request, replace this file with the raw JSONL frame
+# and update metadata.json. Until then, contract tests must NOT depend on this fixture.
