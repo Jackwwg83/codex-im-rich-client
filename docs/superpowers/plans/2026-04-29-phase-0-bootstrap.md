@@ -33,7 +33,7 @@
 |---------|--------|-----------------|
 | 1 (P0) Init-only smoke insufficient | ✅ Adopted with rails | Section J Tasks 9.3–9.4 |
 | 2 (P1) Version pin + upgrade gate | ✅ Adopted (custom `codexIm.codexVersion` field, NOT `engines.codex`) | Section B Task 1.5 |
-| 3 (P1) `--experimental` flag decision | ✅ Adopted, default to `--experimental`, document why | Section A Task 0.2; Section C Task 2.2 |
+| 3 (P1) `--experimental` flag decision | ✅ Adopted; **decision REVERSED to STABLE** based on empirical diff (Phase 0–6 needs all in stable; experimental adds only realtime/fuzzy-session/memory/mock — out of scope). See `docs/phase-0/codex-gen-diff.md` and `docs/phase-0/host-environment.md` "--experimental decision". | Section A Task 0.2; Section C Task 2.2 |
 | 4 (P1) Wire spike underspecified | ✅ Adopted, 6 spike cases | Section A Task 0.3 |
 | 5 (P1) Default-reject server request | ✅ Adopted, 4 cases (no handler / throw / timeout / unknown method) | Section F Task 5.6 |
 | 6 (P1) `StdioTransportOptions` shape | ✅ Adopted full signature with `configOverrides` translation | Section G Task 6.1 |
@@ -248,21 +248,7 @@ codex-im-rich-client/
   - `mkdir -p /tmp/codex-gen-stable && codex app-server generate-ts --out /tmp/codex-gen-stable`
   - `mkdir -p /tmp/codex-gen-exp && codex app-server generate-ts --experimental --out /tmp/codex-gen-exp`
   - `diff -r /tmp/codex-gen-stable /tmp/codex-gen-exp > /tmp/codex-gen.diff` and inspect diff.
-- [ ] **Step 3:** Decide and document in `host-environment.md`:
-
-```markdown
-# --experimental decision (Codex finding #3)
-Decision: USE --experimental for both generate-ts and generate-json-schema.
-Rationale:
-- This project's product surface (Computer Use, approval/request, plan updates,
-  review, app-level methods) lives on the experimental surface.
-- Stable surface lacks rich event types we need (verified by diff at /tmp/codex-gen.diff).
-- We accept that the experimental surface may break on codex upgrade; that risk is
-  managed by `pnpm check:codex-version` gating + wire fixture replay (Codex finding #2, #9).
-Caveats:
-- If a future codex version removes --experimental, fall back to stable + record gap.
-- protocol:generate uses --experimental by default (Task 2.2).
-```
+- [ ] **Step 3:** Decide and document in `host-environment.md` and `docs/phase-0/codex-gen-diff.md`. **Empirical decision (executed 2026-04-29): USE STABLE.** Rationale: Phase 0–6 needs (initialize, thread/turn lifecycle, command exec, approvals via `item/*/requestApproval` server-requests, MCP, auth, Tool generic, ServerNotification/Response) **are all in stable**. Experimental adds only realtime voice, fuzzy-session lifecycle, memory mode, elicitation counters, background terminals, collaboration mode, and mock — all out of P0–P6 scope. Computer Use is a runtime `Tool` instance, not a type-level distinction; `--experimental` does NOT add a ComputerUse type. See `docs/phase-0/codex-gen-diff.md` for full evidence and "Switching to --experimental later" recipe.
 
 - [ ] **Step 4 (degraded path):** If `generate-ts` does not exist at all → write degraded section with hand-shim plan and STOP for human review.
 - [ ] **Step 5:** Commit: `chore(phase0): document --experimental flag decision`.
@@ -638,11 +624,13 @@ See docs/phase-0/host-environment.md "--experimental decision".
 
 **Files:** Modify root `package.json`.
 
-- [ ] **Step 1 (real path, default per Task 0.2 decision):** Replace placeholder script:
+- [ ] **Step 1 (real path, default per Task 0.2 decision = STABLE):** Replace placeholder script:
 
 ```json
-"protocol:generate": "pnpm check:codex-version && rm -rf packages/codex-protocol/src/generated packages/codex-protocol/schema && codex app-server generate-ts --experimental --out packages/codex-protocol/src/generated && codex app-server generate-json-schema --experimental --out packages/codex-protocol/schema"
+"protocol:generate": "pnpm check:codex-version && rm -rf packages/codex-protocol/src/generated packages/codex-protocol/schema && codex app-server generate-ts --out packages/codex-protocol/src/generated && codex app-server generate-json-schema --out packages/codex-protocol/schema"
 ```
+
+**Note:** No `--experimental` flag. If Phase 7+ requires voice / memory mode / fuzzy session, see `docs/phase-0/codex-gen-diff.md` "Switching to --experimental later" — regenerate with the flag, expand `packages/codex-protocol/src/index.ts` facade explicitly.
 
 - [ ] **Step 2:** Add `protocol:check`: `pnpm protocol:generate && git diff --exit-code packages/codex-protocol`.
 - [ ] **Step 3 (degraded path — only if Task 0.2 decided no generators available):** Replace with `node scripts/protocol-generate-fallback.mjs` that exits 1 with explanation.
@@ -673,7 +661,7 @@ export type {
 (If those exact names differ, list the actual closest matches from the generated index. Document any name drift in `README.md`.)
 
 - [ ] **Step 4:** `pnpm typecheck` PASS.
-- [ ] **Step 5:** Commit: `feat(codex-protocol): commit generated artifacts (codex 0.125.0 --experimental)`. **Generated files MUST be committed**, not gitignored.
+- [ ] **Step 5:** Commit: `feat(codex-protocol): commit generated artifacts (codex 0.125.0 stable)`. **Generated files MUST be committed**, not gitignored.
 - **Exit:** Subsequent packages can `import type { InitializeResult } from "@codex-im/protocol"`.
 
 ---
