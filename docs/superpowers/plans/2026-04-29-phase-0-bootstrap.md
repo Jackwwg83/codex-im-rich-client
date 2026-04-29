@@ -305,7 +305,7 @@ NOT guaranteed stable. Covered by:
   "platform": "darwin",
   "capturedAt": "2026-04-29",
   "capturedBy": "Phase 0 Task 0.4",
-  "experimentalFlag": true,
+  "experimentalFlag": false,
   "notes": [
     "id type observed: number",
     "jsonrpc field observed: absent",
@@ -591,8 +591,9 @@ console.log(`[check:codex-version] OK: ${fileVersion}`);
 
 ```markdown
 # @codex-im/protocol
-Houses generated TypeScript types from `codex app-server generate-ts --experimental`
-and JSON schema artifacts. **Never write business logic here.**
+Houses generated TypeScript types from `codex app-server generate-ts` (stable
+surface, no `--experimental` flag — see Phase 0 Task 0.2 decision) and JSON
+schema artifacts. **Never write business logic here.**
 
 ## Facade rule
 `src/index.ts` re-exports ONLY the small set of types currently consumed by the rest
@@ -601,8 +602,11 @@ directory. Reasons:
 - Reduces blast radius when codex upgrades change generated surface.
 - Forces deliberate adoption of new types — every new export is a code review.
 
-## Why --experimental?
-See docs/phase-0/host-environment.md "--experimental decision".
+## Why stable, not --experimental?
+See `docs/phase-0/host-environment.md` "--experimental decision" and
+`docs/phase-0/codex-gen-diff.md`. tldr: experimental adds only realtime/fuzzy-session/
+memory/elicitation/mock features that are out of Phase 0–6 scope. If Phase 7+
+needs them, follow the "Switching to --experimental later" recipe in codex-gen-diff.md.
 
 ## Upgrade workflow
 1. `pnpm check:codex-version` (will fail until CODEX_VERSION is updated).
@@ -635,7 +639,7 @@ See docs/phase-0/host-environment.md "--experimental decision".
 - [ ] **Step 2:** Add `protocol:check`: `pnpm protocol:generate && git diff --exit-code packages/codex-protocol`.
 - [ ] **Step 3 (degraded path — only if Task 0.2 decided no generators available):** Replace with `node scripts/protocol-generate-fallback.mjs` that exits 1 with explanation.
 - **Verify:** `pnpm protocol:generate` produces `.ts` files in `packages/codex-protocol/src/generated/`.
-- **Exit:** Commit `feat(phase0): wire protocol:generate (--experimental)`.
+- **Exit:** Commit `feat(phase0): wire protocol:generate (stable, no --experimental)`.
 
 ---
 

@@ -6,3 +6,4 @@ coverage/
 packages/*/dist/
 /tmp/
 .vitest-cache/
+*.tsbuildinfo

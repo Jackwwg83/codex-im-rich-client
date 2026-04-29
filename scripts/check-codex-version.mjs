@@ -16,13 +16,21 @@
  * `pnpm protocol:generate` (Task 2.2).
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
+
+// Anchored semver: MAJOR.MINOR.PATCH with optional -prerelease and +build.
+// Per https://semver.org. Anchored at start AND end so "0.125.0junk" is rejected.
+const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+// Capture form for parsing a semver out of the codex --version line, anchored
+// by the first whitespace boundary so build metadata is included.
+const SEMVER_CAPTURE_RE =
+  /(?:^|\s)(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)(?:$|\s)/;
 
 function fail(msg) {
   console.error(`[check:codex-version] ${msg}`);
@@ -36,8 +44,8 @@ try {
 } catch (err) {
   fail(`could not read CODEX_VERSION at repo root: ${err.message}`);
 }
-if (!/^\d+\.\d+\.\d+/.test(fileVersion)) {
-  fail(`CODEX_VERSION does not look like a semver: "${fileVersion}"`);
+if (!SEMVER_RE.test(fileVersion)) {
+  fail(`CODEX_VERSION is not a valid anchored semver: "${fileVersion}"`);
 }
 
 // 2. Read package.json#codexIm.codexVersion
@@ -51,15 +59,21 @@ try {
 if (!pkgVersion) {
   fail("package.json#codexIm.codexVersion is missing");
 }
+if (!SEMVER_RE.test(pkgVersion)) {
+  fail(`package.json#codexIm.codexVersion is not a valid anchored semver: "${pkgVersion}"`);
+}
 
-// 3. Read `codex --version` from the CLI on PATH
+// 3. Read `codex --version` from the CLI on PATH.
+// execFile (not execSync via shell) so missing binary surfaces as ENOENT,
+// not shell exit 127.
 let cliVersion;
 try {
-  const raw = execSync("codex --version", {
+  const raw = execFileSync("codex", ["--version"], {
     encoding: "utf8",
+    timeout: 5000,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-  const match = raw.match(/(\d+\.\d+\.\d+)/);
+  const match = raw.match(SEMVER_CAPTURE_RE);
   if (!match) {
     fail(`could not parse codex version from output: "${raw}"`);
   }
@@ -67,6 +81,9 @@ try {
 } catch (err) {
   if (err.code === "ENOENT") {
     fail("codex CLI not found on PATH. Install it (https://github.com/openai/codex) and re-run.");
+  }
+  if (err.code === "ETIMEDOUT") {
+    fail("`codex --version` timed out (5s).");
   }
   fail(`\`codex --version\` failed: ${err.message}`);
 }
