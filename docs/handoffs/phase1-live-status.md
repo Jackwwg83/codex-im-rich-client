@@ -1,24 +1,23 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-04-30 23:51 (overnight wake 1) — T9a Steps 9a.1 → 9a.3 done. Test count 251/251. HEAD `e8d5c1a`. Next wake handles 9a.4+9a.5+codex review.
+> **Last updated:** 2026-05-01 00:25 (overnight wake 2) — **T9a complete** (Steps 9a.1-9a.5 + codex review fixes). Test count 254/254. HEAD `06d9e3c`. Next wake starts T9b.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **T9a in progress** — Steps 9a.1 (failing tests `fad862d`) + 9a.2 (broker impl `f274aae`) + 9a.3 (per-method dispatch + default-reject coverage `e8d5c1a`) all done. Next: 9a.4 (v2 response-shape — implicitly covered by 9a.3's typing; tiny explicit type-only block can be added to 9a.5's file) + 9a.5 (dispatch-coverage.test.ts).
-- **Autonomous mode:** ON. ScheduleWakeup loop fires roughly every 20 min; loop prompt holds the per-wake protocol + hard-stop conditions. Scheduled tasks remaining: T9a → T9b → T10 → STOP before T11a.
-- **Last completed task:** **Pre-3** (`AppServerClient` `JsonRpcResponseError` propagation) — both commits landed (`c96d36d` docs, `44e2623` code).
-- **Prior tasks:** T8 (CodexRuntime typed wrappers) + T8 codex review fixes.
+- **Active task:** **T9b — ready to start** (`ApprovalBroker` edges + reviews per plan §1685). Has not started yet; next wake's first action is T9b Step 9b.1 (reattach API).
+- **Autonomous mode:** ON. ScheduleWakeup loop fires roughly every 20 min. Scheduled tasks remaining: T9b → T10 → STOP before T11a.
+- **Last completed task:** **T9a** (`ApprovalBroker` skeleton + happy-path dispatch + dispatch coverage) — 5 implementation commits + codex outside-voice review with 4/4 findings resolved. Plan §1592.
+- **Prior tasks:** Pre-3, T8, T7b, T7a, T6, T5, T4.5, T4, T3, T2, T1, Pre-2, Pre-1.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-1-runtime`
-- **HEAD:** `e8d5c1a test(core): per-method dispatch + default-reject coverage (T9a Step 9a.3)`
-- **Parent:** `f274aae feat(core): ApprovalBroker skeleton + exhaustive dispatch table (T9a Step 9a.2)`
-- **Grandparent:** `fad862d test(core): T9a Step 9a.1 — failing skeleton tests for ApprovalBroker (TDD red)`
+- **HEAD:** `06d9e3c docs(phase-1): codex outside-voice review report — T9a (4 of 4 resolved)`
+- **Recent T9a chain:** `7fe48c6` (review fixes) ← `7a05598` (9a.4+9a.5) ← `e8d5c1a` (9a.3) ← `f274aae` (9a.2) ← `fad862d` (9a.1) ← Pre-3 / T8.
 - **Main:** `main`
 
 ## 3. Completed tasks (Phase 1)
@@ -36,6 +35,7 @@
 - T7b (T7b-1 + T7b-2 = exhaustive switch + walk-and-drop overflow) — landed + reviewed (2/2 fixes applied)
 - T8 (CodexRuntime typed wrappers) — landed + reviewed (5/5 low+nit fixes applied)
 - **Pre-3 (`AppServerClient` `JsonRpcResponseError` propagation) — landed (docs `c96d36d` + code `44e2623`).** No outside-voice review run on Pre-3; the change is purely additive (single new branch in catch arm; existing `-32603` path bit-identical). 231/231 tests pass.
+- **T9a (`ApprovalBroker` skeleton + happy-path dispatch + dispatch coverage) — landed.** 5 code commits (`fad862d` 9a.1 failing test, `f274aae` 9a.2 broker impl, `e8d5c1a` 9a.3 per-method dispatch + default-reject, `7a05598` 9a.4+9a.5 dispatch coverage + type-only response shapes, `7fe48c6` codex review fixes) + review doc `06d9e3c`. Codex outside-voice review: 4 findings (2 medium + 2 low), all resolved inline. 254/254 tests pass.
 
 ## 4. Currently doing
 
@@ -45,26 +45,28 @@ User went to bed — interrupt anytime. To halt: send any message during a wake'
 
 ## 5. Next exact action
 
-**T9a Step 9a.5 (next wake)** — create `packages/core/test/dispatch-coverage.test.ts`:
-1. Type-only assertion block satisfying Step 9a.4 (Codex required-test) — explicit `const _v2_<x>: <Generated>Response = { ... }` lines using v2 response types from the protocol facade. This proves at compile-time the broker's default-reject shapes are valid for the generated types and the broker is NOT assuming the legacy `{decision: ReviewDecision}` shape applies to v2 methods.
-2. Runtime coverage test: instantiate `ApprovalBroker(client)`, call `broker.dispatchMethods()`, assert it equals (as a sorted set) the 9 string literals corresponding to `ServerRequest["method"]`. The plan §1752 phrases this as "covers every method seen in the captured fixture AND every method in the generated union" — but ground-truth is the generated union (the fixture has 1 method).
+**T9b Step 9b.1** — Add `reattach(client)` API on `ApprovalBroker` for the Supervisor (Codex B7 dependency). Detaches from the prior client (drops its handler reference + clears the WeakSet entry — note Pre-3/T9a's WeakSet guard means the new client must be a different instance, which is the expected supervisor pattern), validates `client !== priorClient` (catches identity bugs), calls `client.setServerRequestHandler(...)` on the new one, transfers any retained pending state. Throws if `client === priorClient`. Plan §1777 + plan §1813.
 
-After 9a.5: ci-check 8/8 gates green; test count rises to ~252-253.
+Test: assert `setServerRequestHandler` called once on new client, prior client's handler reference set to `null` after reattach, `_attachedClients` WeakSet now contains the new client and not the prior one (or rather: the prior one's slot is unconstrained for the test's lifetime).
 
-Then **Step 9a.6** — full ci-check (already green per gates above; just rerun for the record).
-Then **Step 9a.7** — task functionally complete; the broker scope is closed for T9a.
-Then **Step 9a.8 (added by autonomous protocol)** — codex outside-voice review on T9a diff range `c96d36d..HEAD` (covers all of T9a but NOT Pre-3 or earlier work). Capture findings to `docs/phase-1/codex-review-t9a.md`. Apply low/nit fixes inline. blocker/medium → STOP.
-Then **Step 9a.9** — update live-status §1/§2/§3/§5/§7 to reflect T9a complete; commit `docs(phase1): sync live-status — T9a complete`.
-Then **Step 9a.10** — ScheduleWakeup → next wake starts T9b at plan §1685.
+Then proceed sequentially through T9b plan §1685-1804:
+- **Step 9b.2** — timeout test (registered dispatcher takes 31s → broker default-rejects with -32603 + audit)
+- **Step 9b.3** — throw tests (two cases: generic `Error` → -32603 vs explicit `JsonRpcResponseError` → preserve code/message/data)
+- **Step 9b.4** — transport-loss test (D6: pending approval at transport close → status `transport_lost`, `actor=system`, `reason=transport_lost`)
+- **Step 9b.5** — implement `resolve()`, `failPendingAsTransportLost()` (idempotent — Codex B7), `expirePending()`. T9a's stubs throw "T9b" placeholders; T9b makes them real.
+- **Step 9b.6** — type-level + build-time grep guard: assert no approval method-name string literal exists in `packages/{app-server-client,codex-runtime,daemon,cli}/src/**`. Implementation: a `*.test.ts` that runs grep, fails if any match. Exempts test files.
+- **Step 9b.7** — codex outside-voice review (replaces plan's `/plan-eng-review` step; autonomous mode caveat)
+- **Step 9b.9** — full ci-check
+- **Step 9b.10** — commit
+- Then live-status sync + ScheduleWakeup → T10
 
-T9a-authorized Files (CLAUDE.md "每个任务只改计划内文件"):
-- `packages/core/src/approval-broker.ts` (committed at `f274aae`)
-- `packages/core/test/approval-broker.test.ts` (committed at `fad862d`)
-- `packages/core/test/approval-broker-dispatch.test.ts` (committed at `e8d5c1a`)
-- `packages/core/test/dispatch-coverage.test.ts` (next wake)
-- Plus housekeeping: `packages/core/src/index.ts` (re-export — committed at `f274aae`; mirrors T6/T8 pattern)
+T9b-authorized Files (per plan §1773-1775):
+- `packages/core/src/approval-broker.ts` (modify)
+- `packages/core/test/approval-broker.test.ts` (modify)
+- Create: `packages/core/test/approval-broker-fixture.test.ts` — additional fixture-driven tests
+- Plus the build-time grep guard test file (location TBD inside packages/core/test/ or scripts/)
 
-T9a may NOT touch `packages/app-server-client/` — Pre-3 owns that file.
+T9b may NOT touch `packages/app-server-client/` (Pre-3 owns) or `packages/codex-runtime/` (T8 owns) — only `packages/core/` and possibly `scripts/` for the grep guard.
 
 ## 6. Currently modified files (working tree)
 
@@ -76,15 +78,15 @@ Clean (only the gstack runtime lock):
 
 `git stash list` is empty. The autonomous loop's recovery scan treats anything beyond this exact list as drift and triggers a hard stop.
 
-## 7. Current test results (at HEAD `e8d5c1a`)
+## 7. Current test results (at HEAD `06d9e3c`)
 
 - `pnpm typecheck` → exit 0 (6 packages)
-- `pnpm test` → **251 passed (251)**, 26 files (was 231 pre-T9a; +2 broker skeleton + +18 dispatch coverage)
+- `pnpm test` → **254 passed (254)**, 27 files (was 231 pre-T9a; +2 broker skeleton + +18 dispatch coverage + +2 dispatch-coverage runtime + +1 cross-instance attach guard from codex review fix)
 - `pnpm typecheck:tests` → exit 0
 - `pnpm test:cli-smoke` → 2 passed
-- `pnpm lint` → exit 0 (80 files biome)
+- `pnpm lint` → exit 0 (81 files biome)
 - `pnpm protocol:check` → exit 0
-- `bash scripts/ci-check.sh` → all 8 gates green at `e8d5c1a`
+- `bash scripts/ci-check.sh` → all 8 gates green at `06d9e3c`
 
 ## 8. Current key decisions (Phase 1, decided — do not relitigate)
 
