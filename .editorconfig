@@ -1,0 +1,27 @@
+# EditorConfig — keep cross-editor settings consistent.
+# https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Markdown allows trailing spaces (line breaks); biome.json ignores .md anyway.
+[*.md]
+trim_trailing_whitespace = false
+
+# pnpm-lock.yaml is generated; don't fight it.
+[pnpm-lock.yaml]
+indent_size = 2
+
+# Generated codex-protocol — do not hand-format.
+[packages/codex-protocol/src/generated/**]
+trim_trailing_whitespace = false
+
+[packages/codex-protocol/schema/**]
+trim_trailing_whitespace = false
