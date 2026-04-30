@@ -261,6 +261,19 @@ export class AppServerClient {
       this.respond(m.id, result);
     } catch (err) {
       if (timer !== undefined) clearTimeout(timer);
+      // T9a addition: handlers MAY throw a `JsonRpcResponseError` to
+      // signal a specific JSON-RPC error code/message/data combo (e.g.
+      // ApprovalBroker uses this to emit -32601 for an unknown method
+      // not in its DispatchTable). Other thrown values still collapse to
+      // -32603 with the legacy "handler error: ..." prefix.
+      if (err instanceof JsonRpcResponseError) {
+        this.reject(m.id, { code: err.code, message: err.rawMessage, data: err.data });
+        this.log.warn(
+          { method: m.method, id: m.id, code: err.code, error: err.rawMessage },
+          "AppServerClient: server-request handler signaled JSON-RPC error",
+        );
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       this.reject(m.id, { code: -32603, message: `handler error: ${message}` });
       this.log.warn(

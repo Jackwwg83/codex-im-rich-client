@@ -1,6 +1,7 @@
 import { createInMemoryTransportPair } from "@codex-im/testkit";
 import { describe, expect, it } from "vitest";
 import { AppServerClient } from "../src/client.js";
+import { JsonRpcResponseError } from "../src/errors.js";
 
 const flush = () => new Promise<void>((r) => queueMicrotask(() => r()));
 
@@ -87,6 +88,37 @@ describe("AppServerClient — default-reject server requests", () => {
     expect(errResp?.id).toBe(300);
     expect(errResp?.error.code).toBe(-32603);
     expect(errResp?.error.message).toContain("timeout");
+
+    await client.stop();
+  });
+
+  it("honors JsonRpcResponseError thrown from handler (T9a addition — preserves code/message/data)", async () => {
+    const [clientT, serverT] = createInMemoryTransportPair();
+    const responses: unknown[] = [];
+    serverT.onMessage((m) => responses.push(m));
+    await serverT.start();
+    const client = new AppServerClient(clientT);
+    client.setServerRequestHandler(() => {
+      throw new JsonRpcResponseError({
+        code: -32601,
+        message: "unsupported method foo/bar",
+        data: { hint: "not in dispatch table" },
+      });
+    });
+    await client.start();
+
+    serverT.send({ id: 400, method: "foo/bar", params: {} });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const errResp = responses.find(
+      (r): r is { id: number; error: { code: number; message: string; data?: unknown } } =>
+        typeof r === "object" && r !== null && "error" in r,
+    );
+    expect(errResp?.id).toBe(400);
+    expect(errResp?.error.code).toBe(-32601);
+    expect(errResp?.error.message).toBe("unsupported method foo/bar");
+    expect(errResp?.error.message).not.toContain("handler error:");
+    expect(errResp?.error.data).toEqual({ hint: "not in dispatch table" });
 
     await client.stop();
   });
