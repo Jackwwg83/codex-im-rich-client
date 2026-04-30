@@ -286,3 +286,22 @@ total elapsed ~5s, no zombie subprocess
   agentMessage/delta, item/started, etc.
 - The `chronicle` under-development warning suggests codex 0.125 is mid-flight; the
   CODEX_VERSION pin is well-justified.
+
+## Security baseline (Phase 0 close-out)
+
+`pnpm audit` run at end of Phase 0 (2026-04-30):
+
+```
+{
+  "advisories": {},
+  "metadata": {
+    "vulnerabilities": { "info": 0, "low": 0, "moderate": 0, "high": 0, "critical": 0 },
+    "dependencies": 193,
+    "devDependencies": 0,
+    "totalDependencies": 193
+  }
+}
+```
+
+Zero advisories across 193 transitive deps. Re-run on every dependency bump
+and at start of each phase. See TODOS.md "pnpm audit periodic check".
