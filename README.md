@@ -1,8 +1,62 @@
-# Codex IM Rich Client 文档包
+# Codex IM Rich Client
 
-本包是一套用于开发“基于 Codex App Server 的 IM rich client”的项目蓝图。目标是在 Mac mini 上常驻运行一个本地 daemon，通过 Telegram、飞书、钉钉等 IM 远程控制 Codex App Server，并尽可能保留 Codex App Server 的完整能力：thread/turn、流式事件、命令执行、文件变更、review、approval、Computer Use 等。
+基于 Codex App Server 的 IM rich client。Mac mini 上常驻 daemon，通过 Telegram/飞书/钉钉等 IM 远程控制 Codex，**保留 thread/turn、流式事件、命令执行、文件变更、review、approval、Computer Use 等结构化 rich event，不降维成普通 chat completion**。
 
-## 推荐阅读顺序
+**Phase 0 状态**：✅ 完成（2026-04-29）。bottom-up vertical slice 已端到端跑通真 codex 0.125.0。详见 `docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md` + `docs/phase-0/`。
+
+## Phase 0 quick start
+
+```bash
+# 0. 装运行时（一次性，不在 repo 范围）
+node --version    # need >=20.10
+pnpm --version    # need >=10
+codex --version   # need 0.125.0 (pinned in CODEX_VERSION)
+
+# 1. 安装依赖 + 验证版本闸
+pnpm install
+pnpm check:codex-version       # OK: 0.125.0
+
+# 2. 重新生成协议（已经 commit 过；只在 codex 升级时跑）
+pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol/
+
+# 3. 全量验证
+pnpm typecheck                 # all 5 packages
+pnpm test                      # 67 tests pass (unit + contract)
+pnpm lint                      # biome check
+
+# 4. 操作员手动 smoke (非默认测试)
+CODEX_SMOKE=1 pnpm smoke:app-server      # initialize-only, 安全
+CODEX_REAL_SMOKE=1 pnpm smoke:real-turn  # 真模型调用 ~$0.01，请先确认 codex login 与配额
+```
+
+## Phase 0 安全边界
+
+详见 `packages/cli/README.md`。要点：
+
+- 默认 `pnpm test` 永不 spawn `codex app-server` 子进程
+- `pnpm smoke:*` 全部 env-gated，明确开关后才跑
+- `smoke:real-turn` 锁死 `sandbox=read-only` + `approval_policy=on-request` + 客户端 default-reject 所有 server request
+- `pnpm check:codex-version` 在 codex 升级时 fail-stop，强制 review 生成产物 + 重新捕获 wire fixtures
+
+## Repo 结构
+
+```
+packages/
+  codex-protocol/      generated TS + JSON schema (codex 0.125 stable, no --experimental)
+  app-server-client/   JSONL + JSON-RPC lite + Transport iface + StdioTransport + handshake + AppServerClient
+  testkit/             InMemoryTransport + FakeAppServer + replayFixture + codex-0.125 wire fixtures
+  cli/                 codex-im smoke (app-server | real-turn)
+docs/
+  phase-0/             host-environment + codex-gen-diff (decision evidence)
+  superpowers/plans/   the Phase 0 plan (v2, post-/plan-eng-review + Codex outside-voice)
+scripts/
+  check-codex-version.mjs  3-way version gate
+  canonicalize-schema.mjs  deterministic JSON schema sort
+```
+
+## 文档蓝图（原始包）
+
+### 推荐阅读顺序
 
 1. `01-PRD.md`：产品目标、用户故事、范围与验收标准。
 2. `02-TECHNICAL-DECISIONS.md`：关键技术选型，尤其是 Chat SDK、Koishi/Satori、native adapter 的取舍。

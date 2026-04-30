@@ -4,7 +4,7 @@
 
 先完成 App Server rich client 内核，再接 IM；先 Telegram 跑通端到端，再做飞书/钉钉；Computer Use 放在基础审批稳定之后。
 
-## Phase 0：项目初始化与协议验证
+## Phase 0：项目初始化与协议验证 ✅ 完成 2026-04-29
 
 ### 目标
 
@@ -12,18 +12,34 @@
 
 ### 任务
 
-- [ ] 初始化 pnpm workspace。
-- [ ] 创建 packages skeleton。
-- [ ] 添加 TypeScript、Vitest、ESLint/Prettier 或 Biome。
-- [ ] 实现 `protocol:generate`。
-- [ ] 实现 JSONL transport 最小版本。
-- [ ] 实现 `smoke:app-server`。
+- [x] 初始化 pnpm workspace（commit `0629659`）
+- [x] 创建 packages skeleton（codex-protocol/app-server-client/testkit/cli — Sections C–J）
+- [x] 添加 TypeScript（5.9.3 strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes）、Vitest（4.1.5 with unit/contract projects）、Biome（1.9.4，commits `cbd44c7` `34119a0` `df05488`）
+- [x] 实现 `protocol:generate` —— stable mode 不带 `--experimental`（empirical 决策见 `docs/phase-0/codex-gen-diff.md`，commits `c1a1a08` `67d7928` `d9b61c5`）
+- [x] 实现 JSONL transport 最小版本（JsonlDecoder + perf 1MB/4KB/<100ms + UTF-8 split，commit `9b74163`）
+- [x] 实现 `smoke:app-server`（CODEX_SMOKE=1 gated，初始化握手 + 干净 shutdown，commit `72d328f`）
+
+### 额外完成（Plan v2 / Codex outside-voice 加项）
+
+- [x] CODEX_VERSION 三方版本 gate（CODEX_VERSION 文件 / package.json#codexIm.codexVersion / `codex --version`，commit `df56519`）
+- [x] StdioTransport 完整签名（command/args/cwd?/env?/configOverrides?/shutdownGraceMs?/logger?；ENOENT/SIGKILL grace；commit `e23cda2`）
+- [x] AppServerClient 完整：request timeout（per-call 覆盖）+ default-reject server request（4 cases）+ transport-close-pending reject + 类型化 errors + 并发 correlation
+- [x] FakeAppServer + replayFixture（commit `380a988`）+ 7 wire fixtures（codex-0.125.0 case 1–5 + server-request placeholder + metadata，commit `f525cb0`）
+- [x] performInitializeHandshake 返回 typed `InitializeResponse`（commit `2d4b149`）
+- [x] `smoke:real-turn` 真模型 turn 验证（CODEX_REAL_SMOKE=1 gated，sandbox=read-only + approval_policy=on-request + client default-reject，commit `72d328f`）
+- [x] JSON schema canonicalization（解 codex 0.125 generate-json-schema 非确定性，commit `d9b61c5`）
 
 ### 验收
 
-- [ ] `codex app-server generate-ts` 产物进入 repo。
-- [ ] smoke test 可以 initialize 并完成一个无害 turn。
-- [ ] CI/local `pnpm test typecheck lint` 可运行。
+- [x] `codex app-server generate-ts` 产物进入 repo（488 TS + 227 schema canonical）
+- [x] smoke test 可以 initialize（`CODEX_SMOKE=1` 已运行通过）并完成一个无害 turn（`CODEX_REAL_SMOKE=1` 已运行通过 2026-04-29，~5s elapsed）
+- [x] CI/local `pnpm test typecheck lint` 可运行（67 tests pass，typecheck 5 packages 全过，biome check 47 文件 clean）
+
+### 产出引用
+
+- 实施计划：`docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md`
+- 协议决策证据：`docs/phase-0/host-environment.md`、`docs/phase-0/codex-gen-diff.md`
+- Codex outside-voice review 结果：见 plan v2 Decision Log + commit `dacbb29` `719a859` `380a988`
 
 ## Phase 1：Codex Runtime Core
 
