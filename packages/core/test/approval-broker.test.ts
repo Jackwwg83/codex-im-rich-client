@@ -19,7 +19,7 @@
 // bump can't accidentally make the "unknown method" test passable via
 // real dispatch.
 
-import { AppServerClient } from "@codex-im/app-server-client";
+import { AppServerClient, JsonRpcResponseError } from "@codex-im/app-server-client";
 import { FakeAppServer } from "@codex-im/testkit";
 import { describe, expect, it } from "vitest";
 import { ApprovalBroker } from "../src/approval-broker.js";
@@ -208,6 +208,160 @@ describe("ApprovalBroker skeleton (T9a Step 9a.1)", () => {
       99,
     );
     expect(broker1Saw).toBe(true);
+
+    await client.stop();
+    await fake.stop();
+  });
+});
+
+describe("ApprovalBroker handler-error edges (T9b Steps 9b.2 + 9b.3)", () => {
+  // Step 9b.2: timeout test — registered handler that exceeds the
+  // serverRequestHandlerTimeoutMs is treated as a handler error and
+  // collapses to -32603. Distinguishes "broker is alive but slow"
+  // from "broker is gone" (the latter is detected via transport close
+  // — D6, T9b Step 9b.4).
+
+  it("times out a slow handler with -32603 (T9b Step 9b.2)", async () => {
+    const fake = new FakeAppServer();
+    // Tiny serverRequestHandlerTimeoutMs so the test is fast.
+    const client = new AppServerClient(fake.clientSide, {
+      serverRequestHandlerTimeoutMs: 30,
+    });
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+    broker.registerHandler(
+      "item/fileChange/requestApproval",
+      () => new Promise((resolve) => setTimeout(() => resolve({ decision: "accept" }), 1000)),
+    );
+
+    await expect(
+      fake.emitServerRequest(
+        "item/fileChange/requestApproval",
+        { threadId: "t", turnId: "u", itemId: "i" },
+        301,
+      ),
+    ).rejects.toMatchObject({
+      code: -32603,
+      message: expect.stringMatching(/handler error: .*timeout/i),
+    });
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  // Step 9b.3 case 1: generic-throw distinction.
+  // A registered handler that throws a plain Error collapses to -32603
+  // with the legacy "handler error: <msg>" prefix. This is the path
+  // for unexpected handler bugs (TypeError, runtime exceptions, etc.)
+  // — never the path for "method not in dispatch table" (which uses
+  // JsonRpcResponseError → -32601 verbatim, case 2 below).
+
+  it("collapses a generic Error throw to -32603 with handler-error prefix (T9b Step 9b.3 case 1)", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+    broker.registerHandler("item/fileChange/requestApproval", async () => {
+      throw new Error("policy denied");
+    });
+
+    await expect(
+      fake.emitServerRequest(
+        "item/fileChange/requestApproval",
+        { threadId: "t", turnId: "u", itemId: "i" },
+        302,
+      ),
+    ).rejects.toMatchObject({
+      code: -32603,
+      message: "handler error: policy denied",
+    });
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  // Step 9b.3 case 2: explicit JsonRpcResponseError throw (Pre-3 path).
+  // A registered handler that throws JsonRpcResponseError preserves
+  // the explicit code/message/data on the wire. NO "handler error: "
+  // prefix. This is what the broker itself uses for "method not in
+  // dispatch table" → -32601, but downstream handlers can use the
+  // same path to signal any specific JSON-RPC error code.
+
+  it("preserves JsonRpcResponseError code/message/data verbatim (T9b Step 9b.3 case 2 — Pre-3)", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+    broker.registerHandler("item/fileChange/requestApproval", async () => {
+      throw new JsonRpcResponseError({
+        code: -32004,
+        message: "synthetic-rejection",
+        data: { reason: "test" },
+      });
+    });
+
+    await expect(
+      fake.emitServerRequest(
+        "item/fileChange/requestApproval",
+        { threadId: "t", turnId: "u", itemId: "i" },
+        303,
+      ),
+    ).rejects.toMatchObject({
+      code: -32004,
+      message: "synthetic-rejection",
+      data: { reason: "test" },
+    });
+
+    // Important negative assertion: the wire envelope's message MUST
+    // NOT carry the "handler error: " prefix. That prefix is reserved
+    // for the -32603 generic-throw path (case 1).
+    await expect(
+      fake.emitServerRequest(
+        "item/fileChange/requestApproval",
+        { threadId: "t", turnId: "u", itemId: "i" },
+        304,
+      ),
+    ).rejects.toMatchObject({
+      message: expect.not.stringContaining("handler error:"),
+    });
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  // Negative cross-check: neither path crashes the broker. After a
+  // generic-throw, the broker is still alive and routes the next
+  // server request through its dispatch table.
+
+  it("survives a handler throw — broker keeps dispatching subsequent requests (T9b Step 9b.3)", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    let throws = 0;
+    let succeeds = 0;
+    broker.registerHandler("item/fileChange/requestApproval", async () => {
+      if (throws === 0) {
+        throws++;
+        throw new Error("boom");
+      }
+      succeeds++;
+      return { decision: "decline" };
+    });
+
+    await expect(
+      fake.emitServerRequest("item/fileChange/requestApproval", {}, 305),
+    ).rejects.toMatchObject({ code: -32603 });
+
+    const ok = await fake.emitServerRequest("item/fileChange/requestApproval", {}, 306);
+    expect(ok).toEqual({ decision: "decline" });
+    expect(throws).toBe(1);
+    expect(succeeds).toBe(1);
 
     await client.stop();
     await fake.stop();
