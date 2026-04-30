@@ -8,6 +8,34 @@
  *   - Transport lifecycle: stop() and onClose(exitCode) reject all
  *     pending requests with TransportClosedError.
  *
+ * ## Lifecycle policy: ONE-SHOT
+ *
+ * `AppServerClient` instances are **one-shot**:
+ *   - `start()` may be called exactly once, after construction.
+ *   - `stop()` is terminal. It sets `closed=true` and unsubscribes from
+ *     the transport. There is NO `restart()` — calling `start()` again
+ *     after `stop()` is undefined behavior and is NOT supported.
+ *   - `onClose(code)` from the transport (e.g. codex subprocess exited)
+ *     also flips the client to `closed=true`, rejecting all pending
+ *     requests with TransportClosedError.
+ *
+ * If you need to recover from codex crash / restart:
+ *   1. Daemon supervisor observes `client.transport.onClose` (or detects
+ *      pending-request rejection with TransportClosedError).
+ *   2. Backoff. Spawn a fresh `StdioTransport`.
+ *   3. Construct a NEW `AppServerClient(newTransport, opts)`.
+ *   4. `await newClient.start()`.
+ *   5. Re-run `performInitializeHandshake(newClient, ...)`.
+ *   6. Re-attach notification + server-request handlers.
+ *   7. Replace the runtime's reference to point at `newClient`.
+ *
+ * Rationale: a stateful client that tries to "restart in place" hides
+ * subtle bugs (stale pending Map, dangling timers, half-applied
+ * subscriptions). Constructing a fresh instance forces the supervisor
+ * to think about Phase 1 state recovery (re-resolving thread bindings,
+ * re-issuing pending operator commands, etc.) explicitly. Closes
+ * Codex final review Group 3 #4.
+ *
  * Phase 0 design notes:
  *   - We do NOT bake initialize handshake in; that lives in
  *     `performInitializeHandshake` (Section H Task 7.1) so smoke +
