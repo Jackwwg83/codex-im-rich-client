@@ -300,4 +300,123 @@ describe("EventNormalizer happy path (T7a)", () => {
     expect(ev.done).toBe(true);
     await teardown(h);
   });
+
+  // ─── Codex T7a review #5 — cancellation race + FIFO + malformed ──
+
+  it("a pending next() resolves done after return() is called", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Suspend a next() — no events yet, so it parks on the waiter list.
+    const pending = it.next();
+    // Immediately request cancellation. The pending Promise must resolve
+    // with done:true rather than hanging forever.
+    await it.return?.();
+
+    const result = await pending;
+    expect(result.done).toBe(true);
+    await teardown(h);
+  });
+
+  it("two queued events with two waiters preserve FIFO drain order", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Two suspended next() calls in flight — both park on the waiter list.
+    const p1 = it.next();
+    const p2 = it.next();
+
+    // Two events arrive — drain should resolve in arrival order to
+    // arrival-order waiters (FIFO across both axes).
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress" },
+    });
+    h.fake.emitNotification("turn/completed", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "completed" },
+    });
+
+    const r1 = await p1;
+    const r2 = await p2;
+    expect((r1.value as CodexRichEvent).type).toBe("turn_started");
+    expect((r2.value as CodexRichEvent).type).toBe("turn_completed");
+    await teardown(h);
+  });
+
+  it("malformed turn/started (missing turn.id) falls through to unknown, not turn_started with empty IDs", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Wire frame missing the required `turn.id` — must NOT produce a
+    // turn_started event with an empty turnId, which downstream state
+    // code could mistake for a real turn (codex T7a review #2).
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { items: [], status: "inProgress" /* id missing */ },
+    });
+
+    const ev = (await it.next()).value as CodexRichEvent;
+    expect(ev.type).toBe("unknown");
+    if (ev.type === "unknown") {
+      expect(ev.method).toBe("turn/started");
+    }
+    await teardown(h);
+  });
+
+  it("malformed item/started (non-string itemId) falls through to unknown", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("item/started", {
+      threadId: "thread-1",
+      turnId: "turn-1",
+      item: { type: "agentMessage", id: 42 /* number, not string */ },
+    });
+
+    const ev = (await it.next()).value as CodexRichEvent;
+    expect(ev.type).toBe("unknown");
+    await teardown(h);
+  });
+
+  it("malformed item/agentMessage/delta (delta not a string) falls through to unknown", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("item/agentMessage/delta", {
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "msg-1",
+      delta: { not: "a string" },
+    });
+
+    const ev = (await it.next()).value as CodexRichEvent;
+    expect(ev.type).toBe("unknown");
+    await teardown(h);
+  });
+
+  it("events() returns the SAME iterator on every call (single-consumer contract — codex T7a review #1)", async () => {
+    const h = harness();
+    const a = h.normalizer.events();
+    const b = h.normalizer.events();
+    expect(a).toBe(b);
+
+    // Both share the queue: an event consumed via one is gone from the other.
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress" },
+    });
+    const ev1 = (await a.next()).value as CodexRichEvent;
+    expect(ev1.type).toBe("turn_started");
+
+    // Emit a second; only one of {a, b} sees it (work-queue, not broadcast).
+    h.fake.emitNotification("turn/completed", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "completed" },
+    });
+    const ev2 = (await b.next()).value as CodexRichEvent;
+    expect(ev2.type).toBe("turn_completed");
+
+    await teardown(h);
+  });
 });
