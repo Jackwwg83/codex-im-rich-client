@@ -87,3 +87,47 @@ pnpm smoke:app-server
 - 是否更新文档？
 - 是否有 unknown risk？
 - 是否需要 Codex CLI 独立 review？
+
+## Compact / Resume Instructions
+
+After auto-compaction, manual `/compact`, `/resume`, or context loss, Claude Code must not continue implementation immediately.
+
+First enter Context Recovery Mode:
+
+1. Read:
+   - CLAUDE.md
+   - README.md
+   - current phase plan under docs/superpowers/plans/
+   - latest handoff under docs/handoffs/
+   - docs/handoffs/phase1-live-status.md if present
+   - 09-ROADMAP.md
+   - TODOS.md
+
+2. Run:
+   - git status --short
+   - git diff --stat
+   - git diff --name-only
+
+3. Reconstruct:
+   - current branch and HEAD
+   - current phase/task
+   - completed tasks
+   - modified files
+   - tests already run
+   - next exact action
+   - applicable redlines
+
+4. Stop and output a Context Recovery Report.
+
+Do not modify code after compaction until the user approves the recovery report.
+
+Persistent project redlines:
+- This project is a Codex App Server native IM Rich Client.
+- Do not implement a Codex CLI/TUI wrapper.
+- Do not parse terminal output as product protocol.
+- Do not hard-code unknown approval method names.
+- Do not implement real IM adapters before the approved phase.
+- Do not implement Computer Use production flow before the approved phase.
+- Do not expose public WebSocket listeners.
+- Unknown App Server events must not be silently dropped.
+- Security and approval logic must fail closed.
