@@ -1,4 +1,7 @@
 {
   "files": [],
-  "references": [{ "path": "./packages/codex-protocol" }]
+  "references": [
+    { "path": "./packages/codex-protocol" },
+    { "path": "./packages/app-server-client" }
+  ]
 }

@@ -1,0 +1,16 @@
+{
+  "name": "@codex-im/app-server-client",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run --project unit"
+  },
+  "dependencies": {
+    "@codex-im/protocol": "workspace:*",
+    "execa": "^9",
+    "pino": "^9"
+  }
+}
