@@ -26,6 +26,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "check:codex-version": "node scripts/check-codex-version.mjs",
+    "check:all": "bash scripts/ci-check.sh",
     "protocol:generate": "pnpm check:codex-version && rm -rf packages/codex-protocol/src/generated packages/codex-protocol/schema && codex app-server generate-ts --out packages/codex-protocol/src/generated && codex app-server generate-json-schema --out packages/codex-protocol/schema && node scripts/canonicalize-schema.mjs",
     "protocol:check": "pnpm protocol:generate && git diff --exit-code packages/codex-protocol",
     "smoke:app-server": "tsx packages/cli/src/index.ts smoke app-server",

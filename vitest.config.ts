@@ -22,7 +22,14 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          include: ["packages/*/test/**/*.test.ts"],
+          include: [
+            "packages/*/test/**/*.test.ts",
+            // T3 (P1-5 + Codex B2): repo-level helper scripts test alongside
+            // unit gate. .mjs covers redact-fixture (plain JS); .mts covers
+            // split-capture and any future tsx-based helper.
+            "scripts/**/*.test.mjs",
+            "scripts/**/*.test.mts",
+          ],
           exclude: [
             "packages/cli/test/smoke-*.test.ts",
             "packages/testkit/test/fixture-replay.test.ts",
