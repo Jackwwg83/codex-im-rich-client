@@ -82,16 +82,41 @@ export class FakeAppServer {
   /**
    * Emit a server-initiated request and wait for the client's response.
    * Returns a Promise that resolves to the client's `result` or rejects with
-   * the client's `error`.
+   * the client's `error` envelope.
+   *
+   * If the client never answers within `opts.timeoutMs` (default 5000ms), the
+   * Promise rejects with a diagnostic Error and the message subscription is
+   * unsubscribed. Without this timeout, a missing-handler bug in the test
+   * would hang to vitest's outer test timeout with the misleading diagnostic
+   * "test timed out" instead of "fake's emitServerRequest never got an
+   * answer for method X / id Y".
+   *
+   * Codex final review Group 5 #1.
    */
   async emitServerRequest(
     method: string,
     params?: unknown,
     id: number | string = Math.floor(Math.random() * 1e9),
+    opts: { timeoutMs?: number } = {},
   ): Promise<unknown> {
+    const timeoutMs = opts.timeoutMs ?? 5000;
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        unsub();
+        reject(
+          new Error(
+            `FakeAppServer.emitServerRequest: client did not answer ${method} (id=${String(id)}) within ${timeoutMs}ms`,
+          ),
+        );
+      }, timeoutMs);
       const unsub = this.serverSide.onMessage((m) => {
         if (m && typeof m === "object" && "id" in m && (m as { id: unknown }).id === id) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           unsub();
           const env = m as { result?: unknown; error?: unknown };
           if ("error" in env) reject(env.error);

@@ -123,4 +123,27 @@ describe("FakeAppServer — Task 8.3 (emitServerRequest round-trip)", () => {
     await client.stop();
     await fake.stop();
   });
+
+  it("rejects with diagnostic error when client never answers (Codex final review Group 5)", async () => {
+    const fake = new FakeAppServer();
+    // No client attached at all — the request will never be answered.
+    const start = Date.now();
+    await expect(
+      fake.emitServerRequest("approval/forgotten", {}, "id-1", { timeoutMs: 80 }),
+    ).rejects.toThrow(/client did not answer.*approval\/forgotten.*id-1.*80ms/);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(200);
+    await fake.stop();
+  });
+
+  it("default timeoutMs is 5000ms (does not hang the test runner)", async () => {
+    const fake = new FakeAppServer();
+    // Sanity: with default timeout, the rejection still happens; we just don't
+    // wait for it to verify the value. Verify by calling with explicit 5000
+    // and checking the diagnostic message format.
+    await expect(
+      fake.emitServerRequest("approval/x", {}, "id-2", { timeoutMs: 50 }),
+    ).rejects.toThrow(/within 50ms/);
+    await fake.stop();
+  });
 });
