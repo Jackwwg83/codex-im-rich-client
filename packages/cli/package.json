@@ -1,0 +1,16 @@
+{
+  "name": "@codex-im/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "bin": { "codex-im": "./src/index.ts" },
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@codex-im/app-server-client": "workspace:*",
+    "@codex-im/protocol": "workspace:*",
+    "pino": "^9"
+  }
+}

@@ -46,6 +46,18 @@ importers:
         specifier: workspace:*
         version: link:../testkit
 
+  packages/cli:
+    dependencies:
+      '@codex-im/app-server-client':
+        specifier: workspace:*
+        version: link:../app-server-client
+      '@codex-im/protocol':
+        specifier: workspace:*
+        version: link:../codex-protocol
+      pino:
+        specifier: ^9
+        version: 9.14.0
+
   packages/codex-protocol: {}
 
   packages/testkit:

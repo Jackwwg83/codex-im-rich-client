@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/codex-protocol" },
     { "path": "./packages/app-server-client" },
-    { "path": "./packages/testkit" }
+    { "path": "./packages/testkit" },
+    { "path": "./packages/cli" }
   ]
 }
