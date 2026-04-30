@@ -1,14 +1,14 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-04-30 (overnight) — T9a Step 9a.1 staged (failing tests committed as `fad862d`); autonomous loop scheduled to wake at 23:43 to do Step 9a.2. **Test count is 231 fails / 233 total at HEAD `fad862d` — this is intentional TDD-red; Step 9a.2 turns it green.**
+> **Last updated:** 2026-04-30 23:51 (overnight wake 1) — T9a Steps 9a.1 → 9a.3 done. Test count 251/251. HEAD `e8d5c1a`. Next wake handles 9a.4+9a.5+codex review.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **T9a in progress** — Step 9a.1 done (failing tests committed `fad862d`); next step 9a.2 (broker skeleton implementation) is what the autonomous overnight loop wakes up to do.
+- **Active task:** **T9a in progress** — Steps 9a.1 (failing tests `fad862d`) + 9a.2 (broker impl `f274aae`) + 9a.3 (per-method dispatch + default-reject coverage `e8d5c1a`) all done. Next: 9a.4 (v2 response-shape — implicitly covered by 9a.3's typing; tiny explicit type-only block can be added to 9a.5's file) + 9a.5 (dispatch-coverage.test.ts).
 - **Autonomous mode:** ON. ScheduleWakeup loop fires roughly every 20 min; loop prompt holds the per-wake protocol + hard-stop conditions. Scheduled tasks remaining: T9a → T9b → T10 → STOP before T11a.
 - **Last completed task:** **Pre-3** (`AppServerClient` `JsonRpcResponseError` propagation) — both commits landed (`c96d36d` docs, `44e2623` code).
 - **Prior tasks:** T8 (CodexRuntime typed wrappers) + T8 codex review fixes.
@@ -16,8 +16,9 @@
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-1-runtime`
-- **HEAD:** `fad862d test(core): T9a Step 9a.1 — failing skeleton tests for ApprovalBroker (TDD red)`
-- **Parent:** `ea02ab3 docs(phase1): sync live-status — Pre-3 complete, T9a ready`
+- **HEAD:** `e8d5c1a test(core): per-method dispatch + default-reject coverage (T9a Step 9a.3)`
+- **Parent:** `f274aae feat(core): ApprovalBroker skeleton + exhaustive dispatch table (T9a Step 9a.2)`
+- **Grandparent:** `fad862d test(core): T9a Step 9a.1 — failing skeleton tests for ApprovalBroker (TDD red)`
 - **Main:** `main`
 
 ## 3. Completed tasks (Phase 1)
@@ -44,33 +45,24 @@ User went to bed — interrupt anytime. To halt: send any message during a wake'
 
 ## 5. Next exact action
 
-**T9a Step 9a.2** — implement `packages/core/src/approval-broker.ts` with:
-- `DispatcherSpec<P, R>` type (handler + defaultReject)
-- Exhaustive `DispatchTable` typed over the 9 generated `ServerRequest["method"]` arms
-- Type-level `_ExhaustiveDispatch` guard (compiles iff `keyof DispatchTable === ServerRequest["method"]`)
-- Constructor populates `#table` with all 9 entries; each `handler: null` initially; each `defaultReject` returns the wire-shape mandated by the per-method generated `*Response.ts`
-- `attach()` enforces single-handler invariant (throws `/already attached/` on second call); calls `client.setServerRequestHandler(req => this.#handle(req))`
-- `#handle(req)` looks up method; if NOT in table → `throw new JsonRpcResponseError({ code: -32601, message: \`unsupported method ${req.method}\` })`; if `handler === null` → `return spec.defaultReject()`; else `return await spec.handler(req as never)`
-- `registerHandler<M>(method, handler)` — typed setter for per-method handler installation (used by 9a.3 dispatch tests and downstream callers)
-- T9b stubs (`resolve` / `failPendingAsTransportLost` / `expirePending`) — throw "T9b" placeholder
+**T9a Step 9a.5 (next wake)** — create `packages/core/test/dispatch-coverage.test.ts`:
+1. Type-only assertion block satisfying Step 9a.4 (Codex required-test) — explicit `const _v2_<x>: <Generated>Response = { ... }` lines using v2 response types from the protocol facade. This proves at compile-time the broker's default-reject shapes are valid for the generated types and the broker is NOT assuming the legacy `{decision: ReviewDecision}` shape applies to v2 methods.
+2. Runtime coverage test: instantiate `ApprovalBroker(client)`, call `broker.dispatchMethods()`, assert it equals (as a sorted set) the 9 string literals corresponding to `ServerRequest["method"]`. The plan §1752 phrases this as "covers every method seen in the captured fixture AND every method in the generated union" — but ground-truth is the generated union (the fixture has 1 method).
 
-After 9a.2: existing 2 tests turn green; ci-check (8 gates) green at 233/233.
+After 9a.5: ci-check 8/8 gates green; test count rises to ~252-253.
 
-Then proceed:
-- **Step 9a.3** — per-method dispatcher tests in `packages/core/test/approval-broker-dispatch.test.ts` (one happy-path + one default-reject per method, 9+9 cases)
-- **Step 9a.4** — v2 response-shape assertions (per-method response matches generated type)
-- **Step 9a.5** — `packages/core/test/dispatch-coverage.test.ts` (runtime check that all 9 generated arms are covered)
-- **Step 9a.6** — full ci-check
-- **Step 9a.7** — single feat commit
-- **Step 9a.8** (added by autonomous protocol) — codex outside-voice review on T9a diff range; fix low/nit findings; capture `docs/phase-1/codex-review-t9a.md`
-- **Step 9a.9** — update this live-status, commit as separate `docs(phase1): sync live-status — T9a complete`
-- **Step 9a.10** — schedule next wake → start T9b
+Then **Step 9a.6** — full ci-check (already green per gates above; just rerun for the record).
+Then **Step 9a.7** — task functionally complete; the broker scope is closed for T9a.
+Then **Step 9a.8 (added by autonomous protocol)** — codex outside-voice review on T9a diff range `c96d36d..HEAD` (covers all of T9a but NOT Pre-3 or earlier work). Capture findings to `docs/phase-1/codex-review-t9a.md`. Apply low/nit fixes inline. blocker/medium → STOP.
+Then **Step 9a.9** — update live-status §1/§2/§3/§5/§7 to reflect T9a complete; commit `docs(phase1): sync live-status — T9a complete`.
+Then **Step 9a.10** — ScheduleWakeup → next wake starts T9b at plan §1685.
 
 T9a-authorized Files (CLAUDE.md "每个任务只改计划内文件"):
-- `packages/core/src/approval-broker.ts`
-- `packages/core/test/approval-broker.test.ts` (already committed at `fad862d`)
-- `packages/core/test/approval-broker-dispatch.test.ts`
-- `packages/core/test/dispatch-coverage.test.ts`
+- `packages/core/src/approval-broker.ts` (committed at `f274aae`)
+- `packages/core/test/approval-broker.test.ts` (committed at `fad862d`)
+- `packages/core/test/approval-broker-dispatch.test.ts` (committed at `e8d5c1a`)
+- `packages/core/test/dispatch-coverage.test.ts` (next wake)
+- Plus housekeeping: `packages/core/src/index.ts` (re-export — committed at `f274aae`; mirrors T6/T8 pattern)
 
 T9a may NOT touch `packages/app-server-client/` — Pre-3 owns that file.
 
@@ -84,11 +76,15 @@ Clean (only the gstack runtime lock):
 
 `git stash list` is empty. The autonomous loop's recovery scan treats anything beyond this exact list as drift and triggers a hard stop.
 
-## 7. Current test results (at HEAD `fad862d`)
+## 7. Current test results (at HEAD `e8d5c1a`)
 
-- `pnpm test` → **231 pass / 2 fail / 233 total** (TDD red — failures in `packages/core/test/approval-broker.test.ts` are the failing skeleton tests committed by 9a.1; expected to turn green after 9a.2 lands the implementation)
-- Other gates not re-run at HEAD `fad862d` because the source-only failure is by design; they were green at HEAD `ea02ab3` (one commit back, before the failing test was committed).
-- After Step 9a.2 lands, expected green state: `pnpm test` → **233 passed (233)**; full 8-gate ci-check green.
+- `pnpm typecheck` → exit 0 (6 packages)
+- `pnpm test` → **251 passed (251)**, 26 files (was 231 pre-T9a; +2 broker skeleton + +18 dispatch coverage)
+- `pnpm typecheck:tests` → exit 0
+- `pnpm test:cli-smoke` → 2 passed
+- `pnpm lint` → exit 0 (80 files biome)
+- `pnpm protocol:check` → exit 0
+- `bash scripts/ci-check.sh` → all 8 gates green at `e8d5c1a`
 
 ## 8. Current key decisions (Phase 1, decided — do not relitigate)
 
