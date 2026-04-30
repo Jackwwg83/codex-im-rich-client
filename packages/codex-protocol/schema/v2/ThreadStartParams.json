@@ -1,137 +1,5 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ThreadStartParams",
-  "type": "object",
-  "properties": {
-    "approvalPolicy": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/AskForApproval"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "approvalsReviewer": {
-      "description": "Override where approval requests are routed for review on this thread and subsequent turns.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ApprovalsReviewer"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "baseInstructions": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "config": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "additionalProperties": true
-    },
-    "cwd": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "developerInstructions": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "sandbox": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/SandboxMode"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "sessionStartSource": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ThreadStartSource"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "ephemeral": {
-      "type": [
-        "boolean",
-        "null"
-      ]
-    },
-    "personality": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/Personality"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "serviceName": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "model": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "modelProvider": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "permissionProfile": {
-      "description": "Full permissions override for this thread. Cannot be combined with `sandbox`.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/PermissionProfile"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "serviceTier": {
-      "anyOf": [
-        {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ServiceTier"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        {
-          "type": "null"
-        }
-      ]
-    }
-  },
   "definitions": {
     "AbsolutePathBuf": {
       "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
@@ -139,37 +7,28 @@
     },
     "ApprovalsReviewer": {
       "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
-      "type": "string",
       "enum": [
         "user",
         "auto_review",
         "guardian_subagent"
-      ]
+      ],
+      "type": "string"
     },
     "AskForApproval": {
       "oneOf": [
         {
-          "type": "string",
           "enum": [
             "untrusted",
             "on-failure",
             "on-request",
             "never"
-          ]
+          ],
+          "type": "string"
         },
         {
-          "type": "object",
-          "required": [
-            "granular"
-          ],
+          "additionalProperties": false,
           "properties": {
             "granular": {
-              "type": "object",
-              "required": [
-                "mcp_elicitations",
-                "rules",
-                "sandbox_approval"
-              ],
               "properties": {
                 "mcp_elicitations": {
                   "type": "boolean"
@@ -188,21 +47,24 @@
                   "default": false,
                   "type": "boolean"
                 }
-              }
+              },
+              "required": [
+                "mcp_elicitations",
+                "rules",
+                "sandbox_approval"
+              ],
+              "type": "object"
             }
           },
-          "additionalProperties": false,
-          "title": "GranularAskForApproval"
+          "required": [
+            "granular"
+          ],
+          "title": "GranularAskForApproval",
+          "type": "object"
         }
       ]
     },
     "DynamicToolSpec": {
-      "type": "object",
-      "required": [
-        "description",
-        "inputSchema",
-        "name"
-      ],
       "properties": {
         "deferLoading": {
           "type": "boolean"
@@ -220,86 +82,87 @@
             "null"
           ]
         }
-      }
+      },
+      "required": [
+        "description",
+        "inputSchema",
+        "name"
+      ],
+      "type": "object"
     },
     "FileSystemAccessMode": {
-      "type": "string",
       "enum": [
         "read",
         "write",
         "none"
-      ]
+      ],
+      "type": "string"
     },
     "FileSystemPath": {
       "oneOf": [
         {
-          "type": "object",
-          "required": [
-            "path",
-            "type"
-          ],
           "properties": {
             "path": {
               "$ref": "#/definitions/AbsolutePathBuf"
             },
             "type": {
-              "type": "string",
               "enum": [
                 "path"
               ],
-              "title": "PathFileSystemPathType"
+              "title": "PathFileSystemPathType",
+              "type": "string"
             }
           },
-          "title": "PathFileSystemPath"
-        },
-        {
-          "type": "object",
           "required": [
-            "pattern",
+            "path",
             "type"
           ],
+          "title": "PathFileSystemPath",
+          "type": "object"
+        },
+        {
           "properties": {
             "pattern": {
               "type": "string"
             },
             "type": {
-              "type": "string",
               "enum": [
                 "glob_pattern"
               ],
-              "title": "GlobPatternFileSystemPathType"
+              "title": "GlobPatternFileSystemPathType",
+              "type": "string"
             }
           },
-          "title": "GlobPatternFileSystemPath"
+          "required": [
+            "pattern",
+            "type"
+          ],
+          "title": "GlobPatternFileSystemPath",
+          "type": "object"
         },
         {
-          "type": "object",
-          "required": [
-            "type",
-            "value"
-          ],
           "properties": {
             "type": {
-              "type": "string",
               "enum": [
                 "special"
               ],
-              "title": "SpecialFileSystemPathType"
+              "title": "SpecialFileSystemPathType",
+              "type": "string"
             },
             "value": {
               "$ref": "#/definitions/FileSystemSpecialPath"
             }
           },
-          "title": "SpecialFileSystemPath"
+          "required": [
+            "type",
+            "value"
+          ],
+          "title": "SpecialFileSystemPath",
+          "type": "object"
         }
       ]
     },
     "FileSystemSandboxEntry": {
-      "type": "object",
-      "required": [
-        "access",
-        "path"
-      ],
       "properties": {
         "access": {
           "$ref": "#/definitions/FileSystemAccessMode"
@@ -307,66 +170,67 @@
         "path": {
           "$ref": "#/definitions/FileSystemPath"
         }
-      }
+      },
+      "required": [
+        "access",
+        "path"
+      ],
+      "type": "object"
     },
     "FileSystemSpecialPath": {
       "oneOf": [
         {
-          "type": "object",
-          "required": [
-            "kind"
-          ],
           "properties": {
             "kind": {
-              "type": "string",
               "enum": [
                 "root"
-              ]
+              ],
+              "type": "string"
             }
           },
-          "title": "RootFileSystemSpecialPath"
-        },
-        {
-          "type": "object",
           "required": [
             "kind"
           ],
+          "title": "RootFileSystemSpecialPath",
+          "type": "object"
+        },
+        {
           "properties": {
             "kind": {
-              "type": "string",
               "enum": [
                 "minimal"
-              ]
+              ],
+              "type": "string"
             }
           },
-          "title": "MinimalFileSystemSpecialPath"
-        },
-        {
-          "type": "object",
           "required": [
             "kind"
           ],
+          "title": "MinimalFileSystemSpecialPath",
+          "type": "object"
+        },
+        {
           "properties": {
             "kind": {
-              "type": "string",
               "enum": [
                 "current_working_directory"
-              ]
+              ],
+              "type": "string"
             }
           },
-          "title": "CurrentWorkingDirectoryFileSystemSpecialPath"
-        },
-        {
-          "type": "object",
           "required": [
             "kind"
           ],
+          "title": "CurrentWorkingDirectoryFileSystemSpecialPath",
+          "type": "object"
+        },
+        {
           "properties": {
             "kind": {
-              "type": "string",
               "enum": [
                 "project_roots"
-              ]
+              ],
+              "type": "string"
             },
             "subpath": {
               "type": [
@@ -375,50 +239,49 @@
               ]
             }
           },
-          "title": "KindFileSystemSpecialPath"
-        },
-        {
-          "type": "object",
           "required": [
             "kind"
           ],
+          "title": "KindFileSystemSpecialPath",
+          "type": "object"
+        },
+        {
           "properties": {
             "kind": {
-              "type": "string",
               "enum": [
                 "tmpdir"
-              ]
+              ],
+              "type": "string"
             }
           },
-          "title": "TmpdirFileSystemSpecialPath"
-        },
-        {
-          "type": "object",
           "required": [
             "kind"
           ],
-          "properties": {
-            "kind": {
-              "type": "string",
-              "enum": [
-                "slash_tmp"
-              ]
-            }
-          },
-          "title": "SlashTmpFileSystemSpecialPath"
+          "title": "TmpdirFileSystemSpecialPath",
+          "type": "object"
         },
         {
-          "type": "object",
-          "required": [
-            "kind",
-            "path"
-          ],
           "properties": {
             "kind": {
-              "type": "string",
+              "enum": [
+                "slash_tmp"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "SlashTmpFileSystemSpecialPath",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
               "enum": [
                 "unknown"
-              ]
+              ],
+              "type": "string"
             },
             "path": {
               "type": "string"
@@ -429,7 +292,12 @@
                 "null"
               ]
             }
-          }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -437,12 +305,6 @@
       "oneOf": [
         {
           "description": "Codex owns sandbox construction for this profile.",
-          "type": "object",
-          "required": [
-            "fileSystem",
-            "network",
-            "type"
-          ],
           "properties": {
             "fileSystem": {
               "$ref": "#/definitions/PermissionProfileFileSystemPermissions"
@@ -451,153 +313,154 @@
               "$ref": "#/definitions/PermissionProfileNetworkPermissions"
             },
             "type": {
-              "type": "string",
               "enum": [
                 "managed"
               ],
-              "title": "ManagedPermissionProfileType"
+              "title": "ManagedPermissionProfileType",
+              "type": "string"
             }
           },
-          "title": "ManagedPermissionProfile"
-        },
-        {
-          "description": "Do not apply an outer sandbox.",
-          "type": "object",
           "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "type": "string",
-              "enum": [
-                "disabled"
-              ],
-              "title": "DisabledPermissionProfileType"
-            }
-          },
-          "title": "DisabledPermissionProfile"
-        },
-        {
-          "description": "Filesystem isolation is enforced by an external caller.",
-          "type": "object",
-          "required": [
+            "fileSystem",
             "network",
             "type"
           ],
+          "title": "ManagedPermissionProfile",
+          "type": "object"
+        },
+        {
+          "description": "Do not apply an outer sandbox.",
+          "properties": {
+            "type": {
+              "enum": [
+                "disabled"
+              ],
+              "title": "DisabledPermissionProfileType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "DisabledPermissionProfile",
+          "type": "object"
+        },
+        {
+          "description": "Filesystem isolation is enforced by an external caller.",
           "properties": {
             "network": {
               "$ref": "#/definitions/PermissionProfileNetworkPermissions"
             },
             "type": {
-              "type": "string",
               "enum": [
                 "external"
               ],
-              "title": "ExternalPermissionProfileType"
+              "title": "ExternalPermissionProfileType",
+              "type": "string"
             }
           },
-          "title": "ExternalPermissionProfile"
+          "required": [
+            "network",
+            "type"
+          ],
+          "title": "ExternalPermissionProfile",
+          "type": "object"
         }
       ]
     },
     "PermissionProfileFileSystemPermissions": {
       "oneOf": [
         {
-          "type": "object",
+          "properties": {
+            "entries": {
+              "items": {
+                "$ref": "#/definitions/FileSystemSandboxEntry"
+              },
+              "type": "array"
+            },
+            "globScanMaxDepth": {
+              "format": "uint",
+              "minimum": 1,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "restricted"
+              ],
+              "title": "RestrictedPermissionProfileFileSystemPermissionsType",
+              "type": "string"
+            }
+          },
           "required": [
             "entries",
             "type"
           ],
-          "properties": {
-            "entries": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/FileSystemSandboxEntry"
-              }
-            },
-            "globScanMaxDepth": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint",
-              "minimum": 1.0
-            },
-            "type": {
-              "type": "string",
-              "enum": [
-                "restricted"
-              ],
-              "title": "RestrictedPermissionProfileFileSystemPermissionsType"
-            }
-          },
-          "title": "RestrictedPermissionProfileFileSystemPermissions"
+          "title": "RestrictedPermissionProfileFileSystemPermissions",
+          "type": "object"
         },
         {
-          "type": "object",
-          "required": [
-            "type"
-          ],
           "properties": {
             "type": {
-              "type": "string",
               "enum": [
                 "unrestricted"
               ],
-              "title": "UnrestrictedPermissionProfileFileSystemPermissionsType"
+              "title": "UnrestrictedPermissionProfileFileSystemPermissionsType",
+              "type": "string"
             }
           },
-          "title": "UnrestrictedPermissionProfileFileSystemPermissions"
+          "required": [
+            "type"
+          ],
+          "title": "UnrestrictedPermissionProfileFileSystemPermissions",
+          "type": "object"
         }
       ]
     },
     "PermissionProfileNetworkPermissions": {
-      "type": "object",
-      "required": [
-        "enabled"
-      ],
       "properties": {
         "enabled": {
           "type": "boolean"
         }
-      }
+      },
+      "required": [
+        "enabled"
+      ],
+      "type": "object"
     },
     "Personality": {
-      "type": "string",
       "enum": [
         "none",
         "friendly",
         "pragmatic"
-      ]
+      ],
+      "type": "string"
     },
     "SandboxMode": {
-      "type": "string",
       "enum": [
         "read-only",
         "workspace-write",
         "danger-full-access"
-      ]
+      ],
+      "type": "string"
     },
     "ServiceTier": {
-      "type": "string",
       "enum": [
         "fast",
         "flex"
-      ]
+      ],
+      "type": "string"
     },
     "ThreadStartSource": {
-      "type": "string",
       "enum": [
         "startup",
         "clear"
-      ]
+      ],
+      "type": "string"
     },
     "TurnEnvironmentParams": {
-      "type": "object",
-      "required": [
-        "cwd",
-        "environmentId"
-      ],
       "properties": {
         "cwd": {
           "$ref": "#/definitions/AbsolutePathBuf"
@@ -605,7 +468,144 @@
         "environmentId": {
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "cwd",
+        "environmentId"
+      ],
+      "type": "object"
     }
-  }
+  },
+  "properties": {
+    "approvalPolicy": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AskForApproval"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "approvalsReviewer": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ApprovalsReviewer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Override where approval requests are routed for review on this thread and subsequent turns."
+    },
+    "baseInstructions": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "config": {
+      "additionalProperties": true,
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "cwd": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "developerInstructions": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ephemeral": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "modelProvider": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "permissionProfile": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PermissionProfile"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Full permissions override for this thread. Cannot be combined with `sandbox`."
+    },
+    "personality": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Personality"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sandbox": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SandboxMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "serviceName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "serviceTier": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ServiceTier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sessionStartSource": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ThreadStartSource"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "ThreadStartParams",
+  "type": "object"
 }

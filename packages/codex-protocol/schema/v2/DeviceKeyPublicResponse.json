@@ -1,14 +1,24 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "DeviceKeyPublicResponse",
+  "definitions": {
+    "DeviceKeyAlgorithm": {
+      "description": "Device-key algorithm reported at enrollment and signing boundaries.",
+      "enum": [
+        "ecdsa_p256_sha256"
+      ],
+      "type": "string"
+    },
+    "DeviceKeyProtectionClass": {
+      "description": "Platform protection class for a controller-local device key.",
+      "enum": [
+        "hardware_secure_enclave",
+        "hardware_tpm",
+        "os_protected_nonextractable"
+      ],
+      "type": "string"
+    }
+  },
   "description": "Device-key public metadata returned by `device/key/public`.",
-  "type": "object",
-  "required": [
-    "algorithm",
-    "keyId",
-    "protectionClass",
-    "publicKeySpkiDerBase64"
-  ],
   "properties": {
     "algorithm": {
       "$ref": "#/definitions/DeviceKeyAlgorithm"
@@ -24,22 +34,12 @@
       "type": "string"
     }
   },
-  "definitions": {
-    "DeviceKeyAlgorithm": {
-      "description": "Device-key algorithm reported at enrollment and signing boundaries.",
-      "type": "string",
-      "enum": [
-        "ecdsa_p256_sha256"
-      ]
-    },
-    "DeviceKeyProtectionClass": {
-      "description": "Platform protection class for a controller-local device key.",
-      "type": "string",
-      "enum": [
-        "hardware_secure_enclave",
-        "hardware_tpm",
-        "os_protected_nonextractable"
-      ]
-    }
-  }
+  "required": [
+    "algorithm",
+    "keyId",
+    "protectionClass",
+    "publicKeySpkiDerBase64"
+  ],
+  "title": "DeviceKeyPublicResponse",
+  "type": "object"
 }

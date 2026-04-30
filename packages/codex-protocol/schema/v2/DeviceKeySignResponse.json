@@ -1,13 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "DeviceKeySignResponse",
+  "definitions": {
+    "DeviceKeyAlgorithm": {
+      "description": "Device-key algorithm reported at enrollment and signing boundaries.",
+      "enum": [
+        "ecdsa_p256_sha256"
+      ],
+      "type": "string"
+    }
+  },
   "description": "ASN.1 DER signature returned by `device/key/sign`.",
-  "type": "object",
-  "required": [
-    "algorithm",
-    "signatureDerBase64",
-    "signedPayloadBase64"
-  ],
   "properties": {
     "algorithm": {
       "$ref": "#/definitions/DeviceKeyAlgorithm"
@@ -21,13 +23,11 @@
       "type": "string"
     }
   },
-  "definitions": {
-    "DeviceKeyAlgorithm": {
-      "description": "Device-key algorithm reported at enrollment and signing boundaries.",
-      "type": "string",
-      "enum": [
-        "ecdsa_p256_sha256"
-      ]
-    }
-  }
+  "required": [
+    "algorithm",
+    "signatureDerBase64",
+    "signedPayloadBase64"
+  ],
+  "title": "DeviceKeySignResponse",
+  "type": "object"
 }

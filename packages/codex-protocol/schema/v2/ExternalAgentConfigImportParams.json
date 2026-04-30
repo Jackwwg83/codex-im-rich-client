@@ -1,25 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ExternalAgentConfigImportParams",
-  "type": "object",
-  "required": [
-    "migrationItems"
-  ],
-  "properties": {
-    "migrationItems": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/ExternalAgentConfigMigrationItem"
-      }
-    }
-  },
   "definitions": {
     "ExternalAgentConfigMigrationItem": {
-      "type": "object",
-      "required": [
-        "description",
-        "itemType"
-      ],
       "properties": {
         "cwd": {
           "description": "Null or empty means home-scoped migration; non-empty means repo-scoped migration.",
@@ -44,49 +26,67 @@
         "itemType": {
           "$ref": "#/definitions/ExternalAgentConfigMigrationItemType"
         }
-      }
+      },
+      "required": [
+        "description",
+        "itemType"
+      ],
+      "type": "object"
     },
     "ExternalAgentConfigMigrationItemType": {
-      "type": "string",
       "enum": [
         "AGENTS_MD",
         "CONFIG",
         "SKILLS",
         "PLUGINS",
         "MCP_SERVER_CONFIG"
-      ]
+      ],
+      "type": "string"
     },
     "MigrationDetails": {
-      "type": "object",
+      "properties": {
+        "plugins": {
+          "items": {
+            "$ref": "#/definitions/PluginsMigration"
+          },
+          "type": "array"
+        }
+      },
       "required": [
         "plugins"
       ],
-      "properties": {
-        "plugins": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/PluginsMigration"
-          }
-        }
-      }
+      "type": "object"
     },
     "PluginsMigration": {
-      "type": "object",
-      "required": [
-        "marketplaceName",
-        "pluginNames"
-      ],
       "properties": {
         "marketplaceName": {
           "type": "string"
         },
         "pluginNames": {
-          "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "type": "array"
         }
-      }
+      },
+      "required": [
+        "marketplaceName",
+        "pluginNames"
+      ],
+      "type": "object"
     }
-  }
+  },
+  "properties": {
+    "migrationItems": {
+      "items": {
+        "$ref": "#/definitions/ExternalAgentConfigMigrationItem"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "migrationItems"
+  ],
+  "title": "ExternalAgentConfigImportParams",
+  "type": "object"
 }
