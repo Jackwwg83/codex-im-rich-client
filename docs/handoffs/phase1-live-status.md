@@ -1,14 +1,14 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-01 00:25 (overnight wake 2) — **T9a complete** (Steps 9a.1-9a.5 + codex review fixes). Test count 254/254. HEAD `06d9e3c`. Next wake starts T9b.
+> **Last updated:** 2026-05-01 00:51 (overnight wake 3) — T9b Steps 9b.1 (reattach) + 9b.2 (timeout) + 9b.3 (throw distinction) done. Test count 262/262. HEAD `4798c02`. Next wake handles 9b.4+9b.5 (transport-loss D6 + resolve/expire/fail-pending implementations).
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **T9b — ready to start** (`ApprovalBroker` edges + reviews per plan §1685). Has not started yet; next wake's first action is T9b Step 9b.1 (reattach API).
+- **Active task:** **T9b in progress** — Steps 9b.1 (reattach `1ecb394`) + 9b.2 (timeout) + 9b.3 (throw distinction) done at `4798c02`. Next wake: 9b.4 (transport-loss D6) + 9b.5 (resolve/failPendingAsTransportLost/expirePending implementations).
 - **Autonomous mode:** ON. ScheduleWakeup loop fires roughly every 20 min. Scheduled tasks remaining: T9b → T10 → STOP before T11a.
 - **Last completed task:** **T9a** (`ApprovalBroker` skeleton + happy-path dispatch + dispatch coverage) — 5 implementation commits + codex outside-voice review with 4/4 findings resolved. Plan §1592.
 - **Prior tasks:** Pre-3, T8, T7b, T7a, T6, T5, T4.5, T4, T3, T2, T1, Pre-2, Pre-1.
@@ -16,8 +16,8 @@
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-1-runtime`
-- **HEAD:** `06d9e3c docs(phase-1): codex outside-voice review report — T9a (4 of 4 resolved)`
-- **Recent T9a chain:** `7fe48c6` (review fixes) ← `7a05598` (9a.4+9a.5) ← `e8d5c1a` (9a.3) ← `f274aae` (9a.2) ← `fad862d` (9a.1) ← Pre-3 / T8.
+- **HEAD:** `4798c02 test(core): timeout + throw distinction (T9b Steps 9b.2 + 9b.3)`
+- **Recent T9b chain:** `4798c02` (9b.2+9b.3) ← `1ecb394` (9b.1 reattach) ← T9a complete chain.
 - **Main:** `main`
 
 ## 3. Completed tasks (Phase 1)
@@ -45,28 +45,41 @@ User went to bed — interrupt anytime. To halt: send any message during a wake'
 
 ## 5. Next exact action
 
-**T9b Step 9b.1** — Add `reattach(client)` API on `ApprovalBroker` for the Supervisor (Codex B7 dependency). Detaches from the prior client (drops its handler reference + clears the WeakSet entry — note Pre-3/T9a's WeakSet guard means the new client must be a different instance, which is the expected supervisor pattern), validates `client !== priorClient` (catches identity bugs), calls `client.setServerRequestHandler(...)` on the new one, transfers any retained pending state. Throws if `client === priorClient`. Plan §1777 + plan §1813.
+**T9b Step 9b.4** — transport-loss test (D6) in `packages/core/test/approval-broker.test.ts`:
+- Construct broker on a client, attach, register a handler that **never** resolves (simulates an in-flight pending approval at the moment of transport close).
+- Emit a server request through the fake; the handler starts but doesn't return.
+- Stop the client (or close the transport) — this triggers `client.handleClose` → `rejectAllPending`. The broker's `#pending` Map should also be drained: each record gets `status: "transport_lost"`, `actor: { kind: "system", reason: "transport_lost" }`, `decision: { kind: "denied", reason: "transport_lost" }`.
+- Assert that the pending approval record in the broker reflects the transport-lost terminal state.
+- Assert that `failPendingAsTransportLost()` is **idempotent** — calling it twice doesn't double-process.
 
-Test: assert `setServerRequestHandler` called once on new client, prior client's handler reference set to `null` after reattach, `_attachedClients` WeakSet now contains the new client and not the prior one (or rather: the prior one's slot is unconstrained for the test's lifetime).
+The test will require Step 9b.5 to actually implement the lifecycle, so 9b.4 + 9b.5 land together as a TDD red-green pair (or one combined test+impl commit).
 
-Then proceed sequentially through T9b plan §1685-1804:
-- **Step 9b.2** — timeout test (registered dispatcher takes 31s → broker default-rejects with -32603 + audit)
-- **Step 9b.3** — throw tests (two cases: generic `Error` → -32603 vs explicit `JsonRpcResponseError` → preserve code/message/data)
-- **Step 9b.4** — transport-loss test (D6: pending approval at transport close → status `transport_lost`, `actor=system`, `reason=transport_lost`)
-- **Step 9b.5** — implement `resolve()`, `failPendingAsTransportLost()` (idempotent — Codex B7), `expirePending()`. T9a's stubs throw "T9b" placeholders; T9b makes them real.
-- **Step 9b.6** — type-level + build-time grep guard: assert no approval method-name string literal exists in `packages/{app-server-client,codex-runtime,daemon,cli}/src/**`. Implementation: a `*.test.ts` that runs grep, fails if any match. Exempts test files.
-- **Step 9b.7** — codex outside-voice review (replaces plan's `/plan-eng-review` step; autonomous mode caveat)
-- **Step 9b.9** — full ci-check
-- **Step 9b.10** — commit
-- Then live-status sync + ScheduleWakeup → T10
+**T9b Step 9b.5** — implementations on `ApprovalBroker`:
+- `resolve(approvalId, decision, actor)`:
+  - Look up the pending record by approvalId.
+  - If not found: throw or no-op (decide: probably throw — caller error to resolve a nonexistent approval).
+  - If already terminal: throw (caller error to double-resolve).
+  - Otherwise: set `status: "resolved"`, `decidedAt: new Date()`, `decision`, `actor`. Emit the JSON-RPC response back to codex via `client.respond(appServerRequestId, ...mappedResponse)` where `mappedResponse` is per-method-shape mapping (see plan §1750 — v2 responses are NOT all `{decision: ReviewDecision}`).
+- `failPendingAsTransportLost()`:
+  - Idempotent: subsequent calls are a no-op.
+  - For each pending record: set status/actor/decision per D6.
+  - DO NOT call `client.respond` (the client is dead; transport is closed).
+  - Clear `#pending` afterward to prevent re-processing.
+- `expirePending(maxAgeMs?)`:
+  - For each pending record older than `maxAgeMs` (default = some value, e.g. 10 minutes): set status `expired`, actor `{kind:"system", reason:"expired"}`, decision `{kind:"denied", reason:"expired"}`.
+  - Emit a denied response to codex (which is still alive in this case — only `failPendingAsTransportLost` skips the wire response).
+
+The pending Map needs to be populated by `#handle` BEFORE invoking the registered handler (so the broker can track in-flight approvals for transport-loss / expire). This means `#handle` becomes async-with-side-effect: insert pending → invoke handler → on resolve, remove from pending. That's a substantive change to T9a's pure-dispatch behavior; the test (9b.4) will drive what the implementation needs to do.
 
 T9b-authorized Files (per plan §1773-1775):
-- `packages/core/src/approval-broker.ts` (modify)
+- `packages/core/src/approval-broker.ts` (modify — add resolve/expire/failPending + pending tracking in #handle)
 - `packages/core/test/approval-broker.test.ts` (modify)
 - Create: `packages/core/test/approval-broker-fixture.test.ts` — additional fixture-driven tests
-- Plus the build-time grep guard test file (location TBD inside packages/core/test/ or scripts/)
+- Plus the build-time grep guard test file (T9b Step 9b.6 — location TBD inside packages/core/test/ or scripts/)
 
 T9b may NOT touch `packages/app-server-client/` (Pre-3 owns) or `packages/codex-runtime/` (T8 owns) — only `packages/core/` and possibly `scripts/` for the grep guard.
+
+After 9b.5 lands, remaining T9b steps: 9b.6 (grep guard) → codex review → fix → live-status sync → ScheduleWakeup → T10.
 
 ## 6. Currently modified files (working tree)
 
@@ -78,15 +91,15 @@ Clean (only the gstack runtime lock):
 
 `git stash list` is empty. The autonomous loop's recovery scan treats anything beyond this exact list as drift and triggers a hard stop.
 
-## 7. Current test results (at HEAD `06d9e3c`)
+## 7. Current test results (at HEAD `4798c02`)
 
 - `pnpm typecheck` → exit 0 (6 packages)
-- `pnpm test` → **254 passed (254)**, 27 files (was 231 pre-T9a; +2 broker skeleton + +18 dispatch coverage + +2 dispatch-coverage runtime + +1 cross-instance attach guard from codex review fix)
+- `pnpm test` → **262 passed (262)**, 27 files (was 254 pre-T9b; +4 reattach + +4 timeout/throw)
 - `pnpm typecheck:tests` → exit 0
 - `pnpm test:cli-smoke` → 2 passed
 - `pnpm lint` → exit 0 (81 files biome)
 - `pnpm protocol:check` → exit 0
-- `bash scripts/ci-check.sh` → all 8 gates green at `06d9e3c`
+- `bash scripts/ci-check.sh` → all 8 gates green at `4798c02`
 
 ## 8. Current key decisions (Phase 1, decided — do not relitigate)
 
