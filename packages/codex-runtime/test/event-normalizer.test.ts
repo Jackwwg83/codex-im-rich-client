@@ -21,10 +21,10 @@
 //   - constructor unsubscribes from client.onNotification on iterator close
 
 import { AppServerClient } from "@codex-im/app-server-client";
-import { FakeAppServer } from "@codex-im/testkit";
+import { FakeAppServer, loadFixture } from "@codex-im/testkit";
 import pino from "pino";
 import { describe, expect, it } from "vitest";
-import { EventNormalizer } from "../src/event-normalizer.js";
+import { EventNormalizer, type NormalizerOptions } from "../src/event-normalizer.js";
 import type { CodexRichEvent } from "../src/types.js";
 
 const SILENT = pino({ level: "silent" });
@@ -35,11 +35,11 @@ interface Harness {
   normalizer: EventNormalizer;
 }
 
-function harness(): Harness {
+function harness(opts: NormalizerOptions = {}): Harness {
   const fake = new FakeAppServer();
   const client = new AppServerClient(fake.clientSide, { logger: SILENT });
   void client.start();
-  const normalizer = new EventNormalizer(client);
+  const normalizer = new EventNormalizer(client, opts);
   return { fake, client, normalizer };
 }
 
@@ -138,12 +138,16 @@ describe("EventNormalizer happy path (T7a)", () => {
     const h = harness();
     const it = h.normalizer.events()[Symbol.asyncIterator]();
 
-    h.fake.emitNotification("thread/started", { threadId: "thread-1" });
+    // Wire shape: thread/started has params.thread.id (nested);
+    // thread/closed has params.threadId (top-level). Verified against
+    // generated v2 schemas.
+    h.fake.emitNotification("thread/started", { thread: { id: "thread-1" } });
     h.fake.emitNotification("thread/closed", { threadId: "thread-1" });
 
     const a = (await it.next()).value as CodexRichEvent;
     const b = (await it.next()).value as CodexRichEvent;
     expect(a.type).toBe("thread_started");
+    if (a.type === "thread_started") expect(a.threadId).toBe("thread-1");
     expect(b.type).toBe("thread_closed");
     if (b.type === "thread_closed") expect(b.terminal).toBe(true);
     await teardown(h);
@@ -631,6 +635,320 @@ describe("EventNormalizer happy path (T7a)", () => {
     });
     const ev2 = (await b.next()).value as CodexRichEvent;
     expect(ev2.type).toBe("turn_completed");
+
+    await teardown(h);
+  });
+});
+
+// ─── T7b-2: walk-and-drop overflow + ordering + fixture replay ──────
+
+const delta = (n: string) => ({
+  threadId: "t",
+  turnId: "u",
+  itemId: "m",
+  delta: n,
+});
+
+describe("EventNormalizer walk-and-drop overflow (T7b-2)", () => {
+  it("oldest delta is replaced by an overflow synthetic at the SAME position when soft cap hit", async () => {
+    // Cap=2: third delta forces eviction of delta1.
+    const h = harness({ deltaSoftCap: 2 });
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("item/agentMessage/delta", delta("1"));
+    h.fake.emitNotification("item/agentMessage/delta", delta("2"));
+    h.fake.emitNotification("warning", { msg: "between" });
+    h.fake.emitNotification("item/agentMessage/delta", delta("3"));
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < 4; i++) out.push((await it.next()).value as CodexRichEvent);
+
+    // Expected: synthetic@0 (delta1 dropped), delta2@1, warning@2, delta3@3
+    expect(out[0]?.type).toBe("normalizer_overflow");
+    if (out[0]?.type === "normalizer_overflow") {
+      expect(out[0].droppedCount).toBe(1);
+      expect(out[0].class).toBe("delta");
+    }
+    expect(out[1]?.type).toBe("agent_message_delta");
+    if (out[1]?.type === "agent_message_delta") expect(out[1].deltaText).toBe("2");
+    expect(out[2]?.type).toBe("warning");
+    expect(out[3]?.type).toBe("agent_message_delta");
+    if (out[3]?.type === "agent_message_delta") expect(out[3].deltaText).toBe("3");
+
+    await teardown(h);
+  });
+
+  it("multiple drops accumulate droppedCount monotonically (1, 2, 3, ...)", async () => {
+    const h = harness({ deltaSoftCap: 1 });
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("item/agentMessage/delta", delta("1"));
+    h.fake.emitNotification("item/agentMessage/delta", delta("2"));
+    h.fake.emitNotification("item/agentMessage/delta", delta("3"));
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < 3; i++) out.push((await it.next()).value as CodexRichEvent);
+
+    // delta1 evicted by delta2 (synthetic dc=1), then delta2 evicted by delta3 (synthetic dc=2),
+    // delta3 in queue.
+    expect(out[0]?.type).toBe("normalizer_overflow");
+    expect(out[1]?.type).toBe("normalizer_overflow");
+    expect(out[2]?.type).toBe("agent_message_delta");
+    if (out[0]?.type === "normalizer_overflow") expect(out[0].droppedCount).toBe(1);
+    if (out[1]?.type === "normalizer_overflow") expect(out[1].droppedCount).toBe(2);
+
+    await teardown(h);
+  });
+
+  it("LIFECYCLE invariant: lifecycle events are NEVER dropped under delta overflow (D5 final)", async () => {
+    // Many deltas under a low cap; interleave lifecycle events. Every
+    // lifecycle event must survive to the consumer.
+    const h = harness({ deltaSoftCap: 2 });
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Emit 5 deltas, then 1 warning, then 5 more deltas (11 total).
+    // Walk-and-drop math: each delta beyond cap=2 splices out 1 + adds
+    // 1 synthetic + appends 1 new = net +1 queue entry. So 11 wire
+    // frames → 11 queue entries (2 surviving deltas + 8 synthetics +
+    // 1 warning), drain exactly 11 events.
+    for (let i = 0; i < 5; i++) {
+      h.fake.emitNotification("item/agentMessage/delta", delta(`a${i}`));
+    }
+    h.fake.emitNotification("warning", { msg: "load-bearing" });
+    for (let i = 0; i < 5; i++) {
+      h.fake.emitNotification("item/agentMessage/delta", delta(`b${i}`));
+    }
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < 11; i++) {
+      out.push((await it.next()).value as CodexRichEvent);
+    }
+
+    // The warning MUST be present (lifecycle never dropped).
+    expect(out.filter((e) => e.type === "warning")).toHaveLength(1);
+
+    // Some deltas should have been dropped (overflow synthetics present).
+    expect(out.some((e) => e.type === "normalizer_overflow" && e.class === "delta")).toBe(true);
+
+    // No lifecycle-class overflow synthetic (would indicate the
+    // catastrophic hard-cap fired, which shouldn't under this load).
+    expect(out.some((e) => e.type === "normalizer_overflow" && e.class === "lifecycle")).toBe(
+      false,
+    );
+
+    await teardown(h);
+  });
+
+  it("walk-and-drop preserves global FIFO order across non-evicted events", async () => {
+    const h = harness({ deltaSoftCap: 2 });
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Wire pattern (as if from real codex):
+    //   warning A, delta a, delta b, warning B, delta c, delta d, warning C
+    // With cap=2, delta a and delta b will be evicted when c & d come in.
+    h.fake.emitNotification("warning", { mark: "A" });
+    h.fake.emitNotification("item/agentMessage/delta", delta("a"));
+    h.fake.emitNotification("item/agentMessage/delta", delta("b"));
+    h.fake.emitNotification("warning", { mark: "B" });
+    h.fake.emitNotification("item/agentMessage/delta", delta("c"));
+    h.fake.emitNotification("item/agentMessage/delta", delta("d"));
+    h.fake.emitNotification("warning", { mark: "C" });
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < 7; i++) out.push((await it.next()).value as CodexRichEvent);
+
+    // Global FIFO invariant: every warning's relative position to other
+    // warnings must be preserved.
+    const warningMarks = out
+      .filter((e): e is Extract<CodexRichEvent, { type: "warning" }> => e.type === "warning")
+      .map((e) => (e.raw as { params: { mark: string } }).params.mark);
+    expect(warningMarks).toEqual(["A", "B", "C"]);
+
+    // The trailing two deltas (c, d) must be preserved (cap=2 + 2 in ⇒
+    // walk-and-drop evicts a and b; c and d remain).
+    const remainingDeltaTexts = out
+      .filter(
+        (e): e is Extract<CodexRichEvent, { type: "agent_message_delta" }> =>
+          e.type === "agent_message_delta",
+      )
+      .map((e) => e.deltaText);
+    expect(remainingDeltaTexts).toEqual(["c", "d"]);
+
+    await teardown(h);
+  });
+
+  it("hard-cap drops oldest entry regardless of class with a lifecycle-class synthetic", async () => {
+    // Hard cap at 3, soft cap effectively disabled (high). Push 4
+    // lifecycle events; the 4th forces a hard-cap drop of the first.
+    const h = harness({ deltaSoftCap: 1_000_000, totalHardCap: 3 });
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("warning", { mark: "1" });
+    h.fake.emitNotification("warning", { mark: "2" });
+    h.fake.emitNotification("warning", { mark: "3" });
+    h.fake.emitNotification("warning", { mark: "4" });
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < 4; i++) {
+      const r = await it.next();
+      if (r.done) break;
+      out.push(r.value as CodexRichEvent);
+    }
+
+    // Position 0 should be the hard-cap synthetic (replaces dropped warning1).
+    expect(out[0]?.type).toBe("normalizer_overflow");
+    if (out[0]?.type === "normalizer_overflow") {
+      expect(out[0].class).toBe("lifecycle");
+      expect(out[0].droppedCount).toBe(1);
+    }
+    // Then warnings 2, 3, 4 in order.
+    const trailing = out
+      .slice(1)
+      .filter((e): e is Extract<CodexRichEvent, { type: "warning" }> => e.type === "warning")
+      .map((e) => (e.raw as { params: { mark: string } }).params.mark);
+    expect(trailing).toEqual(["2", "3", "4"]);
+
+    await teardown(h);
+  });
+
+  it("synthetic events do NOT count toward the delta cap (no recursive overflow)", async () => {
+    const h = harness({ deltaSoftCap: 1 });
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Emit two deltas — the second triggers walk-and-drop and inserts
+    // a synthetic. The synthetic is class:"lifecycle" so it must NOT
+    // bump the delta count and must NOT itself be evicted.
+    h.fake.emitNotification("item/agentMessage/delta", delta("1"));
+    h.fake.emitNotification("item/agentMessage/delta", delta("2"));
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    // Emit a third delta. Should evict the second (since cap=1, count=1).
+    // The synthetic from round 1 must remain at position 0.
+    h.fake.emitNotification("item/agentMessage/delta", delta("3"));
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < 3; i++) out.push((await it.next()).value as CodexRichEvent);
+
+    expect(out[0]?.type).toBe("normalizer_overflow"); // delta1 evicted
+    expect(out[1]?.type).toBe("normalizer_overflow"); // delta2 evicted
+    expect(out[2]?.type).toBe("agent_message_delta"); // delta3 survives
+    if (out[2]?.type === "agent_message_delta") expect(out[2].deltaText).toBe("3");
+
+    await teardown(h);
+  });
+
+  it("default caps don't break ordinary load (the captured T4 fixture)", async () => {
+    // Default cap is 4096; the fixture has 25 events. No overflow expected.
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    const messages = loadFixture("0.125.0", "phase1-richer-turn-event-stream.jsonl");
+    for (const msg of messages) {
+      const m = msg as { method: string; params: unknown };
+      h.fake.emitNotification(m.method, m.params);
+    }
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      out.push((await it.next()).value as CodexRichEvent);
+    }
+
+    expect(out.length).toBe(messages.length);
+    // No overflow at default caps.
+    expect(out.some((e) => e.type === "normalizer_overflow")).toBe(false);
+
+    await teardown(h);
+  });
+});
+
+// ─── T7b-2: fixture replay against the captured T4 wire ──────────────
+
+describe("EventNormalizer fixture replay (T7b-2)", () => {
+  it("replays phase1-richer-turn-event-stream and yields the expected lifecycle types", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    const messages = loadFixture("0.125.0", "phase1-richer-turn-event-stream.jsonl");
+    for (const msg of messages) {
+      const m = msg as { method: string; params: unknown };
+      h.fake.emitNotification(m.method, m.params);
+    }
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      out.push((await it.next()).value as CodexRichEvent);
+    }
+
+    const types = out.map((e) => e.type);
+
+    // Expected typed arms from the captured fixture.
+    expect(types).toContain("turn_started");
+    expect(types).toContain("turn_completed");
+    expect(types).toContain("thread_started");
+    expect(types).toContain("agent_message_delta");
+    expect(types).toContain("item_started");
+    expect(types).toContain("item_completed");
+    expect(types).toContain("warning");
+
+    // The turn/completed in this fixture has status="completed" (not
+    // failed/interrupted). T7b-1's discrimination must produce
+    // turn_completed, not turn_failed/turn_interrupted.
+    expect(types).not.toContain("turn_failed");
+    expect(types).not.toContain("turn_interrupted");
+
+    // Methods without a typed arm (item/started for fileChange items,
+    // mcpServer/startupStatus/updated, etc.) come through as `unknown`
+    // — verify some are present.
+    expect(types).toContain("unknown");
+
+    // No overflow at default caps.
+    expect(types).not.toContain("normalizer_overflow");
+
+    await teardown(h);
+  });
+
+  it("preserves arrival order across the entire fixture", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    const messages = loadFixture("0.125.0", "phase1-richer-turn-event-stream.jsonl");
+    for (const msg of messages) {
+      const m = msg as { method: string; params: unknown };
+      h.fake.emitNotification(m.method, m.params);
+    }
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      out.push((await it.next()).value as CodexRichEvent);
+    }
+
+    // For each event, its index in the output must match the original
+    // wire frame's index in the fixture.
+    expect(out.length).toBe(messages.length);
+    for (let i = 0; i < messages.length; i++) {
+      const wireMethod = (messages[i] as { method: string }).method;
+      const richEvent = out[i];
+      expect(richEvent).toBeDefined();
+      // raw should be the original message envelope (or {method,params}
+      // for unknown).
+      const raw = richEvent && "raw" in richEvent ? richEvent.raw : undefined;
+      if (raw !== undefined) {
+        expect((raw as { method: string }).method).toBe(wireMethod);
+      } else if (richEvent?.type === "unknown") {
+        expect(richEvent.method).toBe(wireMethod);
+      } else {
+        throw new Error(`event at index ${i} has neither raw nor unknown shape`);
+      }
+    }
 
     await teardown(h);
   });

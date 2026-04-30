@@ -1,11 +1,10 @@
-// Phase 1 codex-runtime — EventNormalizer (T7a + T7b-1).
+// Phase 1 codex-runtime — EventNormalizer (T7a + T7b-1 + T7b-2).
 //
 // D5 final + Codex outside-voice B4 invariant: ONE FIFO queue. Order is
 // preserved globally across both lifecycle and delta classes. Backpressure
-// (T7b-2) is per-class via walk-and-drop, NOT via drain priority — a
-// scheduler that drained lifecycle before delta would silently reorder
-// retained deltas around lifecycle events, breaking the ordered-iterator
-// contract.
+// is per-class via walk-and-drop, NOT via drain priority — a scheduler
+// that drained lifecycle before delta would silently reorder retained
+// deltas around lifecycle events, breaking the ordered-iterator contract.
 //
 // Iterator contract (codex T7a review #1 + #4 — single-consumer):
 //
@@ -40,40 +39,86 @@
 //   arm fall through to `unknownEvent(msg)` via case-fall-through
 //   grouping; the `default` branch's `const _exhaustive: never = method`
 //   guards against silent fall-through if codex adds a new arm.
+//
+// Backpressure (T7b-2 — walk-and-drop):
+//
+//   Each queue entry is wrapped as { ev, cls } so walk-and-drop can
+//   identify delta-class entries without re-classifying. On enqueue:
+//
+//     1. If new event is delta-class AND #deltaCount >= deltaSoftCap:
+//        scan from queue head for the OLDEST delta-class entry, splice
+//        it out, and insert a `{type:"normalizer_overflow", class:"delta"}`
+//        synthetic AT THE SAME POSITION. This preserves global FIFO order
+//        — consumers see the gap exactly where the dropped event was.
+//        The synthetic itself is class:"lifecycle" (it's not droppable).
+//
+//     2. Push the new event at the tail.
+//
+//     3. If queue length still exceeds totalHardCap (lifecycle
+//        saturation — should be impossible in practice under codex
+//        0.125), drop the oldest entry regardless of class and replace
+//        with a fatal-class `{type:"normalizer_overflow", class:"lifecycle"}`
+//        synthetic. This branch indicates a runtime bug, not normal load.
+//
+//   Lifecycle-class events are NEVER dropped via walk-and-drop. The
+//   D5 invariant: lifecycle events are state-machine transitions; the
+//   runtime correctness depends on observing them.
 
 import type {
   AppServerClient,
   JsonRpcNotification,
   Unsubscribe,
 } from "@codex-im/app-server-client";
+import { classifyMethod } from "./event-class.js";
 import { type ServerNotificationMethod, isServerNotificationMethod } from "./method-names.js";
-import type { CodexRichEvent } from "./types.js";
+import type { CodexRichEvent, EventClass } from "./types.js";
 
-/**
- * Future-compatibility surface. T7a doesn't store these caps yet — the
- * walk-and-drop overflow logic lives in T7b-2. The keys are accepted on
- * construction so callers can pass them today and T7b-2 becomes a
- * non-breaking add.
- */
 export type NormalizerOptions = {
-  /** T7b-2: when delta-class queue size exceeds this, walk and drop oldest delta. */
+  /**
+   * Delta-class queue soft cap. When a new delta arrives and the count
+   * of delta-class entries already in the queue is ≥ this cap, the
+   * normalizer walks the queue, splices out the OLDEST delta, and
+   * inserts a `normalizer_overflow` synthetic at the same position.
+   * Default 4096.
+   */
   deltaSoftCap?: number;
-  /** T7b-2: total queue hard cap as a last-resort backstop. */
+  /**
+   * Total queue hard cap as a last-resort backstop. If queue length
+   * exceeds this after walk-and-drop has run, the normalizer drops
+   * the oldest entry regardless of class and emits a fatal-class
+   * synthetic. Should be impossible in practice; if it fires, a
+   * runtime bug is responsible. Default 16384.
+   */
   totalHardCap?: number;
 };
 
+const DEFAULT_DELTA_SOFT_CAP = 4096;
+const DEFAULT_TOTAL_HARD_CAP = 16384;
+
 type Resolver = (ev: IteratorResult<CodexRichEvent>) => void;
+type QueueEntry = { ev: CodexRichEvent; cls: EventClass };
 
 export class EventNormalizer {
-  // Single FIFO queue (D5 final invariant).
-  #queue: CodexRichEvent[] = [];
+  // Single FIFO queue (D5 final invariant). Each entry wraps the rich
+  // event with its backpressure class so walk-and-drop can identify
+  // delta entries without re-classifying.
+  #queue: QueueEntry[] = [];
   #waiters: Resolver[] = [];
   #cancelled = false;
   #endOfStream = false;
   #unsub: Unsubscribe;
   #iterator: AsyncIterableIterator<CodexRichEvent> | null = null;
 
-  constructor(client: AppServerClient, _opts: NormalizerOptions = {}) {
+  // Backpressure accounting (T7b-2).
+  readonly #deltaSoftCap: number;
+  readonly #totalHardCap: number;
+  #deltaCount = 0;
+  #droppedDeltaCount = 0;
+  #droppedLifecycleCount = 0;
+
+  constructor(client: AppServerClient, opts: NormalizerOptions = {}) {
+    this.#deltaSoftCap = opts.deltaSoftCap ?? DEFAULT_DELTA_SOFT_CAP;
+    this.#totalHardCap = opts.totalHardCap ?? DEFAULT_TOTAL_HARD_CAP;
     this.#unsub = client.onNotification((msg) => this.#onNotification(msg));
   }
 
@@ -103,9 +148,6 @@ export class EventNormalizer {
     if (this.#cancelled || this.#endOfStream) return;
     this.#endOfStream = true;
     this.#unsub();
-    // Waiters can only exist when the queue is empty (drain() empties
-    // them eagerly on enqueue). With endOfStream + no events ever
-    // again, any waiter must resolve as done.
     if (this.#queue.length === 0) {
       for (const w of this.#waiters.splice(0)) {
         w({ value: undefined, done: true });
@@ -118,8 +160,90 @@ export class EventNormalizer {
   #onNotification(msg: JsonRpcNotification): void {
     if (this.#cancelled || this.#endOfStream) return;
     const ev = this.#mapNotification(msg);
-    this.#queue.push(ev);
+    const cls = this.#classifyForBackpressure(msg.method);
+    this.#enqueue(ev, cls);
     this.#drain();
+  }
+
+  /**
+   * Per-method backpressure classification. Uses METHOD_CLASS for
+   * known methods; unknown methods default to lifecycle so we never
+   * overflow them under burst (an unrecognized burst is already
+   * abnormal — drop it on the lifecycle hard cap, not the delta soft
+   * cap).
+   */
+  #classifyForBackpressure(method: string): EventClass {
+    if (isServerNotificationMethod(method)) {
+      return classifyMethod(method);
+    }
+    return "lifecycle";
+  }
+
+  /**
+   * Walk-and-drop enqueue (D5 final / Codex B4).
+   *
+   *   1. If new event is delta and we're at the soft cap, walk forward
+   *      for the oldest delta in the queue, splice it out, and insert
+   *      a `normalizer_overflow{class:"delta"}` synthetic at the same
+   *      position. Order preserved.
+   *   2. Push the new event.
+   *   3. If total length exceeds the hard cap (lifecycle saturation),
+   *      drop oldest entry regardless of class with
+   *      `normalizer_overflow{class:"lifecycle"}` at the front.
+   */
+  #enqueue(ev: CodexRichEvent, cls: EventClass): void {
+    if (cls === "delta" && this.#deltaCount >= this.#deltaSoftCap) {
+      for (let i = 0; i < this.#queue.length; i++) {
+        const entry = this.#queue[i];
+        if (entry?.cls === "delta") {
+          this.#droppedDeltaCount++;
+          this.#queue.splice(i, 1, {
+            ev: {
+              type: "normalizer_overflow",
+              droppedCount: this.#droppedDeltaCount,
+              class: "delta",
+            },
+            cls: "lifecycle",
+          });
+          this.#deltaCount--;
+          break;
+        }
+      }
+    }
+
+    this.#queue.push({ ev, cls });
+    if (cls === "delta") this.#deltaCount++;
+
+    // Hard-cap backstop (catastrophic — should be unreachable under
+    // codex 0.125 with bounded lifecycle event rate). Drop oldest
+    // entries until under cap, then emit ONE synthetic indicating the
+    // round's drop count. Queue may briefly sit at hardCap+1 because
+    // of the synthetic; that's bounded — the next push runs this
+    // block again and drops the synthetic alongside the next oldest.
+    //
+    // Earlier T7b-2 attempt looped on `shift+unshift` per drop, which
+    // turns into an infinite loop (each iteration nets +0 queue
+    // size). The fix is to drain and synthesize OUTSIDE the loop.
+    if (this.#queue.length > this.#totalHardCap) {
+      let droppedThisRound = 0;
+      while (this.#queue.length > this.#totalHardCap) {
+        const oldest = this.#queue.shift();
+        if (oldest === undefined) break;
+        if (oldest.cls === "delta") this.#deltaCount--;
+        droppedThisRound++;
+      }
+      if (droppedThisRound > 0) {
+        this.#droppedLifecycleCount += droppedThisRound;
+        this.#queue.unshift({
+          ev: {
+            type: "normalizer_overflow",
+            droppedCount: this.#droppedLifecycleCount,
+            class: "lifecycle",
+          },
+          cls: "lifecycle",
+        });
+      }
+    }
   }
 
   /**
@@ -133,7 +257,6 @@ export class EventNormalizer {
     if (!isServerNotificationMethod(msg.method)) {
       return unknownEvent(msg);
     }
-    // Narrowed to ServerNotificationMethod — switch is exhaustive.
     const method: ServerNotificationMethod = msg.method;
 
     switch (method) {
@@ -173,11 +296,17 @@ export class EventNormalizer {
         return unknownEvent(msg);
       }
       case "thread/started": {
-        const p = msg.params as { threadId?: unknown };
-        if (typeof p?.threadId !== "string") return unknownEvent(msg);
-        return { type: "thread_started", threadId: p.threadId, raw: msg };
+        // Wire shape (verified against generated
+        // ThreadStartedNotification = { thread: Thread }):
+        // threadId is nested under params.thread.id, NOT at top level.
+        const p = msg.params as { thread?: { id?: unknown } };
+        if (typeof p?.thread?.id !== "string") return unknownEvent(msg);
+        return { type: "thread_started", threadId: p.thread.id, raw: msg };
       }
       case "thread/closed": {
+        // Wire shape (verified against generated
+        // ThreadClosedNotification = { threadId: string }):
+        // threadId is at the top level, unlike thread/started.
         const p = msg.params as { threadId?: unknown };
         if (typeof p?.threadId !== "string") return unknownEvent(msg);
         return { type: "thread_closed", threadId: p.threadId, raw: msg, terminal: true };
@@ -336,11 +465,7 @@ export class EventNormalizer {
         return unknownEvent(msg);
 
       default: {
-        // Exhaustiveness guard. If a future codex upgrade adds a new
-        // ServerNotification arm, METHOD_CLASS would force a compile
-        // error in event-class.ts; this branch catches the case where
-        // the maintainer added the entry to METHOD_CLASS but forgot
-        // to also enumerate it in this switch.
+        // Exhaustiveness guard.
         const _exhaustive: never = method;
         void _exhaustive;
         return unknownEvent(msg);
@@ -356,9 +481,9 @@ export class EventNormalizer {
       },
       next(): Promise<IteratorResult<CodexRichEvent>> {
         return new Promise<IteratorResult<CodexRichEvent>>((resolve) => {
-          if (self.#queue.length > 0) {
-            const ev = self.#queue.shift() as CodexRichEvent;
-            resolve({ value: ev, done: false });
+          const entry = self.#dequeue();
+          if (entry !== undefined) {
+            resolve({ value: entry.ev, done: false });
             return;
           }
           if (self.#cancelled || self.#endOfStream) {
@@ -378,11 +503,21 @@ export class EventNormalizer {
     return it;
   }
 
+  /**
+   * Dequeue the head entry, maintaining the delta count. Used by both
+   * the iterator's .next() and #drain so the count is always correct.
+   */
+  #dequeue(): QueueEntry | undefined {
+    const entry = this.#queue.shift();
+    if (entry?.cls === "delta") this.#deltaCount--;
+    return entry;
+  }
+
   #drain(): void {
     while (this.#queue.length > 0 && this.#waiters.length > 0) {
       const w = this.#waiters.shift() as Resolver;
-      const ev = this.#queue.shift() as CodexRichEvent;
-      w({ value: ev, done: false });
+      const entry = this.#dequeue() as QueueEntry;
+      w({ value: entry.ev, done: false });
     }
   }
 
@@ -397,6 +532,7 @@ export class EventNormalizer {
       this.#unsub();
     }
     this.#queue.length = 0;
+    this.#deltaCount = 0;
     for (const w of this.#waiters.splice(0)) {
       w({ value: undefined, done: true });
     }
