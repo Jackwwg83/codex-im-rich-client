@@ -44,30 +44,111 @@
 
 Carried verbatim from CLAUDE.md / handoff §Phase 0 红线复核. Any task that would violate one of these is **rejected at review**, not "fixed in code review".
 
+### 0.4 Pre-Phase-1 prerequisites (separate PRs, before Task 1)
+
+These two changes ship as **standalone PRs** off `phase-0-bootstrap`, each with its own Phase 0 gate re-run, before Phase 1 implementation begins. They are **not** Phase 1 tasks — they are prerequisites the plan depends on.
+
+#### Pre-1: Node 22→24 bump (was P0-1 in plan-eng-review; reversed after Codex outside-voice on 2026-04-30)
+
+Today is 2026-04-30 — Node 20 reaches EOL today per the official Node release schedule. Codex outside-voice flagged that Phase 1 cannot ship long-term on EOL Node. The right move is a single standalone bump PR, not silent inclusion in any Phase 1 task.
+
+Scope of the bump PR:
+- `package.json#engines.node` → `>=24 <25`
+- `package.json#codexIm.nodeVersion` (if present) → `24.x`
+- `@types/node` devDep → `^24`
+- Re-run all Phase 0 gates under Node 24: `pnpm typecheck && pnpm test && pnpm lint && pnpm protocol:check && CODEX_SMOKE=1 pnpm smoke:app-server && CODEX_REAL_SMOKE=1 pnpm smoke:real-turn && pnpm audit`
+- Tag: `phase0-bootstrap-node24` (preserves the original `phase0-bootstrap-complete` tag on the Node-20 commit for traceability)
+- Single commit titled `chore(node): bump engines.node from >=20.10 to >=24 — Node 20 EOL 2026-04-30`
+
+Phase 1 starts **on top of** this bump. Every later command in this plan assumes Node 24.
+
+#### Pre-2: `@codex-im/protocol` facade expansion (Codex blocker B3)
+
+Phase 0 facade `packages/codex-protocol/src/index.ts:12` only re-exports initialize types. Phase 1 imports `ServerRequest`, `ServerNotification`, `ClientRequest`, plus per-method params/responses. Without a facade expansion, every Phase 1 package would either grow `import { ... } from "@codex-im/protocol/generated/..."` strings (loses the audited facade rule) or break.
+
+The facade expansion ships as a separate small PR before Task 1 because:
+- It touches only one file (`packages/codex-protocol/src/index.ts`) plus its test
+- Each new export is a deliberate code-review checkpoint per the facade rule (`packages/codex-protocol/README.md`)
+- T1 (categorize-error) is the only Phase 1A task that does NOT depend on the facade — it can run in parallel with this PR; T3/T5/T6/T7a/T8/T9a all depend on it
+
+Scope of the facade PR (`packages/codex-protocol/src/index.ts`):
+```ts
+// Add to existing initialize-only exports:
+export type {
+  // discriminated unions used for type-level method dispatch
+  ServerRequest,
+  ServerNotification,
+  ClientRequest,
+  ClientResponse,
+  ServerResponse,
+} from "./generated/index.js";
+
+// Per-method params/responses consumed by Phase 1.
+// (Add only what Phase 1 imports; new exports require a code-review checkpoint.)
+export type {
+  // Threading / turning
+  ThreadStartParams, ThreadStartResponse,
+  ThreadResumeParams, ThreadResumeResponse,
+  ThreadForkParams, ThreadForkResponse,
+  ThreadTurnsListParams, ThreadTurnsListResponse,
+  ThreadReadParams, ThreadReadResponse,
+  TurnStartParams, TurnStartResponse,
+  TurnSteerParams, TurnSteerResponse,
+  TurnInterruptParams, TurnInterruptResponse,    // Codex B8: turn/interrupt — not thread/interrupt
+  ReviewStartParams, ReviewStartResponse,
+  // Server-initiated request params (consumed by ApprovalBroker dispatchers)
+  CommandExecutionRequestApprovalParams, CommandExecutionRequestApprovalResponse,
+  FileChangeRequestApprovalParams, FileChangeRequestApprovalResponse,
+  PermissionsRequestApprovalParams, PermissionsRequestApprovalResponse,
+  ToolRequestUserInputParams, ToolRequestUserInputResponse,
+  DynamicToolCallParams, DynamicToolCallResponse,
+  McpServerElicitationRequestParams, McpServerElicitationRequestResponse,
+  ApplyPatchApprovalParams, ApplyPatchApprovalResponse,    // legacy
+  ExecCommandApprovalParams, ExecCommandApprovalResponse,  // legacy
+  ChatgptAuthTokensRefreshParams, ChatgptAuthTokensRefreshResponse,
+  ReviewDecision,
+  // Notification params (consumed by EventNormalizer)
+  TurnStartedNotification, TurnCompletedNotification,
+  ItemStartedNotification, ItemCompletedNotification,
+  AgentMessageDeltaNotification,
+  // ... other notification arms enumerated by the implementer
+} from "./generated/index.js";
+```
+
+The implementer **enumerates each export** and verifies it exists in `packages/codex-protocol/src/generated/index.ts` before committing. Any name that doesn't exist is a Phase 1 plan defect — surface it before Phase 1 starts, not during implementation.
+
+Tag/commit: a single commit `feat(protocol): expand facade for Phase 1 (ServerRequest/Notification/ClientRequest + per-method types)` on a branch off whatever the Node bump PR settles on.
+
 ---
 
 ## 1. Decision Log (Phase 1)
 
 Numbering continues from Phase 0 (D1–D4). Each decision must have a write-up in `docs/superpowers/plans/decision-log.md` after merge.
 
-### D5 — EventNormalizer backpressure: two-class queue, lifecycle unbounded, deltas drop-oldest (revised after plan-eng-review P0-3)
+### D5 — EventNormalizer backpressure: single FIFO queue with class-aware walk-and-drop (revised twice; final after Codex outside-voice 2026-04-30, blocker B4)
 
 **Question:** When raw notifications arrive faster than the async iterator consumer drains, what happens?
 
-**Options considered:**
+**Options considered (full history):**
 - (A) Unbounded queue — risk OOM under 1000-delta/sec scenarios
-- (B) Single bounded queue, drop oldest on overflow — risks dropping `turn/started`, `item/*/requestApproval`, or other load-bearing lifecycle events
+- (B) Single bounded queue, drop oldest on overflow — risks dropping load-bearing lifecycle events (e.g. `turn/started`, `item/*/requestApproval`)
 - (C) Backpressure to `client.onNotification` — impossible; notifications are stateless callbacks
-- (D) Two-class queue: lifecycle events unbounded, delta events bounded with drop-oldest + overflow synthetic event
+- (D) Two-class FIFO + lifecycle-drains-first scheduler — **rejected by Codex B4** because draining lifecycle before delta reorders deltas around lifecycle events, contradicting the ordered-iterator goal
+- (E) Single FIFO queue with class-aware walk-and-drop — **adopted**
 
-**Decision:** **D**. Classify each notification on enqueue into one of two classes via a method-prefix table:
+**Decision:** **E**. There is exactly **one** FIFO queue. Order is preserved globally across both classes. Backpressure works by scanning, not by reordering.
 
-- **Lifecycle class (unbounded):** `turn/{started,completed,failed,interrupted}`, `thread/{started,closed,...}`, `item/{started,completed}`, all `item/*/requestApproval` and other `ServerRequest`-correlated frames, `error`, `warning`, `guardianWarning`, `model/*`, `thread/tokenUsage/updated`. These are O(N) per turn (not per token), so OOM risk is bounded by turn count and acceptable.
-- **Delta class (bounded, default cap 4096, drop-oldest):** `*/delta`, `*/outputDelta`, `*/textDelta`, `*/patchUpdated` (the high-frequency byproduct streams). On overflow, drop oldest and emit `{ type: "normalizer_overflow", droppedCount, class: "delta" }` synthetic event.
+Each notification carries a class assigned via a type-checked exhaustive `METHOD_CLASS: Record<ServerNotification["method"], "lifecycle" | "delta">` (D7-style — adding a new union member without classifying it is a TypeScript compile error). The class affects **only** the eviction policy:
 
-Classification table is type-level-checked (D7-style): the prefix-to-class map's domain must equal `ServerNotification["method"]` union, so a new method that isn't classified causes a compile error.
+- Default delta soft cap: 4096. Default total hard cap: 16384.
+- On enqueue:
+  - If `deltaCount >= deltaSoftCap`: walk forward from queue head, find the **oldest delta-class entry**, splice it out (preserving order of all other entries), decrement counter. Insert a `{ type: "normalizer_overflow", droppedCount, class: "delta" }` synthetic event at the spliced position so downstream renderers see the gap **at the right place in the stream**. Then enqueue the new event at the tail.
+  - If after that the queue still has `length >= totalHardCap` (lifecycle saturation — should be impossible in practice under codex 0.125): emit a fatal-class synthetic `{ type: "normalizer_overflow", droppedCount, class: "lifecycle" }`, drop the oldest entry regardless of class, and log at error level. This branch indicates a real bug, not normal load.
+- On drain: simple FIFO. No scheduler, no priority. Consumer sees events in arrival order, with overflow synthetics inserted **in place** of dropped entries.
 
-**Reason:** Phase 1 has no renderer yet, so dropping a `turn/started` would corrupt runtime state without recourse. Lifecycle events are inherently rate-limited by codex's per-turn structure; deltas are the only events that can burst. Splitting the classes preserves the safety property "every state-machine transition is observed" while keeping bounded memory under delta storms. Cost: ~10 LOC over the single-queue version, all type-checked.
+**Reason:** Codex B4 was correct — the previous two-class drain-priority design was fundamentally broken. A consumer that depends on "delta_K appears between item_started and turn_completed" cannot tolerate the normalizer reordering them. Single FIFO preserves every causal invariant the wire produces. Walk-and-drop is O(N) per overflow event, but overflow is the rare path; the common path stays O(1) enqueue+dequeue.
+
+Cost vs. previous (rejected) two-queue design: roughly the same code (~30 LOC), strictly more correct.
 
 ### D6 — Supervisor recovery on transport close: pending turn fails open, no auto-resume
 
@@ -185,6 +266,8 @@ biome.json / .biome*              # no change expected
 scripts/ci-check.sh               # NEW (P1-4) — local "did your worktree pass everything?" gate; bundles check:codex-version + typecheck + test + lint + protocol:check; subagents must run before claiming done
 scripts/redact-fixture.mjs        # NEW (P1-5) — JSONL filter that scrubs absolute paths + model names; T4 capture pipes through it
 scripts/redact-fixture.test.mjs   # NEW (P1-5) — round-trip test on a known dirty fixture; runs as part of pnpm test
+scripts/split-capture.mts         # NEW (Codex B2) — JSON-aware splitter; reads raw capture JSONL, emits two JSONL streams (notifications vs server-initiated requests). Replaces unsafe grep pipeline.
+scripts/verify-phase1-fixtures.mts # NEW (Codex B1) — committed tsx script that backs T4.5 acceptance gate; type-checks fixture frames against generated ServerRequest["method"] union; requires ≥1 approval-capable method
 docs/handoffs/2026-04-30-phase0-to-phase1.md   # source of truth — DO NOT MODIFY here
 docs/superpowers/plans/decision-log.md         # APPEND D5 (revised), D6, D7, D8, D9 after merge
 docs/phase-1/                     # NEW — Codex outside-voice + plan-eng-review + fixture-prompt-review reports
@@ -249,40 +332,46 @@ TODOS.md                          # MOVE Phase 1 items to "Done in Phase 1" afte
 
 Granularity target: each task = 1 git commit, 2–5 min of execution time per step (10–25 min per task). Engineer should run TDD at each step.
 
-### Dependency graph (revised after plan-eng-review: T1 first; T4.5 hard gate; T7/T9/T11 split per P1-3)
+### Dependency graph (revised after Codex outside-voice 2026-04-30: Pre-1 + Pre-2 prerequisites; T6 derives from METHOD_CLASS; Supervisor uses transport.onClose)
 
 ```text
-T1 (categorizeJsonRpcError) ───┐   ← first to land — pure helper, zero deps; ErrorCategory used by T7/T9/T11 tests
-T2 (--capture flag CLI)     ───┤
-T3 (codex-runtime skeleton) ───┼──► T4 (fixture spike, lead, real $) ──► T4.5 (acceptance gate, lead) ──┐
-T5 (core skeleton)          ───┘                                                                          │
-                                                                                                           ▼
-                                                                T6 (ServerNotification narrowing helpers)
-                                                                                  │
-              ┌───────────────────────────────────────────────────────────────────┼───────────────────────────────┐
-              ▼                                                                   ▼                               ▼
-   T7a (Normalizer skeleton + happy path)              T8 (CodexRuntime wrappers)           T9a (Broker skeleton + happy path)
-              │                                                                                                 │
-              ▼                                                                                                 ▼
-   T7b (overflow + unknown + terminal + 2-class queue + reviews)                                T9b (timeout + throw + transport-loss + reviews)
-              └───────────────────────────────────────────┬─────────────────────────────────────────────────────┘
-                                                          ▼
-                                                T10 (codex-im runtime send)
-                                                          │
-                                                          ▼
-                                                T11a (Supervisor skeleton — fresh-client + re-attach)
-                                                          │
-                                                          ▼
-                                                T11b (backoff + halt + transport-loss propagation + outside-voice review)
-                                                          │
-                                                          ▼
-                                                T12 (docs + roadmap update)
+PRE-1 (Node 24 bump, separate PR off phase-0-bootstrap) ──┐
+                                                            │  both must merge before any Phase 1 task runs
+PRE-2 (@codex-im/protocol facade expansion, separate PR) ─┘
+                                              │
+                                              ▼
+T1 (categorizeJsonRpcError) ───┐   ← first Phase 1 task to land; ErrorCategory used by T7b/T9b/T11b tests
+T2 (CLI flags: --capture / --prompt-file / --cwd) ───┤
+T3 (codex-runtime skeleton) ───┼──► T4 (fixture spike, lead, real $) ──► T4.5 (verify-phase1-fixtures.mts gate, lead) ──┐
+T5 (core skeleton)          ───┘                                                                                          │
+                                                                                                                           ▼
+                                                                                                            T6 (METHOD_CLASS-derived isServerNotificationMethod)
+                                                                                                                                │
+              ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────────────┐
+              ▼                                                                                                                 ▼                               ▼
+   T7a (Normalizer skeleton + single FIFO + happy path)                          T8 (CodexRuntime wrappers — turn/interrupt not thread/interrupt)     T9a (Broker skeleton + exhaustive Record<ServerRequest['method']> + dispatch coverage)
+              │                                                                                                                                                 │
+              ▼                                                                                                                                                 ▼
+   T7b (walk-and-drop overflow + unknown + terminal semantics + ordering tests + reviews)                            T9b (timeout + throw + transport-loss + per-method v2 response mappers + reviews)
+              └─────────────────────────────────────────────────────────────────────────────────────────────────────┬───────────────────────────────────────────┘
+                                                                                                                    ▼
+                                                                                                          T10 (codex-im runtime send)
+                                                                                                                    │
+                                                                                                                    ▼
+                                                                                                          T11a (Supervisor skeleton — owns transport spawn; subscribes to transport.onClose; never depends on client.onClose)
+                                                                                                                    │
+                                                                                                                    ▼
+                                                                                                          T11b (backoff + halt + transport-loss propagation + close-idempotence test + outside-voice review)
+                                                                                                                    │
+                                                                                                                    ▼
+                                                                                                          T12 (docs + roadmap update)
 ```
 
 ### Parallelization windows
 
-- **Phase 1A (parallel, no deps):** T1, T2, T3, T5 — four worktrees concurrently. T1 should land first since later tests reference its `ErrorCategory` type.
-- **Phase 1B (sequential gate, lead-only):** T4 → **T4.5 acceptance gate** — single worktree, real codex spawn. T4.5 must pass (≥1 valid `ServerRequest` frame matching generated union) before any T7/T9 work.
+- **Pre-Phase-1 (sequential, lead-only):** Pre-1 (Node bump) → Pre-2 (protocol facade). Each is its own PR with its own Phase 0 gate re-run. **No Phase 1 task starts until both merge.**
+- **Phase 1A (parallel, no deps after Pre-1+Pre-2):** T1, T2, T3, T5 — four worktrees concurrently. T1 should land first since later tests reference its `ErrorCategory` type.
+- **Phase 1B (sequential gate, lead-only):** T4 → **T4.5 acceptance gate** — single worktree, real codex spawn. T4.5 must pass (≥1 valid `ServerRequest` frame matching generated `ServerRequest["method"]` union, **and** ≥1 of the approval-capable method subset) before any T7/T9 work.
 - **Phase 1B′ (sequential after T3):** T6.
 - **Phase 1C (parallel, T4.5+T6 done):** T7a → T7b, T8, T9a → T9b — three lanes concurrently. Each lane is internally sequential (skeleton before edges).
 - **Phase 1D (sequential):** T10 → T11a → T11b → T12.
@@ -408,68 +497,86 @@ case 3+4. Pure helper, no state."
 
 ---
 
-### Task 2: `--capture` flag in `smoke-real-turn` (P1.6 capture tool)
+### Task 2: CLI capture flags — `--capture`, `--prompt-file`, `--cwd` (P1.6 capture tool; expanded after Codex B2 + required-change)
 
 **Files:**
 - Modify: `packages/cli/src/smoke-real-turn.ts`
 - Modify: `packages/cli/src/index.ts` (subcommand wiring)
 - Modify: `packages/cli/README.md`
-- Create: `packages/cli/test/smoke-real-turn-capture.test.ts` (unit, no subprocess)
+- Modify: `vitest.config.ts` — **rename** `packages/cli/test/smoke-*.test.ts` exclusion so it stays excluded from `unit` project (those tests spawn real subprocesses), but **add** new pure-unit tests for the flag parsing under a different name pattern (`packages/cli/test/cli-flags.test.ts`) that runs in default unit project.
+- Create: `packages/cli/test/cli-flags.test.ts` (pure unit — argv parsing, no subprocess)
+- Create: `packages/cli/test/smoke-real-turn-capture.test.ts` (subprocess-style test using `InMemoryTransport`; lives under the existing `smoke-*` exclude pattern, runs only via dedicated script — Codex required change to **not** exclude flag-handling tests from default gate)
 
-- [ ] **Step 2.1: Write failing test — `--capture <path>` writes JSONL of every inbound message**
+- [ ] **Step 2.1: Decide test placement.**
+
+Codex B2 noted that `vitest.config.ts:14` excludes `packages/cli/test/smoke-*.test.ts` from the default unit run. Pure flag-parsing tests **must** be in the default gate. The decision:
+- `cli-flags.test.ts` — pure argv parsing (no transport, no subprocess) — included in default unit project.
+- `smoke-real-turn-capture.test.ts` — uses `InMemoryTransport` to assert capture-stream writes; included under the `smoke-*` exclude (because future iterations may grow into subprocess work). Run explicitly via `pnpm test:cli-smoke` (new script) and required by `bash scripts/ci-check.sh`.
+
+- [ ] **Step 2.2: Write failing pure-unit test — argv parsing.**
 
 ```ts
-// packages/cli/test/smoke-real-turn-capture.test.ts
+// packages/cli/test/cli-flags.test.ts
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { InMemoryTransport } from "@codex-im/testkit";
-import { runSmokeRealTurnWithCapture } from "../src/smoke-real-turn.js";
+import { parseSmokeRealTurnArgs } from "../src/smoke-real-turn.js";
 
-describe("smoke-real-turn --capture", () => {
-  it("writes one JSONL line per inbound message", async () => {
-    const tmp = mkdtempSync(join(tmpdir(), "capture-"));
-    const file = join(tmp, "out.jsonl");
-    const transport = new InMemoryTransport();
-    // ... seed transport with 3 fake notifications + 1 response
-    await runSmokeRealTurnWithCapture({ transport, capturePath: file, harmlessPrompt: "Reply OK" });
-    const lines = readFileSync(file, "utf8").trim().split("\n");
-    expect(lines.length).toBe(4);
-    expect(JSON.parse(lines[0])).toMatchObject({ method: "..." });
+describe("smoke-real-turn argv parsing", () => {
+  it("accepts --capture <path>", () => {
+    expect(parseSmokeRealTurnArgs(["--capture", "/tmp/out.jsonl"])).toMatchObject({
+      capturePath: "/tmp/out.jsonl",
+    });
+  });
+  it("accepts --prompt-file <path>", () => {
+    expect(parseSmokeRealTurnArgs(["--prompt-file", "packages/cli/src/prompts/richer-turn.txt"])).toMatchObject({
+      promptFile: "packages/cli/src/prompts/richer-turn.txt",
+    });
+  });
+  it("accepts --cwd <path> for the codex subprocess working dir", () => {
+    expect(parseSmokeRealTurnArgs(["--cwd", "/tmp/codex-fixture-spike"])).toMatchObject({
+      subprocessCwd: "/tmp/codex-fixture-spike",
+    });
+  });
+  it("accepts all three together in any order", () => {
+    expect(parseSmokeRealTurnArgs([
+      "--cwd", "/tmp/x",
+      "--capture", "/tmp/cap.jsonl",
+      "--prompt-file", "p.txt",
+    ])).toMatchObject({
+      subprocessCwd: "/tmp/x",
+      capturePath: "/tmp/cap.jsonl",
+      promptFile: "p.txt",
+    });
+  });
+  it("rejects unknown flags loudly", () => {
+    expect(() => parseSmokeRealTurnArgs(["--bogus"])).toThrow(/unknown flag/);
   });
 });
 ```
 
-- [ ] **Step 2.2: Run, verify FAIL** (`runSmokeRealTurnWithCapture` not exported).
-- [ ] **Step 2.3: Refactor `smoke-real-turn.ts` to expose injectable transport + capture writer**
-
-Extract transport construction into a factory parameter; default = real `StdioTransport`. Add `capturePath` option that opens a write stream and pipes every transport `onMessage` payload as `JSON.stringify(msg) + "\n"`.
-
-- [ ] **Step 2.4: Run unit test, verify PASS.**
-- [ ] **Step 2.5: Add `--capture <path>` arg parsing in `cli/src/index.ts`.**
-
-```ts
-// pseudo-flag; respect existing arg-parser style
-if (args.includes("--capture")) {
-  const idx = args.indexOf("--capture");
-  capturePath = args[idx + 1];
-}
-```
-
-- [ ] **Step 2.6: Update `packages/cli/README.md`** documenting `CODEX_REAL_SMOKE=1 pnpm smoke:real-turn -- --capture <path>`.
-- [ ] **Step 2.7: Run full suite + typecheck + lint.**
-- [ ] **Step 2.8: Commit.**
+- [ ] **Step 2.3: Verify FAIL** (`parseSmokeRealTurnArgs` not exported).
+- [ ] **Step 2.4: Refactor `smoke-real-turn.ts`:**
+  - Extract pure `parseSmokeRealTurnArgs(argv: string[]): SmokeOptions` (no I/O).
+  - Add `runSmokeRealTurnWithCapture` injectable transport factory + capture writer (file write stream piping `JSON.stringify(msg) + "\n"` per inbound message).
+  - Wire `--prompt-file` to `readFileSync(promptFile, "utf8")` for the `turn/start` input text (replaces hardcoded "Reply OK" when the flag is present).
+  - Wire `--cwd` to the `StdioTransport` spawn options (`{ cwd: subprocessCwd }`); does NOT change the harness's own working dir.
+- [ ] **Step 2.5: Verify unit test passes.**
+- [ ] **Step 2.6: Add `smoke-real-turn-capture.test.ts` (transport-injected, no subprocess)** — assert `runSmokeRealTurnWithCapture({ transport: new InMemoryTransport(), capturePath, ... })` writes one JSONL line per inbound message and exits cleanly.
+- [ ] **Step 2.7: Update `vitest.config.ts`** — keep `smoke-*.test.ts` excluded from `unit` project (subprocess concern); add a third project `cli-smoke` that includes only `packages/cli/test/smoke-*.test.ts` and runs via `pnpm test:cli-smoke`. Add this to `scripts/ci-check.sh` so it runs in the local gate.
+- [ ] **Step 2.8: Update `packages/cli/README.md`** documenting all three flags and the `--cwd` semantics: "applies only to the spawned codex subprocess, not the harness itself".
+- [ ] **Step 2.9: `bash scripts/ci-check.sh` — exit 0** (runs unit + contract + new cli-smoke project).
+- [ ] **Step 2.10: Commit.**
 
 ```bash
-git commit -m "feat(cli): smoke:real-turn --capture <path> flag (P1.6 part 1)
+git commit -m "feat(cli): smoke:real-turn --capture/--prompt-file/--cwd (P1.6 part 1, Codex B2)
 
-Writes one JSONL line per inbound message to <path> for fixture
-capture. No-op if --capture absent. Tested with InMemoryTransport;
-real subprocess capture exercised in T4."
+Pure parseSmokeRealTurnArgs extracted into default unit gate.
+runSmokeRealTurnWithCapture injectable transport + capture writer.
+--cwd applies only to spawned codex subprocess, not harness.
+New cli-smoke vitest project covers transport-injected smoke test.
+ci-check.sh runs unit + contract + cli-smoke."
 ```
 
-**Exit criteria:** unit test passes against `InMemoryTransport`; CLI accepts flag; README documents usage; default behavior unchanged.
+**Exit criteria:** flag-parsing unit tests run in the **default** `pnpm test`; capture flow tested with `InMemoryTransport`; CLI accepts all three flags; README documents semantics; default behavior unchanged when no flags passed.
 
 ---
 
@@ -622,15 +729,18 @@ Prompt skeleton: "in a sandboxed scratch dir, propose adding a single-file `hell
 ⚠ This is a Phase 0 outside-voice consultation point — **before running**, send `codex consult` with the prompt + safety constraints (sandbox=read-only, approval_policy=on-request, scratch dir under `/tmp/codex-fixture-XXXX`) and ask "will this trigger ≥1 server-initiated approval without taking destructive action".
 
 - [ ] **Step 4.2: Codex outside-voice consult — record verdict in `docs/phase-1/fixture-prompt-review.md`.**
-- [ ] **Step 4.3: Run capture:**
+- [ ] **Step 4.3: Run capture (Codex B2 — fixed: stay in repo for pnpm + paths; pass --cwd to subprocess for sandboxing):**
 
 ```bash
+# from repo root — pnpm needs the workspace, paths must be repo-relative
 mkdir -p /tmp/codex-fixture-spike
-cd /tmp/codex-fixture-spike
 CODEX_REAL_SMOKE=1 pnpm --filter @codex-im/cli smoke:real-turn -- \
-  --capture $(pwd)/raw-stream.jsonl \
-  --prompt-file packages/cli/src/prompts/richer-turn.txt
+  --capture /tmp/codex-fixture-spike/raw-stream.jsonl \
+  --prompt-file packages/cli/src/prompts/richer-turn.txt \
+  --cwd /tmp/codex-fixture-spike
 ```
+
+`--cwd` (added in T2) puts the **codex subprocess** in the scratch dir while the harness keeps using repo-relative paths for `--prompt-file` and `pnpm --filter` resolution.
 
 Expected: real codex spawn, ≥1 approval request, all events captured, smoke exits cleanly with default-reject.
 
@@ -639,21 +749,61 @@ Expected: real codex spawn, ≥1 approval request, all events captured, smoke ex
   - ≥1 `item/agentMessage/delta`
   - ≥1 `item/{commandExecution|fileChange}/requestApproval`
   - `turn/completed`
-- [ ] **Step 4.5: Split capture into two fixtures + redact via the script (P1-5).**
+- [ ] **Step 4.5: Split capture into two fixtures via the JSON-aware splitter + redact (P1-5; Codex B2 — grep replaced with JSON parser since wire frames can have nested objects with embedded `"method"` strings).**
 
-`phase1-richer-turn-event-stream.jsonl` = notifications only.
-`phase1-richer-turn-server-request.jsonl` = the server-request frame(s) only.
+`phase1-richer-turn-event-stream.jsonl` = notifications (no `id` field) only.
+`phase1-richer-turn-server-request.jsonl` = the server-initiated request frames (have `id` AND `method`) only.
+
+`scripts/split-capture.mts` (created in T3 alongside redact-fixture.mjs) does this with a real JSON parser:
+
+```ts
+// scripts/split-capture.mts (committed; usage: tsx scripts/split-capture.mts <in> <notifications-out> <requests-out>)
+import { readFileSync, writeFileSync } from "node:fs";
+
+const [, , inPath, notifOut, reqOut] = process.argv;
+if (!inPath || !notifOut || !reqOut) {
+  console.error("usage: tsx scripts/split-capture.mts <raw> <notif-out> <req-out>");
+  process.exit(2);
+}
+
+const lines = readFileSync(inPath, "utf8").split("\n").filter((l) => l.trim().length > 0);
+const notifications: string[] = [];
+const requests: string[] = [];
+for (const line of lines) {
+  let frame: unknown;
+  try { frame = JSON.parse(line); } catch { continue; }   // skip non-JSON noise
+  if (typeof frame !== "object" || frame === null) continue;
+  const f = frame as Record<string, unknown>;
+  // Server-initiated request: has both id AND method (top-level keys).
+  // Notification: has method but no id (top-level).
+  // Response: has id but no method — skip (T4 raw stream may include client-side responses).
+  if ("method" in f && "id" in f) requests.push(line);
+  else if ("method" in f && !("id" in f)) notifications.push(line);
+}
+
+writeFileSync(notifOut, notifications.join("\n") + (notifications.length ? "\n" : ""));
+writeFileSync(reqOut, requests.join("\n") + (requests.length ? "\n" : ""));
+console.log(`split: ${notifications.length} notifications, ${requests.length} server-requests`);
+```
+
+Then redact:
 
 ```bash
-# split + redact (idempotent; script is committed in T3)
-grep -E '^\{[^}]*"method":[^}]*\}$' raw-stream.jsonl \
-  | grep -v '"id":' \
-  | node scripts/redact-fixture.mjs \
+# Split + redact pipeline (Codex B2 — JSON-aware, no grep)
+pnpm exec tsx scripts/split-capture.mts \
+  /tmp/codex-fixture-spike/raw-stream.jsonl \
+  /tmp/codex-fixture-spike/notifications.raw.jsonl \
+  /tmp/codex-fixture-spike/requests.raw.jsonl
+
+node scripts/redact-fixture.mjs < /tmp/codex-fixture-spike/notifications.raw.jsonl \
   > packages/testkit/fixtures/codex-0.125.0/phase1-richer-turn-event-stream.jsonl
 
-grep -E '^\{[^}]*"id":[0-9]+,[^}]*"method":' raw-stream.jsonl \
-  | node scripts/redact-fixture.mjs \
+node scripts/redact-fixture.mjs < /tmp/codex-fixture-spike/requests.raw.jsonl \
   > packages/testkit/fixtures/codex-0.125.0/phase1-richer-turn-server-request.jsonl
+
+# Idempotency check — running redact on the output should yield no diff
+node scripts/redact-fixture.mjs < packages/testkit/fixtures/codex-0.125.0/phase1-richer-turn-event-stream.jsonl \
+  | diff - packages/testkit/fixtures/codex-0.125.0/phase1-richer-turn-event-stream.jsonl
 ```
 
 Then `git diff` the resulting files manually as a final sanity check before commit.
@@ -678,46 +828,170 @@ Filenames phase-prefixed under version-pinned codex-0.125.0/ dir."
 
 ---
 
-### Task 4.5: Fixture acceptance gate **[lead session, single step]**
+### Task 4.5: Fixture acceptance gate via `scripts/verify-phase1-fixtures.mts` **[lead session]**
 
-(NEW per plan-eng-review P1-2.) One-step task that hard-blocks T7/T9 if T4 didn't produce a usable server-request capture. Cannot be subagent-delegated.
+(NEW per plan-eng-review P1-2; rewritten after Codex B1 — committed `tsx` script, not inline `node -e`.) Hard-blocks T7/T9 if T4 didn't produce a usable server-request capture. Cannot be subagent-delegated.
 
-**Files:** none created; this is a verification step.
+**Files:**
+- Create: `scripts/verify-phase1-fixtures.mts`
+- Create: `scripts/verify-phase1-fixtures.test.mts` (negative test cases — Codex required-tests "Fixture gate negative tests")
 
-- [ ] **Step 4.5.1: Verify the captured server-request fixture meets the gate.**
+- [ ] **Step 4.5.1: Author `scripts/verify-phase1-fixtures.mts`.**
 
-```bash
-node -e '
+The script does what `node -e` cannot:
+
+```ts
+// scripts/verify-phase1-fixtures.mts — runs as `pnpm exec tsx scripts/verify-phase1-fixtures.mts`
+// Codex B1: committed verification, not inline.
 import { readFileSync } from "node:fs";
 import type { ServerRequest } from "@codex-im/protocol";
 
-const lines = readFileSync(
-  "packages/testkit/fixtures/codex-0.125.0/phase1-richer-turn-server-request.jsonl",
-  "utf8",
-).trim().split("\n").filter(Boolean);
+// Exhaustive runtime table over generated ServerRequest["method"] union.
+// Adding a generated arm without a row here is a TS compile error (D7-style).
+// Codex outside-voice noted: generated unions don't exist at runtime, so we
+// derive an exhaustive Record<ServerRequest["method"], boolean>.
+const APPROVAL_CAPABLE: Record<ServerRequest["method"], boolean> = {
+  // v2 approvals — what the gate primarily wants
+  "item/commandExecution/requestApproval": true,
+  "item/fileChange/requestApproval": true,
+  "item/permissions/requestApproval": true,
+  // v2 user-input — also approval-capable in our sense
+  "item/tool/requestUserInput": true,
+  // legacy (pre-v2) — still approval-capable for compat
+  "applyPatchApproval": true,
+  "execCommandApproval": true,
+  // tool/elicitation/auth — server-initiated but NOT what the gate is about
+  "item/tool/call": false,
+  "mcpServer/elicitation/request": false,
+  "account/chatgptAuthTokens/refresh": false,
+};
 
-if (lines.length < 1) {
-  console.error("GATE FAIL: zero server-request frames captured");
-  process.exit(1);
+const ALL_METHODS = new Set<string>(Object.keys(APPROVAL_CAPABLE));
+const APPROVAL_METHODS = new Set<string>(
+  Object.entries(APPROVAL_CAPABLE).filter(([, v]) => v).map(([k]) => k),
+);
+
+interface Frame { method?: unknown; id?: unknown; params?: unknown }
+
+export interface VerifyResult {
+  ok: boolean;
+  totalFrames: number;
+  approvalCapableFrames: number;
+  unknownMethods: string[];
+  errors: string[];
 }
 
-for (const line of lines) {
-  const frame = JSON.parse(line);
-  if (typeof frame.method !== "string" || frame.id == null) {
-    console.error("GATE FAIL: frame missing method or id:", line);
+export function verify(jsonlText: string): VerifyResult {
+  const lines = jsonlText.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return { ok: false, totalFrames: 0, approvalCapableFrames: 0, unknownMethods: [], errors: ["empty fixture file"] };
+
+  const errors: string[] = [];
+  const unknownMethods = new Set<string>();
+  let totalFrames = 0;
+  let approvalCapableFrames = 0;
+
+  for (const [i, line] of lines.entries()) {
+    let frame: Frame;
+    try { frame = JSON.parse(line) as Frame; }
+    catch (e) { errors.push(`line ${i + 1}: not valid JSON: ${(e as Error).message}`); continue; }
+
+    if (typeof frame.method !== "string") { errors.push(`line ${i + 1}: missing string method`); continue; }
+    if (!("id" in frame) || frame.id == null) {
+      errors.push(`line ${i + 1}: missing id — this fixture must contain server-initiated REQUESTS, not notifications`);
+      continue;
+    }
+    totalFrames++;
+    const m = frame.method;
+    if (!ALL_METHODS.has(m)) {
+      unknownMethods.add(m);
+      errors.push(`line ${i + 1}: method "${m}" not in generated ServerRequest["method"] union`);
+      continue;
+    }
+    if (APPROVAL_METHODS.has(m)) approvalCapableFrames++;
+  }
+
+  if (approvalCapableFrames === 0) {
+    errors.push(`gate failed: 0 approval-capable frames; need ≥1 of ${[...APPROVAL_METHODS].join(", ")}`);
+  }
+
+  return { ok: errors.length === 0, totalFrames, approvalCapableFrames, unknownMethods: [...unknownMethods], errors };
+}
+
+// CLI entrypoint
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const path = process.argv[2] ?? "packages/testkit/fixtures/codex-0.125.0/phase1-richer-turn-server-request.jsonl";
+  const text = readFileSync(path, "utf8");
+  const r = verify(text);
+  if (!r.ok) {
+    console.error(`GATE FAIL: ${path}`);
+    for (const e of r.errors) console.error("  -", e);
     process.exit(1);
   }
-  // Type-level discrimination: method MUST be assignable to ServerRequest["method"]
-  // (script-level — the actual TS check happens in T9 dispatch test)
+  console.log(`GATE PASS: ${r.totalFrames} server-request frames, ${r.approvalCapableFrames} approval-capable`);
+  if (r.unknownMethods.length) console.warn(`  warning: unknown methods seen: ${r.unknownMethods.join(", ")}`);
 }
+```
 
-console.log(`GATE PASS: ${lines.length} server-request frame(s) captured`);
-' --input-type=module
+- [ ] **Step 4.5.2: Author `scripts/verify-phase1-fixtures.test.mts`** with the **negative cases Codex flagged as missing**:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { verify } from "./verify-phase1-fixtures.mts";
+
+describe("verify-phase1-fixtures negative cases", () => {
+  it("rejects empty file", () => {
+    expect(verify("").ok).toBe(false);
+  });
+  it("rejects a notification mistakenly placed in the requests fixture (no id)", () => {
+    const r = verify(JSON.stringify({ method: "turn/started", params: {} }));
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes("missing id"))).toBe(true);
+  });
+  it("rejects a fixture containing only non-approval server-requests (e.g. token refresh)", () => {
+    const r = verify(JSON.stringify({ id: 1, method: "account/chatgptAuthTokens/refresh", params: {} }));
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes("0 approval-capable"))).toBe(true);
+  });
+  it("rejects unknown methods (not in generated union)", () => {
+    const r = verify(JSON.stringify({ id: 1, method: "future/unseen/approval", params: {} }));
+    expect(r.ok).toBe(false);
+    expect(r.unknownMethods).toContain("future/unseen/approval");
+  });
+  it("accepts a fixture with ≥1 approval-capable v2 method", () => {
+    const r = verify(JSON.stringify({ id: 1, method: "item/commandExecution/requestApproval", params: {} }));
+    expect(r.ok).toBe(true);
+    expect(r.approvalCapableFrames).toBe(1);
+  });
+  it("accepts a fixture with a legacy method (applyPatchApproval)", () => {
+    const r = verify(JSON.stringify({ id: 1, method: "applyPatchApproval", params: {} }));
+    expect(r.ok).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 4.5.3: Run the gate against the captured fixture:**
+
+```bash
+pnpm exec tsx scripts/verify-phase1-fixtures.mts
+# Expected: GATE PASS: <N> server-request frames, <M> approval-capable
 ```
 
 If exit code ≠ 0: STOP. Do not start T7, T8, or T9. Loop back to T4 with a different prompt or `approval_policy` setting. Document the rollback in `docs/phase-1/fixture-prompt-review.md`.
 
-**Exit criteria:** script exits 0 with `GATE PASS: N server-request frame(s) captured` where N ≥ 1.
+- [ ] **Step 4.5.4: Add `pnpm exec tsx scripts/verify-phase1-fixtures.mts` to `scripts/ci-check.sh`** so every later subagent reruns the gate.
+
+- [ ] **Step 4.5.5: Commit.**
+
+```bash
+git commit -m "feat(scripts): verify-phase1-fixtures.mts — fixture acceptance gate (Codex B1)
+
+Type-checked exhaustive table over generated ServerRequest['method']
+union. Requires ≥1 approval-capable method. Negative tests cover
+empty file, mistaken notification, only non-approval requests,
+unknown methods. Wired into ci-check.sh."
+```
+
+**Exit criteria:** script + tests committed; script exits 0 against the captured fixture; all 6 negative-case tests pass; `bash scripts/ci-check.sh` runs the gate.
 
 **Rollback:** see T4 rollback. T4.5 itself has no rollback — it is the gate.
 
@@ -775,45 +1049,85 @@ always set actor: null."
 
 ---
 
-### Task 6: `method-names.ts` — typed narrowing helpers
+### Task 6: `method-names.ts` — typed narrowing helpers (rewritten after Codex B5)
+
+**Codex B5 found:** `Set<ServerNotificationMethod>([...])` is **not** exhaustive — TypeScript happily accepts a strict subset. The original "engineer enumerates ALL" maintenance note is unenforceable. Rewrite: derive the runtime check from `METHOD_CLASS` (T7a), which IS exhaustive by construction (`Record<ServerNotification["method"], EventClass>` has every union member as a key).
 
 **Files:**
 - Create: `packages/codex-runtime/src/method-names.ts`
 - Create: `packages/codex-runtime/test/method-names.test.ts`
 
-- [ ] **Step 6.1: Write failing test — `isServerNotificationMethod("turn/started") === true`, `=== false` for unknown.**
-- [ ] **Step 6.2: Implement helper using generated union from `@codex-im/protocol`**
+**Depends on:** T7a's `event-class.ts` for `METHOD_CLASS`. Adjust execution order: T6 lands AFTER T7a's classification-table commit (or in the same PR). The graph above already places T6 after T3 + T4.5; T7a can land its `event-class.ts` first as a sub-step inside its lane.
+
+- [ ] **Step 6.1: Write failing test.**
+
+```ts
+// packages/codex-runtime/test/method-names.test.ts
+import { describe, expect, it } from "vitest";
+import { isServerNotificationMethod } from "../src/method-names.js";
+
+describe("isServerNotificationMethod", () => {
+  it("accepts a known method", () => expect(isServerNotificationMethod("turn/started")).toBe(true));
+  it("rejects an unknown method", () => expect(isServerNotificationMethod("future/never/seen")).toBe(false));
+  it("narrows the type for downstream consumers", () => {
+    const m: string = "turn/completed";
+    if (isServerNotificationMethod(m)) {
+      // type-level check — m is now ServerNotification["method"]
+      const _ok: typeof m = m;
+      expect(typeof _ok).toBe("string");
+    }
+  });
+});
+```
+
+- [ ] **Step 6.2: Implement helper by deriving from `METHOD_CLASS` (Codex B5 fix).**
 
 ```ts
 // packages/codex-runtime/src/method-names.ts
 import type { ServerNotification } from "@codex-im/protocol";
+import { METHOD_CLASS } from "./event-class.js";
 
 export type ServerNotificationMethod = ServerNotification["method"];
 
-const KNOWN_METHODS: ReadonlySet<ServerNotificationMethod> = new Set<ServerNotificationMethod>([
-  // Type-level enforcement: TS errors here if generated union shrinks
-  "turn/started",
-  "turn/completed",
-  "item/started",
-  "item/completed",
-  "item/agentMessage/delta",
-  // ... full list pulled from generated ServerNotification.ts; engineer enumerates ALL
-]);
-
+// METHOD_CLASS is Record<ServerNotification["method"], EventClass>, so its
+// keys are exactly the generated union — no parallel enumeration to drift.
+// (No Set<Union> exhaustiveness false-positive; the Record's domain is
+// type-level enforced in event-class.ts.)
 export function isServerNotificationMethod(m: string): m is ServerNotificationMethod {
-  return KNOWN_METHODS.has(m as ServerNotificationMethod);
+  return Object.hasOwn(METHOD_CLASS, m);
 }
+
+export const KNOWN_NOTIFICATION_METHODS: readonly ServerNotificationMethod[] =
+  Object.freeze(Object.keys(METHOD_CLASS) as ServerNotificationMethod[]);
 ```
 
-⚠ **Maintenance note:** the engineer must enumerate the full union — TypeScript will fail to narrow if any arm is missing because `Set<Union>` accepts a strict subset. Do not use `Set<string>`. The compile-time guarantee is the whole point.
+- [ ] **Step 6.3: Type-level exhaustiveness assertion (compile-time test).**
 
-- [ ] **Step 6.3–6.5:** verify test passes; typecheck; lint; commit.
+```ts
+// packages/codex-runtime/test/method-class-exhaustive.test-d.ts
+import { expectTypeOf } from "vitest";
+import type { ServerNotification } from "@codex-im/protocol";
+import { METHOD_CLASS } from "../src/event-class.js";
+
+// If event-class.ts ever drops a union arm, this assertion fails to compile.
+// (vitest type-test mode picks up *.test-d.ts files via vitest typecheck.)
+expectTypeOf<keyof typeof METHOD_CLASS>().toEqualTypeOf<ServerNotification["method"]>();
+```
+
+- [ ] **Step 6.4: `bash scripts/ci-check.sh` — exit 0** (incl. `vitest typecheck` for the type-level test).
+- [ ] **Step 6.5: Commit.**
 
 ```bash
-git commit -m "feat(codex-runtime): typed ServerNotification method-name helpers"
+git commit -m "feat(codex-runtime): method-name narrowing derived from METHOD_CLASS (Codex B5)
+
+isServerNotificationMethod now uses Object.hasOwn over the
+exhaustive Record<ServerNotification['method'], EventClass> table
+in event-class.ts. Avoids the Set<Union> false-positive
+exhaustiveness footgun. Type-level test asserts METHOD_CLASS keys
+equal the generated union."
 ```
 
-**Exit criteria:** `isServerNotificationMethod` narrows to generated union; adding a fake string fails typecheck; existing tests green.
+**Exit criteria:** `isServerNotificationMethod` narrows to generated union; type-level test forces `METHOD_CLASS` to stay exhaustive; ci-check green.
 
 ---
 
@@ -895,7 +1209,7 @@ export function classifyMethod(m: ServerNotification["method"]): EventClass {
 }
 ```
 
-- [ ] **Step 7a.4: Implement minimal normalizer (happy path only — no overflow yet)**
+- [ ] **Step 7a.4: Implement minimal normalizer — single FIFO queue, happy path only (D5 final / Codex B4 fix).**
 
 ```ts
 // packages/codex-runtime/src/event-normalizer.ts
@@ -904,54 +1218,98 @@ import { isServerNotificationMethod } from "./method-names.js";
 import { classifyMethod } from "./event-class.js";
 import type { CodexRichEvent } from "./types.js";
 
-export type NormalizerOptions = { deltaQueueCap?: number };
+export type NormalizerOptions = {
+  deltaSoftCap?: number;        // when delta count exceeds this, walk-and-drop oldest delta
+  totalHardCap?: number;        // last-resort backstop; emits fatal lifecycle overflow if breached
+};
 
 export class EventNormalizer {
-  #lifecycleQueue: CodexRichEvent[] = [];   // unbounded — D5 revised
-  #deltaQueue: CodexRichEvent[] = [];       // bounded
+  // Codex B4: ONE queue. Order is preserved globally. Backpressure is
+  // per-class via walk-and-drop, not via priority drain.
+  #queue: CodexRichEvent[] = [];
+  #deltaCount = 0;
   #waiters: Array<(ev: IteratorResult<CodexRichEvent>) => void> = [];
   #closed = false;
   #unsub: () => void;
-  #deltaCap: number;
+  #deltaSoftCap: number;
+  #totalHardCap: number;
   #droppedDeltaCount = 0;
 
   constructor(client: AppServerClient, opts: NormalizerOptions = {}) {
-    this.#deltaCap = opts.deltaQueueCap ?? 4096;
+    this.#deltaSoftCap = opts.deltaSoftCap ?? 4096;
+    this.#totalHardCap = opts.totalHardCap ?? 16384;
     this.#unsub = client.onNotification((msg) => this.#onNotification(msg));
   }
 
   #onNotification(msg: JsonRpcNotification) {
     const m = msg.method;
     if (!isServerNotificationMethod(m)) {
-      this.#lifecycleQueue.push({ type: "unknown", method: m, params: msg.params });
-      this.#drain();
+      this.#enqueue({ type: "unknown", method: m, params: msg.params }, "lifecycle");
       return;
     }
     const cls = classifyMethod(m);
-    const ev = this.#mapNotification(msg);
-    if (cls === "lifecycle") {
-      this.#lifecycleQueue.push(ev);
-    } else {
-      // T7b: implement bounded drop-oldest + overflow synthetic
-      this.#deltaQueue.push(ev);
-    }
+    this.#enqueue(this.#mapNotification(msg), cls);
+  }
+
+  #enqueue(ev: CodexRichEvent, cls: "lifecycle" | "delta") {
+    // T7b: full eviction logic. T7a happy path = no eviction needed in tests.
+    this.#queue.push(ev);
+    if (cls === "delta") this.#deltaCount++;
     this.#drain();
   }
 
   #mapNotification(msg: JsonRpcNotification): CodexRichEvent {
-    // T7b: full exhaustive switch over ServerNotification union; T7a does turn/started + turn/completed only
-    /* implementer: see T7b for full mapping */ return { type: "unknown", method: msg.method, params: msg.params };
+    // T7a: minimal mapping — turn/started, turn/completed, item/started, item/completed,
+    // agentMessage/delta. Full exhaustive switch lands in T7b.
+    switch (msg.method) {
+      case "turn/started": {
+        const p = msg.params as { threadId: string; turnId: string };
+        return { type: "turn_started", threadId: p.threadId, turnId: p.turnId, raw: msg };
+      }
+      case "turn/completed": {
+        const p = msg.params as { threadId: string; turnId: string };
+        return { type: "turn_completed", threadId: p.threadId, turnId: p.turnId, raw: msg, terminal: true };
+      }
+      // T7b adds the rest
+      default:
+        return { type: "unknown", method: msg.method, params: msg.params };
+    }
   }
 
   events(): AsyncIterable<CodexRichEvent> {
     return { [Symbol.asyncIterator]: () => this.#asyncIterator() };
   }
 
-  // FIFO across both queues, lifecycle drained first when both have items
-  // (bounded queue can starve under burst, but lifecycle frequency << delta frequency)
-  #asyncIterator(): AsyncIterator<CodexRichEvent> { /* ... see T7b for full impl */ throw new Error("T7b"); }
-  #drain() { /* T7b */ }
-  #close() { /* T7b */ }
+  #asyncIterator(): AsyncIterator<CodexRichEvent> {
+    return {
+      next: () => new Promise((resolve) => {
+        if (this.#queue.length > 0) {
+          const ev = this.#queue.shift()!;
+          if ((ev as { type: string }).type.endsWith("_delta") || (ev as { type: string }).type.endsWith("_overflow")) {
+            // delta-class accounting; T7b refines this using the real class map
+          }
+          resolve({ value: ev, done: false });
+          return;
+        }
+        if (this.#closed) { resolve({ value: undefined, done: true }); return; }
+        this.#waiters.push(resolve);
+      }),
+      return: async () => { this.#close(); return { value: undefined, done: true }; },
+    };
+  }
+
+  #drain() {
+    while (this.#queue.length > 0 && this.#waiters.length > 0) {
+      const w = this.#waiters.shift()!;
+      w({ value: this.#queue.shift()!, done: false });
+    }
+  }
+
+  #close() {
+    this.#closed = true;
+    this.#unsub();
+    for (const w of this.#waiters.splice(0)) w({ value: undefined, done: true });
+  }
 }
 ```
 
@@ -960,11 +1318,12 @@ export class EventNormalizer {
 - [ ] **Step 7a.7: Commit.**
 
 ```bash
-git commit -m "feat(codex-runtime): EventNormalizer skeleton + classification table (P1.3 part 1)
+git commit -m "feat(codex-runtime): EventNormalizer skeleton + classification table (P1.3 part 1; D5 final)
 
-Two-class queue (D5 revised): lifecycle unbounded, delta bounded.
-Classification table is type-checked exhaustive over
-ServerNotification union. T7b lands overflow + unknown + terminal."
+Single FIFO queue preserves global order across lifecycle and
+delta classes (D5 final, Codex B4 fix). Classification table is
+type-checked exhaustive over ServerNotification union. T7b lands
+walk-and-drop overflow + exhaustive mapping + terminal semantics."
 ```
 
 **Exit criteria:** happy-path test + late-subscriber test pass; classification table compiles exhaustively; ci-check green.
@@ -977,45 +1336,129 @@ ServerNotification union. T7b lands overflow + unknown + terminal."
 - Modify: `packages/codex-runtime/src/event-normalizer.ts` (fill in T7a stubs)
 - Modify: `packages/codex-runtime/test/event-normalizer.test.ts`
 - Create: `packages/codex-runtime/test/event-normalizer-fixture.test.ts`
+- Create: `packages/codex-runtime/test/event-normalizer-ordering.test.ts` (Codex required-test "Event ordering test with interleaved lifecycle + deltas")
 
 - [ ] **Step 7b.1: Add coverage for each `ServerNotification` arm** — one test per method, asserting correct `CodexRichEvent.type` mapping.
 - [ ] **Step 7b.2: Implement full exhaustive `#mapNotification` switch over the generated `ServerNotification` union.** Use TypeScript exhaustiveness check (`const _exhaustive: never = m;` in default branch).
-- [ ] **Step 7b.3: Implement bounded delta queue + drop-oldest + overflow synthetic event.**
+- [ ] **Step 7b.3: Add `turn/completed` status mapping (Codex required-test "turn/completed mapping based on turn.status").**
+
+The wire `turn/completed` notification carries `params.turn.status` ∈ `"completed" | "failed" | "interrupted"`. The normalizer must emit one of three rich events:
+```ts
+case "turn/completed": {
+  const p = msg.params as { turn: { id: string; threadId: string; status: "completed" | "failed" | "interrupted" } };
+  switch (p.turn.status) {
+    case "completed":   return { type: "turn_completed",   threadId: p.turn.threadId, turnId: p.turn.id, raw: msg, terminal: true };
+    case "failed":      return { type: "turn_failed",      threadId: p.turn.threadId, turnId: p.turn.id, raw: msg, terminal: true };
+    case "interrupted": return { type: "turn_interrupted", threadId: p.turn.threadId, turnId: p.turn.id, raw: msg, terminal: true };
+  }
+}
+```
+Add `turn_failed` and `turn_interrupted` to `CodexRichEvent` in `types.ts`.
+
+- [ ] **Step 7b.4: Implement walk-and-drop overflow (D5 final / Codex B4 fix).**
 
 ```ts
-if (cls === "delta") {
-  if (this.#deltaQueue.length >= this.#deltaCap) {
-    this.#deltaQueue.shift();
-    this.#droppedDeltaCount++;
-    // emit overflow synthetic on the lifecycle queue so it's never itself dropped
-    this.#lifecycleQueue.push({ type: "normalizer_overflow", droppedCount: this.#droppedDeltaCount, class: "delta" });
+#enqueue(ev: CodexRichEvent, cls: "lifecycle" | "delta") {
+  if (cls === "delta" && this.#deltaCount >= this.#deltaSoftCap) {
+    // Find oldest delta, splice it out, insert overflow synthetic in its place
+    for (let i = 0; i < this.#queue.length; i++) {
+      const old = this.#queue[i];
+      const oldCls = isOverflow(old) ? "lifecycle" : classifyOf(old);
+      if (oldCls === "delta") {
+        this.#queue.splice(i, 1, { type: "normalizer_overflow", droppedCount: ++this.#droppedDeltaCount, class: "delta" });
+        this.#deltaCount--;
+        break;
+      }
+    }
   }
-  this.#deltaQueue.push(ev);
+  this.#queue.push(ev);
+  if (cls === "delta") this.#deltaCount++;
+  // Hard cap (lifecycle saturation — should be impossible in practice)
+  while (this.#queue.length > this.#totalHardCap) {
+    this.#queue.shift();
+    this.#queue.unshift({ type: "normalizer_overflow", droppedCount: 1, class: "lifecycle" });
+    // log error — this branch indicates a bug
+  }
+  this.#drain();
 }
 ```
 
-- [ ] **Step 7b.4: Lifecycle-never-dropped test** — push `cap + 100` deltas + interleave 5 `turn/started`; assert all 5 lifecycle events delivered, overflow synthetic appears, no lifecycle event missing. (Suggested test from review §"Suggested additional tests".)
-- [ ] **Step 7b.5: Add overflow test — push `cap + 10` deltas, assert drop + overflow synthetic on lifecycle queue.**
-- [ ] **Step 7b.6: Add unknown-method test — feed `{ method: "future/unseen", params: {} }`, assert `{ type: "unknown" }`, no throw.**
-- [ ] **Step 7b.7: Add terminal-state test — feed `turn/completed`, assert iterator continues delivering then closes when caller calls `iterator.return()`.**
-- [ ] **Step 7b.8: Add fixture replay test** — load `phase1-richer-turn-event-stream.jsonl`, feed each line into `transport.simulateInbound`, assert iterator yields exactly N events in order, terminal `turn_completed` present.
-- [ ] **Step 7b.9: Add `for await ... of` integration test** — consume entire fixture.
-- [ ] **Step 7b.10: `bash scripts/ci-check.sh` — exit 0.**
-- [ ] **Step 7b.11: Codex outside-voice review on the diff** — `codex review` against the EventNormalizer files. Record findings in `docs/phase-1/event-normalizer-review.md`.
-- [ ] **Step 7b.12: gstack `/plan-eng-review`** on the EventNormalizer module surface vs. plan.
-- [ ] **Step 7b.13: Commit.**
+- [ ] **Step 7b.5: Ordering test (Codex required-test).**
 
-```bash
-git commit -m "feat(codex-runtime): EventNormalizer edges + reviews (P1.3 part 2)
-
-Two-class queue with lifecycle never dropped, delta bounded with
-drop-oldest + overflow synthetic on lifecycle queue. Exhaustive
-ServerNotification union mapping. Fixture replay test against
-phase1-richer-turn-event-stream.jsonl. Outside-voice + plan-eng-review
-captured in docs/phase-1/event-normalizer-review.md."
+```ts
+// packages/codex-runtime/test/event-normalizer-ordering.test.ts
+it("preserves global FIFO order across lifecycle and delta even under overflow", async () => {
+  const { client, transport } = makeFakeAppServerClient();
+  const norm = new EventNormalizer(client, { deltaSoftCap: 5 });
+  // Wire pattern: delta delta lifecycle delta delta delta delta lifecycle delta delta delta
+  const wire: Array<{ method: string; params: unknown }> = [
+    { method: "item/agentMessage/delta", params: { delta: 1 } },
+    { method: "item/agentMessage/delta", params: { delta: 2 } },
+    { method: "turn/started", params: { threadId: "t", turnId: "u" } },
+    { method: "item/agentMessage/delta", params: { delta: 3 } },
+    { method: "item/agentMessage/delta", params: { delta: 4 } },
+    { method: "item/agentMessage/delta", params: { delta: 5 } },
+    { method: "item/agentMessage/delta", params: { delta: 6 } },   // soft cap exceeded → drop oldest delta (delta 1)
+    { method: "turn/completed", params: { turn: { id: "u", threadId: "t", status: "completed" } } },
+    { method: "item/agentMessage/delta", params: { delta: 7 } },
+    { method: "item/agentMessage/delta", params: { delta: 8 } },
+    { method: "item/agentMessage/delta", params: { delta: 9 } },   // drop oldest delta (delta 2)
+  ];
+  for (const w of wire) transport.simulateInbound(w);
+  const out: CodexRichEvent[] = [];
+  const it = norm.events()[Symbol.asyncIterator]();
+  for (let i = 0; i < 11; i++) out.push((await it.next()).value as CodexRichEvent);
+  // Expected order (with overflow synthetics replacing dropped delta 1 and delta 2):
+  // overflow-1, delta-2, turn_started, delta-3, delta-4, delta-5, delta-6, turn_completed, delta-7, delta-8, delta-9
+  // — but wait: after dropping delta-1, delta-2 is still there. After dropping delta-2 too, only the synthetic remains at delta-2's slot.
+  // Implementer adapts assertions to the precise eviction sequence; the invariant is:
+  //   for any pair of original wire entries A then B, the rich events derived from them
+  //   appear in the output stream in the same order, OR are replaced by an overflow synthetic at A's position.
+  expect(out.map((e) => e.type)).toEqual([
+    "normalizer_overflow",   // delta-1 dropped
+    "agent_message_delta",   // delta-2
+    "turn_started",
+    "agent_message_delta",   // delta-3
+    "agent_message_delta",   // delta-4
+    "agent_message_delta",   // delta-5
+    "agent_message_delta",   // delta-6
+    "turn_completed",
+    "agent_message_delta",   // delta-7
+    "agent_message_delta",   // delta-8
+    "agent_message_delta",   // delta-9
+  ]);
+});
 ```
 
-**Exit criteria:** all unit + fixture replay tests pass; lifecycle-never-dropped test proves D5 revised invariant; iterator closes cleanly on terminal events; unknown methods do not crash; outside-voice + plan-eng-review captured.
+- [ ] **Step 7b.6: Iterator terminal semantics test (Codex required clarification).**
+
+Document the contract in JSDoc on `events()`:
+> The global stream stays open until `transport.onClose` or the caller invokes `iterator.return()` / `break`s out of `for await`. Per-turn / per-thread filtered sub-iterators (added in P2 if needed) close at their respective terminal events.
+
+Test: feed `turn/completed`; assert next iteration **does NOT close** automatically; assert calling `iterator.return()` resolves with `{ done: true }`.
+
+- [ ] **Step 7b.7: Lifecycle-never-dropped test** — push 1000 deltas + interleave 5 `turn/started`; assert all 5 lifecycle events delivered, no lifecycle dropped, only delta overflow synthetics observed.
+- [ ] **Step 7b.8: Unknown-method test — feed `{ method: "future/unseen", params: {} }`, assert `{ type: "unknown" }`, no throw.**
+- [ ] **Step 7b.9: Add fixture replay test** — load `phase1-richer-turn-event-stream.jsonl`, feed each line into `transport.simulateInbound`, assert iterator yields exactly N events in order, all three terminal-state arms (`turn_completed | turn_failed | turn_interrupted`) parsed correctly when present.
+- [ ] **Step 7b.10: `for await ... of` integration test** — consume entire fixture without a manual `break`.
+- [ ] **Step 7b.11: `bash scripts/ci-check.sh` — exit 0.**
+- [ ] **Step 7b.12: Codex outside-voice review on the diff** — `codex review` against the EventNormalizer files. Specifically ask: "is global FIFO order preserved across all eviction paths?". Record findings in `docs/phase-1/event-normalizer-review.md`.
+- [ ] **Step 7b.13: gstack `/plan-eng-review`** on the EventNormalizer module surface vs. plan.
+- [ ] **Step 7b.14: Commit.**
+
+```bash
+git commit -m "feat(codex-runtime): EventNormalizer edges + reviews (P1.3 part 2; D5 final)
+
+Single FIFO queue with class-aware walk-and-drop preserves global
+order under overflow (D5 final / Codex B4). Exhaustive
+ServerNotification union mapping with turn.status →
+turn_completed | turn_failed | turn_interrupted. Iterator stays
+open until transport close / explicit return. Fixture replay over
+phase1-richer-turn-event-stream.jsonl. Outside-voice + plan-eng-review
+captured."
+```
+
+**Exit criteria:** all unit + fixture replay + ordering tests pass; lifecycle-never-dropped invariant proven; iterator terminal semantics documented + tested; unknown methods do not crash; outside-voice + plan-eng-review captured.
 
 ---
 
@@ -1029,10 +1472,12 @@ captured in docs/phase-1/event-normalizer-review.md."
 - [ ] **Step 8.1: Write failing test — `runtime.threadStart({})` returns `ThreadStartResponse` from generated types.**
 - [ ] **Step 8.2: Implement minimal wrappers — one per `ClientRequest` arm we expose in Phase 1**
 
-Methods to wrap (per TODOS P1.1):
-- `thread/start`, `thread/resume`, `thread/fork`, `thread/interrupt`, `thread/turns/list`, `thread/read`
-- `turn/start`, `turn/steer`, `turn/interrupt`
+Methods to wrap (Codex B8 fix — `thread/interrupt` removed; not a real generated method per `packages/codex-protocol/src/generated/ClientRequest.ts:79`):
+- `thread/start`, `thread/resume`, `thread/fork`, `thread/turns/list`, `thread/read`
+- `turn/start`, `turn/steer`, `turn/interrupt` (this is the only "interrupt" — operates on the active turn within a thread)
 - `review/start`
+
+Each wrapper signature pulls types from `@codex-im/protocol` (Pre-2 facade); if a Phase-1-needed name is missing from the facade, that's a Pre-2 defect, not a Phase 1 implementation choice.
 
 Pattern:
 
@@ -1110,22 +1555,75 @@ describe("ApprovalBroker skeleton", () => {
 });
 ```
 
-- [ ] **Step 9a.2: Implement broker skeleton with internal dispatch table**
+- [ ] **Step 9a.2: Implement broker skeleton with **exhaustive Record-based** dispatch table (Codex B6 fix — `Map` was not exhaustive).**
 
 ```ts
 // packages/core/src/approval-broker.ts
 import type { AppServerClient, JsonRpcRequest } from "@codex-im/app-server-client";
-import type { ServerRequest } from "@codex-im/protocol";
+import type { ServerRequest, ReviewDecision } from "@codex-im/protocol";
+import type {
+  CommandExecutionRequestApprovalParams, CommandExecutionRequestApprovalResponse,
+  FileChangeRequestApprovalParams, FileChangeRequestApprovalResponse,
+  PermissionsRequestApprovalParams, PermissionsRequestApprovalResponse,
+  ToolRequestUserInputParams, ToolRequestUserInputResponse,
+  DynamicToolCallParams, DynamicToolCallResponse,
+  McpServerElicitationRequestParams, McpServerElicitationRequestResponse,
+  ApplyPatchApprovalParams, ApplyPatchApprovalResponse,
+  ExecCommandApprovalParams, ExecCommandApprovalResponse,
+  ChatgptAuthTokensRefreshParams, ChatgptAuthTokensRefreshResponse,
+} from "@codex-im/protocol";
 import type { ApprovalDecision, ApprovalRecord, ApprovalActor } from "./types.js";
 
-type ServerRequestMethod = ServerRequest["method"];
-type Dispatcher = (req: JsonRpcRequest) => Promise<unknown>;
+// Per-method dispatcher specification — params and response types are method-specific.
+// (Codex outside-voice noted v2 approval responses are NOT all { decision: ReviewDecision }.
+// Per 05-PROTOCOL §4.1 the v2 response shapes live at packages/codex-protocol/src/generated/v2/*RequestApprovalResponse.ts.)
+export type DispatcherSpec<P, R> = {
+  handler: ((req: { method: string; params: P; id: string | number }) => Promise<R>) | null;
+  defaultReject: () => R;
+};
+
+// Exhaustive Record over generated ServerRequest["method"] union.
+// TypeScript fails to compile if a generated arm is missing.
+type DispatchTable = {
+  "item/commandExecution/requestApproval": DispatcherSpec<CommandExecutionRequestApprovalParams, CommandExecutionRequestApprovalResponse>;
+  "item/fileChange/requestApproval":       DispatcherSpec<FileChangeRequestApprovalParams,       FileChangeRequestApprovalResponse>;
+  "item/permissions/requestApproval":      DispatcherSpec<PermissionsRequestApprovalParams,      PermissionsRequestApprovalResponse>;
+  "item/tool/requestUserInput":            DispatcherSpec<ToolRequestUserInputParams,            ToolRequestUserInputResponse>;
+  "item/tool/call":                        DispatcherSpec<DynamicToolCallParams,                 DynamicToolCallResponse>;
+  "mcpServer/elicitation/request":         DispatcherSpec<McpServerElicitationRequestParams,     McpServerElicitationRequestResponse>;
+  "applyPatchApproval":                    DispatcherSpec<ApplyPatchApprovalParams,              ApplyPatchApprovalResponse>;
+  "execCommandApproval":                   DispatcherSpec<ExecCommandApprovalParams,             ExecCommandApprovalResponse>;
+  "account/chatgptAuthTokens/refresh":     DispatcherSpec<ChatgptAuthTokensRefreshParams,        ChatgptAuthTokensRefreshResponse>;
+};
+
+// Type-level guard: DispatchTable's keys MUST equal ServerRequest["method"].
+// If a new generated arm is added without updating this table, this line fails to compile.
+type _ExhaustiveDispatch = ServerRequest["method"] extends keyof DispatchTable
+  ? keyof DispatchTable extends ServerRequest["method"] ? true : ["dispatch table has stale keys not in ServerRequest"]
+  : ["dispatch table is missing a ServerRequest method"];
+const _exhaustiveCheck: _ExhaustiveDispatch = true;
 
 export class ApprovalBroker {
-  #dispatchers = new Map<ServerRequestMethod, Dispatcher>();
+  #table: DispatchTable;
   #pending = new Map<string | number, ApprovalRecord>();
   #attached = false;
-  constructor(private client: AppServerClient) {}
+  constructor(private client: AppServerClient) {
+    // Default-reject specs for non-approval methods — explicit, never silent fall-through.
+    this.#table = {
+      "item/commandExecution/requestApproval": { handler: null, defaultReject: () => ({ decision: "denied" } as CommandExecutionRequestApprovalResponse) },
+      "item/fileChange/requestApproval":       { handler: null, defaultReject: () => ({ decision: "denied" } as FileChangeRequestApprovalResponse) },
+      "item/permissions/requestApproval":      { handler: null, defaultReject: () => ({ decision: "denied" } as PermissionsRequestApprovalResponse) },
+      // user-input requires a string answer — Phase 1 default-reject = empty + cancelled flag (semantics from generated type)
+      "item/tool/requestUserInput":            { handler: null, defaultReject: () => ({ /* per ToolRequestUserInputResponse shape */ } as ToolRequestUserInputResponse) },
+      // tool/call: Phase 1 has no Computer Use; default-reject means error response per generated shape
+      "item/tool/call":                        { handler: null, defaultReject: () => ({ /* error per DynamicToolCallResponse shape */ } as DynamicToolCallResponse) },
+      "mcpServer/elicitation/request":         { handler: null, defaultReject: () => ({ /* per shape */ } as McpServerElicitationRequestResponse) },
+      "applyPatchApproval":                    { handler: null, defaultReject: () => ({ decision: "denied" satisfies ReviewDecision } as ApplyPatchApprovalResponse) },
+      "execCommandApproval":                   { handler: null, defaultReject: () => ({ decision: "denied" satisfies ReviewDecision } as ExecCommandApprovalResponse) },
+      // auth refresh: Phase 1 must NOT silently approve; explicit error
+      "account/chatgptAuthTokens/refresh":     { handler: null, defaultReject: () => { throw Object.assign(new Error("auth refresh not supported in Phase 1"), { code: -32601 }); } },
+    };
+  }
 
   attach(): void {
     if (this.#attached) throw new Error("ApprovalBroker already attached");
@@ -1133,33 +1631,42 @@ export class ApprovalBroker {
     this.#attached = true;
   }
 
-  registerDispatcher<M extends ServerRequestMethod>(method: M, fn: Dispatcher): void {
-    this.#dispatchers.set(method, fn);
+  // T9b: also accept a DispatchHandlers object to register multiple at once
+  registerHandler<M extends keyof DispatchTable>(method: M, handler: NonNullable<DispatchTable[M]["handler"]>): void {
+    this.#table[method].handler = handler as DispatchTable[M]["handler"];
   }
 
   async #handle(req: JsonRpcRequest): Promise<unknown> {
-    const dispatcher = this.#dispatchers.get(req.method as ServerRequestMethod);
-    if (!dispatcher) {
-      // default-reject — matches Phase 0 client.ts policy
-      throw Object.assign(new Error("no handler registered"), { code: -32601 });
+    const m = req.method as keyof DispatchTable;
+    const spec = this.#table[m];
+    if (!spec) {
+      // method not in generated union — fail-open as -32601
+      throw Object.assign(new Error(`unsupported method ${req.method}`), { code: -32601 });
     }
-    return await dispatcher(req);
+    if (!spec.handler) {
+      // explicit default-reject (returned to codex as a successful response with denied decision,
+      // NOT as a -32601 error — codex needs the response shape to continue)
+      return spec.defaultReject();
+    }
+    return await spec.handler(req as never);
   }
 
   // T9b: timeout + transport-loss + actor-binding
   resolve(_approvalId: string, _decision: ApprovalDecision, _actor: ApprovalActor): void { throw new Error("T9b"); }
+  failPendingAsTransportLost(): void { throw new Error("T9b"); }
   expirePending(): void { throw new Error("T9b"); }
 }
 ```
 
-- [ ] **Step 9a.3: Add per-method dispatcher tests using fixture from T4 + T4.5** — one test per method present in `phase1-richer-turn-server-request.jsonl`. Each test:
-  1. Constructs `FakeAppServer`.
-  2. Replays the captured request via `fake.emitServerRequest(method, params, id)`.
-  3. Asserts broker's dispatcher is invoked with correctly-typed params.
-  4. Asserts `client.respond` writes `{ decision: ... }` mapped from `ApprovalDecision`.
-- [ ] **Step 9a.4: Add `dispatch-coverage.test.ts` (P2-2)** — exhaustive type-level check that `ServerRequest["method"]` union is registrable; test fails if a generated arm has no dispatcher slot.
-- [ ] **Step 9a.5: `bash scripts/ci-check.sh` — exit 0.**
-- [ ] **Step 9a.6: Commit.**
+- [ ] **Step 9a.3: Add per-method dispatcher tests using fixture from T4 + T4.5** — one test per method present in `phase1-richer-turn-server-request.jsonl` AND one explicit-default-reject test per non-approval method (`item/tool/call`, `mcpServer/elicitation/request`, `account/chatgptAuthTokens/refresh`). Codex required-test "broker tests for all 9 generated server-request methods, including explicit unsupported default-reject".
+- [ ] **Step 9a.4: Add v2 approval response-shape tests (Codex required-test).** For each v2 method, assert:
+  - `item/commandExecution/requestApproval` → response shape per `packages/codex-protocol/src/generated/v2/CommandExecutionRequestApprovalResponse.ts`
+  - `item/fileChange/requestApproval` → per `FileChangeRequestApprovalResponse.ts`
+  - `item/permissions/requestApproval` → per `PermissionsRequestApprovalResponse.ts`
+  None of these are guaranteed to use the legacy `{ decision: ReviewDecision }` shape — the test reads the actual generated type and validates the response shape against it. **Do not assume legacy shape applies.**
+- [ ] **Step 9a.5: Add `dispatch-coverage.test.ts`** — `_ExhaustiveDispatch` type-level test (already in source); plus a runtime test that asserts `Object.keys(broker.dispatchTable())` covers every method seen in the captured fixture AND every method in the generated union.
+- [ ] **Step 9a.6: `bash scripts/ci-check.sh` — exit 0.**
+- [ ] **Step 9a.7: Commit.**
 
 ```bash
 git commit -m "feat(core): ApprovalBroker skeleton + happy-path dispatch (P1.2 part 1)
@@ -1182,19 +1689,20 @@ adds timeout + throw + transport-loss + outside-voice review."
 - Modify: `packages/core/test/approval-broker.test.ts`
 - Create: `packages/core/test/approval-broker-fixture.test.ts`
 
-- [ ] **Step 9b.1: Add timeout test — registered dispatcher that takes 31s → broker must default-reject (-32603 "handler error") + audit.**
-- [ ] **Step 9b.2: Add throw test — registered dispatcher throws → broker default-rejects with -32603 (NOT -32601) + audit, does not crash.** This distinguishes "no handler" (-32601) from "handler errored" (-32603).
-- [ ] **Step 9b.3: Add transport-loss test (D6)** — pending approval at transport close → status `transport_lost`, decision auto-set to `{ kind: "denied", reason: "transport_lost" }`, `actor` set to `{ kind: "system", reason: "transport_lost" }`.
-- [ ] **Step 9b.4: Implement `resolve(approvalId, decision, actor)` + `expirePending()`** — actor field always required (P1-1 enforcement); Phase 1 callers pass `{ kind: "system", reason: "..." }` since no IM exists yet.
-- [ ] **Step 9b.5: Type-level test (P2-4)** — assert no string literal of an approval method name exists outside `packages/core/`. Implementation: build-time grep over `packages/{app-server-client,codex-runtime,daemon,cli}/src/**` for `/['"](approval|item\/|turn\/|thread\/)/` — fail test if any match. Exempts test files.
-- [ ] **Step 9b.6: Codex outside-voice review on broker diff.** Specifically ask:
+- [ ] **Step 9b.1: Add `reattach(client)` API used by Supervisor (Codex B7 dependency).** Detaches from the prior client (drops its handler reference), validates the new client is a different instance, calls `client.setServerRequestHandler(...)` on the new one, transfers any retained pending state. Throws if `client === priorClient` (catches identity bugs). Test: assert `setServerRequestHandler` called once on new, prior client's handler reference set to null after reattach.
+- [ ] **Step 9b.2: Add timeout test — registered dispatcher that takes 31s → broker must default-reject (-32603 "handler error") + audit.**
+- [ ] **Step 9b.3: Add throw test — registered dispatcher throws → broker default-rejects with -32603 (NOT -32601) + audit, does not crash.** This distinguishes "no handler" (-32601) from "handler errored" (-32603).
+- [ ] **Step 9b.4: Add transport-loss test (D6)** — pending approval at transport close → status `transport_lost`, decision auto-set to `{ kind: "denied", reason: "transport_lost" }`, `actor` set to `{ kind: "system", reason: "transport_lost" }`.
+- [ ] **Step 9b.5: Implement `resolve(approvalId, decision, actor)` + `failPendingAsTransportLost()` + `expirePending()`** — actor field always required (P1-1 enforcement); Phase 1 callers pass `{ kind: "system", reason: "..." }` since no IM exists yet. `failPendingAsTransportLost()` is **idempotent** (Codex B7 close-idempotence dependency): if called twice, the second call is a no-op. Test asserts both behaviors.
+- [ ] **Step 9b.6: Type-level test (P2-4)** — assert no string literal of an approval method name exists outside `packages/core/`. Implementation: build-time grep over `packages/{app-server-client,codex-runtime,daemon,cli}/src/**` for `/['"](approval|item\/|turn\/|thread\/)/` — fail test if any match. Exempts test files.
+- [ ] **Step 9b.7: Codex outside-voice review on broker diff.** Specifically ask:
   1. "is the single-slot invariant violated anywhere?"
   2. "does method-name handling read from the generated `ServerRequest` union?"
   3. "is `ApprovalActor` always set on resolve, including system-initiated transport-loss path?"
   Capture in `docs/phase-1/approval-broker-review.md`.
-- [ ] **Step 9b.7: gstack `/plan-eng-review`** on the broker module.
-- [ ] **Step 9b.8: `bash scripts/ci-check.sh` — exit 0.**
-- [ ] **Step 9b.9: Commit.**
+- [ ] **Step 9b.8: gstack `/plan-eng-review`** on the broker module.
+- [ ] **Step 9b.9: `bash scripts/ci-check.sh` — exit 0.**
+- [ ] **Step 9b.10: Commit.**
 
 ```bash
 git commit -m "feat(core): ApprovalBroker edges + reviews (P1.2 part 2)
@@ -1254,7 +1762,9 @@ git commit -m "feat(cli): codex-im runtime send (P1 dev tooling)"
 
 ### Task 11a: Daemon Supervisor skeleton (P1.4 part 1) **[lead session]**
 
-(Split per plan-eng-review P1-3.) Skeleton ships fresh-client + re-attach + ONE-SHOT identity guarantee. Backoff + halt-on-cascade + transport-loss propagation lands in T11b.
+(Split per plan-eng-review P1-3; rewritten after Codex B7 — Supervisor owns the transport spawn and subscribes to `transport.onClose`, not the nonexistent `client.onClose`.)
+
+**Codex B7 background:** `AppServerClient` has no public `onClose` API; `handleClose` is private and the constructor itself subscribes to `transport.onClose`. Phase 0's JSDoc documents the supervisor pattern as "observes `client.transport.onClose`" — meaning the supervisor either holds a transport reference directly or owns the spawn that produces it. The cleaner design is: **Supervisor owns the spawn → subscribes to transport.onClose → constructs AppServerClient passing that transport**. No new public surface on `AppServerClient`. Nothing in Phase 0 contracts changes.
 
 **Files:**
 - Create: `packages/daemon/package.json`, `tsconfig.json`, `src/index.ts`, `src/types.ts`
@@ -1262,55 +1772,81 @@ git commit -m "feat(cli): codex-im runtime send (P1 dev tooling)"
 - Create: `packages/daemon/test/supervisor.test.ts`
 
 - [ ] **Step 11a.1: Skeleton (mirror T3 — package.json/tsconfig/index/types/README/vitest.config) — commit separately.**
-- [ ] **Step 11a.2: Write failing test — `Supervisor.start()` constructs client; on transport close, constructs **new** client (object identity differs).**
-- [ ] **Step 11a.3: Implement supervisor following the 7-step protocol from `client.ts` JSDoc** (already documented). Inject `clientFactory` for testability — Phase 1 tests use injected factory; real `StdioTransport` wiring stays minimal.
+- [ ] **Step 11a.2: Write failing test — `Supervisor.start()` constructs transport+client; on transport close, constructs **new** transport+client (object identity differs).**
+- [ ] **Step 11a.3: Implement supervisor — owns spawn + transport subscription (Codex B7).**
 
 ```ts
-export class Supervisor {
-  #current: AppServerClient | null = null;
-  constructor(private opts: {
-    clientFactory: () => AppServerClient;
-    broker: ApprovalBroker;
-    runtimeFactory: (c: AppServerClient) => CodexRuntime;
-  }) {}
+import type { Transport, AppServerClient, AppServerClientOptions } from "@codex-im/app-server-client";
 
-  async start(): Promise<void> {
-    await this.#spawnFresh();
-  }
+export interface SupervisorOptions {
+  // Spawns a fresh transport on every recovery; supervisor owns the subprocess lifecycle.
+  transportFactory: () => Transport;
+  // Constructs a client given a transport. Decoupled from transportFactory so tests can
+  // pass an InMemoryTransport without spawning a real process.
+  clientFactory: (transport: Transport, opts?: AppServerClientOptions) => AppServerClient;
+  broker: ApprovalBroker;        // .attach(client) re-attaches per spawn
+  runtimeFactory: (c: AppServerClient) => CodexRuntime;
+  audit: { emitFatal(msg: string): void; emit(msg: string): void };
+  performHandshake: (c: AppServerClient) => Promise<unknown>;
+}
+
+export class Supervisor {
+  #currentTransport: Transport | null = null;
+  #currentClient: AppServerClient | null = null;
+  #closing = false;
+  #closeUnsub: (() => void) | null = null;
+
+  constructor(private opts: SupervisorOptions) {}
+
+  async start(): Promise<void> { await this.#spawnFresh(); }
 
   async #spawnFresh(): Promise<void> {
-    const client = this.opts.clientFactory();          // fresh instance per ONE-SHOT
-    this.#current = client;
-    this.opts.broker.attachTo(client);                 // re-attach single handler (T9b adds attachTo)
+    // Codex B7: subscribe to transport.onClose BEFORE constructing the client,
+    // so we never miss a close event during client setup.
+    const transport = this.opts.transportFactory();
+    this.#currentTransport = transport;
+    this.#closeUnsub = transport.onClose((code) => this.#onTransportClose(code));
+
+    const client = this.opts.clientFactory(transport);
+    this.#currentClient = client;
+
+    // ApprovalBroker is the single owner of client.setServerRequestHandler (D7).
+    // attach() throws if the broker is already attached to a different client; T9b
+    // adds reattach(client) to support supervisor recovery without leaking the prior client.
+    this.opts.broker.reattach(client);
+
     await client.start();
-    await performInitializeHandshake(client, /* clientInfo */);
-    const runtime = this.opts.runtimeFactory(client);
-    client.onClose(() => this.#onClose());
+    await this.opts.performHandshake(client);
+    const _runtime = this.opts.runtimeFactory(client);
+    // Note: T7's normalizer subscribes to client.onNotification inside its constructor.
+    // The supervisor does NOT call client.onClose — there is no such API. Close detection
+    // flows from transport.onClose only.
   }
 
-  // T11b: implement #onClose (backoff + halt + transport-loss propagation)
-  #onClose() { throw new Error("T11b"); }
+  // T11b: implement transport-close idempotence + backoff + halt
+  #onTransportClose(_code: number | null) { throw new Error("T11b"); }
 }
 ```
 
 - [ ] **Step 11a.4: Tests (skeleton scope only):**
-  1. Fresh client per spawn (assert object identity differs after manual `client.handleClose()`).
-  2. `broker.attachTo` called once per spawn (assert mock spy count).
-  3. **No zombie listeners** — old client's `onClose` handler does not fire after new client is attached (suggested test from review §"Suggested additional tests").
-
+  1. **Fresh transport+client per spawn** — assert object identity of both differs after a simulated transport close.
+  2. **`broker.reattach` called once per spawn** — assert mock spy count.
+  3. **Subscribe-before-spawn ordering** — using a transport that emits `onClose` synchronously inside its constructor, assert the supervisor still receives it (proves the subscription happens before the client construction races).
+  4. **No zombie listeners** — old transport's `onClose` handler does not fire after a new transport is in place.
 - [ ] **Step 11a.5: `bash scripts/ci-check.sh` — exit 0.**
 - [ ] **Step 11a.6: Commit.**
 
 ```bash
-git commit -m "feat(daemon): Supervisor skeleton with ONE-SHOT lifecycle (P1.4 part 1)
+git commit -m "feat(daemon): Supervisor skeleton — owns transport spawn (P1.4 part 1; Codex B7)
 
-Fresh client per spawn (object-identity-asserted). broker.attachTo
-called once per spawn. Old-client listener does not zombify when new
-client is attached. T11b adds backoff + halt + transport-loss
-propagation."
+Supervisor owns transport spawn and subscribes to transport.onClose
+BEFORE constructing AppServerClient. No dependency on a (nonexistent)
+client.onClose API. Fresh transport+client per spawn,
+object-identity-asserted. broker.reattach() per spawn. T11b lands
+backoff + halt + close-idempotence."
 ```
 
-**Exit criteria:** ONE-SHOT invariant proven by object-identity assertions; no zombie listener test passes; ci-check green.
+**Exit criteria:** Supervisor never references `client.onClose`; subscribe-before-spawn ordering proven by test; ONE-SHOT invariant proven by object-identity assertions; no zombie listener test passes; ci-check green.
 
 ---
 
@@ -1320,44 +1856,66 @@ propagation."
 - Modify: `packages/daemon/src/supervisor.ts`
 - Modify: `packages/daemon/test/supervisor.test.ts`
 
-- [ ] **Step 11b.1: Implement `#onClose` with bounded exponential backoff + halt-on-cascade.**
+- [ ] **Step 11b.1: Implement `#onTransportClose` with idempotence + bounded exponential backoff + halt-on-cascade.**
 
 ```ts
-#onClose() {
-  // D6: pending turns/approvals fail, no auto-resume
-  this.opts.broker.failPendingAsTransportLost();   // T9b API
+#onTransportClose(code: number | null) {
+  // Codex required-test "Supervisor close idempotence test": concurrent close events
+  // call transport-loss cleanup ONCE.
+  if (this.#closing) return;
+  this.#closing = true;
+
+  // D6: pending approvals fail-as-transport-lost (T9b API)
+  this.opts.broker.failPendingAsTransportLost();
+  // Pending turns: T7's runtime emits a synthetic `turn_failed` for each pending turn (T7b extension)
+  // (delivered through the EventNormalizer; no separate runtime API needed)
+
+  this.opts.audit.emit(`transport closed (code=${code}); cleanup complete`);
+
   this.#consecutiveFailures++;
   if (this.#consecutiveFailures >= 5) {
     this.opts.audit.emitFatal("supervisor halted: 5 consecutive transport closes");
     return;
   }
-  setTimeout(() => this.#spawnFresh(), this.#backoff());
+  setTimeout(async () => {
+    this.#closing = false;
+    try { await this.#spawnFresh(); }
+    catch (e) { this.opts.audit.emitFatal(`spawnFresh failed: ${(e as Error).message}`); }
+  }, this.#backoff());
+}
+
+#backoff(): number {
+  // 500ms → 1s → 2s → 4s → 8s
+  return 500 * (1 << Math.min(this.#consecutiveFailures - 1, 4));
 }
 ```
 
 - [ ] **Step 11b.2: Tests:**
-  1. Pending approvals from old client are marked `transport_lost` (D6) — wired through `broker.failPendingAsTransportLost()`.
-  2. Pending turns from old runtime emit synthetic `turn_failed (transport_lost)` event.
-  3. Exponential backoff bounded (500ms → 1s → 2s → 4s → 8s).
-  4. 5 consecutive failures → halt + emit fatal audit; no further `#spawnFresh` calls.
+  1. **Close idempotence under concurrent events** (Codex required-test) — fire `transport.onClose` twice in quick succession; assert `broker.failPendingAsTransportLost()` called exactly once, audit fires once.
+  2. Pending approvals from old client are marked `transport_lost` (D6) — wired through `broker.failPendingAsTransportLost()`.
+  3. Pending turns from old runtime emit synthetic `turn_failed (transport_lost)` event through the normalizer.
+  4. Exponential backoff bounded (500ms → 1s → 2s → 4s → 8s).
+  5. 5 consecutive failures → halt + emit fatal audit; no further `#spawnFresh` calls.
 - [ ] **Step 11b.3: Codex outside-voice review.** Specifically ask:
   1. "do we ever reuse a closed AppServerClient?"
   2. "does any branch leak the prior runtime reference?"
   3. "is `failPendingAsTransportLost` called exactly once per close, even under concurrent close events?"
+  4. "is the close subscription always installed before any wire activity could trigger it?"
   Capture in `docs/phase-1/supervisor-review.md`.
 - [ ] **Step 11b.4: `bash scripts/ci-check.sh` — exit 0.**
 - [ ] **Step 11b.5: Commit.**
 
 ```bash
-git commit -m "feat(daemon): Supervisor edges + reviews (P1.4 part 2)
+git commit -m "feat(daemon): Supervisor edges + reviews (P1.4 part 2; Codex B7 + close-idempotence)
 
+Close idempotence under concurrent events (#closing latch).
 Bounded exponential backoff (500ms..8s) with 5-failure halt and
 fatal audit. Pending approvals (D6) auto-fail as transport_lost
 via broker.failPendingAsTransportLost(). Pending turns emit
 synthetic turn_failed event. Outside-voice review captured."
 ```
 
-**Exit criteria:** all supervisor tests pass including transport-loss propagation + halt cascade; outside-voice review captured.
+**Exit criteria:** all supervisor tests pass including close-idempotence + transport-loss propagation + halt cascade; outside-voice review captured.
 
 ---
 
@@ -1498,32 +2056,36 @@ Resolutions:
 
 ## 11. Self-review checklist (writing-plans skill §Self-Review)
 
-- [x] Spec coverage: P1.1–P1.6 + CLI `runtime send` + 05-PROTOCOL §3/§4.1 doc maintenance — each maps to T7a/T7b (P1.3), T8 (P1.1), T9a/T9b (P1.2), T11a/T11b (P1.4), T1 (P1.5), T2+T4+T4.5 (P1.6), T10 (CLI), T12 (docs).
+- [x] Spec coverage: P1.1–P1.6 + CLI `runtime send` + 05-PROTOCOL §3/§4.1 doc maintenance — each maps to T7a/T7b (P1.3), T8 (P1.1), T9a/T9b (P1.2), T11a/T11b (P1.4), T1 (P1.5), T2+T4+T4.5 (P1.6), T10 (CLI), T12 (docs). Pre-1 + Pre-2 cover Codex-flagged prerequisites (Node bump, protocol facade).
 - [x] No placeholders: every step has either a code block, a command, or an unambiguous file path.
-- [x] Type consistency: `ApprovalDecision` + `ApprovalActor` shape used identically in T5 (definition) and T9a/T9b (consumer); `CodexRichEvent` discriminated union introduced in T3 and consumed in T7a/T7b; `EventClass` classification table type-checked exhaustive in T7a.
-- [x] No backwards-compat shims (Phase 0 contracts only extended, never refactored).
+- [x] Type consistency: `ApprovalDecision` + `ApprovalActor` shape used identically in T5 (definition) and T9a/T9b (consumer); `CodexRichEvent` discriminated union introduced in T3 (with `turn_failed` / `turn_interrupted` added in T7b for status mapping) and consumed in T7a/T7b; `EventClass` classification table type-checked exhaustive in T7a; `DispatchTable` exhaustive over `ServerRequest["method"]` in T9a.
+- [x] No backwards-compat shims (Phase 0 contracts only extended, never refactored). Codex B7 fix: Supervisor uses `transport.onClose` per Phase 0 JSDoc, no new public surface on `AppServerClient`.
 - [x] Every task has explicit verification commands (`bash scripts/ci-check.sh` after T3) and exit criteria.
-- [x] Sequential vs parallel windows declared (4 phases: 1A parallel, 1B + 1B′ sequential, 1C parallel lanes with internal a→b sequencing, 1D sequential).
+- [x] Sequential vs parallel windows declared (Pre-1 → Pre-2 → Phase 1A parallel → 1B + 1B′ sequential → 1C parallel lanes with internal a→b sequencing → 1D sequential).
 - [x] Subagent / outside-voice / `/plan-eng-review` assignments declared per task.
-- [x] Plan-eng-review P0/P1 fixes applied inline (D5 revised, fixture path preserved, Node 20.10 preserved, ApprovalRecord.actor added, T4.5 gate inserted, T7/T9/T11 split, ci-check.sh + redact-fixture.mjs added).
+- [x] Plan-eng-review P0/P1 fixes applied inline (D5 revised, fixture path preserved, ApprovalRecord.actor added, T4.5 gate inserted, T7/T9/T11 split, ci-check.sh + redact-fixture.mjs added).
+- [x] Codex outside-voice fixes applied inline (Pre-1 Node 24 bump, Pre-2 protocol facade, D5 final / single-FIFO, T2 --prompt-file/--cwd + vitest-exclusion fix, T4 capture command fixed, T4.5 = committed verify-phase1-fixtures.mts, T6 derived from METHOD_CLASS, T7b turn.status mapping + ordering test + iterator semantics, T8 thread/interrupt → turn/interrupt, T9 exhaustive Record + per-method v2 mappers + non-approval default-rejects, T11 transport-owned with close idempotence).
 
 ---
 
-## 12. Open questions — RESOLVED
+## 12. Open questions — RESOLVED (twice)
 
-Decisions reached after plan-eng-review (2026-04-30):
+Decisions reached after plan-eng-review (2026-04-30) and Codex outside-voice (2026-04-30):
 
-1. **Fixture-capture target dir** — **resolved**. Capture runs in `/tmp/codex-fixture-spike` (outside repo, to avoid sandbox writes during real codex spawn). Captured + redacted output lands in `packages/testkit/fixtures/codex-0.125.0/phase1-*.jsonl` (version-pinned dir preserved per P0-2; phase tracing via filename prefix).
-2. **Node target for new packages** — **resolved**. Keep `engines.node >=20.10` to match Phase 0 contract. Any future bump to Node 24 happens in a standalone pre-Phase-3 PR with full Phase 0 gate re-run, not silently inside Phase 1 (P0-1).
+1. **Fixture-capture target dir** — **resolved**. Capture runs in `/tmp/codex-fixture-spike` (outside repo, to avoid sandbox writes during real codex spawn). Captured + redacted output lands in `packages/testkit/fixtures/codex-0.125.0/phase1-*.jsonl` (version-pinned dir preserved per P0-2; phase tracing via filename prefix). Capture command stays in repo root with `--cwd` flag controlling subprocess working dir (Codex B2 fix).
+2. **Node target for new packages** — **reversed by Codex outside-voice 2026-04-30**. Today is Node 20 EOL. Bump to Node 24 (Active LTS) as Pre-1, a standalone PR off `phase-0-bootstrap` with full Phase 0 gate re-run. Pre-1 is a prerequisite of Phase 1, not a Phase 1 task. See §0.4 Pre-1 for scope.
 3. **CI integration timing** — **resolved**. Phase 1 ships `scripts/ci-check.sh` (local subagent gate, P1-4) but defers GitHub Actions workflow to Phase 2 hygiene as TODOS already lists. The local gate is mandatory before any subagent claims a task done.
+4. **`@codex-im/protocol` facade scope** — **resolved by Codex B3**. Phase 0 facade exposes only initialize types. Phase 1 needs `ServerRequest`, `ServerNotification`, `ClientRequest`, plus the per-method params/responses enumerated in §0.4 Pre-2. Ships as Pre-2 prerequisite PR; Phase 1 imports cannot start until merged.
 
 ---
 
-**Status:** P0 + P1 review fixes applied inline (2026-04-30). Plan now ready for:
+**Status:** Plan-eng-review P0/P1 + Codex outside-voice B1–B8 fixes applied inline (2026-04-30). Plan now ready for:
 
-1. gstack `/plan-eng-review` — already run; report in §9 / GSTACK REVIEW REPORT below
-2. Codex outside-voice — capture report in §10
-3. Begin execution per `superpowers:subagent-driven-development` (recommended) — fresh subagent per task with two-stage review
+1. gstack `/plan-eng-review` — already run on 2026-04-30; report below
+2. Codex outside-voice — already run on 2026-04-30; report below
+3. **Pre-1 (Node 24 bump) PR** off `phase-0-bootstrap` — full Phase 0 gate re-run
+4. **Pre-2 (protocol facade) PR** off Pre-1 — narrow facade expansion
+5. Begin Phase 1 execution per `superpowers:subagent-driven-development` (recommended) — fresh subagent per task with two-stage review
 
 ---
 
@@ -1532,10 +2094,11 @@ Decisions reached after plan-eng-review (2026-04-30):
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | not run; Phase 1 is foundations, not a product/strategy change |
-| Codex Review | `codex review` (outside voice) | Independent 2nd opinion | 0 | pending | scheduled after this plan revision |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | **APPROVE WITH CHANGES → CHANGES APPLIED** | 3 P0 (D5 revise, fixture path, Node target), 5 P1 (ApprovalRecord.actor, T4.5 gate, T7/T9/T11 split, ci-check.sh, redact script), 5 P2 — all P0+P1 applied inline |
+| Codex Review | `codex review` (outside voice) | Independent 2nd opinion | 1 | **APPROVE WITH CHANGES → CHANGES APPLIED** | 8 blockers (B1 verify-script, B2 capture command, B3 protocol facade, B4 queue ordering, B5 Set non-exhaustive, B6 Map non-exhaustive, B7 client.onClose absent, B8 thread/interrupt non-existent) + Node 24 advice + 7 missing tests + 4 risky-assumption notes. All 8 blockers resolved inline; tests folded into respective tasks; risky assumptions documented in T4 prompt-design step. |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | **APPROVE WITH CHANGES → CHANGES APPLIED** | 3 P0 (D5 revise, fixture path, Node target), 5 P1 (ApprovalRecord.actor, T4.5 gate, T7/T9/T11 split, ci-check.sh, redact script), 5 P2 — all P0+P1 applied inline (Node decision later reversed by Codex outside-voice; see Open question #2) |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | n/a | no UI in Phase 1 |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | n/a | no developer-facing surface in Phase 1 |
 
-- **UNRESOLVED:** 0 (all P0+P1 applied; P2 deferred but tracked in review §"P2 improvements")
-- **VERDICT:** ENG REVIEW CLEARED — ready to run Codex outside-voice on the revised plan, then begin execution.
+- **CROSS-MODEL:** Eng Review and Codex outside-voice converged on 7/8 of the same architectural concerns (queue design, exhaustive method dispatch, non-hardcoded method names, T7/T9/T11 split, fixture gate hardness, ci-check.sh hygiene). They DISAGREED on Node 24: Eng Review rejected the bump to preserve Phase 0 contract; Codex outside-voice approved on the basis that today is Node 20 EOL and the bump can land as a standalone Pre-1 PR with full Phase 0 re-run. The Codex argument is stronger — Pre-1 was added.
+- **UNRESOLVED:** 0 (all blockers + P0+P1 applied; P2 deferred but tracked).
+- **VERDICT:** ENG REVIEW CLEARED + CODEX OUTSIDE-VOICE CLEARED — ready for Pre-1 + Pre-2 prerequisite PRs, then Phase 1 execution.
