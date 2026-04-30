@@ -38,11 +38,15 @@ const PATH_INLINE_PATTERNS = [
   /\/Users\/[^\s)"',\\]+/g,
   // /home/<name>/...    (Linux user dirs)
   /\/home\/[^\s)"',\\]+/g,
-  // /private/var/folders/... (macOS per-user temp; mkdtemp lives here)
-  /\/private\/var\/folders\/[^\s)"',\\]+/g,
-  // /tmp/codex-fixture-<rand>/... (T4 sandbox dir; narrower than a
-  // blanket /tmp redaction so we don't paper over unrelated /tmp usage)
-  /\/tmp\/codex-fixture-[^\s)"',\\]+/g,
+  // /private/var/folders/... AND /var/folders/...  (macOS per-user
+  // temp; the optional `/private` prefix is the canonical-form leak
+  // codex review caught — codex's chronicle path normalization can
+  // emit either form depending on which API returned the path).
+  /(?:\/private)?\/var\/folders\/[^\s)"',\\]+/g,
+  // /private/tmp/codex-fixture-* AND /tmp/codex-fixture-*  (T4 sandbox
+  // dir; same dual-form issue. Narrower than a blanket /tmp redaction
+  // so we don't paper over unrelated /tmp usage.)
+  /(?:\/private)?\/tmp\/codex-fixture-[^\s)"',\\]+/g,
 ];
 
 // ─── Model name patterns ────────────────────────────────────────────────

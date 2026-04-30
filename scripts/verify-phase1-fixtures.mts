@@ -78,6 +78,8 @@ interface JsonRpcFrame {
   method?: unknown;
   id?: unknown;
   params?: unknown;
+  result?: unknown;
+  error?: unknown;
 }
 
 export interface VerifyResult {
@@ -121,6 +123,16 @@ export function verify(jsonlText: string): VerifyResult {
     if (!("id" in frame) || frame.id === null || frame.id === undefined) {
       errors.push(
         `line ${i + 1}: missing id — this fixture must contain server-initiated REQUESTS, not notifications`,
+      );
+      continue;
+    }
+    // Codex outside-voice T4.5 review #4: a server-initiated REQUEST has
+    // method+id but no result/error. A response would have id+result/error
+    // (and may also have a method on some shapes). Reject either field
+    // explicitly so a stray response can't mascarade as an approval.
+    if ("result" in frame || "error" in frame) {
+      errors.push(
+        `line ${i + 1}: frame has result/error field — that is a response shape, not a server-initiated request`,
       );
       continue;
     }

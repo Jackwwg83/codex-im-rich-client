@@ -47,6 +47,20 @@ describe("verify-phase1-fixtures.verify (negative cases)", () => {
     expect(r.errors.some((e) => /missing string method/i.test(e))).toBe(true);
   });
 
+  it("rejects a response masquerading as a request (id + method + result) — codex review #4", () => {
+    const r = verify(
+      frame({ id: 1, method: "applyPatchApproval", result: { decision: "denied" } }),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => /response shape/i.test(e))).toBe(true);
+  });
+
+  it("rejects a frame with id + method + error (also a response shape)", () => {
+    const r = verify(frame({ id: 1, method: "x", error: { code: -32603, message: "y" } }));
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => /response shape/i.test(e))).toBe(true);
+  });
+
   it("rejects a frame whose JSON is malformed", () => {
     const r = verify("{ this is not json");
     expect(r.ok).toBe(false);

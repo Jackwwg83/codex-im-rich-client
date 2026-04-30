@@ -123,28 +123,37 @@ transport-layer rails are the load-bearing safety, per Q1).
 ### Consult output (verbatim)
 
 <!-- BEGIN CODEX OUTSIDE-VOICE OUTPUT -->
-**Consult deferred** (2026-04-30, 14:00–14:08).
+**Consult attempted pre-capture (2026-04-30, 14:00–14:08); deferred
+after the codex exec invocation hung on stdin (shell-quoting issue
+with the very long heredoc-expanded prompt). Capture proceeded under
+the locked transport-layer safety rails (Q1) as the load-bearing
+safety mechanism.**
 
-The lead session attempted `codex exec --skip-git-repo-check --sandbox
-read-only -c approval_policy=never -c model_reasoning_effort=high
-"<prompt>"` for the formal outside-voice review. The invocation hung on
-stdin ("Reading additional input from stdin...") despite the prompt
-being passed as a CLI argument — almost certainly a shell-quoting
-issue with the very long heredoc-expanded string interacting with
-Codex CLI's input handling. After 90s without progress the consult
-was killed.
+**Consult retroactively fulfilled (2026-04-30, ~14:50) via
+`codex exec --skip-git-repo-check --sandbox read-only -c
+approval_policy=never -c model_reasoning_effort=high -` with
+prompt+diff piped via stdin.** The retry succeeded; codex returned 9
+findings against the T1–T4.5 diff. Findings on this T4 capture
+specifically:
 
-**No retry attempted.** The codex consult is supplementary, not
-load-bearing — the locked transport-layer safety rails (Q1 above)
-are the real safety mechanism. The primary safety analysis stands as
-the formal record. If Q1's invariants ever weaken, the consult
-becomes load-bearing again and must be retried with stdin-fed input
-(`echo "<prompt>" | codex exec ... -`) or with a much shorter inlined
-prompt.
+  - #2: `account/rateLimits/updated` frames committed account metadata
+    (`planType: "pro"`, `usedPercent: N`) outside the path/model
+    redaction scope. **Resolved**: frames stripped from the committed
+    fixture; full method classification still covered by T7a's
+    METHOD_CLASS table.
+  - #3: redactor produced `/private<CWD>` partial leaks because
+    `/tmp/codex-fixture-*` matched the suffix while `/private/var/folders`
+    didn't cover the `/private/tmp/codex-fixture-*` macOS canonical form.
+    **Resolved**: regex set updated with optional `(?:/private)?` prefix
+    on both relevant patterns; regression test added.
 
-A retry of the consult is appropriate before T7b/T9b (the next
-high-leverage tasks where Codex outside-voice is required by the
-plan), since those are not gated on T4's capture timing.
+These findings were applied as a follow-on commit to T4.5; the
+original T4 capture commit (619ec6b) and T4.5 commit (a15c772) stand
+in history with the fixes layered on top.
+
+The full 9-finding review output is preserved in
+docs/phase-1/codex-review-t1-t4.5.md (or the b5o79pmb4 task-output log
+on the runtime host).
 <!-- END CODEX OUTSIDE-VOICE OUTPUT -->
 
 ## Verdict

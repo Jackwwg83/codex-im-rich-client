@@ -126,16 +126,30 @@ export function parseSmokeRealTurnArgs(argv: readonly string[]): SmokeRealTurnFl
  * Multiple subscribers on a single Transport are supported (StdioTransport
  * uses a Set; InMemoryTransport uses EventEmitter), so this runs in
  * parallel with AppServerClient's own `transport.onMessage` subscription.
+ *
+ * Codex outside-voice T4.5 review #6: a stream `error` event (e.g.
+ * ENOENT/EACCES on `--capture <bad-path>`) without an explicit listener
+ * surfaces as an UnhandledError that crashes the harness. We capture
+ * the first error and surface it from the close callback so the smoke
+ * fails cleanly with a useful message instead of an uncaught throw.
  */
 export function attachCapture(transport: Transport, path: string): () => Promise<void> {
   const stream = createWriteStream(path, { flags: "w" });
+  let firstStreamError: Error | undefined;
+  stream.on("error", (err: Error) => {
+    if (!firstStreamError) firstStreamError = err;
+  });
   const unsub = transport.onMessage((msg) => {
     stream.write(`${JSON.stringify(msg)}\n`);
   });
   return () =>
     new Promise<void>((resolve, reject) => {
       unsub();
-      stream.end((err: Error | null | undefined) => (err ? reject(err) : resolve()));
+      stream.end((err: Error | null | undefined) => {
+        if (firstStreamError) reject(firstStreamError);
+        else if (err) reject(err);
+        else resolve();
+      });
     });
 }
 
@@ -184,6 +198,13 @@ export async function runSmokeRealTurnCore(opts: RunCoreOptions): Promise<void> 
     throw new Error(`smoke:real-turn rejects all server requests by policy (${req.method})`);
   });
 
+  // Codex outside-voice T4.5 review #5: capture-the-error-then-cleanup
+  // pattern. We do NOT throw from inside `finally` (biome noUnsafeFinally
+  // would also flag that). Instead, run both cleanups unconditionally
+  // and, after they finish, re-throw mainErr if the main work failed,
+  // else surface the first cleanup error if any. Main-work error always
+  // wins so cleanup failures don't mask the actual cause.
+  let mainErr: unknown;
   try {
     await client.start();
     log.info("transport started");
@@ -217,10 +238,27 @@ export async function runSmokeRealTurnCore(opts: RunCoreOptions): Promise<void> 
 
     await turnTerminal;
     log.info("turn reached terminal state");
-  } finally {
-    await client.stop();
-    if (closeCapture) await closeCapture();
+  } catch (e) {
+    mainErr = e;
   }
+
+  // Both cleanups run unconditionally; first cleanup error captured.
+  let cleanupErr: unknown;
+  try {
+    await client.stop();
+  } catch (e) {
+    cleanupErr = e;
+  }
+  if (closeCapture) {
+    try {
+      await closeCapture();
+    } catch (e) {
+      if (cleanupErr === undefined) cleanupErr = e;
+    }
+  }
+
+  if (mainErr !== undefined) throw mainErr;
+  if (cleanupErr !== undefined) throw cleanupErr;
 
   if (unhandledServerRequests > 0) {
     log.warn(
@@ -238,10 +276,14 @@ export async function runSmokeRealTurnCore(opts: RunCoreOptions): Promise<void> 
  * runSmokeRealTurnCore.
  *
  * `argv` parameter (optional) lets a test exercise the env-gate +
- * arg-routing without spawning codex. Default is `process.argv.slice(3)`
- * which is "everything after `codex-im smoke real-turn`".
+ * arg-routing without spawning codex. Callers MUST pass argv explicitly;
+ * the dispatcher in src/index.ts does this. The default-arg fallback
+ * uses `process.argv.slice(2)` so direct `tsx packages/cli/src/smoke-real-turn.ts
+ * --capture x` invocation works (script-as-program path) — codex
+ * outside-voice T4.5 review #7 caught the original slice(3) default
+ * which mis-routed `--capture x` to `["x"]` in the direct-run case.
  */
-export async function run(argv: readonly string[] = process.argv.slice(3)): Promise<void> {
+export async function run(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   if (!process.env.CODEX_REAL_SMOKE) {
     console.error(
       [

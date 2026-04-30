@@ -66,6 +66,32 @@ describe("redactJsonl", () => {
     expect(parsed.message).toContain("<CWD>");
   });
 
+  it("redacts the macOS canonical /private/tmp/codex-fixture-* form (T4.5 codex review #3)", () => {
+    // codex outside-voice flagged that the original regex set produced
+    // `/private<CWD>` in committed fixtures because /tmp/codex-fixture-*
+    // matched the suffix while /private/var/folders missed the /tmp
+    // canonicalization. Optional `/private` prefix in the pattern
+    // catches both bare and canonicalized forms.
+    const input = JSON.stringify({
+      cwd: "/private/tmp/codex-fixture-spike",
+      path: "/private/tmp/codex-fixture-spike/hello.txt",
+    });
+    const parsed = JSON.parse(redactJsonl(input).trim());
+    expect(parsed.cwd).toBe("<CWD>");
+    expect(parsed.path).toBe("<CWD>");
+    // No `/private<CWD>` partial leak.
+    const text = redactJsonl(input);
+    expect(text).not.toContain("/private<CWD>");
+    expect(text).not.toContain("/private/");
+  });
+
+  it("redacts the macOS canonical /private/var/folders form (same canonicalization)", () => {
+    const input = JSON.stringify({ tmp: "/private/var/folders/abc/T/foo" });
+    const parsed = JSON.parse(redactJsonl(input).trim());
+    expect(parsed.tmp).toBe("<CWD>");
+    expect(redactJsonl(input)).not.toContain("/private");
+  });
+
   it("redacts /tmp/codex-fixture-* paths embedded as substrings", () => {
     // T4 captures show `/tmp/codex-fixture-spike/hello.txt` appearing as
     // a value of nested fields. Redactor must catch substrings not just

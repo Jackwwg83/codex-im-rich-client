@@ -126,14 +126,21 @@ describe(`fixture-replay codex-${VERSION} — phase1-richer-turn-event-stream.js
     }
   });
 
-  it("contains no raw paths AND no raw model names (redaction sanity)", () => {
+  it("contains no raw paths, no model names, no account metadata (redaction sanity)", () => {
     const text = loadFixtureText(VERSION, "phase1-richer-turn-event-stream.jsonl");
     expect(text).not.toMatch(/\/Users\//);
     expect(text).not.toMatch(/\/home\//);
     expect(text).not.toMatch(/\/private\/var\/folders\//);
     expect(text).not.toMatch(/\/tmp\/codex-fixture-/);
+    // Codex T4.5 review #3: partial /private<CWD> leak guard
+    expect(text).not.toContain("/private<CWD>");
+    expect(text).not.toContain("/private/");
     expect(text).not.toMatch(/\bgpt-[a-z0-9]/);
     expect(text).not.toMatch(/\bclaude-[a-z0-9]/);
+    // Codex T4.5 review #2: account metadata leak guard
+    expect(text).not.toMatch(/account\/rateLimits/);
+    expect(text).not.toContain("planType");
+    expect(text).not.toContain("usedPercent");
   });
 });
 
