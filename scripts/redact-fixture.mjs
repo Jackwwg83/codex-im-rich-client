@@ -22,54 +22,63 @@
 import { readFileSync } from "node:fs";
 
 // ─── Path patterns ──────────────────────────────────────────────────────
-// These match an entire absolute path; the placeholder <CWD> is intended
-// to be a substitution for the whole string field, so we anchor at start.
-// Using individual prefix patterns keeps the matcher easy to audit.
-const PATH_PREFIX_PATTERNS = [
+// Inline substring match: real captured fixtures embed absolute paths in
+// prose-like fields (e.g. `warning.message`, `agent_message_delta`). T4
+// surfaced one such case — `Under-development features ... in
+// /Users/jackwu/.codex/config.toml.` — that whole-string anchored
+// patterns silently missed. Each regex is global and consumes a path up
+// to the next whitespace or string-quote / paren / comma terminator.
+//
+// Trailing punctuation (period, semicolon) is intentionally consumed:
+// "in <CWD>" reads better than "in <CWD>." and the captured period was
+// part of the host path anyway. Idempotency holds because <CWD> contains
+// `<` and `>`, neither of which match the path patterns.
+const PATH_INLINE_PATTERNS = [
   // /Users/<name>/...   (macOS user dirs)
-  /^\/Users\/[^/]+(?:\/.*)?$/,
+  /\/Users\/[^\s)"',\\]+/g,
   // /home/<name>/...    (Linux user dirs)
-  /^\/home\/[^/]+(?:\/.*)?$/,
+  /\/home\/[^\s)"',\\]+/g,
   // /private/var/folders/... (macOS per-user temp; mkdtemp lives here)
-  /^\/private\/var\/folders\/.*/,
-  // /tmp/codex-fixture-<rand>/... (T4 sandbox dir; matches the specific
-  // prefix the plan uses, narrower than a blanket /tmp redaction so we
-  // don't paper over unrelated /tmp usage)
-  /^\/tmp\/codex-fixture-.*/,
+  /\/private\/var\/folders\/[^\s)"',\\]+/g,
+  // /tmp/codex-fixture-<rand>/... (T4 sandbox dir; narrower than a
+  // blanket /tmp redaction so we don't paper over unrelated /tmp usage)
+  /\/tmp\/codex-fixture-[^\s)"',\\]+/g,
 ];
 
 // ─── Model name patterns ────────────────────────────────────────────────
-const MODEL_NAME_PATTERNS = [/^gpt-.*/, /^o[1-9][0-9]*(?:-.*)?$/, /^claude-.*/];
+// Inline word-boundary match: a model name embedded in prose
+// ("the gpt-5-codex run...") should also redact, not just bare strings.
+// The o1/o3/o4 family is matched only with a digit-and-suffix shape to
+// avoid false positives on standalone "o1" inside unrelated text — there
+// must be at least one alphanumeric char after the digit run.
+const MODEL_INLINE_PATTERNS = [
+  /\bgpt-[a-zA-Z0-9.-]+/g,
+  /\bo[1-9][0-9]*-[a-zA-Z0-9.-]+/g,
+  /\bclaude-[a-zA-Z0-9.-]+/g,
+];
 
 const PLACEHOLDER_PATH = "<CWD>";
 const PLACEHOLDER_MODEL = "<MODEL>";
 
-function isAlreadyRedacted(s) {
-  return s === PLACEHOLDER_PATH || s === PLACEHOLDER_MODEL;
-}
-
-function shouldRedactAsPath(s) {
-  if (isAlreadyRedacted(s)) return false;
-  return PATH_PREFIX_PATTERNS.some((re) => re.test(s));
-}
-
-function shouldRedactAsModel(s) {
-  if (isAlreadyRedacted(s)) return false;
-  return MODEL_NAME_PATTERNS.some((re) => re.test(s));
+function redactStringInline(s) {
+  let out = s;
+  for (const re of PATH_INLINE_PATTERNS) {
+    out = out.replace(re, PLACEHOLDER_PATH);
+  }
+  for (const re of MODEL_INLINE_PATTERNS) {
+    out = out.replace(re, PLACEHOLDER_MODEL);
+  }
+  return out;
 }
 
 /**
- * Recursively walk a parsed JSON value, replacing any string that matches
- * a path / model pattern with its placeholder. Arrays + objects are
+ * Recursively walk a parsed JSON value, replacing path / model patterns
+ * inside any string field with placeholders. Arrays + objects are
  * recursed into; primitives other than string are passed through.
  */
 function redactValue(v) {
   if (v === null) return v;
-  if (typeof v === "string") {
-    if (shouldRedactAsPath(v)) return PLACEHOLDER_PATH;
-    if (shouldRedactAsModel(v)) return PLACEHOLDER_MODEL;
-    return v;
-  }
+  if (typeof v === "string") return redactStringInline(v);
   if (Array.isArray(v)) return v.map(redactValue);
   if (typeof v === "object") {
     const out = {};

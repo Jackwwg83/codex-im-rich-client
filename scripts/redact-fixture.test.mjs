@@ -54,6 +54,45 @@ describe("redactJsonl", () => {
     }
   });
 
+  it("redacts paths embedded in prose (T4 regression: warning message body)", () => {
+    // Real codex 0.125 emits this warning and silently leaked the path
+    // through whole-string-only matchers. Inline substring match catches it.
+    const input = JSON.stringify({
+      message:
+        "Under-development features enabled: chronicle. To suppress, set `suppress_unstable_features_warning = true` in /Users/jackwu/.codex/config.toml.",
+    });
+    const parsed = JSON.parse(redactJsonl(input).trim());
+    expect(parsed.message).not.toContain("/Users/jackwu");
+    expect(parsed.message).toContain("<CWD>");
+  });
+
+  it("redacts /tmp/codex-fixture-* paths embedded as substrings", () => {
+    // T4 captures show `/tmp/codex-fixture-spike/hello.txt` appearing as
+    // a value of nested fields. Redactor must catch substrings not just
+    // whole-string equality.
+    const input = JSON.stringify({
+      diff: "--- a/file\n+++ b/file\nnew path: /tmp/codex-fixture-spike/hello.txt",
+    });
+    const parsed = JSON.parse(redactJsonl(input).trim());
+    expect(parsed.diff).not.toContain("/tmp/codex-fixture-spike");
+    expect(parsed.diff).toContain("<CWD>");
+  });
+
+  it("redacts model names embedded in prose", () => {
+    const input = JSON.stringify({ msg: "switching to gpt-5-codex for this turn" });
+    const parsed = JSON.parse(redactJsonl(input).trim());
+    expect(parsed.msg).not.toContain("gpt-5-codex");
+    expect(parsed.msg).toContain("<MODEL>");
+  });
+
+  it("does NOT match a bare 'o1' or 'o2' as a model name (false-positive guard)", () => {
+    // The o<N>-<suffix> regex requires at least one suffix char after
+    // the digit run, so unrelated text containing standalone "o1" stays.
+    const input = JSON.stringify({ msg: "no model match for o1 alone" });
+    const parsed = JSON.parse(redactJsonl(input).trim());
+    expect(parsed.msg).toBe("no model match for o1 alone");
+  });
+
   it("preserves non-matching strings verbatim", () => {
     const input = JSON.stringify({
       method: "turn/started",

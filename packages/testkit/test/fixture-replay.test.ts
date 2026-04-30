@@ -88,3 +88,92 @@ describe(`fixture-replay codex-${VERSION} — malformed-json.stderr.txt`, () => 
     expect(() => JSON.parse(text)).toThrow();
   });
 });
+
+// ─── Phase 1 T4 captures ────────────────────────────────────────────────
+
+describe(`fixture-replay codex-${VERSION} — phase1-richer-turn-event-stream.jsonl`, () => {
+  const messages = loadFixture(VERSION, "phase1-richer-turn-event-stream.jsonl");
+
+  it("contains ≥10 notification frames covering ≥3 distinct methods (T4 exit criteria)", () => {
+    expect(messages.length).toBeGreaterThanOrEqual(10);
+    const methods = new Set<string>();
+    for (const m of messages) {
+      const obj = m as { method?: unknown };
+      if (typeof obj.method === "string") methods.add(obj.method);
+    }
+    expect(methods.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("contains the turn lifecycle terminators (T7b will map turn.status)", () => {
+    const methods = messages.map((m) => (m as { method?: unknown }).method);
+    expect(methods).toContain("turn/started");
+    expect(methods).toContain("turn/completed");
+  });
+
+  it("turn/completed frame carries a turn.status discriminant (used by T7b mapping)", () => {
+    const completed = messages.find(
+      (m) => (m as { method?: unknown }).method === "turn/completed",
+    ) as { params?: { turn?: { status?: unknown } } } | undefined;
+    expect(completed).toBeDefined();
+    expect(completed?.params?.turn?.status).toBeDefined();
+  });
+
+  it("every frame parses as a JSON-RPC notification (method, no id)", () => {
+    for (const m of messages) {
+      const obj = m as { method?: unknown; id?: unknown };
+      expect(typeof obj.method).toBe("string");
+      expect("id" in obj).toBe(false);
+    }
+  });
+
+  it("contains no raw paths AND no raw model names (redaction sanity)", () => {
+    const text = loadFixtureText(VERSION, "phase1-richer-turn-event-stream.jsonl");
+    expect(text).not.toMatch(/\/Users\//);
+    expect(text).not.toMatch(/\/home\//);
+    expect(text).not.toMatch(/\/private\/var\/folders\//);
+    expect(text).not.toMatch(/\/tmp\/codex-fixture-/);
+    expect(text).not.toMatch(/\bgpt-[a-z0-9]/);
+    expect(text).not.toMatch(/\bclaude-[a-z0-9]/);
+  });
+});
+
+describe(`fixture-replay codex-${VERSION} — phase1-richer-turn-server-request.jsonl`, () => {
+  const messages = loadFixture(VERSION, "phase1-richer-turn-server-request.jsonl");
+
+  it("contains ≥1 server-initiated request frame (T4.5 acceptance gate)", () => {
+    expect(messages.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("every frame is a server-initiated request (method + id, no result/error)", () => {
+    for (const m of messages) {
+      const obj = m as { method?: unknown; id?: unknown; result?: unknown; error?: unknown };
+      expect(typeof obj.method).toBe("string");
+      expect("id" in obj).toBe(true);
+      expect("result" in obj).toBe(false);
+      expect("error" in obj).toBe(false);
+    }
+  });
+
+  it("contains ≥1 approval-capable method (T4.5 substantive gate)", () => {
+    const approvalCapable = new Set([
+      "item/commandExecution/requestApproval",
+      "item/fileChange/requestApproval",
+      "item/permissions/requestApproval",
+      "item/tool/requestUserInput",
+      "applyPatchApproval",
+      "execCommandApproval",
+    ]);
+    const methods = messages.map((m) => (m as { method: string }).method);
+    expect(methods.some((m) => approvalCapable.has(m))).toBe(true);
+  });
+
+  it("captured the file-change approval shape T9a will dispatch on", () => {
+    const fileChange = messages.find(
+      (m) => (m as { method?: unknown }).method === "item/fileChange/requestApproval",
+    ) as { params?: { threadId?: unknown; turnId?: unknown; itemId?: unknown } } | undefined;
+    expect(fileChange).toBeDefined();
+    expect(typeof fileChange?.params?.threadId).toBe("string");
+    expect(typeof fileChange?.params?.turnId).toBe("string");
+    expect(typeof fileChange?.params?.itemId).toBe("string");
+  });
+});

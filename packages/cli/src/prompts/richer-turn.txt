@@ -1,0 +1,8 @@
+Please create a single small file in the current working directory.
+
+Filename: hello.txt
+Contents: the two characters "hi" (no newline, no quotes, no other characters)
+
+Use whatever tool you have available to write this file. You will be asked to confirm before the write happens; if the confirmation is denied, do not retry — just acknowledge and stop.
+
+After the write completes (or is denied), reply with the single word "done" and stop. Do not run any shell commands. Do not make any other file changes. Do not use Computer Use.

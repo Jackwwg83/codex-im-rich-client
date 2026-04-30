@@ -32,7 +32,11 @@ if (cmd === "smoke" && sub === "app-server") {
   await run();
 } else if (cmd === "smoke" && sub === "real-turn") {
   const { run } = await import("./smoke-real-turn.js");
-  await run();
+  // argv = process.argv.slice(2) so argv[0]="smoke", argv[1]="real-turn",
+  // argv[2..] = flag passthrough. Drop a stray "--" that pnpm/npm sometimes
+  // forwards when invoked as `pnpm smoke:real-turn -- --capture ...`.
+  const passthrough = argv.slice(2).filter((a) => a !== "--");
+  await run(passthrough);
 } else {
   usage();
   process.exit(1);
