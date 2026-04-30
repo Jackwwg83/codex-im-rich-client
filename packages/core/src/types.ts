@@ -62,8 +62,15 @@ export type ApprovalRecord = {
   id: string;
   /** The wire id codex sent on the server-initiated request. */
   appServerRequestId: string | number;
-  /** Wire method name. Read from generated ServerRequest union; never
-   *  hardcoded outside @codex-im/core (05-PROTOCOL §4 redline). */
+  /**
+   * Wire method name. Per 05-PROTOCOL §4 redline, the broker MUST read
+   * this from the generated ServerRequest union and never hardcode it
+   * outside @codex-im/core. T5's type cannot enforce that on its own
+   * (codex outside-voice T5 review #3); the constraint is enforced by:
+   *   - T9a's exhaustive Record<ServerRequest["method"], DispatcherSpec>
+   *   - T9b's repo-wide grep guard over packages/{app-server-client,
+   *     codex-runtime,daemon,cli}/src/** for approval method literals
+   */
   method: string;
   /** Verbatim params from the wire frame (audit + cross-version compat). */
   params: unknown;
@@ -73,6 +80,13 @@ export type ApprovalRecord = {
    *   resolved        — user (or system) decided; decision is set
    *   expired         — sat past timeout; auto-denied per D6 spirit
    *   transport_lost  — supervisor saw transport close; auto-denied (D6)
+   *
+   * The shape doesn't encode the (status, decision) correlation that
+   * T9b enforces behaviorally — i.e. terminal statuses (resolved /
+   * expired / transport_lost) MUST have decision + decidedAt set, and
+   * pending MUST NOT. Codex outside-voice T5 review #4 flagged this as
+   * a plan-compatible gap; T9b's broker-resolve and broker-expire paths
+   * are the load-bearing enforcement.
    */
   status: "pending" | "resolved" | "expired" | "transport_lost";
   /** Phase 1: always null. Phase 2: filled in on resolve(). */
@@ -83,18 +97,21 @@ export type ApprovalRecord = {
 };
 
 /**
- * Phase 1 noop interface. Phase 3 fills in:
- *   - allowed users / chats / projects
- *   - command deny-patterns
- *   - Computer Use safety policy (only triggered via /cu)
- *   - approval default-decision
+ * Phase 1 noop sentinel. Phase 3 widens this into a discriminated
+ * union, e.g.:
  *
- * Keeping the interface here in T5 lets T9a / T9b stub it out via
+ *   export type SecurityPolicy =
+ *     | { readonly version: "phase1-noop" }
+ *     | { readonly version: "phase3"; allowed: ...; deny: ...; ... };
+ *
+ * A `type` alias is used (not an `interface`) precisely so Phase 3 can
+ * extend by adding a union arm without changing T5 callers — codex
+ * outside-voice T5 review #2.
+ *
+ * Keeping the noop sentinel here in T5 lets T9a / T9b stub it out via
  * dependency injection (rather than a `null` SecurityPolicy field that
  * Phase 3 would have to reshape).
  */
-export interface SecurityPolicy {
-  /** Phase 1 noop sentinel. Phase 3 widens this to a proper version
-   *  union when the real policy lands. */
+export type SecurityPolicy = {
   readonly version: "phase1-noop";
-}
+};

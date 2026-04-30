@@ -76,7 +76,10 @@ describe("@codex-im/core skeleton (T5)", () => {
     expect(pending.status).toBe("pending");
     expect(pending.actor).toBeNull();
 
-    // Phase 1 system-resolved record — actor must be set, decision required
+    // System-resolved transport-loss record. T5's type doesn't enforce
+    // (status, decision) correlation — codex T5 review #4. T9b's broker
+    // is responsible for ensuring terminal statuses have decision +
+    // decidedAt set; pending must not.
     const resolved: ApprovalRecord = {
       id: "approval-2",
       appServerRequestId: 1,

@@ -15,7 +15,6 @@
     "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
   },
   "scripts": {
-    "build": "pnpm -r build",
     "test": "vitest run --config vitest.config.ts --project unit --project contract",
     "test:unit": "vitest run --config vitest.config.ts --project unit",
     "test:contract": "vitest run --config vitest.config.ts --project contract",
@@ -23,6 +22,7 @@
     "test:all": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "typecheck": "pnpm -r typecheck",
+    "typecheck:tests": "tsc -p tsconfig.test.json --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
     "check:codex-version": "node scripts/check-codex-version.mjs",
