@@ -10,6 +10,20 @@ directory. Reasons:
 - Reduces blast radius when codex upgrades change generated surface.
 - Forces deliberate adoption of new types — every new export is a code review.
 
+The facade test at `test/facade.test.ts` (Pre-2 prerequisite, plan §0.4) imports
+every export and uses it in a type-level context. Type drift in the generated
+surface or accidental facade shrinkage breaks `pnpm test`.
+
+### Surface evolution
+- **Phase 0** (initialize handshake only): `ClientInfo`, `InitializeCapabilities`,
+  `InitializeParams`, `InitializeResponse`.
+- **Pre-2** (Phase 1 prerequisite): adds the discriminated unions
+  (`ServerRequest`, `ServerNotification`, `ClientRequest`, `ClientNotification`),
+  `RequestId`, `ReviewDecision`, legacy `ApplyPatchApproval*` / `ExecCommandApproval*`,
+  v2 thread/turn/review request types, v2 server-initiated request types, and the
+  notification arms consumed by `EventNormalizer`. See `src/index.ts` for the
+  authoritative list.
+
 ## Why stable, not --experimental?
 See `docs/phase-0/host-environment.md` "--experimental decision" and
 `docs/phase-0/codex-gen-diff.md`. tldr: experimental adds only realtime/fuzzy-session/
