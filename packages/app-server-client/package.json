@@ -12,5 +12,8 @@
     "@codex-im/protocol": "workspace:*",
     "execa": "^9",
     "pino": "^9"
+  },
+  "devDependencies": {
+    "@codex-im/testkit": "workspace:*"
   }
 }
