@@ -22,12 +22,13 @@
  * Decision the IM layer emits when the user resolves an approval.
  *
  * The broker (T9a/T9b) maps these to wire-level response shapes that
- * vary per method. Per 05-PROTOCOL §4.1, the legacy applyPatchApproval
- * and execCommandApproval methods return { decision: ReviewDecision }
- * but the v2 *RequestApproval methods may return method-specific
- * shapes — see packages/codex-protocol/src/generated/v2/
- * *RequestApprovalResponse.ts (now exposed via the @codex-im/protocol
- * facade per Pre-2).
+ * vary per method. Per 05-PROTOCOL §4.1, the legacy patch and exec
+ * approval requests return { decision: ReviewDecision } but the v2
+ * *RequestApproval methods may return method-specific shapes — see
+ * packages/codex-protocol/src/generated/v2/*RequestApprovalResponse.ts
+ * (now exposed via the @codex-im/protocol facade per Pre-2). The exact
+ * wire method names live only in packages/core/src/approval-broker.ts
+ * (Codex T9a review medium-2 — boundary discipline).
  */
 export type ApprovalDecision =
   | { kind: "approved" }

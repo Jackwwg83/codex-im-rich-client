@@ -51,6 +51,20 @@ import {
   type JsonRpcRequest,
   JsonRpcResponseError,
 } from "@codex-im/app-server-client";
+
+// Module-level guard against two brokers claiming the same client.
+// AppServerClient.setServerRequestHandler is a single slot — calling it
+// twice silently overwrites. The per-broker `#attached` flag protects
+// against the same broker attaching twice; this WeakSet protects against
+// two different brokers attaching to the same client (D7 single-handler
+// invariant is meant to be per client, not per broker — Codex T9a review
+// medium-1).
+//
+// WeakSet is the right container: entries auto-clear when the client is
+// GC'd, so this does not violate ONE-SHOT lifecycle. T11b's supervisor
+// constructs a fresh client on every recovery; the prior client becomes
+// unreachable and the WeakSet entry vanishes naturally.
+const _attachedClients: WeakSet<AppServerClient> = new WeakSet();
 import type {
   ApplyPatchApprovalParams,
   ApplyPatchApprovalResponse,
@@ -227,7 +241,13 @@ export class ApprovalBroker {
     if (this.#attached) {
       throw new Error("ApprovalBroker already attached");
     }
+    if (_attachedClients.has(this.#client)) {
+      throw new Error(
+        "ApprovalBroker: client already has an attached broker (D7 single-handler invariant)",
+      );
+    }
     this.#client.setServerRequestHandler((req) => this.#handle(req));
+    _attachedClients.add(this.#client);
     this.#attached = true;
   }
 

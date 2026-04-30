@@ -26,7 +26,10 @@
 
 import { AppServerClient } from "@codex-im/app-server-client";
 import type {
+  ApplyPatchApprovalResponse,
   CommandExecutionRequestApprovalResponse,
+  DynamicToolCallResponse,
+  ExecCommandApprovalResponse,
   FileChangeRequestApprovalResponse,
   McpServerElicitationRequestResponse,
   PermissionsRequestApprovalResponse,
@@ -66,6 +69,23 @@ const _v2_elicitation: McpServerElicitationRequestResponse = {
   _meta: null,
 };
 void _v2_elicitation;
+
+// Codex T9a review low-3: extend the type-only block to ALL non-throwing
+// default-reject shapes so the documentation header's claim ("annotates
+// each Phase-1 default-reject value") is literal. The auth-refresh
+// default reject is a throw, not a value, so it has no static-shape
+// annotation here — its behavior is asserted by the dispatch-coverage
+// runtime test for "rejects auth-refresh with -32601" in
+// approval-broker-dispatch.test.ts.
+
+const _v2_toolcall: DynamicToolCallResponse = { contentItems: [], success: false };
+void _v2_toolcall;
+
+const _legacy_patch: ApplyPatchApprovalResponse = { decision: "denied" };
+void _legacy_patch;
+
+const _legacy_exec: ExecCommandApprovalResponse = { decision: "denied" };
+void _legacy_exec;
 
 // ─── Step 9a.5: runtime coverage ───────────────────────────────────────
 

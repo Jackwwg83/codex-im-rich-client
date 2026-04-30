@@ -117,7 +117,12 @@ describe("ApprovalBroker dispatch — registered handler path (T9a Step 9a.3 Gro
     };
     const resp = await h.fake.emitServerRequest("item/permissions/requestApproval", params, 3);
     expect(received).toEqual(params);
-    expect(resp).toMatchObject({ scope: "session" });
+    // toEqual (not toMatchObject) — verbatim forwarding means no extra
+    // fields and no mutations (Codex T9a review low-4).
+    expect(resp).toEqual({
+      permissions: { network: { enabled: true } },
+      scope: "session",
+    });
     await teardown(h);
   });
 
@@ -160,7 +165,10 @@ describe("ApprovalBroker dispatch — registered handler path (T9a Step 9a.3 Gro
     };
     const resp = await h.fake.emitServerRequest("item/tool/call", params, 5);
     expect(received).toEqual(params);
-    expect(resp).toMatchObject({ success: true });
+    expect(resp).toEqual({
+      contentItems: [{ type: "inputText", text: "result" }],
+      success: true,
+    });
     await teardown(h);
   });
 
@@ -182,7 +190,7 @@ describe("ApprovalBroker dispatch — registered handler path (T9a Step 9a.3 Gro
     };
     const resp = await h.fake.emitServerRequest("mcpServer/elicitation/request", params, 6);
     expect(received).toEqual(params);
-    expect(resp).toMatchObject({ action: "accept" });
+    expect(resp).toEqual({ action: "accept", content: { confirmed: true }, _meta: null });
     await teardown(h);
   });
 
@@ -242,7 +250,11 @@ describe("ApprovalBroker dispatch — registered handler path (T9a Step 9a.3 Gro
     const params = { reason: "expired" };
     const resp = await h.fake.emitServerRequest("account/chatgptAuthTokens/refresh", params, 9);
     expect(received).toEqual(params);
-    expect(resp).toMatchObject({ accessToken: "new-token" });
+    expect(resp).toEqual({
+      accessToken: "new-token",
+      chatgptAccountId: "acc-1",
+      chatgptPlanType: "pro",
+    });
     await teardown(h);
   });
 });

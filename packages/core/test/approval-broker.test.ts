@@ -74,4 +74,40 @@ describe("ApprovalBroker skeleton (T9a Step 9a.1)", () => {
     expect(() => h.broker.attach()).toThrow(/already attached/);
     await teardown(h);
   });
+
+  it("two brokers on the same client cannot both attach (D7 cross-instance — codex T9a review medium-1)", async () => {
+    // The per-broker `#attached` flag stops the SAME broker from attaching
+    // twice. The cross-instance guard (module-level WeakSet) stops a
+    // SECOND broker from silently stealing the first's handler slot —
+    // because AppServerClient.setServerRequestHandler is a single slot
+    // that overwrites without complaint.
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+
+    const broker1 = new ApprovalBroker(client);
+    const broker2 = new ApprovalBroker(client);
+    broker1.attach();
+    expect(() => broker2.attach()).toThrow(/client already has an attached broker/);
+
+    // broker1 is still the one wired to the client (sanity check):
+    // broker2's attempt did not silently overwrite. We don't have an
+    // observable handler getter on AppServerClient, but we can verify
+    // by routing a server request and asserting broker1's installed
+    // handler runs (broker2 never installed one because attach threw).
+    let broker1Saw = false;
+    broker1.registerHandler("item/fileChange/requestApproval", async () => {
+      broker1Saw = true;
+      return { decision: "decline" };
+    });
+    await fake.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      99,
+    );
+    expect(broker1Saw).toBe(true);
+
+    await client.stop();
+    await fake.stop();
+  });
 });
