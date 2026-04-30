@@ -1,0 +1,18 @@
+{
+  "name": "@codex-im/core",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run --project unit"
+  },
+  "dependencies": {
+    "@codex-im/protocol": "workspace:*",
+    "@codex-im/app-server-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@codex-im/testkit": "workspace:*"
+  }
+}

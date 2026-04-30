@@ -77,6 +77,19 @@ importers:
         specifier: workspace:*
         version: link:../testkit
 
+  packages/core:
+    dependencies:
+      '@codex-im/app-server-client':
+        specifier: workspace:*
+        version: link:../app-server-client
+      '@codex-im/protocol':
+        specifier: workspace:*
+        version: link:../codex-protocol
+    devDependencies:
+      '@codex-im/testkit':
+        specifier: workspace:*
+        version: link:../testkit
+
   packages/testkit:
     dependencies:
       '@codex-im/app-server-client':
