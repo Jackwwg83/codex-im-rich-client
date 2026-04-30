@@ -1,10 +1,17 @@
 // T8 (Phase 1, P1.1): CodexRuntime typed wrappers.
 //
 // Validates that each ClientRequest method has a typed wrapper:
-//   1. forwards params verbatim to client.request<P, R>
+//   1. forwards params verbatim to client.request<R> (single type arg —
+//      the actual signature; older drafts incorrectly said <P, R>)
 //   2. returns the typed response shape
 //   3. types are sourced from @codex-im/protocol's facade
 //      (Pre-2 expansion), never hardcoded
+//
+// "Verbatim forwarding" is asserted with `toBe` on a representative
+// wrapper (threadStart) so a clone-but-preserve-shape transform would
+// fail. The remaining wrappers use `toEqual` since the `toBe` check
+// already proves the wire path doesn't transform params (T8 codex
+// outside-voice review fix).
 //
 // runtime.events is the EventNormalizer instance — covered by
 // event-normalizer.test.ts. Here we exercise the wrappers themselves
@@ -44,10 +51,10 @@ interface Harness {
   runtime: CodexRuntime;
 }
 
-function harness(): Harness {
+async function harness(): Promise<Harness> {
   const fake = new FakeAppServer();
   const client = new AppServerClient(fake.clientSide, { logger: SILENT });
-  void client.start();
+  await client.start();
   const runtime = new CodexRuntime(client);
   return { fake, client, runtime };
 }
@@ -59,7 +66,7 @@ async function teardown(h: Harness): Promise<void> {
 
 describe("CodexRuntime — thread/* wrappers (T8)", () => {
   it("threadStart forwards params and returns typed response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("thread/start", (params) => {
       received = params;
@@ -83,14 +90,20 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
       persistExtendedHistory: false,
     };
     const r = await h.runtime.threadStart(params);
-    expect(received).toEqual(params);
+    // toEqual would pass for a clone-but-preserve-shape transform; toBe
+    // proves identity, which is what "verbatim forwarding" means.
+    // FakeAppServer / InMemoryTransport pass the params reference through
+    // a microtask without serialization (so identity is preserved end to
+    // end). One representative wrapper carries the toBe check; the rest
+    // use toEqual since the wire path is shared.
+    expect(received).toBe(params);
     expect(r.thread.id).toBe("thread-1");
 
     await teardown(h);
   });
 
   it("threadResume forwards params and returns typed response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("thread/resume", (params) => {
       received = params;
@@ -109,7 +122,7 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
   });
 
   it("threadFork forwards params and returns typed response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("thread/fork", (params) => {
       received = params;
@@ -128,7 +141,7 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
   });
 
   it("threadTurnsList forwards params and returns typed response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("thread/turns/list", (params) => {
       received = params;
@@ -149,7 +162,7 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
   });
 
   it("threadRead forwards params and returns typed response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("thread/read", (params) => {
       received = params;
@@ -167,7 +180,7 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
 
 describe("CodexRuntime — turn/* wrappers (T8)", () => {
   it("turnStart forwards params and returns typed response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("turn/start", (params) => {
       received = params;
@@ -188,7 +201,7 @@ describe("CodexRuntime — turn/* wrappers (T8)", () => {
   });
 
   it("turnSteer forwards params and returns typed response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("turn/steer", (params) => {
       received = params;
@@ -208,7 +221,7 @@ describe("CodexRuntime — turn/* wrappers (T8)", () => {
   });
 
   it("turnInterrupt forwards params and returns void-shaped response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("turn/interrupt", (params) => {
       received = params;
@@ -226,7 +239,7 @@ describe("CodexRuntime — turn/* wrappers (T8)", () => {
 
 describe("CodexRuntime — review/* wrappers (T8)", () => {
   it("reviewStart forwards params and returns typed response", async () => {
-    const h = harness();
+    const h = await harness();
     let received: unknown;
     h.fake.respondTo("review/start", (params) => {
       received = params;
@@ -250,7 +263,7 @@ describe("CodexRuntime — review/* wrappers (T8)", () => {
 
 describe("CodexRuntime — events surface (T8)", () => {
   it("exposes the EventNormalizer's AsyncIterable via runtime.events", async () => {
-    const h = harness();
+    const h = await harness();
     expect(h.runtime.events).toBeDefined();
     // The normalizer's events() returns an AsyncIterableIterator.
     const it = h.runtime.events.events();
@@ -261,7 +274,7 @@ describe("CodexRuntime — events surface (T8)", () => {
   });
 
   it("runtime.events emits notifications received via the underlying client", async () => {
-    const h = harness();
+    const h = await harness();
     const it = h.runtime.events.events();
 
     h.fake.emitNotification("turn/started", {
@@ -278,7 +291,7 @@ describe("CodexRuntime — events surface (T8)", () => {
 
 describe("CodexRuntime — request error propagation (T8)", () => {
   it("rejects with JsonRpcResponseError when the server returns a JSON-RPC error", async () => {
-    const h = harness();
+    const h = await harness();
     // FakeAppServer's default behavior: handler throwing → maps to
     // -32603. Add an explicit handler that throws.
     h.fake.respondTo("thread/read", () => {
@@ -292,8 +305,13 @@ describe("CodexRuntime — request error propagation (T8)", () => {
     await teardown(h);
   });
 
-  it("rejects when codex returns -32601 for an unhandled method", async () => {
-    const h = harness();
+  it("rejects when FakeAppServer returns -32601 for an unhandled method", async () => {
+    // NOTE: codex 0.125 actually returns -32600 (Invalid Request) for
+    // an unknown method; FakeAppServer uses -32601 (Method Not Found).
+    // What this test asserts is the runtime's "JSON-RPC error → reject"
+    // behavior, which is identical regardless of code. The wire-level
+    // contract against real codex is covered by the cli smoke fixtures.
+    const h = await harness();
     // FakeAppServer auto-emits -32601 for unregistered methods.
     await expect(h.runtime.threadRead({ threadId: "x", includeTurns: false })).rejects.toThrow();
     await teardown(h);
