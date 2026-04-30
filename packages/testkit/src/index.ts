@@ -1,5 +1,4 @@
 // @codex-im/testkit — fakes and fixtures for testing AppServerClient + downstream.
-// Real exports added in Tasks 4.2 (InMemoryTransport) and 8.x (FakeAppServer +
-// fixture replay).
+// FakeAppServer + fixture replay come in Section I (Tasks 8.1–8.4).
 
-export {};
+export { createInMemoryTransportPair } from "./in-memory-transport.js";
