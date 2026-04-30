@@ -26,5 +26,13 @@ export {
   TransportClosedError,
   TransportProtocolError,
 } from "./errors.js";
-// AppServerClient + StdioTransport + performInitializeHandshake exported
-// in their respective tasks (5.1, 6.1, 7.1).
+export { AppServerClient } from "./client.js";
+export type {
+  AppServerClientOptions,
+  RequestOptions,
+  ServerRequestHandler,
+} from "./client.js";
+export { StdioTransport } from "./stdio-transport.js";
+export type { StdioTransportOptions } from "./stdio-transport.js";
+export { performInitializeHandshake } from "./handshake.js";
+export type { HandshakeOptions } from "./handshake.js";
