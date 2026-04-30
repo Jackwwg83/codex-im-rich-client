@@ -44,9 +44,9 @@
 
 Carried verbatim from CLAUDE.md / handoff §Phase 0 红线复核. Any task that would violate one of these is **rejected at review**, not "fixed in code review".
 
-### 0.4 Pre-Phase-1 prerequisites (separate PRs, before Task 1)
+### 0.4 Prerequisites (separate PRs)
 
-These two changes ship as **standalone PRs** off `phase-0-bootstrap`, each with its own Phase 0 gate re-run, before Phase 1 implementation begins. They are **not** Phase 1 tasks — they are prerequisites the plan depends on.
+Pre-1 and Pre-2 ship as **standalone PRs** off `phase-0-bootstrap`, each with its own Phase 0 gate re-run, before Phase 1 implementation begins. Pre-3 was added late (after T8) as a **mid-Phase-1 prerequisite** discovered during T9a-prep drift audit. None of these are Phase 1 tasks — they are prerequisites the plan depends on.
 
 #### Pre-1: Node 22→24 bump (was P0-1 in plan-eng-review; reversed after Codex outside-voice on 2026-04-30)
 
@@ -118,6 +118,74 @@ export type {
 The implementer **enumerates each export** and verifies it exists in `packages/codex-protocol/src/generated/index.ts` before committing. Any name that doesn't exist is a Phase 1 plan defect — surface it before Phase 1 starts, not during implementation.
 
 Tag/commit: a single commit `feat(protocol): expand facade for Phase 1 (ServerRequest/Notification/ClientRequest + per-method types)` on a branch off whatever the Node bump PR settles on.
+
+#### Pre-3: `AppServerClient` explicit JSON-RPC error propagation (added 2026-04-30 after T8 — drift audit retrofit)
+
+**Status:** added late; ships as a standalone PR off `phase-1-runtime` HEAD (`585235e`, T8 review fixes), before T9a starts.
+
+**Goal:** Allow server-request handlers to throw a `JsonRpcResponseError` and have `AppServerClient.dispatchServerRequest` preserve, on the wire-level error envelope:
+- `err.code`
+- `err.rawMessage` (used as `error.message`)
+- `err.data`
+
+Generic thrown values (plain `Error`, strings, etc.) continue to collapse to `-32603 "handler error: <message>"` exactly as today — this is purely additive.
+
+**Rationale:**
+T9a's `ApprovalBroker` needs to express "server sent a method that is not in our generated dispatch table" as JSON-RPC `-32601` (Method Not Found), without:
+- hard-coding approval method-name string literals outside `packages/core/`
+- collapsing every dispatch-table miss into the existing `-32603 "handler error"` (which is reserved for "registered handler crashed at runtime" per T9b §9b.3)
+
+The `JsonRpcResponseError` class already exists in `packages/app-server-client/src/errors.ts` and carries (`code`, `rawMessage`, `data`). Today it is only constructed for *inbound* error responses; Pre-3 makes it symmetric — handlers can construct one to signal *outbound* errors.
+
+**Why this isn't part of T9a:**
+The drift audit on 2026-04-30 (after T8 commit `585235e`) found that an in-progress T9a-prep change had modified `packages/app-server-client/{src,test}` outside T9a's authorized Files list (CLAUDE.md "每个任务只改计划内文件"). Rather than absorb the change into T9a or T9b, we promote it to a separate Pre-3 prerequisite with its own gate re-run, mirroring Pre-1 / Pre-2 discipline. The original drift was preserved as `git stash` (`pre3-appserverclient-jsonrpc-error-propagation`) and is unstashed during Pre-3 implementation.
+
+**Scope (Files):**
+- Modify: `packages/app-server-client/src/client.ts` — extend `dispatchServerRequest` catch block; check `err instanceof JsonRpcResponseError` first, propagate its envelope; otherwise existing `-32603` path unchanged.
+- Modify: `packages/app-server-client/test/client-default-reject.test.ts` — add one unit test asserting `JsonRpcResponseError` thrown from a registered handler reaches the wire with its original code/message/data; assert it does NOT carry the `"handler error: "` prefix.
+
+No other files are in Pre-3 scope. In particular:
+- No `packages/core/` work (that is T9a/T9b).
+- No `packages/codex-runtime/` work.
+- No new approval method-name string literals anywhere.
+
+**Rules:**
+- Generic handler throws still map to `-32603` (legacy behavior preserved — verified by the existing "rejects with -32603 when handler throws" test in the same file).
+- Explicit `JsonRpcResponseError` throws preserve their explicit code/message/data verbatim.
+- No approval method names are hard-coded (the test uses a synthetic `foo/bar` method).
+- No broker implementation, dispatch table, or fixture replay is added in Pre-3.
+- No real IM adapter, Computer Use production flow, or WebSocket production listener is added.
+- ONE-SHOT lifecycle JSDoc on `AppServerClient` is preserved verbatim — Pre-3 only edits the catch arm in `dispatchServerRequest`.
+
+**Gate re-run before merging Pre-3:**
+- `pnpm typecheck` — exit 0
+- `pnpm typecheck:tests` — exit 0
+- `pnpm test` — full unit suite green; expected count: 230 → **231** (one new test from this PR; also matches the 231-count observed in working-tree before stashing)
+- `pnpm lint` — exit 0
+- `pnpm protocol:check` — exit 0
+- `bash scripts/ci-check.sh` — all 8 gates green
+- (Optional, costly) `CODEX_REAL_SMOKE=1 pnpm smoke:real-turn` — sanity that real codex round-trip still works under the new catch logic. Only matters if the change accidentally leaks into the success path; the diff is in the catch arm, so this is defense-in-depth.
+
+**Tag/commit:** single commit on a branch off `phase-1-runtime`, message:
+
+```
+feat(app-server-client): JsonRpcResponseError propagation from server-request handlers (Pre-3)
+
+Symmetric to inbound error responses: handlers may now throw a
+JsonRpcResponseError to signal an explicit JSON-RPC error envelope
+(code/message/data). Generic thrown values still collapse to -32603
+"handler error: ..." — Pre-3 is purely additive.
+
+Scope: only packages/app-server-client/{src,test}. No core/runtime/
+daemon work; no broker; no method-name literals.
+
+T9a's ApprovalBroker depends on this so a "method not in dispatch
+table" case can be signaled as -32601 without hardcoding approval
+method names. T9b §9b.3 distinguishes generic-throw (-32603) from
+explicit JsonRpcResponseError-throw (preserve code).
+```
+
+After merging Pre-3, T9a starts on top of it.
 
 ---
 
@@ -373,7 +441,7 @@ T5 (core skeleton)          ───┘                                        
 - **Phase 1A (parallel, no deps after Pre-1+Pre-2):** T1, T2, T3, T5 — four worktrees concurrently. T1 should land first since later tests reference its `ErrorCategory` type.
 - **Phase 1B (sequential gate, lead-only):** T4 → **T4.5 acceptance gate** — single worktree, real codex spawn. T4.5 must pass (≥1 valid `ServerRequest` frame matching generated `ServerRequest["method"]` union, **and** ≥1 of the approval-capable method subset) before any T7/T9 work.
 - **Phase 1B′ (sequential after T3):** T6.
-- **Phase 1C (parallel, T4.5+T6 done):** T7a → T7b, T8, T9a → T9b — three lanes concurrently. Each lane is internally sequential (skeleton before edges).
+- **Phase 1C (parallel, T4.5+T6 done):** T7a → T7b, T8, T9a → T9b — three lanes concurrently. Each lane is internally sequential (skeleton before edges). **Pre-3 sits on this boundary**: discovered after T8, gates T9a. T7/T8 lanes are unaffected; only the T9 lane waits for Pre-3 to merge.
 - **Phase 1D (sequential):** T10 → T11a → T11b → T12.
 
 ### Subagent / outside-voice / review assignment
@@ -1524,33 +1592,50 @@ git commit -m "feat(codex-runtime): typed request wrappers + ONE-SHOT JSDoc (P1.
 
 (Split per plan-eng-review P1-3.) Skeleton lands single-handler invariant + happy-path dispatch + per-method dispatch over T4.5-captured fixture. Edges (timeout/throw/transport-loss/reviews) land in T9b.
 
+**Depends on: Pre-3** (`AppServerClient` `JsonRpcResponseError` propagation). T9a's "unknown method → -32601" expectation requires the Pre-3 catch-arm extension; without Pre-3, the broker's throw collapses to `-32603`. Do not start T9a until Pre-3 is merged.
+
 **Files:**
 - Create: `packages/core/src/approval-broker.ts`
 - Create: `packages/core/test/approval-broker.test.ts`
 - Create: `packages/core/test/approval-broker-dispatch.test.ts`
 - Create: `packages/core/test/dispatch-coverage.test.ts` (P2-2 — exhaustive `ServerRequest["method"]` registration check)
 
+T9a may NOT modify any file in `packages/app-server-client/`. The `JsonRpcResponseError` propagation lives in Pre-3.
+
 - [ ] **Step 9a.1: Write failing test — single handler registration, dispatch by method, default-reject for unregistered.**
+
+The unknown-method test uses a synthetic method name (`future/unseen/method`) that is intentionally NOT in the generated `ServerRequest["method"]` union. The broker signals `-32601` by throwing a `JsonRpcResponseError` (Pre-3 path); it MUST NOT hard-code any approval method-name string literal in `packages/core/` test code, except as needed to assert dispatch behavior for methods that are in the generated union.
 
 ```ts
 import { describe, expect, it } from "vitest";
+import { AppServerClient } from "@codex-im/app-server-client";
 import { FakeAppServer } from "@codex-im/testkit";
 import { ApprovalBroker } from "../src/approval-broker.js";
 
 describe("ApprovalBroker skeleton", () => {
-  it("default-rejects an unknown method via -32601", async () => {
+  it("default-rejects an unknown (non-generated) method via -32601 (Pre-3 path)", async () => {
     const fake = new FakeAppServer();
-    const broker = new ApprovalBroker(fake.client);
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
     broker.attach();
-    const resp = await fake.emitServerRequest("future/unseen/method", {}, 42);
-    expect(resp.error).toMatchObject({ code: -32601 });
+    // Synthetic name — not in generated ServerRequest union. The broker
+    // throws JsonRpcResponseError({ code: -32601, ... }); Pre-3's
+    // AppServerClient catch-arm preserves the explicit code.
+    await expect(
+      fake.emitServerRequest("future/unseen/method", {}, 42),
+    ).rejects.toMatchObject({ code: -32601 });
+    await client.stop();
   });
 
-  it("duplicate attach() throws", () => {
+  it("duplicate attach() throws", async () => {
     const fake = new FakeAppServer();
-    const broker = new ApprovalBroker(fake.client);
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
     broker.attach();
     expect(() => broker.attach()).toThrow(/already attached/);
+    await client.stop();
   });
 });
 ```
@@ -1691,7 +1776,11 @@ adds timeout + throw + transport-loss + outside-voice review."
 
 - [ ] **Step 9b.1: Add `reattach(client)` API used by Supervisor (Codex B7 dependency).** Detaches from the prior client (drops its handler reference), validates the new client is a different instance, calls `client.setServerRequestHandler(...)` on the new one, transfers any retained pending state. Throws if `client === priorClient` (catches identity bugs). Test: assert `setServerRequestHandler` called once on new, prior client's handler reference set to null after reattach.
 - [ ] **Step 9b.2: Add timeout test — registered dispatcher that takes 31s → broker must default-reject (-32603 "handler error") + audit.**
-- [ ] **Step 9b.3: Add throw test — registered dispatcher throws → broker default-rejects with -32603 (NOT -32601) + audit, does not crash.** This distinguishes "no handler" (-32601) from "handler errored" (-32603).
+- [ ] **Step 9b.3: Add throw tests — distinguish generic-throw from explicit-JsonRpcResponseError-throw.** Two cases, both must pass:
+   1. **Generic throw:** registered dispatcher throws a plain `Error("policy denied")` → broker / `AppServerClient` collapse to `-32603 "handler error: policy denied"` + audit. Distinguishes "handler errored" (-32603) from "no handler at all" (which is `-32601` only when `setServerRequestHandler` was never called — orthogonal to the broker, since the broker IS the registered handler).
+   2. **Explicit `JsonRpcResponseError` throw (Pre-3 path):** registered dispatcher throws `new JsonRpcResponseError({ code, message, data })` → wire envelope preserves the explicit `code`, `message`, and `data` verbatim. NO `"handler error: "` prefix. The broker uses this path for "method not in dispatch table" with `code: -32601`. Test asserts the wire envelope matches the thrown error's fields exactly.
+
+   Neither case should crash the broker or AppServerClient.
 - [ ] **Step 9b.4: Add transport-loss test (D6)** — pending approval at transport close → status `transport_lost`, decision auto-set to `{ kind: "denied", reason: "transport_lost" }`, `actor` set to `{ kind: "system", reason: "transport_lost" }`.
 - [ ] **Step 9b.5: Implement `resolve(approvalId, decision, actor)` + `failPendingAsTransportLost()` + `expirePending()`** — actor field always required (P1-1 enforcement); Phase 1 callers pass `{ kind: "system", reason: "..." }` since no IM exists yet. `failPendingAsTransportLost()` is **idempotent** (Codex B7 close-idempotence dependency): if called twice, the second call is a no-op. Test asserts both behaviors.
 - [ ] **Step 9b.6: Type-level test (P2-4)** — assert no string literal of an approval method name exists outside `packages/core/`. Implementation: build-time grep over `packages/{app-server-client,codex-runtime,daemon,cli}/src/**` for `/['"](approval|item\/|turn\/|thread\/)/` — fail test if any match. Exempts test files.
@@ -1707,12 +1796,14 @@ adds timeout + throw + transport-loss + outside-voice review."
 ```bash
 git commit -m "feat(core): ApprovalBroker edges + reviews (P1.2 part 2)
 
-Timeout default-rejects with -32603 (handler error). Throws
-default-reject with -32603 (distinguishes from -32601 'no handler').
-Transport-loss (D6) auto-resolves pending approvals as denied with
-ApprovalActor={ kind: 'system', reason: 'transport_lost' }. Build-time
-grep guard (P2-4) ensures approval method names exist nowhere
-outside packages/core/. Outside-voice + plan-eng-review captured."
+Timeout default-rejects with -32603 (handler error). Generic-throw
+collapses to -32603. Explicit JsonRpcResponseError-throw preserves
+code/message/data verbatim (Pre-3 path; the broker uses this for
+'method not in dispatch table' as -32601). Transport-loss (D6)
+auto-resolves pending approvals as denied with ApprovalActor=
+{ kind: 'system', reason: 'transport_lost' }. Build-time grep guard
+(P2-4) ensures approval method names exist nowhere outside
+packages/core/. Outside-voice + plan-eng-review captured."
 ```
 
 **Exit criteria:** broker is the only module that calls `client.setServerRequestHandler`; test coverage includes default-reject, throw, timeout, transport-loss, exhaustive method dispatch, ApprovalActor binding, and the no-method-literal grep guard; outside-voice + plan-eng-review recorded.
@@ -2086,6 +2177,7 @@ Decisions reached after plan-eng-review (2026-04-30) and Codex outside-voice (20
 3. **Pre-1 (Node 24 bump) PR** off `phase-0-bootstrap` — full Phase 0 gate re-run
 4. **Pre-2 (protocol facade) PR** off Pre-1 — narrow facade expansion
 5. Begin Phase 1 execution per `superpowers:subagent-driven-development` (recommended) — fresh subagent per task with two-stage review
+6. **Pre-3 (`AppServerClient` JsonRpcResponseError propagation) PR** off `phase-1-runtime` HEAD after T8 — added late as a mid-Phase-1 prerequisite discovered during T9a-prep drift audit; gates T9a only (T7/T8 lanes are unaffected).
 
 ---
 
