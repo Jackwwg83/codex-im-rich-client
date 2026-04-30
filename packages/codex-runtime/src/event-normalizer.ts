@@ -95,6 +95,21 @@ export type NormalizerOptions = {
 const DEFAULT_DELTA_SOFT_CAP = 4096;
 const DEFAULT_TOTAL_HARD_CAP = 16384;
 
+/**
+ * Sanitize a public cap option (codex T7b review #2). Rejects NaN,
+ * Infinity, non-integer, and < 1 — all of which break the comparison
+ * semantics or leave the queue effectively unbounded. Falls back to
+ * the default on bad input rather than throwing, since these caps are
+ * non-load-bearing operational tuning.
+ */
+function sanitizeCap(v: number | undefined, fallback: number): number {
+  if (v === undefined) return fallback;
+  if (!Number.isInteger(v)) return fallback;
+  if (v < 1) return fallback;
+  if (v > Number.MAX_SAFE_INTEGER) return fallback;
+  return v;
+}
+
 type Resolver = (ev: IteratorResult<CodexRichEvent>) => void;
 type QueueEntry = { ev: CodexRichEvent; cls: EventClass };
 
@@ -117,8 +132,8 @@ export class EventNormalizer {
   #droppedLifecycleCount = 0;
 
   constructor(client: AppServerClient, opts: NormalizerOptions = {}) {
-    this.#deltaSoftCap = opts.deltaSoftCap ?? DEFAULT_DELTA_SOFT_CAP;
-    this.#totalHardCap = opts.totalHardCap ?? DEFAULT_TOTAL_HARD_CAP;
+    this.#deltaSoftCap = sanitizeCap(opts.deltaSoftCap, DEFAULT_DELTA_SOFT_CAP);
+    this.#totalHardCap = sanitizeCap(opts.totalHardCap, DEFAULT_TOTAL_HARD_CAP);
     this.#unsub = client.onNotification((msg) => this.#onNotification(msg));
   }
 
@@ -214,23 +229,43 @@ export class EventNormalizer {
     this.#queue.push({ ev, cls });
     if (cls === "delta") this.#deltaCount++;
 
-    // Hard-cap backstop (catastrophic — should be unreachable under
-    // codex 0.125 with bounded lifecycle event rate). Drop oldest
-    // entries until under cap, then emit ONE synthetic indicating the
-    // round's drop count. Queue may briefly sit at hardCap+1 because
-    // of the synthetic; that's bounded — the next push runs this
-    // block again and drops the synthetic alongside the next oldest.
+    // Hard-cap backstop. Fires when the queue exceeds totalHardCap
+    // after walk-and-drop has run. Two scenarios reach this branch
+    // (codex T7b review):
+    //
+    //   1. Lifecycle saturation — a torrent of lifecycle events under
+    //      load codex 0.125 doesn't actually produce. Catastrophic;
+    //      indicates a runtime bug.
+    //   2. Pure delta overload — sustained delta-class enqueueing at
+    //      a rate that lets walk-and-drop synthetics accumulate. The
+    //      synthetics themselves are class:"lifecycle" (they're not
+    //      droppable by walk-and-drop), so they pile up until the
+    //      hard cap fires.
+    //
+    // Drop oldest entries until under cap, then emit ONE synthetic
+    // indicating the round's drop count. Queue may briefly sit at
+    // hardCap+1 because of the synthetic; that's bounded — the next
+    // push runs this block again and drops the synthetic alongside
+    // the next oldest.
     //
     // Earlier T7b-2 attempt looped on `shift+unshift` per drop, which
     // turns into an infinite loop (each iteration nets +0 queue
     // size). The fix is to drain and synthesize OUTSIDE the loop.
+    //
+    // Codex T7b review #1: the count must NOT include prior overflow
+    // synthetics that get re-dropped on subsequent overflows —
+    // otherwise droppedCount grows by 2 per real entry lost (one for
+    // the synthetic, one for the real entry). Filter the synthetic
+    // out of the increment.
     if (this.#queue.length > this.#totalHardCap) {
       let droppedThisRound = 0;
       while (this.#queue.length > this.#totalHardCap) {
         const oldest = this.#queue.shift();
         if (oldest === undefined) break;
         if (oldest.cls === "delta") this.#deltaCount--;
-        droppedThisRound++;
+        if (oldest.ev.type !== "normalizer_overflow") {
+          droppedThisRound++;
+        }
       }
       if (droppedThisRound > 0) {
         this.#droppedLifecycleCount += droppedThisRound;

@@ -781,6 +781,66 @@ describe("EventNormalizer walk-and-drop overflow (T7b-2)", () => {
     await teardown(h);
   });
 
+  it("hard-cap droppedCount counts only REAL entries lost, not prior synthetics that get re-dropped (codex T7b review #1)", async () => {
+    // Sustained lifecycle saturation: with hardCap=3, push 6 warnings
+    // and verify the synthetic's droppedCount tracks REAL entries
+    // (3: w1, w2, w3), not "queue churn" inflated by re-dropping the
+    // earlier hard-cap synthetic.
+    const h = harness({ deltaSoftCap: 1_000_000, totalHardCap: 3 });
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("warning", { mark: "1" });
+    h.fake.emitNotification("warning", { mark: "2" });
+    h.fake.emitNotification("warning", { mark: "3" });
+    h.fake.emitNotification("warning", { mark: "4" }); // overflow #1: drop w1
+    h.fake.emitNotification("warning", { mark: "5" }); // overflow #2: drop syn1 (no count) + w2
+    h.fake.emitNotification("warning", { mark: "6" }); // overflow #3: drop syn2 (no count) + w3
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < 4; i++) out.push((await it.next()).value as CodexRichEvent);
+
+    // Position 0 is the latest synthetic. droppedCount must be 3,
+    // because EXACTLY 3 real warnings (1, 2, 3) were lost — not 5
+    // (which would include the two overwritten synthetics).
+    expect(out[0]?.type).toBe("normalizer_overflow");
+    if (out[0]?.type === "normalizer_overflow") {
+      expect(out[0].class).toBe("lifecycle");
+      expect(out[0].droppedCount).toBe(3);
+    }
+    // Then warnings 4, 5, 6 in order.
+    const trailing = out
+      .slice(1)
+      .filter((e): e is Extract<CodexRichEvent, { type: "warning" }> => e.type === "warning")
+      .map((e) => (e.raw as { params: { mark: string } }).params.mark);
+    expect(trailing).toEqual(["4", "5", "6"]);
+
+    await teardown(h);
+  });
+
+  it("constructor sanitizes invalid caps (NaN, Infinity, 0, negative — codex T7b review #2)", async () => {
+    // All four bad inputs should fall back to defaults rather than
+    // poison the comparisons.
+    const cases: NormalizerOptions[] = [
+      { deltaSoftCap: Number.NaN },
+      { deltaSoftCap: Number.POSITIVE_INFINITY },
+      { deltaSoftCap: 0 },
+      { deltaSoftCap: -5 },
+      { deltaSoftCap: 1.5 },
+      { totalHardCap: Number.NaN },
+      { totalHardCap: 0 },
+    ];
+    for (const opts of cases) {
+      const h = harness(opts);
+      // Push a few events; behavior should be normal (default caps).
+      h.fake.emitNotification("warning", { ok: true });
+      const it = h.normalizer.events()[Symbol.asyncIterator]();
+      const ev = (await it.next()).value as CodexRichEvent;
+      expect(ev.type, `case ${JSON.stringify(opts)}`).toBe("warning");
+      await teardown(h);
+    }
+  });
+
   it("hard-cap drops oldest entry regardless of class with a lifecycle-class synthetic", async () => {
     // Hard cap at 3, soft cap effectively disabled (high). Push 4
     // lifecycle events; the 4th forces a hard-cap drop of the first.
