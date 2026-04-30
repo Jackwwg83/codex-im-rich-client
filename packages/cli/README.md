@@ -43,6 +43,32 @@ Verifies the FULL Phase 0 stack:
 7. no command/file/Computer-Use approvals accepted
 8. transport closes cleanly
 
+### Capture flags (Phase 1 T2)
+
+Three optional flags drive the fixture spike (T4) without changing default
+behavior. Pass them after a `--`:
+
+```bash
+# Capture inbound JSONL frames; replace the harmless prompt; sandbox the
+# codex subprocess in /tmp/codex-fixture-spike.
+CODEX_REAL_SMOKE=1 pnpm smoke:real-turn -- \
+  --capture /tmp/codex-fixture-spike/raw-stream.jsonl \
+  --prompt-file packages/cli/src/prompts/richer-turn.txt \
+  --cwd /tmp/codex-fixture-spike
+```
+
+| Flag | Effect |
+|---|---|
+| `--capture <path>` | Append every inbound message (responses, notifications, server-requests) to `<path>` as JSONL. No-op when absent. The split + redact pipeline lives in `scripts/split-capture.mts` + `scripts/redact-fixture.mjs` (added in T3). |
+| `--prompt-file <path>` | Read the turn prompt from `<path>` instead of the default `prompts/harmless-turn.txt`. Path is repo-relative. |
+| `--cwd <path>` | Working directory for the spawned **codex subprocess only**. Does NOT change the harness's own cwd, so `pnpm --filter` and other repo-relative paths still resolve. Use this to point codex at a sandboxed scratch dir. |
+
+Argv parsing rejects unknown flags and missing values (e.g. `--capture --cwd /tmp/x`
+errors instead of silently treating `--cwd` as the capture path). Tests live in
+`test/cli-flags.test.ts` (default unit gate) and
+`test/smoke-real-turn-capture.test.ts` (cli-smoke project, run via
+`pnpm test:cli-smoke` or `bash scripts/ci-check.sh`).
+
 ### Safety rails (Plan v2 D4)
 
 ```ts
@@ -58,11 +84,14 @@ client.setServerRequestHandler((req) => {
 });
 ```
 
-The harmless prompt (`src/prompts/harmless-turn.txt`) explicitly forbids
+The default harmless prompt (`src/prompts/harmless-turn.txt`) explicitly forbids
 shell, file, and Computer Use, and asks the model to reply with the literal
 text `OK`. We do **not** assert the model output equals `OK` — we only
 assert the lifecycle reached terminal state. If the model rejects the
-prompt or rambles, that's still a pass for transport purposes.
+prompt or rambles, that's still a pass for transport purposes. With
+`--prompt-file` the operator opts into a richer prompt that MAY trigger
+server-initiated approvals — those are still default-rejected; T4 captures
+the wire shape for the Phase 1 ApprovalBroker.
 
 ## What is NOT in this CLI
 

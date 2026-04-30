@@ -12,5 +12,8 @@
     "@codex-im/app-server-client": "workspace:*",
     "@codex-im/protocol": "workspace:*",
     "pino": "^9"
+  },
+  "devDependencies": {
+    "@codex-im/testkit": "workspace:*"
   }
 }

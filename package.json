@@ -16,9 +16,11 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "test": "vitest run --config vitest.config.ts",
+    "test": "vitest run --config vitest.config.ts --project unit --project contract",
     "test:unit": "vitest run --config vitest.config.ts --project unit",
     "test:contract": "vitest run --config vitest.config.ts --project contract",
+    "test:cli-smoke": "vitest run --config vitest.config.ts --project cli-smoke",
+    "test:all": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",

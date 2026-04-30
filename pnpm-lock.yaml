@@ -57,6 +57,10 @@ importers:
       pino:
         specifier: ^9
         version: 9.14.0
+    devDependencies:
+      '@codex-im/testkit':
+        specifier: workspace:*
+        version: link:../testkit
 
   packages/codex-protocol: {}
 
