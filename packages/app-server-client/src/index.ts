@@ -25,7 +25,9 @@ export {
   RequestTimeoutError,
   TransportClosedError,
   TransportProtocolError,
+  categorizeJsonRpcError,
 } from "./errors.js";
+export type { ErrorCategory } from "./errors.js";
 export { AppServerClient } from "./client.js";
 export type {
   AppServerClientOptions,
