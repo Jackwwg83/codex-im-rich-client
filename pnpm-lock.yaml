@@ -30,6 +30,8 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@20.19.39)(@vitest/coverage-v8@4.1.5)(vite@6.4.2(@types/node@20.19.39)(tsx@4.21.0))
 
+  packages/codex-protocol: {}
+
 packages:
 
   '@babel/helper-string-parser@7.27.1':

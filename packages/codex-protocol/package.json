@@ -1,0 +1,8 @@
+{
+  "name": "@codex-im/protocol",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -b" }
+}
