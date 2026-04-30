@@ -44,6 +44,15 @@ importers:
 
   packages/codex-protocol: {}
 
+  packages/testkit:
+    dependencies:
+      '@codex-im/app-server-client':
+        specifier: workspace:*
+        version: link:../app-server-client
+      '@codex-im/protocol':
+        specifier: workspace:*
+        version: link:../codex-protocol
+
 packages:
 
   '@babel/helper-string-parser@7.27.1':

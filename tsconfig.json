@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/codex-protocol" },
-    { "path": "./packages/app-server-client" }
+    { "path": "./packages/app-server-client" },
+    { "path": "./packages/testkit" }
   ]
 }
