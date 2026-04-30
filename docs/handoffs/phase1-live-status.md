@@ -1,22 +1,23 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-04-30 — Pre-3 docs amended; implementation pending. T9a blocked on Pre-3 merge.
+> **Last updated:** 2026-04-30 — Pre-3 complete (docs `c96d36d` + code `44e2623`). T9a unblocked, ready to start.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **Pre-3** — `AppServerClient` `JsonRpcResponseError` propagation. Plan docs amended (this commit-window); implementation not yet started.
-- **Blocked task:** T9a — cannot start until Pre-3 merges.
-- **Last completed task:** T8 (CodexRuntime typed wrappers) + T8 codex review fixes.
+- **Active task:** **T9a — ready to start** (`ApprovalBroker` skeleton + happy-path dispatch + dispatch-coverage). Has not been started yet; awaiting user approval to begin Step 9a.1.
+- **Last completed task:** **Pre-3** (`AppServerClient` `JsonRpcResponseError` propagation) — both commits landed (`c96d36d` docs, `44e2623` code).
+- **Prior tasks:** T8 (CodexRuntime typed wrappers) + T8 codex review fixes.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-1-runtime`
-- **HEAD:** `585235e fix(t8): codex outside-voice review — 5 of 5 findings resolved`
-- **Parent of HEAD:** `f59205f feat(codex-runtime): CodexRuntime typed wrappers (T8 / P1.1)`
+- **HEAD:** `44e2623 fix(app-server-client): preserve explicit JSON-RPC handler errors`
+- **Parent:** `c96d36d docs(phase1): add pre-3 appserverclient error propagation prerequisite`
+- **Grandparent:** `585235e fix(t8): codex outside-voice review — 5 of 5 findings resolved`
 - **Main:** `main`
 
 ## 3. Completed tasks (Phase 1)
@@ -33,51 +34,51 @@
 - T7a (EventNormalizer skeleton) — landed + reviewed (6/6 fixes applied)
 - T7b (T7b-1 + T7b-2 = exhaustive switch + walk-and-drop overflow) — landed + reviewed (2/2 fixes applied)
 - T8 (CodexRuntime typed wrappers) — landed + reviewed (5/5 low+nit fixes applied)
+- **Pre-3 (`AppServerClient` `JsonRpcResponseError` propagation) — landed (docs `c96d36d` + code `44e2623`).** No outside-voice review run on Pre-3; the change is purely additive (single new branch in catch arm; existing `-32603` path bit-identical). 231/231 tests pass.
 
 ## 4. Currently doing
 
-User chose **Option C** (drift audit). Pre-3 is being executed docs-first / code-second:
-
-- **Done in this turn:** stashed the drift as `stash@{0}: pre3-appserverclient-jsonrpc-error-propagation`; amended the plan with a new `Pre-3` subsection in §0.4, made T9a depend on Pre-3, clarified T9b §9b.3 throw-distinction (generic `Error` → -32603 vs explicit `JsonRpcResponseError` → preserve code/message/data), updated parallelization windows and rollout sequence; updated this live-status doc.
-- **Not started:** Pre-3 implementation (which is just the unstash + verification + commit, since the diff already exists in the stash).
-
-No `packages/core/` work has been done.
+Nothing in flight. Pre-3 is fully landed. Awaiting explicit user approval before T9a Step 9a.1.
 
 ## 5. Next exact action
 
-User-driven step pending. The expected sequence is:
-1. Verify plan amendments by re-reading §0.4 Pre-3 + T9a "Depends on" + T9b §9b.3.
-2. Pop the stash: `git stash pop stash@{0}`.
-3. Re-run gates (`pnpm typecheck && pnpm test && pnpm lint && pnpm protocol:check && bash scripts/ci-check.sh`). Expected test count: 230 → 231.
-4. Commit Pre-3 with the message in the plan's Pre-3 "Tag/commit" block (single commit on `phase-1-runtime`).
-5. Optional: open the Pre-3 PR (or merge directly into `phase-1-runtime`, mirroring how Pre-1/Pre-2 landed).
-6. Then start T9a's Step 9a.1.
+**T9a Step 9a.1** — write failing tests in `packages/core/test/approval-broker.test.ts` covering:
 
-## 6. Currently modified files (working tree only — not committed)
+1. `default-rejects an unknown (non-generated) method via -32601 (Pre-3 path)` — broker throws `JsonRpcResponseError({ code: -32601, ... })` for a synthetic method name; assertion uses `await expect(fake.emitServerRequest("future/unseen/method", {}, 42)).rejects.toMatchObject({ code: -32601 })`.
+2. `duplicate attach() throws` — second `broker.attach()` raises `/already attached/`.
+
+Test file uses `AppServerClient` + `FakeAppServer` (no `fake.client` placeholder). Synthetic method name only; **no approval method-name string literals in test code**.
+
+After 9a.1 fails for the right reason, proceed sequentially through Steps 9a.2 → 9a.7 per plan §1626-1747.
+
+T9a-authorized Files (CLAUDE.md "每个任务只改计划内文件"):
+- `packages/core/src/approval-broker.ts`
+- `packages/core/test/approval-broker.test.ts`
+- `packages/core/test/approval-broker-dispatch.test.ts`
+- `packages/core/test/dispatch-coverage.test.ts`
+
+T9a may NOT touch `packages/app-server-client/` — Pre-3 owns that file.
+
+## 6. Currently modified files (working tree)
+
+Clean (only the gstack runtime lock):
 
 ```
- M CLAUDE.md                                            (Compact / Resume Instructions; previous turn)
- M docs/superpowers/plans/2026-04-30-phase-1-runtime.md (Pre-3 + T9a/T9b amendments; this turn)
- M docs/handoffs/phase1-live-status.md                  (this turn — but already saved by the time you read this)
-?? .claude/scheduled_tasks.lock                          (gstack runtime; ignore)
+?? .claude/scheduled_tasks.lock
 ```
 
-The original AppServerClient drift is in `git stash`, NOT in the working tree:
-```
-$ git stash list
-stash@{0}: On phase-1-runtime: pre3-appserverclient-jsonrpc-error-propagation
-```
+`git stash list` is empty.
 
-## 7. Current test results
+## 7. Current test results (at HEAD `44e2623`)
 
-- `pnpm typecheck` → exit 0 (5 strict packages clean)
+- `pnpm typecheck` → exit 0 (6 strict packages clean)
 - `pnpm test` → **231 passed (231)**, 24 files
 - `pnpm typecheck:tests` → exit 0
 - `pnpm test:cli-smoke` → 2 passed
 - `pnpm lint` → exit 0 (biome 77 files)
 - `pnpm protocol:check` → exit 0
 - `scripts/verify-phase1-fixtures.mts` → GATE PASS (1 server-request frames, 1 approval-capable)
-- All 8 ci-check gates green at `585235e`. Drift commit isn't on HEAD, so the +1 test (231→232 transition) is staged but not yet permanent.
+- All 8 ci-check gates green at `44e2623`. The 231-count includes Pre-3's new `honors JsonRpcResponseError thrown from handler` test in `client-default-reject.test.ts`.
 
 ## 8. Current key decisions (Phase 1, decided — do not relitigate)
 
@@ -107,23 +108,23 @@ Phase 1 specific:
 
 ## 10. Not allowed to advance until resolved
 
-**Pre-3 implementation must complete (and merge) before T9a starts.** Drift-audit option C was chosen and is in flight. While Pre-3 is open, do not:
+T9a may not start until the user explicitly approves Step 9a.1. Once T9a starts, the binding rules are:
 
-- Add ANY file under `packages/core/` (T9a/T9b territory).
-- Add ANY file under `packages/codex-runtime/` beyond what T1-T8 already shipped.
-- Add a broker, dispatch table, fixture replay, or `setServerRequestHandler` caller in any package.
-- Hard-code an approval method-name string literal anywhere outside `packages/core/` (rule already in CLAUDE.md; not relaxed by Pre-3).
-- Add real IM adapter (Phase 2+), Computer Use production flow (Phase 6), or any public WebSocket / public HTTP listener (Phase 8).
-- Modify any Phase 0 module beyond Pre-3's narrow `dispatchServerRequest` catch-arm (`AppServerClient`, `StdioTransport`, `JsonlDecoder` are contract — only the catch-arm extension is in Pre-3 scope).
-- Make `AppServerClient` restartable (still violates ONE-SHOT JSDoc).
-- Bypass approvals or default-approve in any code path (Pre-3 does not touch approval semantics — only error-envelope propagation on the existing reject path).
+- T9a only touches files in its plan-listed Files (see §5 above).
+- T9a may NOT touch `packages/app-server-client/` — Pre-3 owns that surface area.
+- No new approval method-name string literals outside `packages/core/`. Test code uses synthetic method names (`future/unseen/method`); production code reads from generated `ServerRequest["method"]` union.
+- The single-handler invariant on `client.setServerRequestHandler` is the broker's exclusive territory (D7).
+- `ApprovalBroker` constructor must NOT subscribe to `client.onClose` or attempt restart (ONE-SHOT lifecycle; Supervisor T11 owns recovery).
 
-Other Phase 1 non-goals from handoff (unchanged):
+Other Phase 1 non-goals from handoff (unchanged across all tasks):
 - Any IM adapter (Phase 2+).
 - Computer Use production path (Phase 6).
 - SQLite storage (Phase 2).
 - ChannelAdapter / SessionRouter / CommandRouter (Phase 2).
+- Public WebSocket / public HTTP listener (Phase 8).
 - Rewriting any Phase 0 module.
+- Making `AppServerClient` restartable.
+- Default-approving any approval; bypassing approvals; failing-open on errors.
 
 ## 11. First command for a new (post-compact) session
 
