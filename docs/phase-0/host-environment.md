@@ -248,4 +248,41 @@ not json at all
 
 ## Real-turn smoke results
 
-(Populated by Section J Task 9.3, only after first successful `CODEX_REAL_SMOKE=1 pnpm smoke:real-turn`.)
+**First successful run**: 2026-04-29 (this session).
+
+```
+transport started
+initialize OK (codexHome=/Users/jackwu/.codex,
+               platformFamily=unix, platformOs=macos)
+thread/start OK (threadId=019ddc4e-f6ac-7863-9cad-82bf4ada4219)
+turn/start with harmless prompt
+[warning notification] Under-development features enabled: chronicle
+                       (codex's own warning, not our concern)
+turn reached terminal state          (turn/completed received within 4s)
+[stderr after stop] failed to record rollout items: thread ... not found
+                    (codex internal cleanup noise post-shutdown, harmless)
+smoke:real-turn PASSED
+total elapsed ~5s, no zombie subprocess
+```
+
+### Observed behaviors
+
+- `thread/start` with empty params `{}` works — codex accepts all defaults.
+- `turn/start` with `input: [{type:"text", text:"...", text_elements:[]}]` works.
+- The model produced a `turn/completed` notification within ~4s for our minimal prompt.
+- **No server-initiated requests fired** during the harmless turn — the model did not
+  ask for any approval, tool, or elicitation. Default-reject path was never exercised
+  in this run.
+- Stderr carries codex tracing noise with ANSI escapes — confirmed our handler treats
+  it as plaintext (no JSON parse attempts).
+- Codex emits a `warning` notification with method name `"warning"` and params
+  `{threadId, message}` — Phase 1 EventNormalizer will need to handle this.
+
+### Implications for Phase 1
+
+- `harmless-turn-event-stream.jsonl` fixture capture deferred — the prompt didn't
+  surface any server requests, so the only events were warning + turn/completed.
+  Phase 1 EventNormalizer development should re-run with a richer prompt to capture
+  agentMessage/delta, item/started, etc.
+- The `chronicle` under-development warning suggests codex 0.125 is mid-flight; the
+  CODEX_VERSION pin is well-justified.
