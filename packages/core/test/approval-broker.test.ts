@@ -61,9 +61,9 @@ describe("ApprovalBroker skeleton (T9a Step 9a.1)", () => {
     // AppServerClient catch-arm preserves the explicit code on the wire,
     // and FakeAppServer.emitServerRequest rejects its returned Promise
     // with the unwrapped error envelope.
-    await expect(
-      h.fake.emitServerRequest("future/unseen/method", {}, 42),
-    ).rejects.toMatchObject({ code: -32601 });
+    await expect(h.fake.emitServerRequest("future/unseen/method", {}, 42)).rejects.toMatchObject({
+      code: -32601,
+    });
 
     await teardown(h);
   });
