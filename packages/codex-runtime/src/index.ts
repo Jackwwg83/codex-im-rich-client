@@ -18,3 +18,5 @@ export type { CodexRichEvent, EventClass, MethodClassification } from "./types.j
 export { METHOD_CLASS, classifyMethod } from "./event-class.js";
 export { KNOWN_NOTIFICATION_METHODS, isServerNotificationMethod } from "./method-names.js";
 export type { ServerNotificationMethod } from "./method-names.js";
+export { EventNormalizer } from "./event-normalizer.js";
+export type { NormalizerOptions } from "./event-normalizer.js";
