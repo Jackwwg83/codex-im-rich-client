@@ -53,20 +53,44 @@ function isObj(m: unknown): m is Record<string, unknown> {
   return typeof m === "object" && m !== null && !Array.isArray(m);
 }
 
+function isValidId(v: unknown): v is JsonRpcId {
+  return typeof v === "number" || typeof v === "string";
+}
+
+function isValidError(v: unknown): v is JsonRpcError {
+  if (!isObj(v)) return false;
+  return typeof v.code === "number" && typeof v.message === "string";
+}
+
 /**
- * True iff `m` is a response envelope: has `id`, has either `result` or `error`,
- * and has no `method`. The `id` may be null only on error responses (parse errors).
+ * True iff `m` is a response envelope: has `id` (number, string, or null
+ * only when `error` present), has a well-formed `result` OR `error`, and
+ * has no `method`.
+ *
+ * Codex final review #4: previously this was loose enough that
+ * `{id:1, error:undefined}` passed and reached `new JsonRpcResponseError(undefined)`,
+ * which would throw inside the message handler. Now we validate the
+ * shape strictly.
  */
 export function isJsonRpcResponse(m: unknown): m is JsonRpcResponse {
   if (!isObj(m)) return false;
   if (!("id" in m)) return false;
   if ("method" in m) return false;
-  return "result" in m || "error" in m;
+  const hasResult = "result" in m && m.result !== undefined;
+  const hasError = "error" in m && isValidError(m.error);
+  if (!hasResult && !hasError) return false;
+  // Success response: id must be number or string (NOT null).
+  // Error response: id may be null per spec (parse-error case).
+  if (hasResult) return isValidId(m.id);
+  return m.id === null || isValidId(m.id);
 }
 
-/** True iff `m` is a JSON-RPC error response (response with `error` field). */
+/** True iff `m` is a JSON-RPC error response with a well-formed `error` field. */
 export function isJsonRpcErrorResponse(m: unknown): m is JsonRpcErrorResponse {
-  return isJsonRpcResponse(m) && "error" in m;
+  if (!isObj(m)) return false;
+  if (!("id" in m) || "method" in m) return false;
+  if (!("error" in m) || !isValidError(m.error)) return false;
+  return m.id === null || isValidId(m.id);
 }
 
 /**
@@ -76,7 +100,7 @@ export function isJsonRpcErrorResponse(m: unknown): m is JsonRpcErrorResponse {
  */
 export function isJsonRpcServerRequest(m: unknown): m is JsonRpcRequest {
   if (!isObj(m)) return false;
-  if (!("id" in m) || typeof m.method !== "string") return false;
+  if (!isValidId(m.id) || typeof m.method !== "string") return false;
   if ("result" in m || "error" in m) return false;
   return true;
 }

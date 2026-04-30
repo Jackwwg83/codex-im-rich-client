@@ -79,6 +79,13 @@ export class AppServerClient {
     await this.transport.start();
     this.subs.push(this.transport.onMessage((m) => this.handleMessage(m)));
     this.subs.push(this.transport.onClose((code) => this.handleClose(code)));
+    // Codex final review #2: surface transport errors. Without this, parse
+    // errors / spawn errors / IO errors only surfaced as request timeouts.
+    this.subs.push(
+      this.transport.onError((err) => {
+        this.log.warn({ err: err.message }, "AppServerClient: transport error");
+      }),
+    );
   }
 
   async stop(): Promise<void> {
@@ -107,8 +114,21 @@ export class AppServerClient {
         method,
         timer,
       });
+      // Codex final review #1: send() may throw synchronously
+      // (StdioTransport.send throws TransportClosedError if stopped between
+      // closed-check and write). Without this catch, the pending entry +
+      // timer leak until timeoutMs.
+      try {
+        this.transport.send({ id, method, params });
+      } catch (err) {
+        const entry = this.pending.get(id);
+        if (entry) {
+          clearTimeout(entry.timer);
+          this.pending.delete(id);
+        }
+        reject(err);
+      }
     });
-    this.transport.send({ id, method, params });
     return promise;
   }
 
@@ -189,11 +209,16 @@ export class AppServerClient {
       );
       return;
     }
+    // Codex final review #3: clearable timeout. Without explicit clearance,
+    // the timer's setTimeout closure stays scheduled even when the handler
+    // resolves quickly, retaining a reference to the handler / params for
+    // up to serverRequestHandlerTimeoutMs after success.
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const result = await Promise.race([
         Promise.resolve(h(m)),
-        new Promise((_, reject) =>
-          setTimeout(
+        new Promise((_, reject) => {
+          timer = setTimeout(
             () =>
               reject(
                 new Error(
@@ -201,11 +226,13 @@ export class AppServerClient {
                 ),
               ),
             this.serverRequestHandlerTimeoutMs,
-          ),
-        ),
+          );
+        }),
       ]);
+      if (timer !== undefined) clearTimeout(timer);
       this.respond(m.id, result);
     } catch (err) {
+      if (timer !== undefined) clearTimeout(timer);
       const message = err instanceof Error ? err.message : String(err);
       this.reject(m.id, { code: -32603, message: `handler error: ${message}` });
       this.log.warn(
