@@ -49,18 +49,20 @@
 
 ### 任务
 
-- [ ] AppServerClient 完整 request/notification/server request。
-- [ ] CodexRuntime 状态机。
-- [ ] EventNormalizer。
-- [ ] ApprovalBroker。
-- [ ] FakeAppServer testkit。
-- [ ] CLI 命令：`codex-im smoke app-server`、`codex-im runtime send`。
+- [x] ~~AppServerClient 完整 request/notification/server request~~ — **Phase 0 已完成** (commits `2518692` `440467b`); Phase 1 在此基础上加 typed wrappers + restart lifecycle 文档化（见 TODOS.md `P2.1` `P2.4`）
+- [ ] CodexRuntime 状态机（Phase 1 新建：thread/turn/item lifecycle，typed wrappers over `client.request`）
+- [ ] EventNormalizer（Phase 1 新建：raw `JsonRpcNotification` -> `CodexRichEvent`，async iterator with terminal-state recognition — 见 TODOS.md `P2.3`）
+- [ ] ApprovalBroker（Phase 1 新建：拥有 single server-request handler，内部 dispatch by method name from generated schema — 见 TODOS.md `P2.2`）
+- [x] ~~FakeAppServer testkit~~ — **Phase 0 已完成** (commit `380a988` 含 `replayFixture` + 7 wire fixtures); Phase 1 扩展 ApprovalBroker round-trip 测试
+- [x] ~~CLI `codex-im smoke app-server`~~ — **Phase 0 已完成** (commit `72d328f`); Phase 1 新增 `codex-im runtime send`（手动发 turn 用）
 
 ### 验收
 
-- [ ] 单元测试覆盖 request correlation。
-- [ ] fake server 能模拟 approval。
-- [ ] unknown event 不崩溃。
+- [x] ~~单元测试覆盖 request correlation~~ — Phase 0 已覆盖（`client.test.ts` 8 tests）
+- [ ] fake server 能模拟 approval（**Phase 1**：在 Phase 0 已有的 `FakeAppServer.emitServerRequest` 基础上加 ApprovalBroker round-trip 测试）
+- [x] ~~unknown event 不崩溃~~ — Phase 0 已覆盖（`client.test.ts` 容错测试 + `client-codex-final-review.test.ts` 强化）
+- [ ] **新增**：Phase 1 加 `categorizeJsonRpcError(err)` helper 区分 -32600 重载（unknown method vs invalid params） — 见 TODOS.md
+- [ ] **新增**：richer prompt 触发的 `harmless-turn-event-stream.jsonl` fixture 入 testkit/fixtures — 见 TODOS.md
 
 ## Phase 2：Telegram MVP
 
