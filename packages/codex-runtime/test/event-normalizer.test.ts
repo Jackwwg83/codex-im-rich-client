@@ -395,6 +395,221 @@ describe("EventNormalizer happy path (T7a)", () => {
     await teardown(h);
   });
 
+  // ─── T7b-1: turn.status discrimination ─────────────────────────
+
+  it("turn/completed with status=failed yields turn_failed (T7b-1)", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("turn/completed", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "failed", error: { kind: "rate_limited" } },
+    });
+
+    const ev = (await it.next()).value as CodexRichEvent;
+    expect(ev.type).toBe("turn_failed");
+    if (ev.type === "turn_failed") {
+      expect(ev.threadId).toBe("thread-1");
+      expect(ev.turnId).toBe("turn-1");
+      expect(ev.terminal).toBe(true);
+    }
+    await teardown(h);
+  });
+
+  it("turn/completed with status=interrupted yields turn_interrupted (T7b-1)", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("turn/completed", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "interrupted" },
+    });
+
+    const ev = (await it.next()).value as CodexRichEvent;
+    expect(ev.type).toBe("turn_interrupted");
+    if (ev.type === "turn_interrupted") {
+      expect(ev.terminal).toBe(true);
+    }
+    await teardown(h);
+  });
+
+  it("turn/completed with unrecognized status (e.g. inProgress) falls through to unknown", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("turn/completed", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress" },
+    });
+
+    const ev = (await it.next()).value as CodexRichEvent;
+    expect(ev.type).toBe("unknown");
+    await teardown(h);
+  });
+
+  // ─── T7b-1: every method without a typed arm produces `unknown` ─
+
+  it("every ServerNotification method without a typed arm produces {type:'unknown'} (exhaustive coverage)", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Sample one method from each category that T7b-1 routes to unknown.
+    // Tests the case-fall-through grouping in the exhaustive switch.
+    const unknownBoundMethods = [
+      "account/login/completed",
+      "app/list/updated",
+      "command/exec/outputDelta",
+      "configWarning",
+      "deprecationNotice",
+      "fs/changed",
+      "fuzzyFileSearch/sessionUpdated",
+      "guardianWarning",
+      "hook/started",
+      "item/autoApprovalReview/started",
+      "item/commandExecution/outputDelta",
+      "item/fileChange/patchUpdated",
+      "item/mcpToolCall/progress",
+      "item/plan/delta",
+      "item/reasoning/textDelta",
+      "mcpServer/startupStatus/updated",
+      "model/rerouted",
+      "rawResponseItem/completed",
+      "serverRequest/resolved",
+      "skills/changed",
+      "thread/status/changed",
+      "thread/tokenUsage/updated",
+      "thread/realtime/started",
+      "turn/diff/updated",
+      "turn/plan/updated",
+    ];
+
+    for (const m of unknownBoundMethods) {
+      h.fake.emitNotification(m, { sample: m });
+    }
+
+    for (const m of unknownBoundMethods) {
+      const ev = (await it.next()).value as CodexRichEvent;
+      expect(ev.type, `expected unknown for ${m}`).toBe("unknown");
+      if (ev.type === "unknown") {
+        expect(ev.method).toBe(m);
+        expect(ev.params).toEqual({ sample: m });
+      }
+    }
+
+    await teardown(h);
+  });
+
+  // ─── T7b-1: endOfStream() vs iterator.return() split ────────────
+
+  it("endOfStream() lets pending consumers drain the queue then yields done", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Buffer two events.
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress" },
+    });
+    h.fake.emitNotification("turn/completed", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "completed" },
+    });
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    // Source ended (e.g. transport.onClose). Queue still has events.
+    h.normalizer.endOfStream();
+
+    // Consumer drains naturally — both events yield, then done.
+    const a = (await it.next()).value as CodexRichEvent;
+    const b = (await it.next()).value as CodexRichEvent;
+    const c = await it.next();
+    expect(a.type).toBe("turn_started");
+    expect(b.type).toBe("turn_completed");
+    expect(c.done).toBe(true);
+
+    await teardown(h);
+  });
+
+  it("endOfStream() resolves a pending next() with done when queue is empty", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    // Suspend a next() with no events.
+    const pending = it.next();
+    h.normalizer.endOfStream();
+
+    const result = await pending;
+    expect(result.done).toBe(true);
+    await teardown(h);
+  });
+
+  it("endOfStream() is idempotent (calling twice is a no-op)", async () => {
+    const h = harness();
+    h.normalizer.endOfStream();
+    expect(() => h.normalizer.endOfStream()).not.toThrow();
+    await teardown(h);
+  });
+
+  it("endOfStream() is a no-op if iterator.return() was called first (cancellation wins)", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+    await it.return?.();
+    expect(() => h.normalizer.endOfStream()).not.toThrow();
+
+    // Subsequent .next() still reports done.
+    const ev = await it.next();
+    expect(ev.done).toBe(true);
+    await teardown(h);
+  });
+
+  it("iterator.return() drops buffered events; endOfStream() preserves them", async () => {
+    // Cancellation path: drop queue immediately.
+    const h1 = harness();
+    const it1 = h1.normalizer.events()[Symbol.asyncIterator]();
+    h1.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress" },
+    });
+    await new Promise<void>((r) => queueMicrotask(r));
+    await it1.return?.();
+    const result1 = await it1.next();
+    expect(result1.done).toBe(true);
+    await teardown(h1);
+
+    // Source-ended path: same buffered event is delivered before done.
+    const h2 = harness();
+    const it2 = h2.normalizer.events()[Symbol.asyncIterator]();
+    h2.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress" },
+    });
+    await new Promise<void>((r) => queueMicrotask(r));
+    h2.normalizer.endOfStream();
+    const ev = (await it2.next()).value as CodexRichEvent;
+    expect(ev.type).toBe("turn_started");
+    const after = await it2.next();
+    expect(after.done).toBe(true);
+    await teardown(h2);
+  });
+
+  it("after endOfStream(), notifications arriving via a stale subscription path are ignored", async () => {
+    // This guards against a future regression where #unsub fails to
+    // detach the handler — endOfStream() must also early-return on
+    // notification ingress.
+    const h = harness();
+    h.normalizer.endOfStream();
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress" },
+    });
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+    const result = await it.next();
+    expect(result.done).toBe(true);
+    await teardown(h);
+  });
+
   it("events() returns the SAME iterator on every call (single-consumer contract — codex T7a review #1)", async () => {
     const h = harness();
     const a = h.normalizer.events();

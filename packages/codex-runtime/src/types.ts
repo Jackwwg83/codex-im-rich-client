@@ -43,6 +43,23 @@ export type CodexRichEvent =
       terminal: true;
     }
   | {
+      // T7b: emitted when turn/completed arrives with turn.status === "failed".
+      // The wire frame's turn.error (TurnError | null) lives in raw.
+      type: "turn_failed";
+      threadId: string;
+      turnId: string;
+      raw: unknown;
+      terminal: true;
+    }
+  | {
+      // T7b: emitted when turn/completed arrives with turn.status === "interrupted".
+      type: "turn_interrupted";
+      threadId: string;
+      turnId: string;
+      raw: unknown;
+      terminal: true;
+    }
+  | {
       type: "item_started";
       threadId: string;
       turnId: string;
