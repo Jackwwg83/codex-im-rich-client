@@ -1,23 +1,24 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-01 01:18 (overnight wake 4) — T9b Steps 9b.4 + 9b.5 done (pending lifecycle, D6 transport-loss, expirePending). Test count 268/268. HEAD `decb570`. Next wake: 9b.6 build-time grep guard + codex review on full T9b diff.
+> **Last updated:** 2026-05-01 01:50 (overnight wake 5) — **STOPPED** on T9b codex outside-voice review (2 blockers found). Autonomous loop halted; no further wakes scheduled. Awaiting human review. HEAD `bf97a49`. Test count 277/277.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **T9b in progress** — Steps 9b.1 (reattach `1ecb394`) + 9b.2 (timeout) + 9b.3 (throw distinction) at `4798c02` + 9b.4+9b.5 (pending lifecycle, D6 transport-loss, expirePending) at `decb570`. Next wake: 9b.6 (grep guard) + codex review.
-- **Autonomous mode:** ON. ScheduleWakeup loop fires roughly every 20 min. Scheduled tasks remaining: T9b grep+review → T10 → STOP before T11a.
-- **Last completed task:** **T9a** (`ApprovalBroker` skeleton + happy-path dispatch + dispatch coverage) — 5 implementation commits + codex outside-voice review with 4/4 findings resolved. Plan §1592.
-- **Prior tasks:** Pre-3, T8, T7b, T7a, T6, T5, T4.5, T4, T3, T2, T1, Pre-2, Pre-1.
+- **Active task:** **T9b STOPPED** — code Steps 9b.1-9b.6 all committed (`bf97a49` is HEAD); codex outside-voice review on T9b returned 2 blockers + 2 medium + 1 low + 1 nit. Per autonomous protocol, blockers without obvious low-risk fixes → STOP. Findings captured in `docs/phase-1/codex-review-t9b.md`. **Awaiting human review and design decision before any further work.**
+- **Autonomous mode:** **HALTED**. Loop did NOT schedule next wake. Wake 5 was the last.
+- **Last completed task:** **T9a** + Pre-3 + T1-T8 (see §3).
+- **What needs human input:** see §10 for the open design question (blocker 1 — duplicate-response race needs Pre-4 AppServerClient extension OR a #handle refactor; blocker 2 — `#transportLostFired` reset on reattach is a one-liner but bundled with blocker 1 because the user should look at both together).
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-1-runtime`
-- **HEAD:** `decb570 feat(core): pending lifecycle — transport-loss D6 + expirePending (T9b Steps 9b.4 + 9b.5)`
-- **Recent T9b chain:** `decb570` (9b.4+9b.5) ← `4798c02` (9b.2+9b.3) ← `1ecb394` (9b.1 reattach) ← T9a complete chain.
+- **HEAD:** `bf97a49 test(core): build-time grep guard for approval method-name literals (T9b Step 9b.6)`
+- **Full T9b chain:** `bf97a49` (9b.6 grep guard) ← `e890c69` (live-status sync) ← `decb570` (9b.4+9b.5 pending lifecycle) ← `3e1a300` (live-status sync) ← `4798c02` (9b.2+9b.3 timeout/throw) ← `1ecb394` (9b.1 reattach) ← `0a4bf72` (T9a complete).
+- **T9b code commits:** `1ecb394`, `4798c02`, `decb570`, `bf97a49` (4 logical chunks).
 - **Main:** `main`
 
 ## 3. Completed tasks (Phase 1)
@@ -39,45 +40,39 @@
 
 ## 4. Currently doing
 
-**Autonomous overnight execution active.** First wake fires at 23:43; loop will continue waking every ~20 min. Each wake reads this doc + plan, runs gates, commits, updates status, schedules next wake. Hard-stops fire on: drift / red-line / blocker review finding / T11a boundary / all tasks complete.
+**STOPPED — codex review finding needs review.**
 
-User went to bed — interrupt anytime. To halt: send any message during a wake's response window or wait for the loop to hit a hard-stop and read the STOPPED status in §4 next morning.
+Wake 5's codex outside-voice review on T9b returned 2 blockers + 2 medium + 1 low + 1 nit. Both blockers have non-obvious fixes (one needs a Phase 0 contract change, the other is a one-liner but the design discussion should be unified). Per the autonomous protocol's blocker rule, the loop halted and did NOT schedule wake 6.
+
+Findings full text + suggested fixes + recommended forward path: `docs/phase-1/codex-review-t9b.md`.
+
+Total wake count: 5. Total commits this overnight session: ~20 (most code, several docs syncs, two reviews).
 
 ## 5. Next exact action
 
-**T9b Step 9b.6** — build-time grep guard (P2-4): assert no approval method-name string literal exists in `packages/{app-server-client,codex-runtime,daemon,cli}/src/**`. Implementation: a `*.test.ts` (vitest case in packages/core/test/ runs grep over the workspace) that fails if any match. Exempts test files. Pattern set: `/['"](approval|item\/|turn\/|thread\/|applyPatchApproval|execCommandApproval|account\/chatgptAuthTokens)/` adjusted to avoid false positives — needs to specifically target the 9 generated ServerRequest method names + maybe a permissive substring fallback for `requestApproval`.
+**User approval required before next wake.** Reason: 2 blockers in `docs/phase-1/codex-review-t9b.md` need design decision (the loop deliberately did not auto-fix because both fixes have subtle implications):
 
-Things to allow in source:
-- ClientRequest method literals like `thread/start`, `turn/start` are in `packages/codex-runtime/src/runtime.ts` (T8 boundary). The grep MUST whitelist those or be scoped only to ServerRequest method literals.
+**Blocker 1** — duplicate-response race in `expirePending` / `failPendingAsTransportLost` interacting with in-flight `#handle` await. Three design options laid out in the review doc's "Recommended forward path":
 
-Implementation outline:
-```ts
-// packages/core/test/no-method-literals.test.ts
-import { execSync } from "node:child_process";
-const FORBIDDEN_METHODS = [
-  "item/commandExecution/requestApproval",
-  "item/fileChange/requestApproval",
-  "item/permissions/requestApproval",
-  "item/tool/requestUserInput",
-  "item/tool/call",
-  "mcpServer/elicitation/request",
-  "applyPatchApproval",
-  "execCommandApproval",
-  "account/chatgptAuthTokens/refresh",
-];
-// For each method, run `git grep -F` over packages/{...}/src/** and assert no hits.
-```
+- **(A) Pre-4 AppServerClient idempotence:** track responded ids in AppServerClient, drop duplicate respond/reject calls. Phase 0 contract change; ships as Pre-4 PR mirroring Pre-1/Pre-2/Pre-3 discipline.
+- **(B) #handle refactor:** broker owns a per-record completion promise; `expirePending` settles the promise instead of calling client.respond directly. Stays inside packages/core/. Substantive change to #handle's contract.
+- **(C) Phase 1 punt:** accept the race, document, push real fix to Phase 2 IM. Risky — 10-min default cutoff is operator-tunable.
 
-After 9b.6 lands: codex outside-voice review on full T9b diff range (probably `0a4bf72..HEAD` to cover all T9b commits but exclude T9a). Capture findings to `docs/phase-1/codex-review-t9b.md`. Apply low/nit + obvious medium fixes inline. blocker / uncertain medium → STOP.
+**Blocker 2** — `#transportLostFired` not reset on `reattach()`. Trivial fix (one line in reattach's success path) but bundled with blocker 1 because the right answer might be "rework the lifecycle holistically" depending on which option you pick for blocker 1.
 
-Then live-status sync marking T9b complete + ScheduleWakeup → T10.
+After your decision on blocker 1, the morning sequence:
+1. Decide A / B / C for blocker 1 → apply fix
+2. Apply blocker 2 + medium fixes + missing tests in same commit (the design unifies the lifecycle)
+3. Re-run codex review on the fix commit. If clean → T9b complete.
+4. Then T10 (CLI runtime send) — small, autonomous-safe.
+5. T11a/T11b — explicit user approval per autonomous-mode hard stops.
 
-T9b-authorized Files (per plan §1773-1775 + autonomous protocol):
-- `packages/core/src/approval-broker.ts` (modified — current state at HEAD)
-- `packages/core/test/approval-broker.test.ts` (modified)
-- Create: `packages/core/test/no-method-literals.test.ts` (this wake)
+T9b code Files (already committed at HEAD):
+- `packages/core/src/approval-broker.ts`
+- `packages/core/test/approval-broker.test.ts`
+- `packages/core/test/no-method-literals.test.ts`
 
-Original plan also listed `approval-broker-fixture.test.ts` but the fixture-driven cases ended up inline in approval-broker-dispatch.test.ts (T9a). Skipping the separate file is fine — autonomous protocol allows reasonable structural deviations from the plan when the test surface is achieved.
+The grep guard test (Step 9b.6, `bf97a49`) is correct and unrelated to the blockers — it can land independently if you want to lock the boundary while designing the lifecycle fix.
 
 ## 6. Currently modified files (working tree)
 
@@ -89,15 +84,17 @@ Clean (only the gstack runtime lock):
 
 `git stash list` is empty. The autonomous loop's recovery scan treats anything beyond this exact list as drift and triggers a hard stop.
 
-## 7. Current test results (at HEAD `decb570`)
+## 7. Current test results (at HEAD `bf97a49`)
 
 - `pnpm typecheck` → exit 0 (6 packages)
-- `pnpm test` → **268 passed (268)**, 27 files (was 254 pre-T9b; +4 reattach + +4 timeout/throw + +6 pending-lifecycle)
+- `pnpm test` → **277 passed (277)**, 28 files (was 254 pre-T9b; +4 reattach + +4 timeout/throw + +6 pending-lifecycle + +9 grep guard)
 - `pnpm typecheck:tests` → exit 0
 - `pnpm test:cli-smoke` → 2 passed
-- `pnpm lint` → exit 0 (81 files biome)
+- `pnpm lint` → exit 0 (82 files biome)
 - `pnpm protocol:check` → exit 0
-- `bash scripts/ci-check.sh` → all 8 gates green at `decb570`
+- `bash scripts/ci-check.sh` → all 8 gates green at `bf97a49`
+
+Note: the green test count does NOT prove correctness on the 2 blockers. T9b's tests use never-resolving handlers which intentionally mask the duplicate-response race (codex review medium-4 explicitly calls this out — the late-resolving handler test is one of the missing tests).
 
 ## 8. Current key decisions (Phase 1, decided — do not relitigate)
 
@@ -127,13 +124,28 @@ Phase 1 specific:
 
 ## 10. Not allowed to advance until resolved
 
-T9a may not start until the user explicitly approves Step 9a.1. Once T9a starts, the binding rules are:
+**T9b's blocker 1 design decision required before any further loop work.**
 
-- T9a only touches files in its plan-listed Files (see §5 above).
-- T9a may NOT touch `packages/app-server-client/` — Pre-3 owns that surface area.
-- No new approval method-name string literals outside `packages/core/`. Test code uses synthetic method names (`future/unseen/method`); production code reads from generated `ServerRequest["method"]` union.
-- The single-handler invariant on `client.setServerRequestHandler` is the broker's exclusive territory (D7).
-- `ApprovalBroker` constructor must NOT subscribe to `client.onClose` or attempt restart (ONE-SHOT lifecycle; Supervisor T11 owns recovery).
+The blocker is a real correctness bug (codex outside-voice analysis is sound — see review doc for the manual repro steps). The autonomous loop deliberately did NOT apply a fix because the right design depends on a tradeoff the user owns:
+
+- Option A (Pre-4 AppServerClient idempotence) — cleanest semantically, smallest local change, but expands T9b's scope into Phase 0 contract.
+- Option B (#handle refactor with completion promise) — stays inside packages/core/ but requires a non-trivial rewrite of #handle's contract. Higher risk of subtle bugs.
+- Option C (Phase 1 punt) — fastest, but leaves a known-broken edge case in production.
+
+Once a path is chosen, T9b's fix-up commit lands the chosen approach + blocker 2 + medium fixes + the missing tests, then we re-run codex review. After that:
+
+- T10 (CLI runtime send) — small, autonomous-safe; can resume autonomous mode for it.
+- T11a / T11b — explicit user approval per the autonomous-mode hard stop. Plan §397 marks these "lead session lifecycle correctness critical".
+
+Other Phase 1 non-goals from handoff (unchanged across all tasks):
+- Any IM adapter (Phase 2+).
+- Computer Use production path (Phase 6).
+- SQLite storage (Phase 2).
+- ChannelAdapter / SessionRouter / CommandRouter (Phase 2).
+- Public WebSocket / public HTTP listener (Phase 8).
+- Rewriting any Phase 0 module.
+- Making `AppServerClient` restartable.
+- Default-approving any approval; bypassing approvals; failing-open on errors.
 
 Other Phase 1 non-goals from handoff (unchanged across all tasks):
 - Any IM adapter (Phase 2+).
