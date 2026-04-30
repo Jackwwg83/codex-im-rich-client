@@ -168,12 +168,15 @@ void _exhaustiveCheck;
  *   `{ transport, client, runtime, broker }` quartet on every recovery;
  *   the prior broker is discarded.
  *
- *   T9b will add a `reattach(newClient)` API used by the supervisor to
- *   transfer pending approval state to the new broker (Codex B7
- *   dependency). T9a does NOT include reattach.
+ *   T9b adds a `reattach(newClient)` API used by the supervisor to
+ *   transfer pending approval state to the new client (Codex B7
+ *   dependency). The broker instance survives the reattach; only the
+ *   client identity changes. The pending Map carries approval records
+ *   forward so an in-flight approval started on the prior client can
+ *   complete against the new one (resolve() in T9b Step 9b.5).
  */
 export class ApprovalBroker {
-  readonly #client: AppServerClient;
+  #client: AppServerClient;
   readonly #table: DispatchTable;
   readonly #pending = new Map<string | number, ApprovalRecord>();
   #attached = false;
@@ -249,6 +252,66 @@ export class ApprovalBroker {
     this.#client.setServerRequestHandler((req) => this.#handle(req));
     _attachedClients.add(this.#client);
     this.#attached = true;
+  }
+
+  /**
+   * Reattach the broker to a new AppServerClient (T9b Step 9b.1 — Codex
+   * B7 dependency for the Supervisor). The supervisor calls this when a
+   * codex subprocess restart produces a fresh transport+client; the
+   * broker survives the boundary so any in-flight pending approval state
+   * (the `#pending` Map) carries forward. resolve()/expirePending() in
+   * T9b Step 9b.5 then process that retained state against the new
+   * client.
+   *
+   * Invariants:
+   *   - Broker MUST already be attached (call attach() first).
+   *   - new client MUST be a different instance than the prior one (we
+   *     refuse same-instance reattach to catch identity bugs). If a
+   *     legitimate same-instance reattach is ever needed, that's a real
+   *     scope expansion not contemplated by D7 — STOP and request user
+   *     review.
+   *   - new client MUST NOT already have an attached broker (the
+   *     `_attachedClients` cross-instance guard).
+   *
+   * Behavior:
+   *   1. Detach handler from prior client (sets the slot to null).
+   *   2. Remove prior client from `_attachedClients` so a fresh broker
+   *      could re-claim that prior instance later (relevant only in
+   *      bizarre test scenarios; T11b in practice never reuses a closed
+   *      client).
+   *   3. Install handler on new client + add to `_attachedClients`.
+   *   4. Update `#client` to point at the new instance.
+   *
+   * The pending Map is intentionally NOT cleared. T9b Step 9b.5's
+   * resolve() looks pending records up by approvalId; if codex on the
+   * new client re-issues an approval that was already resolved, the
+   * lookup catches it as a duplicate.
+   */
+  reattach(newClient: AppServerClient): void {
+    if (!this.#attached) {
+      throw new Error(
+        "ApprovalBroker.reattach: broker has not been attached yet; call attach() first",
+      );
+    }
+    if (newClient === this.#client) {
+      throw new Error("ApprovalBroker.reattach: new client must be a different instance");
+    }
+    if (_attachedClients.has(newClient)) {
+      throw new Error(
+        "ApprovalBroker.reattach: new client already has an attached broker (D7 single-handler invariant)",
+      );
+    }
+    // Detach prior. setServerRequestHandler(null) frees the slot;
+    // subsequent server-initiated requests on the prior client will get
+    // -32601 "no handler registered" from AppServerClient's default
+    // path (which is fine — the prior client is dead by the time the
+    // supervisor calls reattach anyway).
+    this.#client.setServerRequestHandler(null);
+    _attachedClients.delete(this.#client);
+    // Attach to new.
+    newClient.setServerRequestHandler((req) => this.#handle(req));
+    _attachedClients.add(newClient);
+    this.#client = newClient;
   }
 
   /**

@@ -75,6 +75,108 @@ describe("ApprovalBroker skeleton (T9a Step 9a.1)", () => {
     await teardown(h);
   });
 
+  it("reattach(newClient) transfers handler ownership and frees prior slot (T9b Step 9b.1 — Codex B7)", async () => {
+    // Supervisor pattern: a codex subprocess restart yields a fresh
+    // {transport, client} pair. The broker survives the boundary by
+    // calling reattach(newClient). After reattach:
+    //   - prior client's handler slot is null (subsequent server
+    //     requests on it return -32601 from AppServerClient's default)
+    //   - new client routes to the broker's #handle
+    //   - the broker's pending Map is preserved (T9b Step 9b.5 wires
+    //     this to resolve(); for 9b.1 the Map is empty)
+
+    // First leg: brokerOnClientA
+    const fakeA = new FakeAppServer();
+    const clientA = new AppServerClient(fakeA.clientSide);
+    await clientA.start();
+    const broker = new ApprovalBroker(clientA);
+    broker.attach();
+
+    // Second leg: a fresh client (mirrors a supervisor-driven restart)
+    const fakeB = new FakeAppServer();
+    const clientB = new AppServerClient(fakeB.clientSide);
+    await clientB.start();
+    broker.reattach(clientB);
+
+    // The broker's handler is now on clientB. Install a per-method
+    // handler and route a server request through fakeB; the broker
+    // should dispatch to it.
+    let brokerSawOnB = false;
+    broker.registerHandler("item/fileChange/requestApproval", async () => {
+      brokerSawOnB = true;
+      return { decision: "decline" };
+    });
+    await fakeB.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      201,
+    );
+    expect(brokerSawOnB).toBe(true);
+
+    // Prior client is no longer wired to the broker. Send a request
+    // through fakeA's transport; AppServerClient's default-reject path
+    // returns -32601 because setServerRequestHandler(null) was called.
+    await expect(
+      fakeA.emitServerRequest(
+        "item/fileChange/requestApproval",
+        { threadId: "t", turnId: "u", itemId: "i" },
+        202,
+      ),
+    ).rejects.toMatchObject({ code: -32601 });
+
+    await clientB.stop();
+    await fakeB.stop();
+    await clientA.stop();
+    await fakeA.stop();
+  });
+
+  it("reattach(sameClient) throws (catches supervisor identity bugs — T9b Step 9b.1)", async () => {
+    const h = await harness();
+    h.broker.attach();
+    expect(() => h.broker.reattach(h.client)).toThrow(/must be a different instance/);
+    await teardown(h);
+  });
+
+  it("reattach() before attach() throws (broker must be attached first — T9b Step 9b.1)", async () => {
+    const fakeA = new FakeAppServer();
+    const clientA = new AppServerClient(fakeA.clientSide);
+    await clientA.start();
+    const broker = new ApprovalBroker(clientA);
+    // No attach() — reattach should refuse.
+    const fakeB = new FakeAppServer();
+    const clientB = new AppServerClient(fakeB.clientSide);
+    await clientB.start();
+    expect(() => broker.reattach(clientB)).toThrow(/has not been attached yet/);
+    await clientB.stop();
+    await fakeB.stop();
+    await clientA.stop();
+    await fakeA.stop();
+  });
+
+  it("reattach() to a client already claimed by another broker throws (D7 cross-instance — T9b Step 9b.1)", async () => {
+    const fakeA = new FakeAppServer();
+    const clientA = new AppServerClient(fakeA.clientSide);
+    await clientA.start();
+    const broker1 = new ApprovalBroker(clientA);
+    broker1.attach();
+
+    const fakeB = new FakeAppServer();
+    const clientB = new AppServerClient(fakeB.clientSide);
+    await clientB.start();
+    const broker2 = new ApprovalBroker(clientB);
+    broker2.attach();
+
+    // broker1 trying to reattach to clientB (which broker2 already
+    // claimed) must fail — would otherwise silently replace broker2's
+    // handler.
+    expect(() => broker1.reattach(clientB)).toThrow(/already has an attached broker/);
+
+    await clientB.stop();
+    await fakeB.stop();
+    await clientA.stop();
+    await fakeA.stop();
+  });
+
   it("two brokers on the same client cannot both attach (D7 cross-instance — codex T9a review medium-1)", async () => {
     // The per-broker `#attached` flag stops the SAME broker from attaching
     // twice. The cross-instance guard (module-level WeakSet) stops a
