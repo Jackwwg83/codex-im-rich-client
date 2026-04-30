@@ -58,7 +58,12 @@ export const METHOD_CLASS = {
   // ─── Fuzzy file search (experimental, not in Phase 1 scope but
   // generated regardless — must classify or compile fails) ────────
   "fuzzyFileSearch/sessionCompleted": "lifecycle",
-  "fuzzyFileSearch/sessionUpdated": "lifecycle",
+  // sessionUpdated fires repeatedly while a fuzzy-find session is
+  // active (e.g. as the user keeps typing) — old result snapshots are
+  // discardable. T6 codex-review #1 reclassified from lifecycle to
+  // delta on that basis: D5 lifecycle is "load-bearing state
+  // transitions", and search-result churn isn't load-bearing.
+  "fuzzyFileSearch/sessionUpdated": "delta",
 
   // ─── Hooks ──────────────────────────────────────────────────────
   "hook/completed": "lifecycle",
@@ -69,7 +74,15 @@ export const METHOD_CLASS = {
   "item/autoApprovalReview/completed": "lifecycle",
   "item/autoApprovalReview/started": "lifecycle",
   "item/commandExecution/outputDelta": "delta",
-  "item/commandExecution/terminalInteraction": "delta",
+  // terminalInteraction fires when codex's exec tool needs interactive
+  // input (e.g. a sudo prompt mid-shell-command). It is NOT
+  // per-keystroke — payload is { stdin: string } supplied as a unit
+  // when the user (or, in our case, the default-reject handler)
+  // responds. T6 codex-review #2 noted the original delta
+  // classification didn't match D5's `*/delta`/`*/outputDelta`
+  // pattern; reclassified lifecycle since the use case is
+  // approval-style, not byproduct-stream.
+  "item/commandExecution/terminalInteraction": "lifecycle",
   "item/completed": "lifecycle",
   "item/fileChange/outputDelta": "delta",
   "item/fileChange/patchUpdated": "delta",

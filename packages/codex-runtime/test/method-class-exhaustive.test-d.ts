@@ -45,13 +45,7 @@ type _ValuesAreEventClass = _Values extends EventClass ? true : never;
 const _valuesAssert: _ValuesAreEventClass = true;
 void _valuesAssert;
 
-// 4. Sanity narrowing test: extending the domain with a fake method name
-//    must NOT typecheck. (The reverse — actually trying to add the fake
-//    method — would only show up if a maintainer modified the source
-//    file. The assertion below proves the type would reject the
-//    addition; if a future maintainer widens
-//    Record<ServerNotification["method"], EventClass> to a looser shape
-//    like Record<string, EventClass>, this fails to compile.)
-type _FakeWouldFail = "future/never/seen" extends _ServerNotificationMethods ? never : true;
-const _fakeAssert: _FakeWouldFail = true;
-void _fakeAssert;
+// (T6 codex-review #3 removed a fourth assertion — _FakeWouldFail —
+// because it only fired when the protocol union literally widened to
+// `string` or gained the literal "future/never/seen" arm. The realistic
+// drift modes are covered by NoExtras + NoMissing above.)
