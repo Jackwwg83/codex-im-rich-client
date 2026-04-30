@@ -164,7 +164,16 @@ client.request("turn/interrupt", { threadId, turnId? })
 
 > **历史教训**：Phase 0 之前的草稿用过 `"approval/request"` / `"commandApproval/request"` 等假设性 method 名。**这些都不存在**。
 >
-> **Phase 0 客户端代码 (`packages/app-server-client/src/client.ts`) 不硬编码任何 method 名** —— 它把 server request 当 opaque dispatch。Phase 1 的 `ApprovalBroker` 才内部 dispatch by method name，从生成的 `ServerRequest.ts` union 读 method 名（见 TODOS.md `P2.2`）。
+> ### 强约束：approval method 名只能在 ApprovalBroker 层引用
+>
+> **`@codex-im/app-server-client` 层（`packages/app-server-client/`）禁止硬编码任何 approval / server-initiated request method 字面量**。Phase 0 Task 10.3 audit 已验证 production code 零字符串字面量；新增模块也必须保持该不变量。
+>
+> **Phase 1 `ApprovalBroker` 是唯一允许引用 approval method 名的层**，并且：
+> 1. method 名必须从生成的 `packages/codex-protocol/src/generated/ServerRequest.ts` union 读取（type-level discrimination on `req.method`），而不是写裸字符串
+> 2. 具体 approval **语义**（每个 method 的 params/response shape、决策选项）以**生成 schema + Phase 1 重新捕获的 wire fixtures 为准**，不接受任何"我以为应该这样"
+> 3. 任何文档假设（包括本文 §4 的 method 列表）都属于"历史观察"，必须在每次 Phase 1 fixture 抓取后用 generated schema 重新校验
+>
+> 如果 Phase 1 发现新的 server-initiated method（generated `ServerRequest.ts` 出现新 union 成员），ApprovalBroker 必须显式处理或显式 default-reject，不能静默 fall-through。
 
 ### 4.1 `ApplyPatchApprovalResponse` / `ExecCommandApprovalResponse` 的 `decision` 字段
 

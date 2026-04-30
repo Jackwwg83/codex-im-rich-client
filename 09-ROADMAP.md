@@ -43,26 +43,55 @@
 
 ## Phase 1：Codex Runtime Core
 
+> **入口文档**：`docs/handoffs/2026-04-30-phase0-to-phase1.md` 是 Phase 1 启动的 single source of truth。新 session 先读它，再读本节。
+
 ### 目标
 
-无 IM 情况下完成 thread/turn/event/approval 内核。
+无 IM 情况下完成 thread/turn/event/approval 内核。**extend/build on** Phase 0 stack（`@codex-im/protocol` + `@codex-im/app-server-client` + `@codex-im/testkit` + `@codex-im/cli`），不重写也不绕过。
 
 ### 任务
 
-- [x] ~~AppServerClient 完整 request/notification/server request~~ — **Phase 0 已完成** (commits `2518692` `440467b`); Phase 1 在此基础上加 typed wrappers + restart lifecycle 文档化（见 TODOS.md `P2.1` `P2.4`）
-- [ ] CodexRuntime 状态机（Phase 1 新建：thread/turn/item lifecycle，typed wrappers over `client.request`）
-- [ ] EventNormalizer（Phase 1 新建：raw `JsonRpcNotification` -> `CodexRichEvent`，async iterator with terminal-state recognition — 见 TODOS.md `P2.3`）
-- [ ] ApprovalBroker（Phase 1 新建：拥有 single server-request handler，内部 dispatch by method name from generated schema — 见 TODOS.md `P2.2`）
-- [x] ~~FakeAppServer testkit~~ — **Phase 0 已完成** (commit `380a988` 含 `replayFixture` + 7 wire fixtures); Phase 1 扩展 ApprovalBroker round-trip 测试
-- [x] ~~CLI `codex-im smoke app-server`~~ — **Phase 0 已完成** (commit `72d328f`); Phase 1 新增 `codex-im runtime send`（手动发 turn 用）
+#### Phase 0 已完成的底层（Phase 1 在其上加层）
+
+- [x] ~~AppServerClient 完整 request/notification/server request~~ — Phase 0 commits `2518692` `440467b`；Phase 1 加 typed wrappers (TODOS `P1.1`) + supervisor 重建 client (TODOS `P1.4`)
+- [x] ~~FakeAppServer testkit + replayFixture~~ — commit `380a988` + `022c075` (含 `emitServerRequest.timeoutMs`)；Phase 1 扩展 ApprovalBroker round-trip 测试 + 真实 fixture 抓取 (TODOS `P1.6`)
+- [x] ~~CLI `codex-im smoke app-server` / `smoke real-turn`~~ — commit `72d328f` + `fa05a5e`；Phase 1 新增 `codex-im runtime send`（手动发 turn 用）+ `--capture` flag 用于 fixture 抓取
+
+#### Phase 1 新建
+
+- [ ] **`CodexRuntime` 状态机** + typed request wrappers over `client.request<R>(method, params)` — TODOS `P1.1`
+- [ ] **`EventNormalizer`** ordered async iterator + terminal-state recognition + unknown-event fallthrough — TODOS `P1.3`
+- [ ] **`ApprovalBroker`** 拥有 single server-request handler，**内部按 method dispatch**，method 名只能从生成 `ServerRequest.ts` union 读，**禁止硬编码字面量**（05-PROTOCOL §4 强约束）— TODOS `P1.2`
+- [ ] **Daemon supervisor** 实施 ONE-SHOT lifecycle：codex 子进程退出后构造 NEW `AppServerClient`（不复用），重跑 `performInitializeHandshake`，重 attach 处理器 — TODOS `P1.4`
+- [ ] **`categorizeJsonRpcError(err)` helper** 区分 -32600 重载（unknown method / invalid params / invalid request） + 文档化 malformed JSON 走 stderr 不走 JSON-RPC error — TODOS `P1.5`
+- [ ] **richer wire fixtures** 替换 Phase 0 的 `harmless-turn-event-stream.jsonl` placeholder（Phase 1 用富 prompt 重抓，含 server-initiated approval request）— TODOS `P1.6`
 
 ### 验收
 
-- [x] ~~单元测试覆盖 request correlation~~ — Phase 0 已覆盖（`client.test.ts` 8 tests）
-- [ ] fake server 能模拟 approval（**Phase 1**：在 Phase 0 已有的 `FakeAppServer.emitServerRequest` 基础上加 ApprovalBroker round-trip 测试）
-- [x] ~~unknown event 不崩溃~~ — Phase 0 已覆盖（`client.test.ts` 容错测试 + `client-codex-final-review.test.ts` 强化）
-- [ ] **新增**：Phase 1 加 `categorizeJsonRpcError(err)` helper 区分 -32600 重载（unknown method vs invalid params） — 见 TODOS.md
-- [ ] **新增**：richer prompt 触发的 `harmless-turn-event-stream.jsonl` fixture 入 testkit/fixtures — 见 TODOS.md
+- [x] ~~单元测试覆盖 request correlation~~ — Phase 0 已覆盖（`client.test.ts` + `client-timeout` + `client-default-reject` + `client-transport-close` + `client-codex-final-review` 共 5 个 test 文件）
+- [x] ~~unknown event 不崩溃~~ — Phase 0 已覆盖
+- [ ] **Phase 1**: fake server 能模拟 approval round-trip（基于 Phase 0 `FakeAppServer.emitServerRequest`）
+- [ ] **Phase 1**: `EventNormalizer` 单测覆盖所有相关 `ServerNotification` union arm
+- [ ] **Phase 1**: `ApprovalBroker` 单测覆盖每个真实 server request method（不是 placeholder）
+- [ ] **Phase 1**: `categorizeJsonRpcError` 单测覆盖 `unknown variant` / `missing field` / `invalid type` / `unknown field` 关键字 + 默认 fallthrough
+- [ ] **Phase 1**: richer wire fixture replay 进 contract test
+- [ ] **Phase 1**: `smoke:real-turn` 用 richer prompt 跑通（不光是 "Reply OK"）
+
+### Phase 1 禁止事项（沿用 CLAUDE.md 红线）
+
+- ❌ 不要做任何 IM adapter（Telegram/飞书/钉钉 = Phase 2+）
+- ❌ 不要做 Computer Use（= Phase 6）
+- ❌ 不要把项目变成 Codex CLI/TUI 输出 wrapper
+- ❌ 不要默认绕过 approvals（client 层 default-reject 已强制；ApprovalBroker 必须显式 dispatch）
+- ❌ 不要在 `@codex-im/app-server-client` 层硬编码 approval/server-request method 名
+- ❌ 不要把 `AppServerClient` 改成可重启（违背 ONE-SHOT policy，client.ts JSDoc 已禁）
+
+### Phase 1 必须先做的 spike / review
+
+1. **新 plan**：`docs/superpowers/plans/YYYY-MM-DD-phase-1-runtime.md`（按 Phase 0 plan v2 同样格式）
+2. **gstack `/plan-eng-review`** on Phase 1 plan
+3. **Codex outside voice** on Phase 1 plan
+4. **richer-prompt fixture spike**：在写 EventNormalizer 之前，先抓 1–2 个 scenario 的真实事件流
 
 ## Phase 2：Telegram MVP
 
