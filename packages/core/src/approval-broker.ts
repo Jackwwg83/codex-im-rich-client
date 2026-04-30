@@ -180,6 +180,11 @@ export class ApprovalBroker {
   readonly #table: DispatchTable;
   readonly #pending = new Map<string | number, ApprovalRecord>();
   #attached = false;
+  // T9b D6 idempotence: failPendingAsTransportLost() is called by the
+  // supervisor from its transport.onClose subscription. If the supervisor
+  // calls it twice (e.g. close fires more than once), the second call
+  // must be a no-op — pending records are already terminal.
+  #transportLostFired = false;
 
   constructor(client: AppServerClient) {
     this.#client = client;
@@ -354,28 +359,176 @@ export class ApprovalBroker {
       // Synchronously invoke defaultReject so a throwing default
       // (account/chatgptAuthTokens/refresh) propagates as a thrown
       // JsonRpcResponseError, not a rejected Promise wrapping the throw.
+      // No pending tracking on the default-reject path: codex sees a
+      // synchronous response and never thinks of this as "in flight"
+      // from the broker's perspective.
       return spec.defaultReject();
     }
-    // The `as never` cast is load-bearing: TypeScript can't prove that
-    // req.method (string) corresponds to spec.handler's parameterized P,
-    // even though the dispatch-table key already proved it. The runtime
-    // dispatch path narrows by key, so the cast is sound.
-    return await (spec.handler as (req: JsonRpcRequest) => Promise<unknown>)(req);
+    // T9b Step 9b.5: track in-flight approvals in #pending so
+    // failPendingAsTransportLost (D6) and expirePending have something
+    // to drain. The record is inserted BEFORE invoking the handler so
+    // a synchronous throw still leaves a snapshot for transport-loss
+    // bookkeeping (the try/finally below removes it after the handler
+    // settles, success or throw).
+    const record: ApprovalRecord = {
+      id: `approval-${req.id}`,
+      appServerRequestId: req.id,
+      method: req.method,
+      params: req.params,
+      status: "pending",
+      actor: null,
+      createdAt: new Date(),
+    };
+    this.#pending.set(req.id, record);
+    try {
+      // The `as never` cast is load-bearing: TypeScript can't prove that
+      // req.method (string) corresponds to spec.handler's parameterized P,
+      // even though the dispatch-table key already proved it. The runtime
+      // dispatch path narrows by key, so the cast is sound.
+      return await (spec.handler as (req: JsonRpcRequest) => Promise<unknown>)(req);
+    } finally {
+      // Remove on resolve/throw. If failPendingAsTransportLost ran
+      // concurrently and already cleared the entry, this delete is a
+      // no-op; if expirePending updated the record's status to
+      // "expired" but didn't remove (it does remove), same. The Map
+      // delete is idempotent.
+      this.#pending.delete(req.id);
+    }
   }
 
-  // ── T9b stubs ────────────────────────────────────────────────────
-  // These exist so the public surface is stable for downstream callers
-  // (Supervisor T11b, future IM adapter Phase 2). T9b implements them.
+  // ── T9b lifecycle (Step 9b.5) ────────────────────────────────────
 
+  /**
+   * Resolve a pending approval with a user / system decision. Phase 2
+   * IM adapter wires this to "user pressed approve/deny" actions; Phase
+   * 1 has no callers, so this remains a stub that signals where Phase 2
+   * picks up. The wire-mapping (ApprovalDecision → per-method response
+   * shape) is the load-bearing part deferred to Phase 2 — see plan
+   * §1750 for why it can't reuse the legacy {decision: ReviewDecision}
+   * shape across all v2 methods.
+   *
+   * Phase 1 callers MUST NOT use this. The default-reject path on the
+   * registered handler being null already covers Phase 1's
+   * "default-deny" semantic without going through resolve().
+   */
   resolve(_approvalId: string, _decision: ApprovalDecision, _actor: ApprovalActor): void {
-    throw new Error("ApprovalBroker.resolve: not implemented (T9b)");
+    throw new Error(
+      "ApprovalBroker.resolve: deferred to Phase 2 IM integration (no Phase 1 callers; wire-mapping per-method response shapes is Phase 2 scope)",
+    );
   }
 
+  /**
+   * Mark every pending approval as transport-lost (D6). Idempotent:
+   * subsequent calls return immediately. The supervisor (T11b) calls
+   * this from its transport.onClose subscription. We do NOT call
+   * `client.respond` — the client is dead by the time this runs and
+   * the wire frame would be dropped anyway (AppServerClient.respond is
+   * a no-op when closed).
+   *
+   * Records are NOT removed from `#pending` after the status flip. The
+   * decision was deliberate: tests + audit need to inspect the
+   * terminal records. resolve() / expirePending() check status before
+   * processing, so terminal records are skipped automatically.
+   */
   failPendingAsTransportLost(): void {
-    throw new Error("ApprovalBroker.failPendingAsTransportLost: not implemented (T9b)");
+    if (this.#transportLostFired) return;
+    this.#transportLostFired = true;
+    const now = new Date();
+    for (const record of this.#pending.values()) {
+      if (record.status !== "pending") continue;
+      record.status = "transport_lost";
+      record.actor = { kind: "system", reason: "transport_lost" };
+      record.decision = { kind: "denied", reason: "transport_lost" };
+      record.decidedAt = now;
+    }
   }
 
-  expirePending(): void {
-    throw new Error("ApprovalBroker.expirePending: not implemented (T9b)");
+  /**
+   * Sweep pending approvals older than `maxAgeMs` (default 10 minutes)
+   * and emit per-method default-reject responses to codex for each.
+   * The default-reject value is the same one the broker uses for
+   * "no handler installed" — Phase 1 never auto-approves, so an
+   * expired approval is treated identically to one whose handler was
+   * never wired.
+   *
+   * Returns the count of records expired in this sweep (useful for
+   * supervisor monitoring / metrics in T11b).
+   *
+   * Skipped: records already in a terminal state (resolved / expired /
+   * transport_lost). The status check makes this safe to call after
+   * failPendingAsTransportLost without double-processing.
+   *
+   * Edge case: account/chatgptAuthTokens/refresh's defaultReject
+   * throws JsonRpcResponseError(-32601). For an expired auth-refresh,
+   * we still record the record as expired but call client.reject
+   * directly with the -32601 envelope (instead of letting the throw
+   * propagate to nowhere). This keeps the wire contract consistent
+   * with the synchronous default-reject path.
+   */
+  expirePending(maxAgeMs = 600_000): number {
+    const cutoff = Date.now() - maxAgeMs;
+    const decidedAt = new Date();
+    let count = 0;
+    const expiredIds: Array<string | number> = [];
+    for (const record of this.#pending.values()) {
+      if (record.status !== "pending") continue;
+      if (record.createdAt.getTime() > cutoff) continue;
+      record.status = "expired";
+      record.actor = { kind: "system", reason: "expired" };
+      record.decision = { kind: "denied", reason: "expired" };
+      record.decidedAt = decidedAt;
+      expiredIds.push(record.appServerRequestId);
+      count++;
+    }
+    // Emit wire responses outside the iteration so #pending mutations
+    // (the in-flight handler's try/finally `delete`) cannot interfere.
+    // Records remain in #pending with terminal status until the
+    // handler resolves — but at that point its try/finally `delete` is
+    // a no-op for already-removed keys. We keep them around explicitly
+    // for audit; T11b may add a separate prune sweep.
+    for (const id of expiredIds) {
+      const record = this.#pending.get(id);
+      if (!record) continue;
+      const spec = this.#table[record.method as keyof DispatchTable];
+      if (!spec) continue;
+      try {
+        const resp = spec.defaultReject();
+        this.#client.respond(id, resp);
+      } catch (err) {
+        // defaultReject for account/chatgptAuthTokens/refresh throws
+        // JsonRpcResponseError(-32601). Translate to a wire reject.
+        if (err instanceof JsonRpcResponseError) {
+          this.#client.reject(id, {
+            code: err.code,
+            message: err.rawMessage,
+            data: err.data,
+          });
+        } else {
+          // Non-JsonRpcResponseError throw from a defaultReject is
+          // unexpected — this would be a bug in the dispatch table.
+          // Re-throw so the developer sees the failure rather than
+          // silently dropping the wire response.
+          throw err;
+        }
+      }
+    }
+    return count;
+  }
+
+  // ── Test-only accessor ───────────────────────────────────────────
+  //
+  // Not part of the public Phase 1 surface. Exposed because the
+  // pending-record state machinery is internal to the broker and
+  // tests for D6 (transport_lost) and expirePending need to inspect
+  // post-condition record states. Phase 2 IM integration will use a
+  // proper public API; this is the stop-gap for T9b tests.
+
+  /**
+   * @internal — for tests only. Returns a defensive shallow copy of
+   * the pending records Map. The records themselves are aliased; if
+   * the test mutates a record's fields, broker behavior is undefined.
+   */
+  _pendingRecordsForTest(): ReadonlyMap<string | number, ApprovalRecord> {
+    return new Map(this.#pending);
   }
 }

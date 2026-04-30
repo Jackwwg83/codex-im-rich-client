@@ -367,3 +367,234 @@ describe("ApprovalBroker handler-error edges (T9b Steps 9b.2 + 9b.3)", () => {
     await fake.stop();
   });
 });
+
+describe("ApprovalBroker pending-state lifecycle (T9b Steps 9b.4 + 9b.5)", () => {
+  // Step 9b.4 / 9b.5: pending tracking, transport-loss (D6), expire.
+  //
+  // The broker's #handle inserts a pending record before invoking the
+  // registered handler. failPendingAsTransportLost marks every pending
+  // record as transport_lost terminal (D6), idempotent. expirePending
+  // does the same for stale records and emits per-method default-reject
+  // wire responses to codex.
+
+  it("tracks an in-flight approval in #pending while the handler is running (T9b Step 9b.5)", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    // Hand-controlled handler resolution — we'll let the test drive
+    // when the handler completes so we can observe #pending mid-flight.
+    let release!: () => void;
+    const handlerDone = new Promise<void>((r) => {
+      release = r;
+    });
+    broker.registerHandler("item/fileChange/requestApproval", async () => {
+      await handlerDone;
+      return { decision: "decline" };
+    });
+
+    // Fire-and-forget: handler is awaiting; emitServerRequest waits
+    // for the response.
+    const respPromise = fake.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      400,
+    );
+
+    // Wait for the broker to insert the pending record (microtasks +
+    // a tick for the handler to start).
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Inspect — pending record should exist with status "pending"
+    const beforeMap = broker._pendingRecordsForTest();
+    expect(beforeMap.size).toBe(1);
+    const beforeRecord = beforeMap.get(400);
+    expect(beforeRecord?.status).toBe("pending");
+    expect(beforeRecord?.method).toBe("item/fileChange/requestApproval");
+    expect(beforeRecord?.actor).toBeNull();
+    expect(beforeRecord?.id).toBe("approval-400");
+    expect(beforeRecord?.appServerRequestId).toBe(400);
+
+    // Release the handler; emitServerRequest's promise should now resolve.
+    release();
+    const resp = await respPromise;
+    expect(resp).toEqual({ decision: "decline" });
+
+    // After handler resolves, the try/finally removes the record from
+    // #pending (cleanup; record is no longer in flight).
+    const afterMap = broker._pendingRecordsForTest();
+    expect(afterMap.size).toBe(0);
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("does NOT track default-reject path in #pending (no handler installed)", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+    // No registerHandler — defaultReject runs synchronously.
+
+    const resp = await fake.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      401,
+    );
+    expect(resp).toEqual({ decision: "decline" });
+    // #pending was never populated for this synchronous path
+    expect(broker._pendingRecordsForTest().size).toBe(0);
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("failPendingAsTransportLost marks every pending record as transport_lost (D6 — T9b Step 9b.4)", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    // Two hanging handlers — neither will resolve.
+    broker.registerHandler(
+      "item/fileChange/requestApproval",
+      () =>
+        new Promise(() => {}) as Promise<{
+          decision: "accept" | "decline" | "acceptForSession" | "cancel";
+        }>,
+    );
+    broker.registerHandler(
+      "applyPatchApproval",
+      () =>
+        new Promise(() => {}) as Promise<{
+          decision: "approved" | "denied" | "abort" | "timed_out" | "approved_for_session";
+        }>,
+    );
+
+    // Two in-flight requests. Suppress the eventual rejection (these
+    // never settle; client.stop() at end of test will drop them).
+    const _h1 = fake.emitServerRequest("item/fileChange/requestApproval", {}, 410).catch(() => {});
+    const _h2 = fake.emitServerRequest("applyPatchApproval", {}, 411).catch(() => {});
+
+    // Wait for handlers to be invoked.
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Both pending
+    expect(broker._pendingRecordsForTest().size).toBe(2);
+    for (const record of broker._pendingRecordsForTest().values()) {
+      expect(record.status).toBe("pending");
+    }
+
+    // Trigger transport-loss path (in production, T11b's supervisor
+    // calls this from transport.onClose).
+    broker.failPendingAsTransportLost();
+
+    // Records are still present with terminal status (we keep them
+    // for audit — see broker.ts comment).
+    const after = broker._pendingRecordsForTest();
+    expect(after.size).toBe(2);
+    for (const record of after.values()) {
+      expect(record.status).toBe("transport_lost");
+      expect(record.actor).toEqual({ kind: "system", reason: "transport_lost" });
+      expect(record.decision).toEqual({ kind: "denied", reason: "transport_lost" });
+      expect(record.decidedAt).toBeInstanceOf(Date);
+    }
+
+    // Idempotent: second call is a no-op (same terminal state).
+    broker.failPendingAsTransportLost();
+    const after2 = broker._pendingRecordsForTest();
+    expect(after2.size).toBe(2);
+    for (const record of after2.values()) {
+      expect(record.status).toBe("transport_lost");
+    }
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("expirePending marks stale records as expired and emits default-reject responses (T9b Step 9b.5)", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    // Hanging handler — emit a request, let it sit in pending, then
+    // call expirePending with a tiny maxAgeMs.
+    broker.registerHandler(
+      "item/fileChange/requestApproval",
+      () =>
+        new Promise(() => {}) as Promise<{
+          decision: "accept" | "decline" | "acceptForSession" | "cancel";
+        }>,
+    );
+    const respP = fake.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      420,
+    );
+
+    // Wait long enough that the record is older than 5ms cutoff
+    await new Promise((r) => setTimeout(r, 30));
+
+    const expiredCount = broker.expirePending(5);
+    expect(expiredCount).toBe(1);
+
+    // Record should be in expired terminal state
+    const record = broker._pendingRecordsForTest().get(420);
+    expect(record?.status).toBe("expired");
+    expect(record?.actor).toEqual({ kind: "system", reason: "expired" });
+    expect(record?.decision).toEqual({ kind: "denied", reason: "expired" });
+
+    // Default-reject response was sent on the wire — emitServerRequest
+    // should now resolve with the expected default-reject shape.
+    const resp = await respP;
+    expect(resp).toEqual({ decision: "decline" });
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("expirePending skips records younger than maxAgeMs", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    broker.registerHandler(
+      "item/fileChange/requestApproval",
+      () =>
+        new Promise(() => {}) as Promise<{
+          decision: "accept" | "decline" | "acceptForSession" | "cancel";
+        }>,
+    );
+    const _h = fake.emitServerRequest("item/fileChange/requestApproval", {}, 421).catch(() => {});
+
+    await new Promise((r) => setTimeout(r, 10));
+    // maxAgeMs is huge; no record old enough
+    const count = broker.expirePending(60_000);
+    expect(count).toBe(0);
+    expect(broker._pendingRecordsForTest().get(421)?.status).toBe("pending");
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("resolve() remains a stub deferred to Phase 2 (T9b Step 9b.5 — Phase 1 has no callers)", async () => {
+    const fake = new FakeAppServer();
+    const client = new AppServerClient(fake.clientSide);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+    expect(() =>
+      broker.resolve("approval-1", { kind: "approved" }, { kind: "system", reason: "test" }),
+    ).toThrow(/deferred to Phase 2/);
+    await client.stop();
+    await fake.stop();
+  });
+});
