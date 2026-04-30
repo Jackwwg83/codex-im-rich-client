@@ -5,7 +5,7 @@
 - macOS，建议 Apple Silicon。
 - Codex App 已安装并登录。
 - `codex` 命令在 launchd 环境 PATH 可用。
-- Node.js 20+ 或 22+。
+- Node.js 24+（Node 20 EOL 2026-04-30，已在 Pre-Phase-1 bump 到 LTS 24）。
 - pnpm。
 - IM 平台 bot/app 凭据。
 

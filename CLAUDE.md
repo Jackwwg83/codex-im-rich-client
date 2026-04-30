@@ -34,7 +34,7 @@ IM 平台只通过 ChannelAdapter 接入。
 ## 技术栈
 
 - TypeScript
-- Node.js 20+
+- Node.js 24+ (Node 20 reached EOL 2026-04-30; project bumped pre-Phase-1)
 - pnpm workspace
 - SQLite
 - Vitest

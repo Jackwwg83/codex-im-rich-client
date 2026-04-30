@@ -8,7 +8,7 @@
 
 ```bash
 # 0. 装运行时（一次性，不在 repo 范围）
-node --version    # need >=20.10
+node --version    # need >=24 (Node 20 EOL 2026-04-30; bumped in chore/node-24-bump)
 pnpm --version    # need >=10
 codex --version   # need 0.125.0 (pinned in CODEX_VERSION)
 

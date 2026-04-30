@@ -143,7 +143,7 @@ Computer Use 能操作桌面和已登录的浏览器/应用，风险显著高于
 ## 10. 最小可用技术栈
 
 ```text
-Runtime: Node.js 20+ / 22+
+Runtime: Node.js 24+ (Active LTS; Node 20 EOL 2026-04-30)
 Language: TypeScript
 Package: pnpm workspace
 DB: SQLite + better-sqlite3 or libsql
