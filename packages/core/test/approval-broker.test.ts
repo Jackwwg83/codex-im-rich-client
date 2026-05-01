@@ -892,4 +892,106 @@ describe("ApprovalBroker T9b blocker-fix — broker completion race (failing und
     await clientA.stop();
     await fakeA.stop();
   });
+
+  // ─── Codex T9b blocker-fix review P2 follow-ups ────────────────────
+  // Two additional tests recommended by codex's APPROVE-with-P2 review:
+  //   - auth-refresh expirePending preserves the JsonRpcResponseError(-32601)
+  //     envelope through the new completion path
+  //   - late-reject after failPendingAsTransportLost (completes the matrix
+  //     of {late-resolve, late-reject} × {expire, transport-lost})
+
+  it("expirePending of auth-refresh preserves -32601 wire envelope (codex T9b blocker-fix P2)", async () => {
+    const fake = new FakeAppServer();
+    const { transport, outboundFrames } = instrumentTransport(fake.clientSide);
+    const client = new AppServerClient(transport);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    // Hanging handler so we can drive expirePending while the request
+    // is in flight. account/chatgptAuthTokens/refresh's defaultReject
+    // throws JsonRpcResponseError(-32601); the B-clean expirePending
+    // catches that and settles via reject so AppServerClient's catch
+    // arm preserves the envelope on the wire (Pre-3 path).
+    broker.registerHandler(
+      "account/chatgptAuthTokens/refresh",
+      () =>
+        new Promise<{ accessToken: string; chatgptAccountId: string; chatgptPlanType: string }>(
+          () => {},
+        ),
+    );
+    const respP = fake.emitServerRequest(
+      "account/chatgptAuthTokens/refresh",
+      { reason: "expired" },
+      730,
+    );
+    await new Promise((r) => setTimeout(r, 30));
+    expect(broker._pendingRecordsForTest().get(730)?.status).toBe("pending");
+
+    const expired = broker.expirePending(5);
+    expect(expired).toBe(1);
+
+    // The wire envelope must be the explicit -32601 from the throwing
+    // defaultReject, NOT a -32603 "handler error: ..." collapse and
+    // NOT a successful response.
+    await expect(respP).rejects.toMatchObject({
+      code: -32601,
+      message: expect.stringMatching(/auth refresh not supported/i),
+    });
+
+    // Exactly one wire frame for id 730 (no duplicate from the still-
+    // hanging handler).
+    expect(countFramesForId(outboundFrames, 730)).toBe(1);
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("late-rejecting handler after failPendingAsTransportLost does not produce duplicate wire response (codex T9b blocker-fix P2)", async () => {
+    const fake = new FakeAppServer();
+    const { transport, outboundFrames } = instrumentTransport(fake.clientSide);
+    const client = new AppServerClient(transport);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    // Manually-controlled reject so the test drives the timing.
+    let reject!: (err: Error) => void;
+    const handlerPromise = new Promise<{
+      decision: "accept" | "decline" | "acceptForSession" | "cancel";
+    }>((_res, rej) => {
+      reject = rej;
+    });
+    broker.registerHandler("item/fileChange/requestApproval", () => handlerPromise);
+
+    const respP = fake.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      740,
+    );
+
+    await new Promise((r) => setTimeout(r, 30));
+    expect(broker._pendingRecordsForTest().get(740)?.status).toBe("pending");
+    expect(countFramesForId(outboundFrames, 740)).toBe(0);
+
+    // Transport-loss path settles the completion with defaultReject.
+    // Under B-clean: 1 wire frame; under the prior buggy code there'd
+    // also be a duplicate when the handler eventually rejects.
+    broker.failPendingAsTransportLost();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(countFramesForId(outboundFrames, 740)).toBe(1);
+
+    const wireResp = await respP;
+    expect(wireResp).toEqual({ decision: "decline" });
+
+    // Late rejection — settleOnce no-ops because entry.settled is true.
+    // No second wire frame.
+    reject(new Error("late rejection after transport-loss"));
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(countFramesForId(outboundFrames, 740)).toBe(1);
+
+    await client.stop();
+    await fake.stop();
+  });
 });

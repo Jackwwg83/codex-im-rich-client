@@ -538,9 +538,12 @@ export class ApprovalBroker {
    * dropped. If the transport is still alive (the test path), the
    * defaultReject is the actual wire response.
    *
-   * Late handler completions (after this method runs) observe
-   * record.status !== "pending" and `settleOnce` returns false — no
-   * duplicate wire frame, no leaked work.
+   * Late handler completions (after this method runs) call
+   * `entry.settleOnce` unconditionally, which returns false because
+   * `entry.settled` was already set to true by this method's settle —
+   * the late outcome is dropped. No duplicate wire frame, no leaked
+   * work. (The `settled` flag is the load-bearing guard; status flips
+   * are for audit visibility, not for blocking late settlers.)
    *
    * Records are NOT removed from `#pending` after the status flip.
    * The decision was deliberate: tests + audit need to inspect the
@@ -589,8 +592,9 @@ export class ApprovalBroker {
    * settled via `settleOnce` (no direct client.respond / client.reject).
    * AppServerClient receives the defaultReject value via #handle's
    * return and emits exactly one wire response per id. Late handler
-   * completions observe record.status !== "pending" and settleOnce
-   * returns false — no duplicate wire frame.
+   * completions call `entry.settleOnce` unconditionally; it returns
+   * false because `entry.settled` was already set by this method's
+   * settle — the late outcome is dropped. No duplicate wire frame.
    *
    * Edge case: account/chatgptAuthTokens/refresh's defaultReject
    * throws JsonRpcResponseError(-32601). settleOnce as `reject` so
