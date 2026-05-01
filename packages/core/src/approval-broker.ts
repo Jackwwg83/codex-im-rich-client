@@ -265,29 +265,41 @@ function createPendingEntry(
 }
 
 /**
+ * Field-wise structural equality for two non-null ApprovalActor values.
+ * Codex T7-T12 review P1 fix: replaces JSON.stringify-based equality
+ * (key-order-sensitive — `{platform, userId}` vs `{userId, platform}`
+ * would JSON-stringify differently and produce a false conflict).
+ */
+function actorEqual(a: NonNullable<ApprovalActor>, b: NonNullable<ApprovalActor>): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "system" && b.kind === "system") {
+    return a.reason === b.reason;
+  }
+  if (a.kind === "im" && b.kind === "im") {
+    return (
+      a.platform === b.platform &&
+      a.userId === b.userId &&
+      (a.chatId ?? null) === (b.chatId ?? null)
+    );
+  }
+  return false;
+}
+
+/**
  * Deep structural equality for ActorPolicy (T9 / D19). Used by
  * `bindActorPolicy` to decide whether a re-bind is idempotent (same
  * policy → ok) or conflicting (different policy → conflicting_policy).
- *
- * Compares:
- *   - allowedActors element-wise (order matters; daemon wire-up is
- *     expected to produce stable ordering — typically a singleton).
- *   - target field-by-field.
- *   - callbackNonce as a string.
- *
- * Falls back to JSON.stringify on the actor + target slots so we don't
- * have to handle the optional fields (chatId / threadKey / topicId)
- * branch by branch. The policy shape is plain data with no functions or
- * cyclic refs, so JSON-equality is sound.
+ * Field-wise so key insertion order doesn't matter.
  */
 function policiesEqual(a: ActorPolicy, b: ActorPolicy): boolean {
   if (a.callbackNonce !== b.callbackNonce) return false;
-  if (JSON.stringify(a.target) !== JSON.stringify(b.target)) return false;
+  if (!targetEqual(a.target, b.target)) return false;
   if (a.allowedActors.length !== b.allowedActors.length) return false;
   for (let i = 0; i < a.allowedActors.length; i += 1) {
-    if (JSON.stringify(a.allowedActors[i]) !== JSON.stringify(b.allowedActors[i])) {
-      return false;
-    }
+    const ai = a.allowedActors[i];
+    const bi = b.allowedActors[i];
+    if (ai === undefined || bi === undefined) return false;
+    if (!actorEqual(ai, bi)) return false;
   }
   return true;
 }
@@ -400,10 +412,25 @@ export class ApprovalBroker {
   // after reattach the flag is cleared and the new generation starts
   // fresh.
   #transportLostFired = false;
+  // T11 / D20 / Codex T7-T12 review P2: per-broker TTL applied at
+  // PendingEntry creation. Defaults to 30 minutes per plan §1 D20.
+  // Constructor option lets tests + supervisor wiring override.
+  readonly #approvalTtlMs: number;
 
-  constructor(client: AppServerClient, opts: { audit?: AuditEmitter } = {}) {
+  constructor(
+    client: AppServerClient,
+    opts: { audit?: AuditEmitter; approvalTtlMs?: number } = {},
+  ) {
     this.#client = client;
     this.#audit = opts.audit ?? new AuditEmitter();
+    if (opts.approvalTtlMs !== undefined) {
+      if (!Number.isFinite(opts.approvalTtlMs) || opts.approvalTtlMs <= 0) {
+        throw new Error(
+          `ApprovalBroker: approvalTtlMs must be a positive finite number (got ${opts.approvalTtlMs})`,
+        );
+      }
+    }
+    this.#approvalTtlMs = opts.approvalTtlMs ?? DEFAULT_APPROVAL_TTL_MS;
     this.#table = {
       "item/commandExecution/requestApproval": {
         mode: "default-reject" as const,
@@ -652,6 +679,15 @@ export class ApprovalBroker {
     // Object.hasOwn rejects prototype-chain keys (defensive against a wire
     // frame whose method happened to match e.g. "toString").
     if (!Object.hasOwn(this.#table, m)) {
+      // Codex T7-T12 review P1: D13 enumerates `approval.unsupported_method`
+      // explicitly — emit it before throwing so audit trail records the
+      // protocol-drift event (e.g. codex 0.126 added a method we don't
+      // dispatch). The throw still propagates -32601 to codex per Pre-3.
+      this.#audit.emit({
+        kind: "approval.unsupported_method",
+        appServerRequestId: req.id,
+        metadata: { method: req.method },
+      });
       throw new JsonRpcResponseError({
         code: -32601,
         message: `unsupported method ${req.method}`,
@@ -690,7 +726,7 @@ export class ApprovalBroker {
       status: "pending",
       actor: null,
       createdAt,
-      expiresAt: new Date(createdAt.getTime() + DEFAULT_APPROVAL_TTL_MS),
+      expiresAt: new Date(createdAt.getTime() + this.#approvalTtlMs),
     };
     const entry = createPendingEntry(record, spec);
     this.#pending.set(req.id, entry);
@@ -816,7 +852,29 @@ export class ApprovalBroker {
     }
     const record = entry.record;
 
+    // Codex T7-T12 review P1: terminal-resolve branches MUST emit
+    // approval.duplicate_attempt so a second click after the entry
+    // already settled (handler-mode happy path or system-driven
+    // expire/transport-lost) leaves an audit trail. The entry's
+    // settleOnce flag is already true by the time we get here, so
+    // the wire is not double-responded — but the bookkeeping needs
+    // to reflect "user clicked, but lost the race". Mirrors the
+    // losing-settle audit semantics of #settleEntry (D21).
+    const dupAttemptAudit = (attemptedKind: AuditEventInput["kind"]): AuditEventInput => ({
+      kind: "approval.duplicate_attempt",
+      approvalId: record.id,
+      appServerRequestId: record.appServerRequestId,
+      actor: input.actor,
+      metadata: {
+        attemptedKind,
+        outcome: "lost-race",
+        source: "resolve",
+        action: input.decision.kind,
+        terminalStatus: record.status,
+      },
+    });
     if (record.status === "resolved") {
+      this.#audit.emit(dupAttemptAudit("approval.resolved"));
       const priorDecision: ApprovalDecision = record.decision ?? actionToDecision(input.decision);
       return {
         kind: "error",
@@ -824,6 +882,7 @@ export class ApprovalBroker {
       };
     }
     if (record.status === "expired") {
+      this.#audit.emit(dupAttemptAudit("approval.expired"));
       return {
         kind: "error",
         error: {
@@ -834,6 +893,7 @@ export class ApprovalBroker {
       };
     }
     if (record.status === "transport_lost") {
+      this.#audit.emit(dupAttemptAudit("approval.transport_lost"));
       return {
         kind: "error",
         error: {
@@ -1188,17 +1248,20 @@ export class ApprovalBroker {
 
   /**
    * Project an `ApprovalRecord` into a public `PendingApprovalSnapshot`.
-   * Frozen so callers can't mutate broker-internal state through the
-   * snapshot reference.
+   * Defensive copy: clones `Date` objects (so callers can't `setTime(0)`
+   * on the broker-internal `expiresAt` and subvert D20 in-resolve
+   * expiry) and `structuredClone`s `params` (so a frozen outer object
+   * doesn't leak a mutable inner reference). The outer object is frozen
+   * so `snap.expiresAt = ...` also fails. Codex T7-T12 review P0 fix.
    */
   #toSnapshot(record: ApprovalRecord): PendingApprovalSnapshot {
     return Object.freeze({
       id: record.id,
       appServerRequestId: record.appServerRequestId,
       method: record.method,
-      params: record.params,
-      createdAt: record.createdAt,
-      expiresAt: record.expiresAt,
+      params: structuredClone(record.params),
+      createdAt: new Date(record.createdAt.getTime()),
+      expiresAt: new Date(record.expiresAt.getTime()),
     });
   }
 
