@@ -285,6 +285,101 @@ describe("Supervisor skeleton (T11a Step 11a.4)", () => {
     await gen2Client?.stop();
   });
 
+  it("calls broker.reattach BEFORE client.start (codex T11a review missing-test)", async () => {
+    // The supervisor's lifecycle ordering is: transport → onClose
+    // subscribe → client construction → broker.reattach → client.start
+    // → handshake → runtime construction. If broker.reattach happened
+    // AFTER client.start, the client would already be processing
+    // server-initiated requests with no broker-installed handler
+    // (would default-reject with -32601 from AppServerClient's no-handler
+    // path, leaking through Phase 1's broker policy).
+
+    const order: string[] = [];
+
+    // Tracking broker that records when reattach is called.
+    const placeholderFake = new FakeAppServer();
+    const placeholderClient = new AppServerClient(placeholderFake.clientSide);
+    class OrderingBroker extends ApprovalBroker {
+      override reattach(newClient: AppServerClient): void {
+        order.push("broker.reattach");
+        super.reattach(newClient);
+      }
+    }
+    const broker = new OrderingBroker(placeholderClient);
+    broker.attach();
+
+    // Tracking transport that records when client.start (which calls
+    // transport.start) runs.
+    const fakeServer = new FakeAppServer();
+    const innerTransport = fakeServer.clientSide;
+    const trackedTransport: Transport = {
+      start: async () => {
+        order.push("transport.start");
+        await innerTransport.start();
+      },
+      stop: () => innerTransport.stop(),
+      send: (m) => innerTransport.send(m),
+      onMessage: (h) => innerTransport.onMessage(h),
+      onError: (h) => innerTransport.onError(h),
+      onClose: (h) => innerTransport.onClose(h),
+    };
+
+    const opts: SupervisorOptions = {
+      transportFactory: () => trackedTransport,
+      clientFactory: (t) => new AppServerClient(t),
+      runtimeFactory: (c) => new CodexRuntime(c),
+      broker,
+      performHandshake: async () => ({}),
+      audit: silentAudit(),
+    };
+
+    const sup = new Supervisor(opts);
+    await sup.start();
+
+    // The load-bearing assertion.
+    const reattachIdx = order.indexOf("broker.reattach");
+    const startIdx = order.indexOf("transport.start");
+    expect(reattachIdx).toBeGreaterThanOrEqual(0);
+    expect(startIdx).toBeGreaterThanOrEqual(0);
+    expect(reattachIdx).toBeLessThan(startIdx);
+
+    await sup.currentClientForTest()?.stop();
+    await fakeServer.stop();
+  });
+
+  it("rejects an unattached broker via reattach precondition (Codex T11a review P1 — pre-attach contract)", async () => {
+    // Documents the production contract: broker MUST be pre-attached
+    // before being passed to Supervisor. The supervisor always calls
+    // reattach() (including for generation 1), and reattach throws if
+    // attach() hasn't been called.
+    //
+    // The error message comes from ApprovalBroker.reattach itself
+    // (T9b: "broker has not been attached yet; call attach() first").
+    // SupervisorOptions.broker JSDoc + README document this contract;
+    // this test pins the runtime behavior so a future refactor can't
+    // silently relax the precondition.
+
+    const placeholderFake = new FakeAppServer();
+    const placeholderClient = new AppServerClient(placeholderFake.clientSide);
+    const unattachedBroker = new ApprovalBroker(placeholderClient);
+    // NOTE: NOT calling broker.attach() — this is the misuse pattern.
+
+    const fakeServer = new FakeAppServer();
+    const opts: SupervisorOptions = {
+      transportFactory: () => fakeServer.clientSide,
+      clientFactory: (t) => new AppServerClient(t),
+      runtimeFactory: (c) => new CodexRuntime(c),
+      broker: unattachedBroker,
+      performHandshake: async () => ({}),
+      audit: silentAudit(),
+    };
+
+    const sup = new Supervisor(opts);
+    await expect(sup.start()).rejects.toThrow(/has not been attached yet/);
+
+    await fakeServer.stop();
+  });
+
   it("no zombie listeners — prior transport's onClose unsub fires before new transport is in place (Step 11a.4 test #4)", async () => {
     // Use a hand-rolled Transport whose onClose subscription returns
     // a tracked unsub. Drive two #spawnFresh calls; assert the gen-1

@@ -28,6 +28,37 @@ the supervisor wraps the lifecycle from outside.
   guarantees `reattach` is race-free with respect to in-flight
   approvals.
 
+## Production wiring contract (Codex T11a review P1)
+
+`SupervisorOptions.broker` MUST be pre-attached. The supervisor
+calls `broker.reattach(client)` for every generation (including the
+first), and `reattach` requires `attach()` to have been called first.
+
+Recommended setup:
+
+```ts
+const placeholderTransport = new StdioTransport({...});
+const placeholderClient = new AppServerClient(placeholderTransport);
+const broker = new ApprovalBroker(placeholderClient);
+broker.attach();  // satisfies reattach's precondition
+
+const supervisor = new Supervisor({
+  transportFactory: () => new StdioTransport({...}),
+  clientFactory: (t) => new AppServerClient(t),
+  runtimeFactory: (c) => new CodexRuntime(c),
+  broker,                       // <-- pre-attached
+  performHandshake: (c) => performInitializeHandshake(c, clientInfo),
+  audit: { emit: ..., emitFatal: ... },
+});
+await supervisor.start();  // first-generation reattach swaps the
+                            // placeholder for the real client
+```
+
+The placeholder client never sees a `start()` call, so it doesn't
+spawn anything; it's just a target for the broker's initial `attach()`
+to satisfy the `reattach` precondition. After supervisor.start() it
+becomes unreachable and is GC'd; the WeakSet's entry vanishes.
+
 ## What is NOT in this package
 
 - No IM adapter wiring (Phase 2+).

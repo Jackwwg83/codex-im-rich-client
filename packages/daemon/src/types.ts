@@ -66,7 +66,36 @@ export interface SupervisorOptions {
    *  the runtime is built per spawn. */
   runtimeFactory: (client: AppServerClient) => CodexRuntime;
   /** Single ApprovalBroker instance — survives quartet swaps. Each
-   *  spawn calls `broker.reattach(client)` (T9b B-clean lifecycle). */
+   *  spawn calls `broker.reattach(client)` (T9b B-clean lifecycle).
+   *
+   *  **PRODUCTION CONTRACT — must be pre-attached.** The supervisor
+   *  always calls `broker.reattach(client)` (including for generation
+   *  1) because the per-spawn flow doesn't distinguish "first" from
+   *  "Nth". `broker.reattach` requires that `broker.attach()` has
+   *  already been called against some prior client (T9b throws
+   *  "broker has not been attached yet" otherwise). Callers MUST
+   *  therefore construct the broker AND call `attach()` before
+   *  passing the broker to the supervisor.
+   *
+   *  Recommended production pattern:
+   *  ```ts
+   *  const placeholderTransport = new StdioTransport({...});  // not started
+   *  const placeholderClient = new AppServerClient(placeholderTransport);
+   *  const broker = new ApprovalBroker(placeholderClient);
+   *  broker.attach();  // satisfies the reattach precondition
+   *  const supervisor = new Supervisor({ ..., broker });
+   *  await supervisor.start();  // first-generation reattach swaps off
+   *                              // the placeholder onto the real client
+   *  ```
+   *
+   *  Why this contract instead of "if first generation, attach else
+   *  reattach": ApprovalBroker.attach() can only attach to the broker's
+   *  constructor-time client. The supervisor doesn't construct the
+   *  client (clientFactory does). Forcing pre-attach keeps the
+   *  client-creation policy in the caller's hands and avoids leaking
+   *  generation-tracking state into the supervisor. (Codex T11a
+   *  review P1.)
+   */
   broker: ApprovalBroker;
   /** Initialize handshake hook. Runs after `client.start()`. */
   performHandshake: (client: AppServerClient) => Promise<unknown>;

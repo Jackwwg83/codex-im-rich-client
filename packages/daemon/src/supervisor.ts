@@ -3,13 +3,16 @@
 // Owns the codex App Server subprocess lifecycle. On every spawn:
 //   1. transportFactory() yields a fresh Transport.
 //   2. SUBSCRIBE to transport.onClose BEFORE constructing AppServerClient.
-//      Codex outside-voice B7: this ordering matters because the client
-//      construction itself subscribes to transport.onClose internally;
-//      if the supervisor's subscription runs after client construction,
-//      a synchronous close-during-construction is observable to the
-//      client (which then tears itself down) but invisible to the
-//      supervisor (which would never spawn a replacement). Subscribing
-//      first eliminates that race window.
+//      Codex outside-voice B7: this ordering matters because the
+//      client's later `start()` call subscribes to transport.onClose
+//      internally (see packages/app-server-client/src/client.ts:106).
+//      If the supervisor doesn't subscribe first, a transport that
+//      synchronously fires onClose between transportFactory's return
+//      and client.start() (rare but possible with custom transports
+//      that have pre-existing close state) would be observable to the
+//      client (which tears itself down) but invisible to the supervisor
+//      (which would never spawn a replacement). Subscribing first
+//      eliminates that race window.
 //   3. clientFactory(transport) constructs AppServerClient.
 //   4. broker.reattach(newClient) — T9b B-clean keeps in-flight approval
 //      state coherent across the quartet swap.
@@ -61,6 +64,10 @@ export class Supervisor {
   // assignment.
   #currentTransport: Transport | null = null;
   #currentClient: AppServerClient | null = null;
+  // T11b / Phase 2 will consume #currentRuntime (e.g. exposing
+  // runtime.events to a host adapter, propagating turn_failed events
+  // on transport-loss). T11a sets it but doesn't read it; intentional
+  // placeholder rather than dead code.
   #currentRuntime: CodexRuntime | null = null;
   #currentCloseUnsub: (() => void) | null = null;
 
