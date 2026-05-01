@@ -30,3 +30,9 @@ export type {
 export { truncate } from "./truncate.js";
 export type { TruncateOptions } from "./truncate.js";
 export { redact } from "./redact.js";
+
+// T16: per-kind ApprovalCard projection + RichBlock wrapper. Switches on
+// ApprovalRequestKind from core.classifyApprovalRequest (NOT on protocol
+// method strings — F1 boundary). C-P1 unknown-defensive decline-only card.
+export { projectApprovalCard, projectAsRichBlock } from "./project-approval.js";
+export type { ProjectApprovalOptions } from "./project-approval.js";

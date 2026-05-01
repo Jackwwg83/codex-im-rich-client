@@ -30,6 +30,7 @@ describe("RichBlock discriminated union (T14)", () => {
       {
         type: "approval",
         card: {
+          schemaVersion: "approval-card.v1",
           kind: "file_change",
           approvalId: "approval-1",
           summary: "Apply patch to src/foo.ts",
@@ -60,8 +61,9 @@ describe("RichBlock discriminated union (T14)", () => {
 });
 
 describe("ApprovalCard shape (T14 / C-P1)", () => {
-  it("includes kind, approvalId, summary, target, actions, status, createdAt", () => {
+  it("includes schemaVersion, kind, approvalId, summary, target, actions, status, createdAt", () => {
     const card: ApprovalCard = {
+      schemaVersion: "approval-card.v1",
       kind: "command_execution",
       approvalId: "approval-7",
       summary: "Run `ls -la /tmp`",
@@ -76,11 +78,13 @@ describe("ApprovalCard shape (T14 / C-P1)", () => {
       createdAt: new Date(),
     };
     expect(card.kind).toBe("command_execution");
+    expect(card.schemaVersion).toBe("approval-card.v1");
     expect(card.actions.length).toBe(4);
   });
 
   it("decline-only card per C-P1 (renderer-defensive unknown kind)", () => {
     const card: ApprovalCard = {
+      schemaVersion: "approval-card.v1",
       kind: "unknown",
       approvalId: "approval-99",
       summary: "Phase 2 cannot resolve unknown approval kinds; default-decline.",

@@ -67,6 +67,12 @@ export type ApprovalTarget = {
  * mapper would reject. C-P1 unknown-kind cards carry only `[{kind:"decline"}]`.
  */
 export type ApprovalCard = {
+  /**
+   * Schema version. Phase 2 = "approval-card.v1"; bumped when the
+   * card shape changes in a breaking way so adapters can refuse to
+   * render unfamiliar versions instead of silently mis-displaying.
+   */
+  readonly schemaVersion: "approval-card.v1";
   readonly kind: ApprovalRequestKind;
   readonly approvalId: string;
   readonly summary: string;
