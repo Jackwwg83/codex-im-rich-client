@@ -2149,6 +2149,64 @@ synthetic turn_failed event. Outside-voice review captured."
 
 ---
 
+### Tag gate (added 2026-05-01 after integrated codex review NO-GO)
+
+`phase-1-runtime-complete` cannot be created until ALL of these are
+true. Codex outside-voice integrated review (run after T12 docs
+landed) returned NO-GO with two blockers + medium/low concerns.
+
+1. **Supervisor spawn-failure cleanup tests pass.** When
+   `client.start()` / `performHandshake` / `runtimeFactory` throws
+   inside `#spawnFresh`, the supervisor must:
+   - stop the half-started client/transport
+   - detach the failed-generation onClose subscription
+   - cancel any pending re-spawn timer
+   - set `#halted = true`
+   - emit `audit.emitFatal`
+   - prevent any later onClose from the half-started generation from
+     scheduling another respawn
+   Both initial `start()` failure and recovery-loop `#spawnFresh`
+   failure paths must be covered by tests.
+
+2. **`smoke-real-turn` uses `CodexRuntime` wrappers** instead of raw
+   `client.request("thread/start", ...)` / `client.request("turn/start",
+   ...)`. T8's `REQUEST_METHODS` table is the only home for ClientRequest
+   method literals; the smoke path was a pre-T8 holdover that bypassed
+   the boundary.
+
+3. **Method-literal policy and guard scope are documented.** CLAUDE.md
+   carries the policy block (allowed exceptions: docs/fixtures/scripts/
+   audit references; disallowed: production `src` outside the approved
+   wrapper layer). Phase 1→2 handoff cross-references it.
+
+4. **Phase 2 handoff accurately states `ApprovalBroker.resolve()` is
+   still a stub.** Earlier handoff wording overstated what Phase 1
+   exposed; Phase 2 may need to extend the broker's public surface
+   (expose pending approvals, design IM rendering / decision-mapping)
+   not just implement wire-mapping.
+
+5. **README quick-start metadata reflects current Phase 1 state.**
+   Package count + test count + root version match what the workspace
+   actually has at HEAD.
+
+After ALL five conditions hold + ci-check 8/8 green + a re-run codex
+outside-voice review returns GO, then `git tag phase-1-runtime-complete`.
+
+#### Phase 2 risk recorded (NOT a Phase 1 blocker)
+
+`runtime-send` (T10 CLI) currently builds the `{client, broker, runtime}`
+quartet directly and does NOT exercise `Supervisor`. Phase 2 should
+either:
+- route a production smoke path through Supervisor, OR
+- add a dedicated integration test that enforces the pre-attached
+  broker contract end-to-end.
+
+This is the first real consumer of Supervisor; the contract is documented
+in `SupervisorOptions.broker` JSDoc but not type-enforced. Until Phase
+2 wires it, the broker pre-attach contract has no production callsite.
+
+---
+
 ## 6. Verification commands
 
 After **every** task (mandatory for subagents before claiming done — P1-4):

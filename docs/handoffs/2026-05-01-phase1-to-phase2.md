@@ -111,11 +111,53 @@ extend/build on Phase 1 stack：
 
 ## Phase 1 已埋点的 Phase 2 hooks
 
-- `ApprovalBroker.registerHandler<M>(method, handler)` — Phase 2 的 IM approval 流通过这里接入。Handler 收到 typed `req` (params 是 generated v2 type)，返回 typed response。Phase 1 的 default-reject 是 fallback，IM 接入后由 handler 处理。
-- `ApprovalBroker.resolve(approvalId, decision, actor)` — 目前 stub throw "Phase 2"。Phase 2 实现 wire-mapping (decision → per-method response shape per generated `*Response.ts`)。
-- `ApprovalRecord.actor: ApprovalActor` — Phase 2 callers pass `{kind: "im", platform: "telegram", userId, chatId?}` instead of `null`. T5 type widening was forward-compat for exactly this.
-- `Supervisor` constructor takes a `runtimeFactory` — Phase 2 wraps with rendering hooks (or accepts a pre-built runtime).
-- `runtime.events.events()` — single AsyncIterable consumer per generation. Phase 2's renderer iterates this; T11b's `endOfStream()` is called by the supervisor on transport-close.
+Phase 1 完成的是 **lifecycle/dispatch/pending-state/timeout/transport-loss
+foundations**，不是 full user approval resolution。Phase 2 接入 IM 时需要
+设计/实现额外的 broker 公共接口（暴露 pending approvals 给 IM 渲染层、
+把 user decision 映射成 per-method 的 wire response shape）。
+
+- `ApprovalBroker.registerHandler<M>(method, handler)` — Phase 2 的 IM
+  approval 流通过这里接入。Handler 收到 typed `req` (params 是 generated
+  v2 type)，返回 typed response。Phase 1 的 default-reject 是 fallback；
+  IM 接入后由 handler 决定每条 approval 的处理。**注意：Phase 2 还需要
+  一个机制让 IM 渲染层"看到"pending approvals 并触发 user-side resolution
+  — registerHandler 本身只是注册回调，不解决 pending state observability。**
+- `ApprovalBroker.resolve(approvalId, decision, actor)` — **目前是 throwing
+  stub** (`Error("ApprovalBroker.resolve: deferred to Phase 2 IM
+  integration ...")`). Phase 2 必须设计并实现：
+    1. The lookup-by-approvalId path (currently no callers; T9b's
+       `#pending` map is keyed by `appServerRequestId`, not the
+       `approval-${id}` synthetic id).
+    2. The `ApprovalDecision → per-method response shape` mapping
+       (per plan §1750, v2 responses are NOT all `{decision: ReviewDecision}`;
+       the mapper must be method-aware).
+    3. The "expose pending approvals to the IM rendering surface" API
+       — `_pendingRecordsForTest()` is test-only; Phase 2 needs a
+       proper public read API or callback hook.
+- `ApprovalRecord.actor: ApprovalActor` — Phase 2 callers pass
+  `{kind: "im", platform: "telegram", userId, chatId?}` instead of
+  `null`. T5 type widening was forward-compat for exactly this.
+- `Supervisor` constructor takes a `runtimeFactory` — Phase 2 wraps
+  with rendering hooks (or accepts a pre-built runtime).
+- `runtime.events.events()` — single AsyncIterable consumer per
+  generation. Phase 2's renderer iterates this; T11b's `endOfStream()`
+  is called by the supervisor on transport-close.
+
+### Phase 2 integration risk: runtime-send vs Supervisor
+
+`packages/cli/src/runtime-send.ts` (T10) currently builds the
+`{client, broker, runtime}` quartet directly and does NOT exercise
+`Supervisor`. The pre-attached-broker contract for Supervisor is
+documented in `SupervisorOptions.broker` JSDoc but not type-enforced.
+Phase 2 should either:
+
+- route a production smoke path through Supervisor, OR
+- add a dedicated integration test that enforces the pre-attached-
+  broker contract end-to-end.
+
+Until Phase 2 wires it, the broker pre-attach contract has no
+production callsite. This is recorded as M3 from the Phase 1 integrated
+review — Phase 2 risk, not a Phase 1 blocker.
 
 ---
 

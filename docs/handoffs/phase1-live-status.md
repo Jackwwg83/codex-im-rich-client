@@ -1,18 +1,19 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-01 — **PHASE 1 COMPLETE.** T11a + T11b + T12 all landed + reviewed. Codex outside-voice review on T11a (APPROVE WITH CHANGES, 1 P1 resolved) + T11b (APPROVE WITH CHANGES, 2 P1 resolved). Phase 1→2 handoff at `docs/handoffs/2026-05-01-phase1-to-phase2.md`. Test count 315/315; all 8 ci-check gates green. Tag candidate: `phase-1-runtime-complete`.
+> **Last updated:** 2026-05-01 — **TAG GATE FIX IN PROGRESS.** Codex integrated review returned NO-GO on `phase-1-runtime-complete`: 2 blockers (Supervisor spawn-failure cleanup hole, method-literal boundary not holding end-to-end) + M4 handoff overstating + L5 README staleness. User approved fix scope (per plan §"Tag gate"); fix passes are docs-first / code-second / metadata-third. Test count 315/315 still green at HEAD `814550d`.
 
 ---
 
 ## 1. Current phase / task
 
-- **Phase:** Phase 1 — Codex Runtime Core ✅ **COMPLETE**
-- **Active task:** none. Phase 1 is closed; T12 docs landed in this commit chain.
-- **Next phase:** Phase 2 — Telegram MVP. Entry: `docs/handoffs/2026-05-01-phase1-to-phase2.md`.
-- **Last completed task:** **T12** (Phase 1 docs + roadmap + handoff). Updated `09-ROADMAP.md` Phase 1 section to ✅ DONE with per-task commit refs; created `docs/handoffs/2026-05-01-phase1-to-phase2.md`; updated root `README.md` with Phase 1 status block; updated `TODOS.md` to move Phase 1 backlog to Done.
+- **Phase:** Phase 1 — Codex Runtime Core (T1-T12 committed; tag GATED on integrated-review fixes)
+- **Active task:** **Phase 1 tag-gate fix pass.** Codex integrated review returned NO-GO; fixing 2 blockers + M4 + L5 inline.
+- **Tag candidate:** `phase-1-runtime-complete` — applied AFTER all tag-gate fixes land + re-run codex review returns GO.
+- **Next phase:** Phase 2 — Telegram MVP. Entry: `docs/handoffs/2026-05-01-phase1-to-phase2.md` (already updated to soften M4 wording + record M3 risk).
+- **Last completed task:** **T12** (Phase 1 docs + roadmap + handoff). Tag-gate fix pass is post-T12.
 - **Prior tasks (full Phase 1 chain):** Pre-1 → Pre-2 → T1 → T2 → T3 → T4 → T4.5 → T5 → T6 → T7a → T7b → T8 → Pre-3 → T9a → T9b code → T9b blocker-fix (B-clean) → T10 → T11a → T11b → T12.
-- **Autonomous mode:** off. Phase 1 is hand-off ready.
+- **Autonomous mode:** off. Hand-fixing tag-gate concerns under user staged-execution discipline.
 - **Rejected alternatives** (do not relitigate): Option A (Pre-4 `AppServerClient` idempotent respond/reject) recorded as future backlog in `TODOS.md`, NOT implemented. Option C (Phase 1 punt) declined.
 
 ## 2. Branch / HEAD
@@ -44,16 +45,15 @@
 
 ## 4. Currently doing
 
-**Nothing in flight.** T10 is fully landed with codex APPROVE-WITH-CHANGES (all P1 resolved). The next task is T11a but it's a hard-stop — supervisor lifecycle correctness is too risky for unattended autonomous work.
+**Tag-gate fix pass.** Codex integrated review on Phase 1 returned NO-GO. User decided 2026-05-01 to fix both blockers + M4 + L5 inline before tagging. Sequence:
 
-T10 arc summary (this session):
-- Step 10.1 + 10.2 + 10.3 + 10.4 (`107af4a`) — failing test → implementation → CLI subcommand wiring → README → ci-check 8/8 green.
-- Codex outside-voice review **APPROVE WITH CHANGES** (0 P0, 2 P1, 2 P2, several missing tests).
-- Review fixes (`64c397f`) — both P1s (forbidden method literal in JSDoc + pino-to-stderr) + 1 P2 rename + 12 missing tests.
-- Review doc (`f070a3d`).
-- Live-status sync (this commit).
+1. Step 1 (this commit) — docs-first: method-literal policy in CLAUDE.md + plan tag-gate § + handoff M4 wording + Phase 2 risk recording for M3.
+2. Step 2 — Blocker 2: Supervisor spawn-failure cleanup. `#spawnFresh`'s post-reattach steps wrap in try/catch; on failure, stop half-started client/transport, detach close subscription, set `#halted = true`, audit fatal. Tests for both initial-`start()` failure and recovery-spawn failure.
+3. Step 3 — Blocker 1: refactor `packages/cli/src/smoke-real-turn.ts` to use `CodexRuntime.threadStart` / `CodexRuntime.turnStart` instead of raw `client.request("thread/start"/"turn/start", ...)`. Method-literal boundary now holds end-to-end in production src.
+4. Step 4 — M4 (handoff softening, in this commit) + L5 (README quick-start metadata refresh in a later docs commit).
+5. Step 5 — re-run codex outside-voice integrated review. If GO, apply tag.
 
-Phase 1 status: T1-T10 + Pre-1/2/3 all complete. T11a/T11b/T12 await user approval. Test count 231 → 299.
+T1-T12 are committed. This is purely tag-gate hardening. Test count stays 315/315 except Blocker 2 fix will add tests.
 
 ## 5. Next exact action
 
