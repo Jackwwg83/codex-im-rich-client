@@ -41,9 +41,9 @@
 - 协议决策证据：`docs/phase-0/host-environment.md`、`docs/phase-0/codex-gen-diff.md`
 - Codex outside-voice review 结果：见 plan v2 Decision Log + commit `dacbb29` `719a859` `380a988`
 
-## Phase 1：Codex Runtime Core
+## Phase 1：Codex Runtime Core ✅ 完成 2026-05-01
 
-> **入口文档**：`docs/handoffs/2026-04-30-phase0-to-phase1.md` 是 Phase 1 启动的 single source of truth。新 session 先读它，再读本节。
+> **入口文档**：`docs/handoffs/2026-04-30-phase0-to-phase1.md` 是 Phase 1 启动的 single source of truth。Phase 1→2 交接见 `docs/handoffs/2026-05-01-phase1-to-phase2.md`。
 
 ### 目标
 
@@ -53,29 +53,51 @@
 
 #### Phase 0 已完成的底层（Phase 1 在其上加层）
 
-- [x] ~~AppServerClient 完整 request/notification/server request~~ — Phase 0 commits `2518692` `440467b`；Phase 1 加 typed wrappers (TODOS `P1.1`) + supervisor 重建 client (TODOS `P1.4`)
-- [x] ~~FakeAppServer testkit + replayFixture~~ — commit `380a988` + `022c075` (含 `emitServerRequest.timeoutMs`)；Phase 1 扩展 ApprovalBroker round-trip 测试 + 真实 fixture 抓取 (TODOS `P1.6`)
-- [x] ~~CLI `codex-im smoke app-server` / `smoke real-turn`~~ — commit `72d328f` + `fa05a5e`；Phase 1 新增 `codex-im runtime send`（手动发 turn 用）+ `--capture` flag 用于 fixture 抓取
+- [x] ~~AppServerClient 完整 request/notification/server request~~ — Phase 0 commits `2518692` `440467b`；Phase 1 加 typed wrappers (`f59205f` T8) + supervisor 重建 client (`e950613` T11a / `43223e8` T11b)
+- [x] ~~FakeAppServer testkit + replayFixture~~ — commit `380a988` + `022c075` (含 `emitServerRequest.timeoutMs`)；Phase 1 扩展 ApprovalBroker round-trip 测试 (`e8d5c1a` T9a) + 真实 fixture 抓取 (`a4187fc` T4 + `8f0603d` T4.5)
+- [x] ~~CLI `codex-im smoke app-server` / `smoke real-turn`~~ — commit `72d328f` + `fa05a5e`；Phase 1 新增 `codex-im runtime send` (`107af4a` T10) + `--capture` flag 用于 fixture 抓取
 
-#### Phase 1 新建
+#### Phase 1 新建（all done）
 
-- [ ] **`CodexRuntime` 状态机** + typed request wrappers over `client.request<R>(method, params)` — TODOS `P1.1`
-- [ ] **`EventNormalizer`** ordered async iterator + terminal-state recognition + unknown-event fallthrough — TODOS `P1.3`
-- [ ] **`ApprovalBroker`** 拥有 single server-request handler，**内部按 method dispatch**，method 名只能从生成 `ServerRequest.ts` union 读，**禁止硬编码字面量**（05-PROTOCOL §4 强约束）— TODOS `P1.2`
-- [ ] **Daemon supervisor** 实施 ONE-SHOT lifecycle：codex 子进程退出后构造 NEW `AppServerClient`（不复用），重跑 `performInitializeHandshake`，重 attach 处理器 — TODOS `P1.4`
-- [ ] **`categorizeJsonRpcError(err)` helper** 区分 -32600 重载（unknown method / invalid params / invalid request） + 文档化 malformed JSON 走 stderr 不走 JSON-RPC error — TODOS `P1.5`
-- [ ] **richer wire fixtures** 替换 Phase 0 的 `harmless-turn-event-stream.jsonl` placeholder（Phase 1 用富 prompt 重抓，含 server-initiated approval request）— TODOS `P1.6`
+- [x] ~~**`CodexRuntime` typed wrappers** over `client.request<R>(method, params)`~~ — `f59205f` T8 + `585235e` review fixes
+- [x] ~~**`EventNormalizer`** ordered async iterator + terminal-state recognition + unknown-event fallthrough~~ — `649d631` T7a + `040b861` T7b-1 + `c4239c7` T7b-2 + `85cd22a` + `908d640` review fixes
+- [x] ~~**`ApprovalBroker`** single server-request handler + 内部 method dispatch~~ — `f274aae` T9a skeleton + `e8d5c1a` per-method dispatch + `7a05598` coverage + `7fe48c6` review fix; `1ecb394` T9b reattach + `4798c02` timeout/throw + `decb570` D6 transport-loss + `bf97a49` grep guard + `e814880` B-clean blocker fix + `429fc2c` review fix
+- [x] ~~**Daemon supervisor** ONE-SHOT lifecycle~~ — `e950613` T11a skeleton + `185b5e8` review fix; `43223e8` T11b close-handling edges + `a4e1bc4` review fix
+- [x] ~~**`categorizeJsonRpcError(err)` helper**~~ — Phase 1 T1 commits (early on this branch)
+- [x] ~~**richer wire fixtures**~~ — `a4187fc` T4 captured + `8f0603d` T4.5 acceptance gate ensures any future bump preserves the capture
+
+#### Pre-prerequisites (mid-Phase-1 retrofits)
+
+- [x] ~~Pre-1: Node 22→24 bump~~ — landed before Phase 1 implementation (Codex outside-voice triggered: Node 20 EOL 2026-04-30)
+- [x] ~~Pre-2: `@codex-im/protocol` facade expansion~~ — landed before Phase 1 (Codex blocker B3)
+- [x] ~~Pre-3: `AppServerClient` JsonRpcResponseError propagation~~ — `c96d36d` docs + `44e2623` code (mid-Phase-1; T9a's "method not in dispatch table" → -32601 needs the catch-arm extension)
 
 ### 验收
 
-- [x] ~~单元测试覆盖 request correlation~~ — Phase 0 已覆盖（`client.test.ts` + `client-timeout` + `client-default-reject` + `client-transport-close` + `client-codex-final-review` 共 5 个 test 文件）
-- [x] ~~unknown event 不崩溃~~ — Phase 0 已覆盖
-- [ ] **Phase 1**: fake server 能模拟 approval round-trip（基于 Phase 0 `FakeAppServer.emitServerRequest`）
-- [ ] **Phase 1**: `EventNormalizer` 单测覆盖所有相关 `ServerNotification` union arm
-- [ ] **Phase 1**: `ApprovalBroker` 单测覆盖每个真实 server request method（不是 placeholder）
-- [ ] **Phase 1**: `categorizeJsonRpcError` 单测覆盖 `unknown variant` / `missing field` / `invalid type` / `unknown field` 关键字 + 默认 fallthrough
-- [ ] **Phase 1**: richer wire fixture replay 进 contract test
-- [ ] **Phase 1**: `smoke:real-turn` 用 richer prompt 跑通（不光是 "Reply OK"）
+- [x] ~~单元测试覆盖 request correlation~~ — Phase 0 已覆盖
+- [x] ~~unknown event 不崩溃~~ — Phase 0 + Phase 1 EventNormalizer reinforces (`unknown` arm in `CodexRichEvent` discriminated union)
+- [x] ~~**Phase 1**: fake server 能模拟 approval round-trip~~ — `e8d5c1a` 9 per-method dispatch tests + `decb570` 6 pending-lifecycle tests
+- [x] ~~**Phase 1**: `EventNormalizer` 单测覆盖所有相关 `ServerNotification` union arm~~ — T7a/T7b coverage + grep guard ensures method literals stay in packages/codex-runtime/
+- [x] ~~**Phase 1**: `ApprovalBroker` 单测覆盖每个真实 server request method~~ — 9 happy-path + 9 default-reject + 2 dispatch-coverage + 4 reattach + 4 timeout/throw + 6 pending-lifecycle = 34+ broker tests
+- [x] ~~**Phase 1**: `categorizeJsonRpcError` 单测覆盖 4 个关键字 + 默认 fallthrough~~ — T1 commit
+- [x] ~~**Phase 1**: richer wire fixture replay 进 contract test~~ — T4 / T4.5 + dispatch test replays the captured fileChange request
+- [x] ~~**Phase 1**: `smoke:real-turn` 用 richer prompt 跑通~~ — `--prompt-file packages/cli/src/prompts/richer-turn.txt --cwd /tmp/codex-fixture-spike` flow exercised in T4
+
+### Phase 1 验收快照
+
+- **Tag candidate:** `phase-1-runtime-complete` (to apply after this commit)
+- **Branch:** `phase-1-runtime`
+- **Test count:** 315 / 315 passing
+- **Gates:** `bash scripts/ci-check.sh` 8/8 green
+- **Codex outside-voice reviews captured (one per task):** docs/phase-1/codex-review-{t5,t6,t7b,t8,t9a,t9b,t9b-blocker-fix,t10,t11a,t11b}.md — 10 review docs total. T9b's blocker-fix arc included a B-clean lifecycle redesign of ApprovalBroker after the first review found 2 blockers; the redesign is the load-bearing correctness work for Phase 1.
+- **Plan-amendment retrofit count:** 3 mid-phase prerequisites (Pre-1 Node 24, Pre-2 protocol facade, Pre-3 AppServerClient JsonRpcResponseError) + 1 mid-phase blocker fix (T9b broker completion race). Each was triggered by a codex review finding and recorded in plan + TODOS.
+
+### Phase 1 后续 deferred items（recorded in TODOS.md backlog）
+
+- AppServerClient idempotent respond/reject (Pre-4-eligible defensive guardrail; declined as primary fix for T9b blocker per user 2026-05-01).
+- T9b broker prune sweep for terminal records (memory hygiene under prolonged sessions).
+- T11b synthetic per-pending-turn `turn_failed` events on transport-loss (T9b's `endOfStream` is the minimum-viable Phase 1 contract; per-turn synthesis is Phase 2 IM adapter scope).
+- T11b grep-guard catches untracked files (currently uses `git grep` which only sees tracked content; bug discovered during T10 review).
 
 ### Phase 1 禁止事项（沿用 CLAUDE.md 红线）
 

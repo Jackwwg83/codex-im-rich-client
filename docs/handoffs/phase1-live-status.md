@@ -1,17 +1,18 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-01 — **T10 complete.** `codex-im runtime send` CLI + codex review **APPROVE WITH CHANGES** (0 P0, 2 P1 — both fixed inline). HEAD `f070a3d`. Test count 299/299; all 8 ci-check gates green. **STOPPED at T11a hard-stop boundary** — supervisor work needs explicit user approval (plan §397: "lead session lifecycle correctness critical").
+> **Last updated:** 2026-05-01 — **PHASE 1 COMPLETE.** T11a + T11b + T12 all landed + reviewed. Codex outside-voice review on T11a (APPROVE WITH CHANGES, 1 P1 resolved) + T11b (APPROVE WITH CHANGES, 2 P1 resolved). Phase 1→2 handoff at `docs/handoffs/2026-05-01-phase1-to-phase2.md`. Test count 315/315; all 8 ci-check gates green. Tag candidate: `phase-1-runtime-complete`.
 
 ---
 
 ## 1. Current phase / task
 
-- **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **STOPPED at T11a hard-stop boundary.** T11a (Daemon Supervisor skeleton, plan §1975) is explicitly marked "lead session lifecycle correctness critical" per plan §397; needs user approval before any autonomous run touches it.
-- **Last completed task:** **T10** (`codex-im runtime send` CLI per plan §1934). 2 commits (`107af4a` initial + `64c397f` codex review fixes) + review doc `f070a3d`. Codex outside-voice review verdict: **APPROVE WITH CHANGES** (0 P0, 2 P1, 2 P2). All P1 + missing-tests resolved inline.
-- **Prior tasks:** T9b (broker edges + B-clean lifecycle fix + reviews), T9a, Pre-3, T1-T8 (see §3).
-- **Autonomous mode:** **HALTED at design-decision gate.** No ScheduleWakeup. Resuming for T11a/T11b/T12 needs an explicit user "go".
+- **Phase:** Phase 1 — Codex Runtime Core ✅ **COMPLETE**
+- **Active task:** none. Phase 1 is closed; T12 docs landed in this commit chain.
+- **Next phase:** Phase 2 — Telegram MVP. Entry: `docs/handoffs/2026-05-01-phase1-to-phase2.md`.
+- **Last completed task:** **T12** (Phase 1 docs + roadmap + handoff). Updated `09-ROADMAP.md` Phase 1 section to ✅ DONE with per-task commit refs; created `docs/handoffs/2026-05-01-phase1-to-phase2.md`; updated root `README.md` with Phase 1 status block; updated `TODOS.md` to move Phase 1 backlog to Done.
+- **Prior tasks (full Phase 1 chain):** Pre-1 → Pre-2 → T1 → T2 → T3 → T4 → T4.5 → T5 → T6 → T7a → T7b → T8 → Pre-3 → T9a → T9b code → T9b blocker-fix (B-clean) → T10 → T11a → T11b → T12.
+- **Autonomous mode:** off. Phase 1 is hand-off ready.
 - **Rejected alternatives** (do not relitigate): Option A (Pre-4 `AppServerClient` idempotent respond/reject) recorded as future backlog in `TODOS.md`, NOT implemented. Option C (Phase 1 punt) declined.
 
 ## 2. Branch / HEAD

@@ -5,7 +5,25 @@ Phase 1 plan-eng-review should ground itself on this file.
 
 ## From Phase 0 (closed by tag `phase0-bootstrap-complete`)
 
-### Phase 1 implementation backlog (active)
+### Phase 1 implementation backlog ✅ COMPLETE 2026-05-01
+
+All P1.1-P1.6 items shipped + codex outside-voice reviewed. See
+`docs/handoffs/2026-05-01-phase1-to-phase2.md` for the close-out
+summary and Phase 2 hand-off.
+
+| Item | Commits | Review |
+|---|---|---|
+| P1.1 CodexRuntime typed wrappers | `f59205f` T8 + `585235e` review | `codex-review-t8.md` |
+| P1.3 EventNormalizer | T7a `649d631` + T7b `040b861` `c4239c7` `85cd22a` `908d640` review | `codex-review-t7b.md` |
+| P1.2 ApprovalBroker | T9a `f274aae` `e8d5c1a` `7a05598` `7fe48c6` review + T9b `1ecb394` `4798c02` `decb570` `bf97a49` `e814880` (B-clean blocker fix) `429fc2c` review | `codex-review-t9a.md` + `codex-review-t9b.md` + `codex-review-t9b-blocker-fix.md` |
+| P1.4 Daemon supervisor | T11a `e950613` `185b5e8` review + T11b `43223e8` `a4e1bc4` review | `codex-review-t11a.md` + `codex-review-t11b.md` |
+| P1.5 categorizeJsonRpcError | Phase 1 T1 (early branch commits) | inline review |
+| P1.6 richer wire fixtures | T4 `a4187fc` capture + T4.5 `8f0603d` acceptance gate | `codex-review-t8.md` (gate verified across all subsequent tasks) |
+| (mid-phase) Pre-3 AppServerClient JsonRpcResponseError | `c96d36d` docs + `44e2623` code | inline review (T9a needed it for -32601 blocker fix) |
+| (mid-phase) T9b broker B-clean blocker fix | `8a14bbe` docs + `e814880` code + `429fc2c` P2 + `f9915f7` review | `codex-review-t9b-blocker-fix.md` |
+| (T10) codex-im runtime send CLI | `107af4a` impl + `64c397f` review | `codex-review-t10.md` |
+
+### Phase 1 implementation backlog (historical reference — superseded)
 
 - [ ] **P1.1 — `CodexRuntime` typed wrappers** over `client.request<R>(method, params)`
   - **Why**: Phase 1 callers will otherwise scatter method strings and unchecked result casts across the runtime.
