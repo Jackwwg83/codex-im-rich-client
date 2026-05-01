@@ -56,6 +56,8 @@ import {
   type Transport,
   performInitializeHandshake,
 } from "@codex-im/app-server-client";
+import { CodexRuntime } from "@codex-im/codex-runtime";
+import { ApprovalBroker } from "@codex-im/core";
 import pino, { type Logger } from "pino";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -191,12 +193,26 @@ export async function runSmokeRealTurnCore(opts: RunCoreOptions): Promise<void> 
 
   const client = new AppServerClient(opts.transport, { logger: log });
 
-  let unhandledServerRequests = 0;
-  client.setServerRequestHandler((req) => {
-    unhandledServerRequests++;
-    log.warn({ method: req.method, id: req.id }, "rejecting server request");
-    throw new Error(`smoke:real-turn rejects all server requests by policy (${req.method})`);
-  });
+  // Phase 1 tag-gate fix (2026-05-01): smoke now goes through the
+  // Phase 1 stack — `ApprovalBroker` for server-request dispatch,
+  // `CodexRuntime` typed wrappers for ClientRequests. The pre-T8
+  // smoke called `setServerRequestHandler` directly with a throwing
+  // handler (-32603 default-reject) and used raw `request(method,
+  // params)` calls with hardcoded method literals; both bypassed the
+  // Phase 1 boundaries. CLAUDE.md "Method literal policy" formalizes
+  // this boundary: ClientRequest literals only in CodexRuntime's
+  // REQUEST_METHODS table, ServerRequest literals only in
+  // ApprovalBroker's DispatchTable.
+  //
+  // ApprovalBroker.attach() registers the broker as the sole owner of
+  // client.setServerRequestHandler (D7). The broker's per-method
+  // default-reject policy (Phase 1, never auto-approve) replaces the
+  // prior "throw on every server request" path. Default-rejects are
+  // shape-correct responses (e.g. {decision:"decline"} for fileChange)
+  // rather than -32603 handler errors, so codex's turn handler can
+  // continue cleanly after a denial.
+  const broker = new ApprovalBroker(client);
+  broker.attach();
 
   // Codex outside-voice T4.5 review #5: capture-the-error-then-cleanup
   // pattern. We do NOT throw from inside `finally` (biome noUnsafeFinally
@@ -216,25 +232,22 @@ export async function runSmokeRealTurnCore(opts: RunCoreOptions): Promise<void> 
     });
     log.info({ codexHome: init.codexHome }, "initialize OK");
 
-    const threadResp = await client.request<{ thread: { id: string } }>(
-      "thread/start",
-      {},
-      { timeoutMs: 15_000 },
-    );
+    const runtime = new CodexRuntime(client);
+
+    const threadResp = await runtime.threadStart({
+      experimentalRawEvents: false,
+      persistExtendedHistory: false,
+    });
     const threadId = threadResp.thread.id;
     log.info({ threadId }, "thread/start OK");
 
     const turnTerminal = waitForTurnCompleted(client, threadId, turnTimeoutMs, log);
 
     log.info("turn/start");
-    await client.request<{ turn: unknown }>(
-      "turn/start",
-      {
-        threadId,
-        input: [{ type: "text", text: opts.prompt, text_elements: [] }],
-      },
-      { timeoutMs: turnTimeoutMs },
-    );
+    await runtime.turnStart({
+      threadId,
+      input: [{ type: "text", text: opts.prompt, text_elements: [] }],
+    });
 
     await turnTerminal;
     log.info("turn reached terminal state");
@@ -260,12 +273,12 @@ export async function runSmokeRealTurnCore(opts: RunCoreOptions): Promise<void> 
   if (mainErr !== undefined) throw mainErr;
   if (cleanupErr !== undefined) throw cleanupErr;
 
-  if (unhandledServerRequests > 0) {
-    log.warn(
-      { count: unhandledServerRequests },
-      "smoke:real-turn observed server requests (default-rejected, but flagged for review)",
-    );
-  }
+  // Pre-T8 the smoke tracked unhandledServerRequests via a counter on
+  // the throwing setServerRequestHandler. With ApprovalBroker default-
+  // deny, server-initiated approvals get shape-correct denial responses
+  // (e.g. {decision:"decline"}); they're not "unhandled". The smoke's
+  // pass criterion remains "turn reaches terminal state without any
+  // approval being granted" — the broker enforces that by construction.
 }
 
 // ─── CLI entry point (env-gated, real subprocess) ───────────────────────

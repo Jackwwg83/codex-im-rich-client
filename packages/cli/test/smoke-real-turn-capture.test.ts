@@ -95,20 +95,24 @@ describe("runSmokeRealTurnCore --capture (FakeAppServer-injected)", () => {
     expect(responseCount).toBeGreaterThanOrEqual(3); // initialize, thread/start, turn/start
   });
 
-  it("default-rejects every server request via setServerRequestHandler", async () => {
+  it("ApprovalBroker default-denies every server request (Phase 1 tag-gate fix: smoke now uses broker)", async () => {
     const tmp = mkdtempSync(join(tmpdir(), "codex-im-capture-"));
     const capturePath = join(tmp, "out.jsonl");
 
     const fake = new FakeAppServer();
     fake.respondTo("thread/start", () => ({ thread: { id: "thread-test-2" } }));
 
-    // Track whether the fake's emitServerRequest got the rejection envelope
-    // we expect from runSmokeRealTurnCore's default-reject handler.
+    // Track the rejection envelope from the broker's per-method
+    // default-reject path. Pre-T8 the smoke used a throwing
+    // setServerRequestHandler that produced -32603; now ApprovalBroker
+    // returns shape-correct responses per DispatchTable. For
+    // item/commandExecution/requestApproval that's
+    // {decision: "decline"} (Phase 1 never auto-approve; T9b contract).
     let serverRequestResult: { ok: true; value: unknown } | { ok: false; error: unknown } | null =
       null;
 
     fake.respondTo("turn/start", () => {
-      // Fire a server-initiated request mid-turn; expect default-reject.
+      // Fire a server-initiated request mid-turn; expect broker default-deny.
       queueMicrotask(async () => {
         try {
           const value = await fake.emitServerRequest(
@@ -124,11 +128,11 @@ describe("runSmokeRealTurnCore --capture (FakeAppServer-injected)", () => {
           // Then complete the turn so runSmokeRealTurnCore returns.
           fake.emitNotification("turn/completed", {
             threadId: "thread-test-2",
-            turnId: "turn-test-2",
+            turn: { id: "turn-test-2", items: [], status: "completed" },
           });
         }
       });
-      return { turn: { id: "turn-test-2" } };
+      return { turn: { id: "turn-test-2", items: [], status: "inProgress" } };
     });
 
     const log = pino({ level: "silent" });
@@ -145,9 +149,12 @@ describe("runSmokeRealTurnCore --capture (FakeAppServer-injected)", () => {
 
     await fake.stop();
 
-    // The server request must NOT have succeeded — the default-reject handler
-    // throws, AppServerClient sends back -32603 (handler error/timeout).
+    // The server request resolves successfully with the broker's
+    // per-method default-reject shape. {decision:"decline"} per T9b's
+    // contract. The smoke is "rejecting" by giving codex a denied
+    // decision; codex sees a successful response with decision=decline
+    // rather than a -32603 handler error.
     expect(serverRequestResult).not.toBeNull();
-    expect(serverRequestResult).toMatchObject({ ok: false });
+    expect(serverRequestResult).toMatchObject({ ok: true, value: { decision: "decline" } });
   });
 });
