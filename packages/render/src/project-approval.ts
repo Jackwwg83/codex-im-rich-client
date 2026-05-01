@@ -34,15 +34,24 @@ import { truncate } from "./truncate.js";
 
 const SUMMARY_BYTE_LIMIT = 1024;
 
-const ALL_FOUR: readonly ApprovalAction[] = [
-  { kind: "allow_once" },
-  { kind: "allow_session" },
-  { kind: "decline" },
-  { kind: "abort" },
-];
-const DECLINE_ONLY: readonly ApprovalAction[] = [{ kind: "decline" }];
-const DECLINE_ABORT: readonly ApprovalAction[] = [{ kind: "decline" }, { kind: "abort" }];
-const NO_ACTIONS: readonly ApprovalAction[] = [];
+// Codex T13-T17 review P2 fix: freeze module-level action arrays so an
+// adapter that accidentally mutates `card.actions` (e.g. `.push(...)` to
+// inject a custom button) can't corrupt later cards. Inner action
+// objects are also frozen.
+const ALL_FOUR: readonly ApprovalAction[] = Object.freeze([
+  Object.freeze({ kind: "allow_once" as const }),
+  Object.freeze({ kind: "allow_session" as const }),
+  Object.freeze({ kind: "decline" as const }),
+  Object.freeze({ kind: "abort" as const }),
+]);
+const DECLINE_ONLY: readonly ApprovalAction[] = Object.freeze([
+  Object.freeze({ kind: "decline" as const }),
+]);
+const DECLINE_ABORT: readonly ApprovalAction[] = Object.freeze([
+  Object.freeze({ kind: "decline" as const }),
+  Object.freeze({ kind: "abort" as const }),
+]);
+const NO_ACTIONS: readonly ApprovalAction[] = Object.freeze([]);
 
 type RiskLevel = "low" | "moderate" | "high" | "critical";
 
@@ -63,7 +72,14 @@ const KIND_TABLE: Record<ApprovalRequestKind, KindSpec> = {
     actions: ALL_FOUR,
     riskLevel: "high",
     summarize: (snap) => {
-      const cmd = readString(snap.params, "commandLineExpanded") ?? "(no command supplied)";
+      // Codex T13-T17 review P1: generated v2 params field is `command`
+      // (CommandExecutionRequestApprovalParams). `commandLineExpanded`
+      // is a Phase 1 / TUI-side legacy name retained as a fallback in
+      // case a future test fixture or shim still uses it.
+      const cmd =
+        readString(snap.params, "command") ??
+        readString(snap.params, "commandLineExpanded") ??
+        "(no command supplied)";
       return `Run command: ${cmd}`;
     },
   },
@@ -158,7 +174,10 @@ export function projectApprovalCard(
     target: { riskLevel: spec.riskLevel },
     actions: spec.actions,
     status: opts.status ?? "pending",
-    createdAt: snapshot.createdAt,
+    // Codex T13-T17 review P1 fix: clone the Date so callers can't
+    // mutate `card.createdAt.setTime(0)` and corrupt the shared
+    // snapshot reference. Mirrors the broker's #toSnapshot fix.
+    createdAt: new Date(snapshot.createdAt.getTime()),
   };
 }
 

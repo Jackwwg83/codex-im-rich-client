@@ -9,7 +9,6 @@
     "test": "vitest run --project unit"
   },
   "dependencies": {
-    "@codex-im/core": "workspace:*",
-    "@codex-im/protocol": "workspace:*"
+    "@codex-im/core": "workspace:*"
   }
 }

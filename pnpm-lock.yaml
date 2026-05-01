@@ -126,9 +126,6 @@ importers:
       '@codex-im/core':
         specifier: workspace:*
         version: link:../core
-      '@codex-im/protocol':
-        specifier: workspace:*
-        version: link:../codex-protocol
 
   packages/testkit:
     dependencies:
