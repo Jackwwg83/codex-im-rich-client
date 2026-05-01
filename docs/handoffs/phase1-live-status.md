@@ -1,25 +1,25 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-01 — **T9b complete.** Blocker-fix (B-clean) applied + codex review verdict: **APPROVE** (0 P0, 0 P1, 4 P2 — 3 resolved + 1 deferred-with-justification). HEAD `f9915f7`. Test count 283/283; all 8 ci-check gates green. Autonomous loop is paused awaiting your call on T10.
+> **Last updated:** 2026-05-01 — **T10 complete.** `codex-im runtime send` CLI + codex review **APPROVE WITH CHANGES** (0 P0, 2 P1 — both fixed inline). HEAD `f070a3d`. Test count 299/299; all 8 ci-check gates green. **STOPPED at T11a hard-stop boundary** — supervisor work needs explicit user approval (plan §397: "lead session lifecycle correctness critical").
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **T10 — ready to start** (`codex-im runtime send` CLI per plan §1813). Has not started yet; awaiting user approval to resume the autonomous loop OR do it manually.
-- **Autonomous mode:** **PAUSED.** The staged T9b blocker-fix sequence (Step 0 docs → Step 1 failing tests → Step 2 implementation → Step 3 codex review APPROVE → Step 4 live-status sync) completed at HEAD `f9915f7`. ScheduleWakeup loop is not active; resuming for T10 is a single-message decision.
-- **Last completed task:** **T9b** (broker edges + B-clean lifecycle fix + reviews) — 4 T9b code commits (`1ecb394`, `4798c02`, `decb570`, `bf97a49`) + 2 codex reviews + 1 blocker-fix (`e814880` B-clean + `429fc2c` P2 follow-ups) + 2 review docs.
-- **Prior tasks:** T9a + Pre-3 + T1-T8 (see §3).
+- **Active task:** **STOPPED at T11a hard-stop boundary.** T11a (Daemon Supervisor skeleton, plan §1975) is explicitly marked "lead session lifecycle correctness critical" per plan §397; needs user approval before any autonomous run touches it.
+- **Last completed task:** **T10** (`codex-im runtime send` CLI per plan §1934). 2 commits (`107af4a` initial + `64c397f` codex review fixes) + review doc `f070a3d`. Codex outside-voice review verdict: **APPROVE WITH CHANGES** (0 P0, 2 P1, 2 P2). All P1 + missing-tests resolved inline.
+- **Prior tasks:** T9b (broker edges + B-clean lifecycle fix + reviews), T9a, Pre-3, T1-T8 (see §3).
+- **Autonomous mode:** **HALTED at design-decision gate.** No ScheduleWakeup. Resuming for T11a/T11b/T12 needs an explicit user "go".
 - **Rejected alternatives** (do not relitigate): Option A (Pre-4 `AppServerClient` idempotent respond/reject) recorded as future backlog in `TODOS.md`, NOT implemented. Option C (Phase 1 punt) declined.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-1-runtime`
-- **HEAD:** `f9915f7 docs(phase-1): codex outside-voice review report — T9b blocker-fix (APPROVE)`
-- **T9b blocker-fix arc:** `f9915f7` (review doc) ← `429fc2c` (P2 follow-ups) ← `e814880` (B-clean fix) ← `8a14bbe` (Step 0 docs) ← `0bae49b` (STOPPED status from prior review).
-- **T9b code commits (5 total):** `1ecb394`, `4798c02`, `decb570`, `bf97a49`, `e814880`, `429fc2c`.
+- **HEAD:** `f070a3d docs(phase-1): codex outside-voice review report — T10 (APPROVE WITH CHANGES, all P1 resolved)`
+- **T10 chain:** `f070a3d` (review doc) ← `64c397f` (review fixes) ← `107af4a` (initial T10) ← `4f1821d` (T9b live-status).
+- **T9b blocker-fix arc:** `f9915f7` (review doc) ← `429fc2c` (P2 follow-ups) ← `e814880` (B-clean fix) ← `8a14bbe` (Step 0 docs).
 - **Main:** `main`
 
 ## 3. Completed tasks (Phase 1)
@@ -39,45 +39,44 @@
 - **Pre-3 (`AppServerClient` `JsonRpcResponseError` propagation) — landed (docs `c96d36d` + code `44e2623`).** No outside-voice review run on Pre-3; the change is purely additive (single new branch in catch arm; existing `-32603` path bit-identical). 231/231 tests pass.
 - **T9a (`ApprovalBroker` skeleton + happy-path dispatch + dispatch coverage) — landed.** 5 code commits (`fad862d` 9a.1 failing test, `f274aae` 9a.2 broker impl, `e8d5c1a` 9a.3 per-method dispatch + default-reject, `7a05598` 9a.4+9a.5 dispatch coverage + type-only response shapes, `7fe48c6` codex review fixes) + review doc `06d9e3c`. Codex outside-voice review: 4 findings (2 medium + 2 low), all resolved inline. 254/254 tests pass.
 - **T9b (`ApprovalBroker` edges + B-clean lifecycle fix + reviews) — landed.** Steps 9b.1-9b.6 (`1ecb394`, `4798c02`, `decb570`, `bf97a49`) + first codex review found 2 blockers + 2 medium + 1 low + 1 nit; user chose **B-clean** design. Blocker fix `e814880` (B-clean: broker owns single completion promise per pending request via internal `PendingEntry` + `settleOnce` race-free guard; `reattach()` resets `#transportLostFired`). Second codex review **APPROVE** (0 P0, 0 P1, 4 P2). P2 follow-ups `429fc2c` (comment polish + 2 missing tests). Review docs `06d9e3c` (T9b first review) + `f9915f7` (blocker-fix review). 283/283 tests pass.
+- **T10 (`codex-im runtime send` CLI) — landed.** 2 code commits (`107af4a` initial + `64c397f` review fixes) + review doc `f070a3d`. `runRuntimeSendCore` exercises the full Phase 1 runtime kernel end-to-end against FakeAppServer; CLI outer (`run(argv)`) spawns real codex via StdioTransport with sandbox=read-only + ApprovalBroker default-deny. Codex outside-voice review **APPROVE WITH CHANGES**: 0 P0, 2 P1 (forbidden method literal in JSDoc + pino routed to stderr), 2 P2 — all fixed inline. 12 missing tests added (parseRuntimeSendArgs matrix + turn_failed/turn_interrupted/timeout terminal variants). 299/299 tests pass.
 
 ## 4. Currently doing
 
-**Nothing in flight.** T9b is fully landed with codex APPROVE. Awaiting your decision on T10.
+**Nothing in flight.** T10 is fully landed with codex APPROVE-WITH-CHANGES (all P1 resolved). The next task is T11a but it's a hard-stop — supervisor lifecycle correctness is too risky for unattended autonomous work.
 
-T9b blocker-fix arc summary (this morning):
-- Step 0 docs commit (`8a14bbe`) — plan + live-status + TODOS amendments.
-- Step 1 failing tests (committed together with Step 2 — TDD red-green pair).
-- Step 2 B-clean implementation (`e814880`) — `PendingEntry` + `settleOnce` + conditional delete + reattach reset.
-- Step 3 codex outside-voice review **APPROVE** with 3 P2 + 1 risky-assumption infos.
-- Step 3a P2 follow-ups (`429fc2c`) — comment polish + 2 missing tests.
-- Step 3b review doc (`f9915f7`).
-- Step 4 (this commit) — live-status sync.
+T10 arc summary (this session):
+- Step 10.1 + 10.2 + 10.3 + 10.4 (`107af4a`) — failing test → implementation → CLI subcommand wiring → README → ci-check 8/8 green.
+- Codex outside-voice review **APPROVE WITH CHANGES** (0 P0, 2 P1, 2 P2, several missing tests).
+- Review fixes (`64c397f`) — both P1s (forbidden method literal in JSDoc + pino-to-stderr) + 1 P2 rename + 12 missing tests.
+- Review doc (`f070a3d`).
+- Live-status sync (this commit).
 
-Total Phase 1 work to date: 6 wakes worth of autonomous + 1 staged session. T1-T9b + Pre-1/2/3 all complete. Test count 231 → 283.
+Phase 1 status: T1-T10 + Pre-1/2/3 all complete. T11a/T11b/T12 await user approval. Test count 231 → 299.
 
 ## 5. Next exact action
 
-**T10 Step 10.1** (per plan §1813-1816, "`codex-im runtime send` CLI"):
+**T11a Step 11a.1** (per plan §1975-1986, "Daemon Supervisor skeleton") — needs explicit user approval before starting.
 
-Plan files:
-- Create: `packages/cli/src/runtime-send.ts`
-- Modify: `packages/cli/src/index.ts`
-- Modify: `packages/cli/README.md`
-- Create: `packages/cli/test/runtime-send.test.ts`
+Plan files (T11a):
+- Create: `packages/daemon/package.json`, `tsconfig.json`, `src/index.ts`, `src/types.ts`
+- Create: `packages/daemon/src/supervisor.ts`
+- Create: `packages/daemon/test/supervisor.test.ts`
 
 Plan steps:
-- 10.1: failing test — `runtimeSend` with `InMemoryTransport` completes one turn and prints final summary.
-- 10.2: implement using `CodexRuntime` + `EventNormalizer.events()` + `ApprovalBroker.attach()`.
-- 10.3: subcommand wiring + README + safety rails (read-only sandbox + default-reject through ApprovalBroker — same as smoke).
-- 10.4: test, typecheck, lint, commit.
+- 11a.1: skeleton (mirror T3 — package.json/tsconfig/index/types/README/vitest.config) — commit separately.
+- 11a.2: failing test — `Supervisor.start()` constructs transport+client; on transport close, constructs a NEW transport+client (object identity differs).
+- 11a.3: implement supervisor — owns spawn + transport subscription (Codex B7).
 
-Exit criteria (plan §1759): `pnpm runtime:send -- --prompt 'Reply OK'` runs end-to-end against real codex with same safety rails as smoke.
+Why this is a hard stop:
+- Plan §397 explicitly marks T11a + T11b as "lead session lifecycle correctness critical".
+- Supervisor owns the transport spawn AND `transport.onClose` subscription (Codex B7 — `AppServerClient` has no public `onClose`; supervisor wraps the lifecycle).
+- The supervisor swaps the entire `{transport, client, runtime, broker}` quartet on every recovery — bugs here are systemic and silent.
+- T11b adds the lifecycle edges (codex restart loop, pending approval handoff via `broker.reattach()`, audit on fatal). The B-clean changes from T9b's blocker-fix make `broker.reattach()` race-free, but the supervisor needs to call it correctly.
 
-**User decision needed before T10 starts:** resume the autonomous overnight loop (ScheduleWakeup) OR drive T10 manually in this session. T10 is small and autonomous-safe per the original task table.
+Recommended starting question for the user: does the autonomous loop resume here, or is this hands-on lead-session work?
 
-After T10:
-- T11a / T11b — explicit user approval per the autonomous-mode hard stop. Plan §397 marks these "lead session lifecycle correctness critical".
-- T12 — docs + roadmap update + Phase 1→2 handoff.
+T12 (Phase 1 docs + roadmap update + Phase 1→2 handoff) depends on T11a+T11b. Also needs user approval.
 
 ## 6. Currently modified files (working tree)
 
@@ -89,17 +88,19 @@ Clean (only the gstack runtime lock):
 
 `git stash list` is empty. The autonomous loop's recovery scan treats anything beyond this exact list as drift and triggers a hard stop.
 
-## 7. Current test results (at HEAD `f9915f7`)
+## 7. Current test results (at HEAD `f070a3d`)
 
 - `pnpm typecheck` → exit 0 (6 packages)
-- `pnpm test` → **283 passed (283)**, 28 files (was 277 pre-blocker-fix; +4 blocker-fix tests + +2 codex P2 follow-up tests)
+- `pnpm test` → **299 passed (299)**, 29 files (was 283 pre-T10; +4 T10 happy-path + +9 parseRuntimeSendArgs + +3 terminal-variants/timeout)
 - `pnpm typecheck:tests` → exit 0
 - `pnpm test:cli-smoke` → 2 passed
-- `pnpm lint` → exit 0 (82 files biome)
+- `pnpm lint` → exit 0 (84 files biome)
 - `pnpm protocol:check` → exit 0
-- `bash scripts/ci-check.sh` → all 8 gates green at `f9915f7`
+- `bash scripts/ci-check.sh` → all 8 gates green at `f070a3d`
 
-Codex T9b blocker-fix review verdict: **APPROVE** (0 P0, 0 P1, 4 P2 — 3 resolved + 1 deferred-with-justification, 2 risky-assumption infos acknowledged for T11b).
+Codex T10 review verdict: **APPROVE WITH CHANGES** (0 P0, 2 P1, 2 P2, several missing-tests — both P1s + 1 P2 + 3 of 5 missing tests resolved; 1 P2 + 2 missing tests deferred-with-justification).
+
+T9b blocker-fix review verdict (prior): **APPROVE** (0 P0, 0 P1, 4 P2).
 
 ## 8. Current key decisions (Phase 1, decided — do not relitigate)
 
