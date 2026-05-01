@@ -127,6 +127,16 @@ const _attachedClients: WeakSet<AppServerClient> = new WeakSet();
  * The DispatchTable below uses the actual generated response types.
  */
 export type DispatcherSpec<P, R> = {
+  /**
+   * Three-mode dispatch (D18). default-reject is the Phase 1 invariant
+   * (no IM, no pending state); handler is the Phase 1 background-IIFE
+   * path; pending is the Phase 2 IM-driven path that creates a
+   * PendingEntry and awaits external resolve / expirePending /
+   * failPendingAsTransportLost. registerHandler flips to "handler";
+   * enablePendingMode flips to "pending"; disablePendingMode reverts
+   * to "default-reject" (and clears handler).
+   */
+  mode: "default-reject" | "handler" | "pending";
   handler: ((req: { method: string; params: P; id: string | number }) => Promise<R>) | null;
   defaultReject: () => R;
 };
@@ -317,42 +327,51 @@ export class ApprovalBroker {
     this.#audit = opts.audit ?? new AuditEmitter();
     this.#table = {
       "item/commandExecution/requestApproval": {
+        mode: "default-reject" as const,
         handler: null,
         defaultReject: () => ({ decision: "decline" }),
       },
       "item/fileChange/requestApproval": {
+        mode: "default-reject" as const,
         handler: null,
         defaultReject: () => ({ decision: "decline" }),
       },
       "item/permissions/requestApproval": {
+        mode: "default-reject" as const,
         handler: null,
         // No extra permissions granted; scope=turn so any prior session-scope
         // grants from other code paths are not extended.
         defaultReject: () => ({ permissions: {}, scope: "turn" }),
       },
       "item/tool/requestUserInput": {
+        mode: "default-reject" as const,
         handler: null,
         defaultReject: () => ({ answers: {} }),
       },
       "item/tool/call": {
+        mode: "default-reject" as const,
         handler: null,
         // Phase 1 has no Computer Use. Default-reject reports a failed
         // tool call; codex's behavior is to surface this to the model.
         defaultReject: () => ({ contentItems: [], success: false }),
       },
       "mcpServer/elicitation/request": {
+        mode: "default-reject" as const,
         handler: null,
         defaultReject: () => ({ action: "cancel", content: null, _meta: null }),
       },
       applyPatchApproval: {
+        mode: "default-reject" as const,
         handler: null,
         defaultReject: () => ({ decision: "denied" }),
       },
       execCommandApproval: {
+        mode: "default-reject" as const,
         handler: null,
         defaultReject: () => ({ decision: "denied" }),
       },
       "account/chatgptAuthTokens/refresh": {
+        mode: "default-reject" as const,
         handler: null,
         // Phase 1 cannot fabricate auth tokens; never silently approve.
         // The Pre-3 path lets us signal -32601 explicitly to codex.
@@ -465,6 +484,32 @@ export class ApprovalBroker {
     handler: NonNullable<DispatchTable[M]["handler"]>,
   ): void {
     this.#table[method].handler = handler as DispatchTable[M]["handler"];
+    this.#table[method].mode = "handler";
+  }
+
+  /**
+   * Switch `method` to pending-mode (D18 / T8). Server-requests for this
+   * method create a PendingEntry but the broker does NOT run a handler
+   * IIFE — the completion stays open until external resolve() /
+   * expirePending() / failPendingAsTransportLost() settles it.
+   *
+   * Idempotent. Used by the IM wiring (typically the daemon's
+   * onPendingCreated subscriber + bindActorPolicy + IM render path).
+   * Methods NOT in pending-mode default-reject (Phase 1 invariant).
+   */
+  enablePendingMode<M extends keyof DispatchTable>(method: M): void {
+    this.#table[method].mode = "pending";
+  }
+
+  /**
+   * Revert `method` to default-reject (T8). Clears the handler slot too;
+   * a subsequent enablePendingMode or registerHandler call is required
+   * before the method does anything other than default-reject.
+   * Mainly for tests / hot-reload teardown.
+   */
+  disablePendingMode<M extends keyof DispatchTable>(method: M): void {
+    this.#table[method].mode = "default-reject";
+    this.#table[method].handler = null;
   }
 
   /**
@@ -487,7 +532,7 @@ export class ApprovalBroker {
       });
     }
     const spec = this.#table[m];
-    if (spec.handler === null) {
+    if (spec.mode === "default-reject") {
       // Synchronous default-reject path. No PendingEntry, no completion
       // promise — codex sees an immediate response. defaultReject may
       // throw JsonRpcResponseError (auth-refresh case); the throw
@@ -551,34 +596,40 @@ export class ApprovalBroker {
     // req.method (string) corresponds to spec.handler's parameterized P,
     // even though the dispatch-table key already proved it. The runtime
     // dispatch path narrows by key, so the cast is sound.
-    void (async () => {
-      try {
-        const result = await (spec.handler as (r: JsonRpcRequest) => Promise<unknown>)(req);
-        this.#settleEntry(
-          entry,
-          { type: "resolve", value: result },
-          {
-            kind: "approval.resolved",
-            approvalId: record.id,
-            appServerRequestId: req.id,
-            metadata: { method: req.method, source: "handler" },
-          },
-          { kind: "handler" },
-        );
-      } catch (err) {
-        this.#settleEntry(
-          entry,
-          { type: "reject", error: err },
-          {
-            kind: "approval.resolved",
-            approvalId: record.id,
-            appServerRequestId: req.id,
-            metadata: { method: req.method, source: "handler-error", error: String(err) },
-          },
-          { kind: "handler" },
-        );
-      }
-    })();
+    //
+    // T8 / D18: only handler-mode runs the IIFE. Pending-mode awaits
+    // entry.completion forever; settle is driven externally by resolve()
+    // (T11), expirePending(), or failPendingAsTransportLost().
+    if (spec.mode === "handler" && spec.handler !== null) {
+      void (async () => {
+        try {
+          const result = await (spec.handler as (r: JsonRpcRequest) => Promise<unknown>)(req);
+          this.#settleEntry(
+            entry,
+            { type: "resolve", value: result },
+            {
+              kind: "approval.resolved",
+              approvalId: record.id,
+              appServerRequestId: req.id,
+              metadata: { method: req.method, source: "handler" },
+            },
+            { kind: "handler" },
+          );
+        } catch (err) {
+          this.#settleEntry(
+            entry,
+            { type: "reject", error: err },
+            {
+              kind: "approval.resolved",
+              approvalId: record.id,
+              appServerRequestId: req.id,
+              metadata: { method: req.method, source: "handler-error", error: String(err) },
+            },
+            { kind: "handler" },
+          );
+        }
+      })();
+    }
 
     try {
       return await entry.completion;
