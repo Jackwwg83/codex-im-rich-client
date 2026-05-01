@@ -166,7 +166,7 @@ export async function runRuntimeSendCore(opts: RunRuntimeSendCoreOptions): Promi
   const log = opts.logger ?? pino({ level: "silent" });
   const turnTimeoutMs = opts.turnTimeoutMs ?? TURN_TIMEOUT_MS;
   const clientName = opts.clientName ?? "codex-im-runtime-send";
-  const clientVersion = opts.clientVersion ?? "0.1.0-phase0";
+  const clientVersion = opts.clientVersion ?? "0.1.0-phase1";
   const output = opts.output ?? ((line: string) => process.stdout.write(`${line}\n`));
 
   const client = new AppServerClient(opts.transport, { logger: log });

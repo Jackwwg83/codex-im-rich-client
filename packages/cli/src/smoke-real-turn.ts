@@ -1,18 +1,25 @@
 /**
  * smoke:real-turn — end-to-end lifecycle smoke against real `codex app-server`.
  *
- * Gated by CODEX_REAL_SMOKE=1. Plan v2 Decision Log D4.
+ * Gated by CODEX_REAL_SMOKE=1. Plan v2 Decision Log D4 (Phase 0 origin);
+ * refactored 2026-05-01 (Phase 1 tag-gate fix Blocker 1) to route through
+ * the Phase 1 stack — `ApprovalBroker` for server-request dispatch and
+ * `CodexRuntime` typed wrappers for ClientRequests — instead of raw
+ * raw `client.request(method, params)` / `client.setServerRequestHandler` calls.
  *
- * Validates the FULL Phase 0 stack against real codex:
+ * Validates the FULL Phase 0 + Phase 1 stack against real codex:
  *   1. codex app-server can spawn
  *   2. initialize handshake succeeds (JSONL + JSON-RPC lite)
- *   3. thread/start succeeds
- *   4. turn/start succeeds with a harmless prompt
- *   5. turn/completed (or terminal) notification arrives
- *   6. NO unhandled server-initiated requests leak
- *   7. NO command/file/Computer-Use approvals were ever accepted
- *      (client default-rejects everything; if a real approval would be
- *      needed, the turn will fail or hang past timeout — both are pass)
+ *   3. ApprovalBroker.attach() — Phase 1 broker is the sole owner of
+ *      client.setServerRequestHandler (D7); per-method default-deny
+ *      means server-initiated approvals get shape-correct denial
+ *      responses (e.g. {decision:"decline"}) instead of -32603 errors
+ *   4. CodexRuntime.threadStart succeeds
+ *   5. CodexRuntime.turnStart succeeds with a harmless prompt
+ *   6. turn/completed (or terminal) notification arrives
+ *   7. NO command/file/Computer-Use approvals were ever accepted (broker
+ *      default-deny is enforced by construction; the model only sees
+ *      denial responses, never grants)
  *   8. Transport closes cleanly, no zombie process
  *
  * Phase 1 T2 added three optional CLI flags (driven by Codex outside-voice
@@ -35,10 +42,12 @@
  * Safety rails (per user rule #5 + plan D4):
  *   - sandbox=read-only           (no shell side effects)
  *   - approval_policy=on-request  (everything funnels through approvals)
- *   - client.setServerRequestHandler default-rejects EVERY server req
+ *   - ApprovalBroker default-deny (T9b: per-method default-reject for
+ *     all 9 generated ServerRequest methods; auth-refresh throws
+ *     JsonRpcResponseError(-32601))
  *   - default harmless prompt forbids tools (overridable via --prompt-file
  *     for T4, where the operator has explicitly accepted that the richer
- *     prompt MAY trigger an approval — still default-rejected)
+ *     prompt MAY trigger an approval — still broker-denied)
  *   - no auto-approve anywhere
  *
  * If you've never run this before, ensure:
@@ -185,7 +194,7 @@ export async function runSmokeRealTurnCore(opts: RunCoreOptions): Promise<void> 
   const log = opts.logger;
   const turnTimeoutMs = opts.turnTimeoutMs ?? TURN_TIMEOUT_MS;
   const clientName = opts.clientName ?? "codex-im-bridge-real-smoke";
-  const clientVersion = opts.clientVersion ?? "0.1.0-phase0";
+  const clientVersion = opts.clientVersion ?? "0.1.0-phase1";
 
   const closeCapture = opts.capturePath
     ? attachCapture(opts.transport, opts.capturePath)

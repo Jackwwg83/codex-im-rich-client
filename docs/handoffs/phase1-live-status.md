@@ -1,15 +1,15 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-01 — **TAG GATE FIX IN PROGRESS.** Codex integrated review returned NO-GO on `phase-1-runtime-complete`: 2 blockers (Supervisor spawn-failure cleanup hole, method-literal boundary not holding end-to-end) + M4 handoff overstating + L5 README staleness. User approved fix scope (per plan §"Tag gate"); fix passes are docs-first / code-second / metadata-third. Test count 315/315 still green at HEAD `814550d`.
+> **Last updated:** 2026-05-01 — **TAG GATE FIX READY FOR RE-REVIEW.** Codex integrated review returned NO-GO on `phase-1-runtime-complete` (2 blockers + M4 handoff overstating + L5 README staleness). All 4 in-scope fix steps landed (`0232dc1` docs / `9096cca` Blocker 2 / `6059644` Blocker 1 / this commit metadata refresh). Test count 320/320 (was 315; +5 from Blocker 2 cleanup tests + grep guard test). Awaiting Codex outside-voice re-review before applying tag.
 
 ---
 
 ## 1. Current phase / task
 
-- **Phase:** Phase 1 — Codex Runtime Core (T1-T12 committed; tag GATED on integrated-review fixes)
-- **Active task:** **Phase 1 tag-gate fix pass.** Codex integrated review returned NO-GO; fixing 2 blockers + M4 + L5 inline.
-- **Tag candidate:** `phase-1-runtime-complete` — applied AFTER all tag-gate fixes land + re-run codex review returns GO.
+- **Phase:** Phase 1 — Codex Runtime Core (T1-T12 committed; tag GATED on integrated-review re-run)
+- **Active task:** **Phase 1 tag-gate fix pass — fix steps complete.** All 4 in-scope steps landed: docs-first (`0232dc1`), Blocker 2 supervisor cleanup (`9096cca`), Blocker 1 smoke refactor (`6059644`), metadata refresh (this commit). Next: re-run Codex outside-voice integrated review on full fix diff; apply tag if GO.
+- **Tag candidate:** `phase-1-runtime-complete` — applied AFTER re-run codex review returns GO.
 - **Next phase:** Phase 2 — Telegram MVP. Entry: `docs/handoffs/2026-05-01-phase1-to-phase2.md` (already updated to soften M4 wording + record M3 risk).
 - **Last completed task:** **T12** (Phase 1 docs + roadmap + handoff). Tag-gate fix pass is post-T12.
 - **Prior tasks (full Phase 1 chain):** Pre-1 → Pre-2 → T1 → T2 → T3 → T4 → T4.5 → T5 → T6 → T7a → T7b → T8 → Pre-3 → T9a → T9b code → T9b blocker-fix (B-clean) → T10 → T11a → T11b → T12.
@@ -19,9 +19,9 @@
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-1-runtime`
-- **HEAD:** `f070a3d docs(phase-1): codex outside-voice review report — T10 (APPROVE WITH CHANGES, all P1 resolved)`
-- **T10 chain:** `f070a3d` (review doc) ← `64c397f` (review fixes) ← `107af4a` (initial T10) ← `4f1821d` (T9b live-status).
-- **T9b blocker-fix arc:** `f9915f7` (review doc) ← `429fc2c` (P2 follow-ups) ← `e814880` (B-clean fix) ← `8a14bbe` (Step 0 docs).
+- **HEAD (pre-this-commit):** `6059644 fix(cli): route real smoke turn through CodexRuntime` (Blocker 1 / Step 3).
+- **Tag-gate fix arc (4 commits):** `0232dc1` Step 1 docs-first ← `9096cca` Step 2 Blocker 2 supervisor cleanup ← `6059644` Step 3 Blocker 1 smoke refactor + ClientRequest grep guard ← *this commit* Step 4 README/package.json/handoff metadata refresh.
+- **Pre-tag-gate baseline:** `814550d docs(phase1): T12 — Phase 1 close-out, roadmap update, Phase 1→2 handoff`.
 - **Main:** `main`
 
 ## 3. Completed tasks (Phase 1)
@@ -45,39 +45,28 @@
 
 ## 4. Currently doing
 
-**Tag-gate fix pass.** Codex integrated review on Phase 1 returned NO-GO. User decided 2026-05-01 to fix both blockers + M4 + L5 inline before tagging. Sequence:
+**Tag-gate fix pass — fix steps complete; awaiting Codex re-review.** Codex integrated review on Phase 1 returned NO-GO 2026-05-01. User decided to fix both blockers + M4 + L5 inline before tagging. All in-scope steps now landed:
 
-1. Step 1 (this commit) — docs-first: method-literal policy in CLAUDE.md + plan tag-gate § + handoff M4 wording + Phase 2 risk recording for M3.
-2. Step 2 — Blocker 2: Supervisor spawn-failure cleanup. `#spawnFresh`'s post-reattach steps wrap in try/catch; on failure, stop half-started client/transport, detach close subscription, set `#halted = true`, audit fatal. Tests for both initial-`start()` failure and recovery-spawn failure.
-3. Step 3 — Blocker 1: refactor `packages/cli/src/smoke-real-turn.ts` to use `CodexRuntime.threadStart` / `CodexRuntime.turnStart` instead of raw `client.request("thread/start"/"turn/start", ...)`. Method-literal boundary now holds end-to-end in production src.
-4. Step 4 — M4 (handoff softening, in this commit) + L5 (README quick-start metadata refresh in a later docs commit).
-5. Step 5 — re-run codex outside-voice integrated review. If GO, apply tag.
+1. **Step 1 — `0232dc1` docs-first:** method-literal policy in CLAUDE.md + plan tag-gate § + handoff M4 wording + Phase 2 risk recording for M3.
+2. **Step 2 — `9096cca` Blocker 2:** Supervisor spawn-failure cleanup. `#spawnFresh` wraps steps 1-7 in try/catch + new `#cleanupFailedGeneration` helper. On failure: stops half-started client/transport, detaches close subscription, sets `#halted = true`, audits fatal. +4 tests covering initial-`start()` failure paths (`client.start` / `performHandshake` / `broker.reattach`) and recovery-spawn failure (no further recovery cycle).
+3. **Step 3 — `6059644` Blocker 1:** refactored `packages/cli/src/smoke-real-turn.ts` to use `CodexRuntime.threadStart` / `CodexRuntime.turnStart` and `ApprovalBroker.attach()`; removed pre-T8 `client.setServerRequestHandler` throwing handler. Added `packages/codex-runtime/test/no-raw-client-request.test.ts` build-time grep guard for ClientRequest method literals over `packages/{app-server-client,daemon,cli}/src/`. Method-literal boundary now holds end-to-end in production src.
+4. **Step 4 — *this commit* metadata refresh:** README package count `5 → 7`, test count `67 → 320`, added `pnpm runtime:send` line; root `package.json` version `0.1.0-phase0 → 0.1.0-phase1`; CLI `clientVersion` defaults bumped to `0.1.0-phase1` in `runtime-send.ts` / `smoke-app-server.ts` / `smoke-real-turn.ts`; `phase1-live-status.md` synced.
 
-T1-T12 are committed. This is purely tag-gate hardening. Test count stays 315/315 except Blocker 2 fix will add tests.
+**Step 5 (next):** re-run Codex outside-voice integrated review on the full tag-gate fix diff (`0232dc1..HEAD`). If GO, apply tag `phase-1-runtime-complete`. M3 (runtime-send vs Supervisor integration) stays a Phase 2 risk per user decision — not blocking the tag.
 
 ## 5. Next exact action
 
-**T11a Step 11a.1** (per plan §1975-1986, "Daemon Supervisor skeleton") — needs explicit user approval before starting.
+**Re-run Codex outside-voice integrated review on `0232dc1..HEAD`.**
 
-Plan files (T11a):
-- Create: `packages/daemon/package.json`, `tsconfig.json`, `src/index.ts`, `src/types.ts`
-- Create: `packages/daemon/src/supervisor.ts`
-- Create: `packages/daemon/test/supervisor.test.ts`
+Scope:
+- Verify both blockers are actually fixed (Supervisor cleanup observable; smoke-real-turn no longer holds raw method literals).
+- Verify M4 handoff wording now says "ApprovalBroker.resolve() remains a throwing stub; Phase 2 likely needs additional broker public surface".
+- Verify L5 README metadata reflects current 7-package / 320-test reality.
+- Confirm test count 320/320 + all 8 ci-check gates green at HEAD.
 
-Plan steps:
-- 11a.1: skeleton (mirror T3 — package.json/tsconfig/index/types/README/vitest.config) — commit separately.
-- 11a.2: failing test — `Supervisor.start()` constructs transport+client; on transport close, constructs a NEW transport+client (object identity differs).
-- 11a.3: implement supervisor — owns spawn + transport subscription (Codex B7).
+If GO: `git tag -a phase-1-runtime-complete -m "..."`. If conditional GO with low-severity nits: apply inline + commit as `fix(phase1): tag-gate review nits`. If NO-GO again: reopen the fix scope, do not tag.
 
-Why this is a hard stop:
-- Plan §397 explicitly marks T11a + T11b as "lead session lifecycle correctness critical".
-- Supervisor owns the transport spawn AND `transport.onClose` subscription (Codex B7 — `AppServerClient` has no public `onClose`; supervisor wraps the lifecycle).
-- The supervisor swaps the entire `{transport, client, runtime, broker}` quartet on every recovery — bugs here are systemic and silent.
-- T11b adds the lifecycle edges (codex restart loop, pending approval handoff via `broker.reattach()`, audit on fatal). The B-clean changes from T9b's blocker-fix make `broker.reattach()` race-free, but the supervisor needs to call it correctly.
-
-Recommended starting question for the user: does the autonomous loop resume here, or is this hands-on lead-session work?
-
-T12 (Phase 1 docs + roadmap update + Phase 1→2 handoff) depends on T11a+T11b. Also needs user approval.
+After tag: Phase 2 (Telegram MVP) per `docs/handoffs/2026-05-01-phase1-to-phase2.md`.
 
 ## 6. Currently modified files (working tree)
 
@@ -89,19 +78,19 @@ Clean (only the gstack runtime lock):
 
 `git stash list` is empty. The autonomous loop's recovery scan treats anything beyond this exact list as drift and triggers a hard stop.
 
-## 7. Current test results (at HEAD `f070a3d`)
+## 7. Current test results (at HEAD = pre-this-commit `6059644` + Step 4 metadata refresh)
 
-- `pnpm typecheck` → exit 0 (6 packages)
-- `pnpm test` → **299 passed (299)**, 29 files (was 283 pre-T10; +4 T10 happy-path + +9 parseRuntimeSendArgs + +3 terminal-variants/timeout)
+- `pnpm typecheck` → exit 0 (7 packages)
+- `pnpm test` → **320 passed (320)**, 31 files (was 315 pre-tag-gate-fix; +4 Blocker 2 supervisor cleanup tests + 1 ClientRequest grep guard test)
 - `pnpm typecheck:tests` → exit 0
 - `pnpm test:cli-smoke` → 2 passed
-- `pnpm lint` → exit 0 (84 files biome)
+- `pnpm lint` → exit 0 (91 files biome)
 - `pnpm protocol:check` → exit 0
-- `bash scripts/ci-check.sh` → all 8 gates green at `f070a3d`
+- `bash scripts/ci-check.sh` → all 8 gates green
 
-Codex T10 review verdict: **APPROVE WITH CHANGES** (0 P0, 2 P1, 2 P2, several missing-tests — both P1s + 1 P2 + 3 of 5 missing tests resolved; 1 P2 + 2 missing tests deferred-with-justification).
+Codex Phase 1 integrated review verdict (pre-fix): **NO-GO** (2 blockers + M4 + L5). Awaiting re-review on tag-gate fix diff `0232dc1..HEAD`.
 
-T9b blocker-fix review verdict (prior): **APPROVE** (0 P0, 0 P1, 4 P2).
+T11b review verdict (prior): **APPROVE WITH CHANGES** (0 P0, all P1s resolved). T10 review verdict: **APPROVE WITH CHANGES** (0 P0, 2 P1 resolved).
 
 ## 8. Current key decisions (Phase 1, decided — do not relitigate)
 
@@ -131,21 +120,18 @@ Phase 1 specific:
 
 ## 10. Not allowed to advance until resolved
 
-**Staged blocker-fix sequence — STOPs are mandatory, NOT advisory.**
+**Tag-gate fix sequence — fix steps complete; tag GATED on Codex re-review.**
 
-User specified gated execution on 2026-05-01:
-- Step 0 (this commit) — docs only. STOP for user review.
-- Step 1 — failing tests. STOP for user approval.
-- Step 2 — B-clean implementation. STOP for user approval.
-- Step 3 — codex outside-voice review on fix diff. Apply low/nit + obvious medium inline; STOP on uncertain medium/blocker.
-- Step 4 — live-status sync; user decides whether to resume autonomous loop for T10.
+Cannot apply `phase-1-runtime-complete` tag until:
+- Codex outside-voice integrated re-review on `0232dc1..HEAD` returns GO (or conditional GO with low-severity nits applied inline).
+- All 8 ci-check gates green at HEAD (currently green).
 
-While Step 0/1/2/3 are open:
-- Do NOT modify `packages/app-server-client/` — Option A (Pre-4 idempotent respond) is future backlog only, NOT this fix.
-- Do NOT modify `packages/codex-runtime/`, `packages/cli/`, `packages/testkit/`, or `packages/daemon/` (the latter doesn't exist yet anyway).
-- Do NOT add `_resolveWire` / `_rejectWire` capability handles to `ApprovalRecord` — keep the public data shape clean. Use private internal `PendingEntry` instead.
-- Do NOT call `client.respond` / `client.reject` directly from `expirePending` or `failPendingAsTransportLost` — both must go through `settleOnce` on the broker-owned completion promise.
-- Do NOT skip the "late handler resolve/reject after terminal status" tests — those are the load-bearing coverage that catches the original race.
+Out-of-scope for this fix pass (do NOT relitigate):
+- Option A (Pre-4 `AppServerClient` idempotent respond/reject) — future backlog in `TODOS.md`, never part of the tag-gate fix.
+- M3 (runtime-send vs Supervisor integration) — recorded as Phase 2 integration risk per user decision; not a tag blocker.
+- T1-T12 implementation work — committed and reviewed.
+
+If Codex re-review surfaces new blockers, reopen the fix scope under user direction; do not auto-extend.
 
 Other Phase 1 non-goals from handoff (unchanged across all tasks):
 - Any IM adapter (Phase 2+).

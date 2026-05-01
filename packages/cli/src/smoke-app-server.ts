@@ -60,7 +60,7 @@ export async function run(): Promise<void> {
     const result = await performInitializeHandshake(client, {
       name: "codex-im-bridge-smoke",
       title: null,
-      version: "0.1.0-phase0",
+      version: "0.1.0-phase1",
     });
 
     log.info(

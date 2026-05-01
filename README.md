@@ -27,13 +27,14 @@ pnpm check:codex-version       # OK: 0.125.0
 pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol/
 
 # 3. 全量验证
-pnpm typecheck                 # all 5 packages
-pnpm test                      # 67 tests pass (unit + contract)
+pnpm typecheck                 # all 7 packages (Phase 1 added codex-runtime, core, daemon)
+pnpm test                      # 320 tests pass (unit + contract)
 pnpm lint                      # biome check
 
 # 4. 操作员手动 smoke (非默认测试)
 CODEX_SMOKE=1 pnpm smoke:app-server      # initialize-only, 安全
 CODEX_REAL_SMOKE=1 pnpm smoke:real-turn  # 真模型调用 ~$0.01，请先确认 codex login 与配额
+CODEX_REAL_SMOKE=1 pnpm runtime:send -- --prompt 'Reply OK'   # Phase 1 runtime kernel smoke
 ```
 
 ## Phase 0 安全边界
