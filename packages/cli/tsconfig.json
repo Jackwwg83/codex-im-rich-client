@@ -7,5 +7,10 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../app-server-client" }, { "path": "../codex-protocol" }]
+  "references": [
+    { "path": "../app-server-client" },
+    { "path": "../codex-protocol" },
+    { "path": "../codex-runtime" },
+    { "path": "../core" }
+  ]
 }

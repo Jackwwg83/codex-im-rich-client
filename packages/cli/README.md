@@ -93,6 +93,56 @@ prompt or rambles, that's still a pass for transport purposes. With
 server-initiated approvals — those are still default-rejected; T4 captures
 the wire shape for the Phase 1 ApprovalBroker.
 
+## `pnpm runtime:send` — Phase 1 runtime kernel smoke (gated)
+
+```bash
+CODEX_REAL_SMOKE=1 pnpm runtime:send -- --prompt 'Reply OK'
+```
+
+**Triggers a real model call.** Same `~$0.01` cost and login/quota
+preconditions as `smoke:real-turn`.
+
+Verifies the FULL Phase 1 runtime kernel against real codex:
+1. spawn `codex app-server`
+2. initialize handshake
+3. `ApprovalBroker.attach()` (Phase 1 default-deny on every server-initiated
+   approval — no auto-approve anywhere)
+4. `runtime.threadStart({})`
+5. `runtime.turnStart({...})` with the prompt
+6. consume `runtime.events.events()` AsyncIterable, print each
+   `CodexRichEvent` as JSONL
+7. break on first terminal turn event
+   (`turn_completed` / `turn_failed` / `turn_interrupted`)
+8. `client.stop()` cleanly
+
+### Flags
+
+| Flag | Effect |
+|---|---|
+| `--prompt <text>` | Inline prompt string. |
+| `--prompt-file <path>` | Read prompt from file (mutually exclusive with `--prompt`). |
+| `--cwd <path>` | Working directory for the spawned **codex subprocess only**. Same semantics as `smoke:real-turn --cwd`. |
+
+If neither `--prompt` nor `--prompt-file` is given, the default
+`packages/cli/src/prompts/harmless-turn.txt` is used.
+
+### Safety rails
+
+Identical to `smoke:real-turn`:
+- `sandbox=read-only`, `approval_policy=on-request` config overrides
+- `ApprovalBroker.attach()` covers `client.setServerRequestHandler` —
+  T9b's per-method default-reject responses fire for every approval
+  the model triggers (`item/fileChange/requestApproval`,
+  `item/commandExecution/requestApproval`, etc.); never auto-approve.
+- `account/chatgptAuthTokens/refresh` throws `JsonRpcResponseError(-32601)`
+  by default (cannot fabricate tokens in Phase 1).
+
+The broker's default-deny is more disciplined than `smoke:real-turn`'s
+ad-hoc `setServerRequestHandler(req => throw)` because each method gets
+the wire-shape codex expects (e.g. `{decision: "decline"}` for fileChange,
+not a `-32603 "handler error"` collapse). This is what Phase 2 IM
+adapter integration will build on.
+
 ## What is NOT in this CLI
 
 - No `codex-im daemon` runtime (Phase 1+).
@@ -100,4 +150,5 @@ the wire shape for the Phase 1 ApprovalBroker.
 - No IM adapter wiring.
 
 This package is the smallest surface needed to exercise the Phase 0 stack
-end-to-end against real codex. Everything else lives downstream.
+end-to-end against real codex. Phase 1 adds `runtime send` to exercise
+the runtime kernel. Everything else lives downstream.

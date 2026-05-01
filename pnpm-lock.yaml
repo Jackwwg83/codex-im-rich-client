@@ -51,6 +51,12 @@ importers:
       '@codex-im/app-server-client':
         specifier: workspace:*
         version: link:../app-server-client
+      '@codex-im/codex-runtime':
+        specifier: workspace:*
+        version: link:../codex-runtime
+      '@codex-im/core':
+        specifier: workspace:*
+        version: link:../core
       '@codex-im/protocol':
         specifier: workspace:*
         version: link:../codex-protocol
