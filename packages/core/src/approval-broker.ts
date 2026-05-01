@@ -72,7 +72,9 @@ import type {
   ToolRequestUserInputParams,
   ToolRequestUserInputResponse,
 } from "@codex-im/protocol";
+import { actionToDecision } from "./action-to-decision.js";
 import { AuditEmitter, type AuditEventInput } from "./audit.js";
+import { mapDecisionForPending } from "./decision-mapper.js";
 import type {
   ActorPolicy,
   ApprovalActor,
@@ -81,6 +83,9 @@ import type {
   ApprovalUiAction,
   BindResult,
   PendingApprovalSnapshot,
+  ResolveApprovalInput,
+  ResolveApprovalResult,
+  Target,
 } from "./types.js";
 
 /**
@@ -285,6 +290,43 @@ function policiesEqual(a: ActorPolicy, b: ActorPolicy): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Check whether `actor` is in the policy's allowedActors list (T11 / D19).
+ * Deep structural match on platform + userId; chatId on actors is not
+ * compared (chatId belongs to the target, not the actor identity).
+ */
+function actorAllowed(
+  allowed: readonly NonNullable<ApprovalActor>[],
+  actor: NonNullable<ApprovalActor>,
+): boolean {
+  for (const a of allowed) {
+    if (a.kind !== actor.kind) continue;
+    if (a.kind === "system" && actor.kind === "system") {
+      if (a.reason === actor.reason) return true;
+      continue;
+    }
+    if (a.kind === "im" && actor.kind === "im") {
+      if (a.platform === actor.platform && a.userId === actor.userId) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Strict equality for Target (T11 / D19). All four fields must match;
+ * an undefined optional on one side and a defined value on the other
+ * is a mismatch (don't widen — clients must include the same scope they
+ * received in the bound policy).
+ */
+function targetEqual(a: Target, b: Target): boolean {
+  return (
+    a.platform === b.platform &&
+    a.chatId === b.chatId &&
+    a.threadKey === b.threadKey &&
+    a.topicId === b.topicId
+  );
 }
 
 /**
@@ -735,22 +777,197 @@ export class ApprovalBroker {
   // ── T9b lifecycle (Step 9b.5) ────────────────────────────────────
 
   /**
-   * Resolve a pending approval with a user / system decision. Phase 2
-   * IM adapter wires this to "user pressed approve/deny" actions; Phase
-   * 1 has no callers, so this remains a stub that signals where Phase 2
-   * picks up. The wire-mapping (ApprovalDecision → per-method response
-   * shape) is the load-bearing part deferred to Phase 2 — see plan
-   * §1750 for why it can't reuse the legacy {decision: ReviewDecision}
-   * shape across all v2 methods.
+   * Resolve a pending approval with a user-driven UI action (T11 / D12 /
+   * D19 / D20). The IM rendering layer wires this to "user pressed
+   * approve/deny" callbacks. Returns a discriminated `ResolveApprovalResult`
+   * describing what happened — `ok` if the wire was settled, or one of
+   * 9 `ResolveError` kinds if the broker fail-closed.
    *
-   * Phase 1 callers MUST NOT use this. The default-reject path on the
-   * registered handler being null already covers Phase 1's
-   * "default-deny" semantic without going through resolve().
+   * Validation order (matches D12 step list verbatim):
+   *   1. Internal #pendingById lookup → null → unknown_approval_id.
+   *   2. Terminal status (resolved → already_resolved with priorDecision;
+   *      expired → expired; transport_lost → transport_lost).
+   *   3. Wall-clock expiry (Date.now() >= expiresAt) — flip status,
+   *      settle defaultReject, return expired. T11.3 / Codex P0-4.
+   *   4. Bound policy check: missing → binding_required.
+   *   5. Actor membership check → wrong_actor.
+   *   6. Target equality check → wrong_target.
+   *   7. Nonce equality check → stale_callback.
+   *   8. mapDecisionForPending: error → JSON-RPC reject; unsupported →
+   *      unsupported_decision (audit + return WITHOUT settling wire).
+   *   9. Settle wire via #settleEntry → ok.
+   *
+   * Wire-response invariant: at most one wire response per request id
+   * (B-clean / settleOnce). Validation-error branches (binding /
+   * actor / target / nonce / unsupported_decision) DO NOT settle the
+   * wire — pending state preserved so a corrected click can race
+   * through. Expiry branches (3 + 5 internal-lookup variant) settle
+   * with defaultReject.
    */
-  resolve(_approvalId: string, _decision: ApprovalDecision, _actor: ApprovalActor): void {
-    throw new Error(
-      "ApprovalBroker.resolve: deferred to Phase 2 IM integration (no Phase 1 callers; wire-mapping per-method response shapes is Phase 2 scope)",
-    );
+  async resolve(input: ResolveApprovalInput): Promise<ResolveApprovalResult> {
+    const entry = this.#pendingById.get(input.approvalId);
+    if (entry === undefined) {
+      this.#audit.emit({
+        kind: "approval.unknown_approval_id",
+        approvalId: input.approvalId,
+        metadata: { source: "resolve" },
+      });
+      return { kind: "error", error: { kind: "unknown_approval_id" } };
+    }
+    const record = entry.record;
+
+    if (record.status === "resolved") {
+      const priorDecision: ApprovalDecision = record.decision ?? actionToDecision(input.decision);
+      return {
+        kind: "error",
+        error: { kind: "already_resolved", priorDecision },
+      };
+    }
+    if (record.status === "expired") {
+      return {
+        kind: "error",
+        error: {
+          kind: "expired",
+          createdAt: record.createdAt,
+          expiredAt: record.decidedAt ?? record.expiresAt,
+        },
+      };
+    }
+    if (record.status === "transport_lost") {
+      return {
+        kind: "error",
+        error: {
+          kind: "transport_lost",
+          lostAt: record.decidedAt ?? new Date(),
+        },
+      };
+    }
+
+    // D20: wall-clock expiry. Even with no expirePending() sweep, a
+    // resolve() arriving past expiresAt fails closed. Flip status,
+    // settle defaultReject, audit "approval.expired" (#settleEntry
+    // emits the supplied audit event on win + the duplicate audit
+    // on lose).
+    const now = new Date();
+    if (now.getTime() >= record.expiresAt.getTime()) {
+      record.status = "expired";
+      record.actor = { kind: "system", reason: "expired" };
+      record.decision = { kind: "denied", reason: "expired" };
+      record.decidedAt = now;
+      const audit: AuditEventInput = {
+        kind: "approval.expired",
+        approvalId: record.id,
+        appServerRequestId: record.appServerRequestId,
+        metadata: { source: "resolve" },
+      };
+      try {
+        const value = entry.spec.defaultReject();
+        this.#settleEntry(entry, { type: "resolve", value }, audit, {
+          kind: "system",
+          reason: "expired",
+        });
+      } catch (err) {
+        this.#settleEntry(entry, { type: "reject", error: err }, audit, {
+          kind: "system",
+          reason: "expired",
+        });
+      }
+      return {
+        kind: "error",
+        error: { kind: "expired", createdAt: record.createdAt, expiredAt: now },
+      };
+    }
+
+    // D19 actor binding validation. Missing binding is a daemon-wireup
+    // bug (operator must call bindActorPolicy synchronously before the
+    // card lands). Mismatching actor / target / nonce all fail closed
+    // WITHOUT settling — a corrected click can still race.
+    const policy = this.#actorPolicies.get(input.approvalId);
+    if (policy === undefined) {
+      this.#audit.emit({
+        kind: "approval.binding_required",
+        approvalId: record.id,
+        appServerRequestId: record.appServerRequestId,
+      });
+      return { kind: "error", error: { kind: "binding_required" } };
+    }
+    if (!actorAllowed(policy.allowedActors, input.actor)) {
+      this.#audit.emit({
+        kind: "approval.wrong_actor",
+        approvalId: record.id,
+        appServerRequestId: record.appServerRequestId,
+        actor: input.actor,
+      });
+      return { kind: "error", error: { kind: "wrong_actor" } };
+    }
+    if (!targetEqual(policy.target, input.target)) {
+      this.#audit.emit({
+        kind: "approval.wrong_target",
+        approvalId: record.id,
+        appServerRequestId: record.appServerRequestId,
+        actor: input.actor,
+      });
+      return { kind: "error", error: { kind: "wrong_target" } };
+    }
+    if (policy.callbackNonce !== input.callbackNonce) {
+      this.#audit.emit({
+        kind: "approval.stale_callback",
+        approvalId: record.id,
+        appServerRequestId: record.appServerRequestId,
+        actor: input.actor,
+      });
+      return { kind: "error", error: { kind: "stale_callback" } };
+    }
+
+    // Wire-shape mapping (D11). unsupported → audit + return without
+    // settling; error → reject the wire with JSON-RPC error envelope.
+    const wire = mapDecisionForPending(record, input.decision);
+    if (wire.kind === "unsupported") {
+      this.#audit.emit({
+        kind: "approval.unsupported_decision",
+        approvalId: record.id,
+        appServerRequestId: record.appServerRequestId,
+        actor: input.actor,
+        metadata: { method: record.method, reason: wire.reason },
+      });
+      return {
+        kind: "error",
+        error: {
+          kind: "unsupported_decision",
+          method: record.method,
+          reason: wire.reason,
+        },
+      };
+    }
+    const decidedAt = new Date();
+    const decision = actionToDecision(input.decision);
+    const decidedRecord = record;
+    decidedRecord.actor = input.actor;
+    decidedRecord.decision = decision;
+    decidedRecord.decidedAt = decidedAt;
+    decidedRecord.status = "resolved";
+    const audit: AuditEventInput = {
+      kind: "approval.resolved",
+      approvalId: record.id,
+      appServerRequestId: record.appServerRequestId,
+      actor: input.actor,
+      metadata: {
+        method: record.method,
+        source: "resolve",
+        action: input.decision.kind,
+      },
+    };
+    const resolvedOutcome = {
+      kind: "user" as const,
+      decision: input.decision,
+      actor: input.actor,
+    };
+    if (wire.kind === "ok") {
+      this.#settleEntry(entry, { type: "resolve", value: wire.value }, audit, resolvedOutcome);
+    } else {
+      this.#settleEntry(entry, { type: "reject", error: wire.error }, audit, resolvedOutcome);
+    }
+    return { kind: "ok", appliedAt: decidedAt };
   }
 
   /**

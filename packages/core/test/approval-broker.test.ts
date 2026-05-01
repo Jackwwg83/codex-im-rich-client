@@ -628,15 +628,23 @@ describe("ApprovalBroker pending-state lifecycle (T9b Steps 9b.4 + 9b.5)", () =>
     await fake.stop();
   });
 
-  it("resolve() remains a stub deferred to Phase 2 (T9b Step 9b.5 — Phase 1 has no callers)", async () => {
+  it("resolve() returns unknown_approval_id for an unknown id (T11 / Phase 2 — replaces the Phase 1 stub assertion)", async () => {
     const fake = new FakeAppServer();
     const client = new AppServerClient(fake.clientSide);
     await client.start();
     const broker = new ApprovalBroker(client);
     broker.attach();
-    expect(() =>
-      broker.resolve("approval-1", { kind: "approved" }, { kind: "system", reason: "test" }),
-    ).toThrow(/deferred to Phase 2/);
+    const result = await broker.resolve({
+      approvalId: "approval-does-not-exist",
+      decision: { kind: "decline" },
+      actor: { kind: "im", platform: "telegram", userId: "u-test" },
+      target: { platform: "telegram", chatId: "c-test" },
+      callbackNonce: "nonce-test-aaaaaaaaaaa",
+    });
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.error.kind).toBe("unknown_approval_id");
+    }
     await client.stop();
     await fake.stop();
   });
