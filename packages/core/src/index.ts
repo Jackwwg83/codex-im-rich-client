@@ -42,3 +42,13 @@ export type {
   ResolveError,
   Target,
 } from "./types.js";
+
+// Phase 2 T10 — UI action → decision intent translator (decoupled from
+// protocol method literals; consumed by the daemon wire-up subscriber and
+// internally by broker.resolve()).
+export { actionToDecision } from "./action-to-decision.js";
+// Phase 2 T10 — per-kind wire-mapping table (D11 corrected). resolve()
+// consumes WireDecisionResult to settle the wire; renderer + audit consume
+// it to surface unsupported / error branches.
+export { mapDecisionForPending } from "./decision-mapper.js";
+export type { WireDecisionResult } from "./decision-mapper.js";
