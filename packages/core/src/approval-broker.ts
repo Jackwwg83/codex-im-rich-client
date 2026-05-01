@@ -74,10 +74,12 @@ import type {
 } from "@codex-im/protocol";
 import { AuditEmitter, type AuditEventInput } from "./audit.js";
 import type {
+  ActorPolicy,
   ApprovalActor,
   ApprovalDecision,
   ApprovalRecord,
   ApprovalUiAction,
+  BindResult,
   PendingApprovalSnapshot,
 } from "./types.js";
 
@@ -258,6 +260,34 @@ function createPendingEntry(
 }
 
 /**
+ * Deep structural equality for ActorPolicy (T9 / D19). Used by
+ * `bindActorPolicy` to decide whether a re-bind is idempotent (same
+ * policy → ok) or conflicting (different policy → conflicting_policy).
+ *
+ * Compares:
+ *   - allowedActors element-wise (order matters; daemon wire-up is
+ *     expected to produce stable ordering — typically a singleton).
+ *   - target field-by-field.
+ *   - callbackNonce as a string.
+ *
+ * Falls back to JSON.stringify on the actor + target slots so we don't
+ * have to handle the optional fields (chatId / threadKey / topicId)
+ * branch by branch. The policy shape is plain data with no functions or
+ * cyclic refs, so JSON-equality is sound.
+ */
+function policiesEqual(a: ActorPolicy, b: ActorPolicy): boolean {
+  if (a.callbackNonce !== b.callbackNonce) return false;
+  if (JSON.stringify(a.target) !== JSON.stringify(b.target)) return false;
+  if (a.allowedActors.length !== b.allowedActors.length) return false;
+  for (let i = 0; i < a.allowedActors.length; i += 1) {
+    if (JSON.stringify(a.allowedActors[i]) !== JSON.stringify(b.allowedActors[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * ApprovalBroker — single owner of `AppServerClient.setServerRequestHandler`.
  *
  * Lifecycle (Phase 1, T9a):
@@ -312,6 +342,13 @@ export class ApprovalBroker {
   // an optional pre-built emitter; default = new no-logger emitter so
   // Phase 1 broker tests still pass.
   readonly #audit: AuditEmitter;
+  // T9 (Phase 2 D19): per-approval actor binding. Daemon wire-up calls
+  // bindActorPolicy() once before the IM card lands so resolve() (T11)
+  // can validate the click came from an allowed actor at the bound
+  // target with the bound nonce. Idempotent on identical policy; rejects
+  // re-bind with a different policy. Storage only at T9; resolve()-side
+  // validation is T11.
+  readonly #actorPolicies = new Map<string, ActorPolicy>();
   #attached = false;
   // T9b D6 idempotence: failPendingAsTransportLost() is called by the
   // supervisor from its transport.onClose subscription. Reset on
@@ -510,6 +547,53 @@ export class ApprovalBroker {
   disablePendingMode<M extends keyof DispatchTable>(method: M): void {
     this.#table[method].mode = "default-reject";
     this.#table[method].handler = null;
+  }
+
+  /**
+   * Bind a per-approval actor policy (D19 / T9). Daemon wire-up's
+   * onPendingCreated subscriber calls this synchronously BEFORE the IM
+   * card hits the user, so the binding exists by the time any user
+   * click can race back through resolve().
+   *
+   * Returns:
+   *   {kind: "ok"}                                       — first-bind or
+   *                                                        idempotent same-policy rebind.
+   *   {kind: "error", error: {kind: "unknown_approval_id"}} — no pending
+   *                                                        with that id (caller bug).
+   *   {kind: "error", error: {kind: "not_pending"}}        — record is in
+   *                                                        a terminal state.
+   *   {kind: "error", error: {kind: "conflicting_policy"}} — re-bind with
+   *                                                        a different policy.
+   *
+   * T9 only stores; T11's resolve() consumes the stored policy to fail
+   * closed on wrong_actor / wrong_target / stale_callback / binding_required.
+   */
+  bindActorPolicy(approvalId: string, policy: ActorPolicy): BindResult {
+    const entry = this.#pendingById.get(approvalId);
+    if (entry === undefined) {
+      return { kind: "error", error: { kind: "unknown_approval_id" } };
+    }
+    if (entry.record.status !== "pending") {
+      return { kind: "error", error: { kind: "not_pending" } };
+    }
+    const existing = this.#actorPolicies.get(approvalId);
+    if (existing !== undefined) {
+      if (policiesEqual(existing, policy)) {
+        return { kind: "ok" };
+      }
+      return { kind: "error", error: { kind: "conflicting_policy" } };
+    }
+    this.#actorPolicies.set(approvalId, policy);
+    return { kind: "ok" };
+  }
+
+  /**
+   * Test-only accessor — mirrors `_pendingRecordsForTest`. Returns the
+   * stored policy or null. T9 tests use this to assert verbatim storage;
+   * T11 will consume the same map internally for validation.
+   */
+  _actorPolicyForTest(approvalId: string): ActorPolicy | null {
+    return this.#actorPolicies.get(approvalId) ?? null;
   }
 
   /**
