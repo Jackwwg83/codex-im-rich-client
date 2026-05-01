@@ -1810,6 +1810,127 @@ packages/core/. Outside-voice + plan-eng-review captured."
 
 ---
 
+### Task 9b blocker-fix — broker completion race (added 2026-05-01 after T9b codex review)
+
+**Status:** added late; ships as a follow-up commit chain on `phase-1-runtime` after T9b code (HEAD `bf97a49`) and the STOPPED docs commit (`0bae49b`). Closes the 2 blockers + 4 minor findings from `docs/phase-1/codex-review-t9b.md`.
+
+**Problem (codex outside-voice review T9b, 2026-05-01):**
+
+`ApprovalBroker` currently has TWO possible wire-response paths for a single server-request id:
+
+1. `expirePending()` / `failPendingAsTransportLost()` directly call `this.#client.respond(id, defaultReject)` or `this.#client.reject(id, ...)`.
+2. `#handle()` later resolves with the registered handler's return value, and `AppServerClient.dispatchServerRequest` calls `client.respond(id, result)` on its own.
+
+Under the timing where path 1 fires while path 2's handler `await` is still in flight, both responses reach the wire for the same id. JSON-RPC forbids duplicate responses; codex's behavior is undefined.
+
+**Decision:**
+
+Fix this in `ApprovalBroker` using a single broker-controlled completion promise per pending server-request — **B-clean** option. Reasons documented in user message 2026-05-01:
+
+- Option A (Pre-4 `AppServerClient` idempotent respond/reject) **rejected as primary fix**: it would protect the wire layer but leave the broker's lifecycle model split between two response paths. It would silently mask future broker bugs and require `AppServerClient` to maintain idempotency state plus worry about JSON-RPC id reuse.
+- Option B (broker owns completion promise) **chosen**, with the additional refinement that capability handles do NOT live on `ApprovalRecord` (the public data shape stays clean). Internal `PendingEntry` / `PendingWire` structure carries the completion + `settleOnce` machinery.
+- Option C (Phase 1 punt) **rejected**: T11b's transport-loss path reduces the immediate blast radius, but `expirePending` is operator-tunable and a 30s testbed config would trip the bug. Plan §1785 explicitly requires expirePending implementation.
+
+**Design (B-clean):**
+
+Internal-only `PendingEntry` shape — never leaks to `ApprovalRecord` or any public type:
+
+```ts
+type WireOutcome =
+  | { type: "resolve"; value: unknown }
+  | { type: "reject"; error: unknown };
+
+interface PendingEntry {
+  record: ApprovalRecord;        // public data; mutated in place for status flips
+  completion: Promise<unknown>;
+  settleOnce: (outcome: WireOutcome) => void;
+  settled: boolean;
+}
+```
+
+`#handle(req)`:
+
+```text
+1. Build PendingEntry { record, completion, settleOnce, settled=false }.
+2. Insert into #pending under req.id.
+3. Kick off `spec.handler(req)` in the background (do NOT await directly):
+     handler.then(result => {
+       if (entry.record.status !== "pending") return;  // expirePending / transportLost won the race
+       entry.record.status = "resolved";
+       entry.settleOnce({ type: "resolve", value: result });
+     }, error => {
+       if (entry.record.status !== "pending") return;
+       entry.record.status = "failed";  // or keep as "pending" + use settle reject — TBD by tests
+       entry.settleOnce({ type: "reject", error });
+     });
+4. try { return await entry.completion; } finally { this.#pending.delete(req.id); }
+```
+
+Key invariant: the wire response is whatever AppServerClient gets from `await broker.#handle(req)`. There is exactly ONE such await per id, so exactly ONE wire response. Late handler completion observes `record.status !== "pending"` and is dropped (or audited) — never reaches wire.
+
+`expirePending(maxAgeMs)`:
+
+```text
+For each pending entry whose record is older than cutoff:
+  record.status = "expired"
+  settleOnce({ type: "resolve", value: spec.defaultReject() })
+    — auth-refresh's defaultReject throws JsonRpcResponseError;
+      catch and settleOnce({ type: "reject", error: theJsonRpcResponseError })
+      so AppServerClient's catch arm preserves the -32601 envelope.
+```
+
+`failPendingAsTransportLost()`:
+
+```text
+Idempotent within a client generation. For each pending entry:
+  record.status = "transport_lost"
+  record.actor = { kind: "system", reason: "transport_lost" }
+  record.decision = { kind: "denied", reason: "transport_lost" }
+  settleOnce({ type: "resolve", value: spec.defaultReject() })
+    — same auth-refresh handling as expirePending. The transport is dead so
+      AppServerClient.respond is a no-op anyway, but using settleOnce keeps
+      the lifecycle model unified (single settle path, no direct client.respond).
+```
+
+`reattach(newClient)` — additional invariant fix (Blocker 2):
+
+```text
+After the existing checks + WeakSet swap + setServerRequestHandler(null/new):
+  this.#transportLostFired = false;
+```
+
+Without this reset, after the first transport close + supervisor restart, the second client generation cannot flag its own pending records as transport_lost (the per-broker idempotency guard stays true forever). Bundled into this blocker-fix because the lifecycle redesign in `#handle` may interact with where this state lives — it's still a one-line reset either way.
+
+**Public API impact: zero.** `ApprovalRecord` shape unchanged. `attach()` / `reattach()` / `registerHandler()` / `dispatchMethods()` / `resolve()` / `failPendingAsTransportLost()` / `expirePending()` signatures unchanged. The only externally visible change is "expirePending and failPendingAsTransportLost no longer cause duplicate responses on late handler completion" — a strict bug fix.
+
+**Scope (Files):**
+
+- Modify: `packages/core/src/approval-broker.ts` — refactor `#handle`, replace direct `client.respond`/`client.reject` calls in `expirePending` / `failPendingAsTransportLost` with `settleOnce`, reset `#transportLostFired` in `reattach`.
+- Modify: `packages/core/test/approval-broker.test.ts` — add 4 new tests (late-resolve after expire, late-reject after expire, late-resolve after transport_lost, reattach + second-generation transport_lost).
+- May modify: `packages/core/test/approval-broker-dispatch.test.ts` and `packages/core/test/dispatch-coverage.test.ts` if the refactor changes any observable behavior covered by those files (it should not — the public contract is preserved).
+
+**Out of scope:**
+
+- `packages/app-server-client/` — must NOT be modified. Pre-3 owns the catch-arm; the Pre-4-style idempotent respond/reject is recorded as future backlog (TODOS.md), NOT this fix.
+- Real IM adapter (Phase 2+).
+- Computer Use production flow (Phase 6).
+- Public WebSocket / public HTTP listener.
+- Generated protocol files (unless protocol:check requires regeneration; it should not).
+
+**Execution order (gated):**
+
+1. **Step 0 — docs only.** Update plan + live-status + TODOS.md, run gates, commit `docs(phase1): record t9b broker completion race fix`. STOP for user review.
+2. **Step 1 — failing tests first.** Write 4 failing tests covering both blockers. Run targeted tests, expect fail-for-the-right-reason. Report. STOP for user approval.
+3. **Step 2 — implementation.** Apply B-clean per the design above. Tests should turn green. Commit `fix(core): make approval broker completion lifecycle race-free` (or split into two commits if natural). STOP for user approval.
+4. **Step 3 — codex outside-voice review** on the fix diff. Apply low/nit + obvious medium fixes inline; STOP on uncertain medium / blocker. Capture findings in `docs/phase-1/codex-review-t9b-blocker-fix.md`.
+5. **Step 4 — live-status sync** marking T9b complete; resume autonomous loop for T10 (or do T10 manually).
+
+**Future defensive guardrail (NOT in this fix):**
+
+Consider `AppServerClient` active server-request idempotency (set of responded ids; silently drop duplicate respond/reject) as a later protocol-layer hardening task. Recorded in `TODOS.md` under "Future defensive guardrails". Do NOT implement here — that would be Option A, which the user explicitly declined as a primary fix on 2026-05-01.
+
+---
+
 ### Task 10: `codex-im runtime send` CLI
 
 **Files:**

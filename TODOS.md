@@ -92,3 +92,12 @@ Phase 1 plan-eng-review should ground itself on this file.
 - [ ] **CI** (GitHub Actions): `pnpm install` + `typecheck` + `test` + `lint` + `check:codex-version` + `protocol:check` on every PR. Probably want this before Phase 1 is shippable to a remote.
 - [ ] **`pnpm audit` periodic check**: re-run on every dependency bump and at start of each phase.
 - [ ] **launchd plist + install script**: Phase 3 work per plan v2 NOT-in-scope. Required before Mac mini "always-on daemon" promise can be kept.
+
+## Future defensive guardrails (not currently scheduled)
+
+- [ ] **`AppServerClient` active server-request idempotency**
+  - **Why**: Defense-in-depth against any future code path that accidentally produces a duplicate JSON-RPC response for the same id. Considered as Option A for the T9b blocker fix (2026-05-01) but explicitly **declined as the primary fix** because the duplicate-response bug was owned by `ApprovalBroker`'s split lifecycle, not by the wire layer. Fixing it at the protocol layer would have masked broker-internal bugs. The blocker was instead fixed in `ApprovalBroker` via B-clean (single broker-owned completion promise per pending request).
+  - **What**: extend `AppServerClient` with a `Set<JsonRpcId>` of responded ids. `respond(id, ...)` / `reject(id, ...)` on an already-responded id silently drops (and `log.warn`s for visibility — surfacing real broker bugs instead of hiding them). Set is cleared in `stop()`. Consider periodic prune for long-running sessions.
+  - **Where to start**: `packages/app-server-client/src/client.ts` — extend `respond` / `reject` methods, add a small unit test in `packages/app-server-client/test/`. Mirrors the Pre-3 modification pattern.
+  - **Source**: T9b blocker fix decision 2026-05-01 (user message). `docs/phase-1/codex-review-t9b.md` finding #1 + plan §"Task 9b blocker-fix" → "Future defensive guardrail".
+  - **Not scheduled**: ship only when there's a concrete second case where the wire-layer guard would catch a real bug. As of 2026-05-01 the `ApprovalBroker` is the only producer of server-request responses, and its B-clean lifecycle prevents duplicates by construction.

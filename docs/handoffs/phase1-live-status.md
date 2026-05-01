@@ -1,17 +1,17 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-01 01:50 (overnight wake 5) — **STOPPED** on T9b codex outside-voice review (2 blockers found). Autonomous loop halted; no further wakes scheduled. Awaiting human review. HEAD `bf97a49`. Test count 277/277.
+> **Last updated:** 2026-05-01 (post-decision) — User chose **B-clean** for T9b blocker 1 + fix blocker 2 in the same stage. Plan amended with `T9b blocker-fix` subsection. Next: failing tests first (Step 1), then implementation (Step 2), then codex review. Autonomous loop NOT resumed yet — staged execution with explicit STOPs between Steps. HEAD `0bae49b`. Test count 277/277.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **T9b STOPPED** — code Steps 9b.1-9b.6 all committed (`bf97a49` is HEAD); codex outside-voice review on T9b returned 2 blockers + 2 medium + 1 low + 1 nit. Per autonomous protocol, blockers without obvious low-risk fixes → STOP. Findings captured in `docs/phase-1/codex-review-t9b.md`. **Awaiting human review and design decision before any further work.**
-- **Autonomous mode:** **HALTED**. Loop did NOT schedule next wake. Wake 5 was the last.
+- **Active task:** **T9b blocker-fix in progress** — user-decided design: **B-clean** for blocker 1 (broker owns single completion promise per pending request, internal `PendingEntry` keeps `ApprovalRecord` data-only) + fix blocker 2 (`#transportLostFired = false` in `reattach`) in the same stage. Plan §"Task 9b blocker-fix" subsection added 2026-05-01 with full design.
+- **Autonomous mode:** **STAGED, not free-running.** User specified an explicit Step 0 → Step 1 → Step 2 → codex review sequence with STOPs between. No ScheduleWakeup until the staged sequence completes.
 - **Last completed task:** **T9a** + Pre-3 + T1-T8 (see §3).
-- **What needs human input:** see §10 for the open design question (blocker 1 — duplicate-response race needs Pre-4 AppServerClient extension OR a #handle refactor; blocker 2 — `#transportLostFired` reset on reattach is a one-liner but bundled with blocker 1 because the user should look at both together).
+- **Rejected alternatives** (do not relitigate): Option A (Pre-4 `AppServerClient` idempotent respond/reject) recorded as future backlog in `TODOS.md`, NOT implemented now. Option C (Phase 1 punt) declined.
 
 ## 2. Branch / HEAD
 
@@ -40,39 +40,69 @@
 
 ## 4. Currently doing
 
-**STOPPED — codex review finding needs review.**
+**Step 0 of T9b blocker-fix — docs only.** This commit adds:
 
-Wake 5's codex outside-voice review on T9b returned 2 blockers + 2 medium + 1 low + 1 nit. Both blockers have non-obvious fixes (one needs a Phase 0 contract change, the other is a one-liner but the design discussion should be unified). Per the autonomous protocol's blocker rule, the loop halted and did NOT schedule wake 6.
+- Plan §"Task 9b blocker-fix" subsection with full B-clean design + rejected alternatives + execution order.
+- This live-status update (§1 / §4 / §5 / §10).
+- TODOS.md entry recording AppServerClient idempotent respond/reject as future defensive guardrail (NOT this fix).
 
-Findings full text + suggested fixes + recommended forward path: `docs/phase-1/codex-review-t9b.md`.
+After this commit lands and gates are green: STOP for user review before Step 1.
 
-Total wake count: 5. Total commits this overnight session: ~20 (most code, several docs syncs, two reviews).
+Step 1: failing tests first (4 new tests). Step 2: B-clean implementation. Step 3: codex outside-voice review on the fix.
+
+Total overnight session (closed): 5 wakes, 21 commits. T9a complete + Pre-3 + T9b code through Step 9b.6. The blocker fix opens a new staged sequence on top of HEAD `0bae49b`.
 
 ## 5. Next exact action
 
-**User approval required before next wake.** Reason: 2 blockers in `docs/phase-1/codex-review-t9b.md` need design decision (the loop deliberately did not auto-fix because both fixes have subtle implications):
+**Step 1 of T9b blocker-fix — write 4 failing tests** in `packages/core/test/approval-broker.test.ts`. Authorized files for the whole blocker-fix: `packages/core/{src,test}/...` only. Do NOT touch `packages/app-server-client/`.
 
-**Blocker 1** — duplicate-response race in `expirePending` / `failPendingAsTransportLost` interacting with in-flight `#handle` await. Three design options laid out in the review doc's "Recommended forward path":
+The 4 tests:
 
-- **(A) Pre-4 AppServerClient idempotence:** track responded ids in AppServerClient, drop duplicate respond/reject calls. Phase 0 contract change; ships as Pre-4 PR mirroring Pre-1/Pre-2/Pre-3 discipline.
-- **(B) #handle refactor:** broker owns a per-record completion promise; `expirePending` settles the promise instead of calling client.respond directly. Stays inside packages/core/. Substantive change to #handle's contract.
-- **(C) Phase 1 punt:** accept the race, document, push real fix to Phase 2 IM. Risky — 10-min default cutoff is operator-tunable.
+1. **late-resolving handler after expirePending does not produce duplicate response**
+   - broker attached, handler returns a manually-controlled Promise (not yet settled)
+   - emit a server request → broker tracks pending
+   - call `broker.expirePending(maxAgeMs)` while handler is still pending
+   - assert the wire response is the per-method default-reject (one wire response total)
+   - then resolve the original handler promise
+   - assert NO second wire response is emitted; record stays terminal `expired`
+2. **late-rejecting handler after expirePending also does not produce duplicate response**
+   - same as #1 but the handler eventually rejects
+   - the expire path is the only wire outcome
+3. **failPendingAsTransportLost does not produce duplicate response on late handler resolution**
+   - handler manually controlled, `failPendingAsTransportLost()` called, then handler settles
+   - record terminal status `transport_lost`; no second wire response
+4. **reattach resets transportLostFired (allows second-generation transport_lost)**
+   - attach to clientA → emit hanging request → `failPendingAsTransportLost()` → assert clientA record is `transport_lost`
+   - reattach to clientB → emit hanging request on clientB → `failPendingAsTransportLost()` → assert clientB record is ALSO `transport_lost` (current bug: second call no-ops because flag stays true)
 
-**Blocker 2** — `#transportLostFired` not reset on `reattach()`. Trivial fix (one line in reattach's success path) but bundled with blocker 1 because the right answer might be "rework the lifecycle holistically" depending on which option you pick for blocker 1.
+Wire-frame counting: prefer using existing FakeAppServer / InMemoryTransport observability. If neither can count duplicate frames cleanly, do NOT fake the assertion silently — STOP and report. Modifying `packages/testkit/` is out of authorized scope unless explicitly approved.
 
-After your decision on blocker 1, the morning sequence:
-1. Decide A / B / C for blocker 1 → apply fix
-2. Apply blocker 2 + medium fixes + missing tests in same commit (the design unifies the lifecycle)
-3. Re-run codex review on the fix commit. If clean → T9b complete.
-4. Then T10 (CLI runtime send) — small, autonomous-safe.
-5. T11a/T11b — explicit user approval per autonomous-mode hard stops.
+Run targeted tests, expect fail-for-the-right-reason, report and STOP. Do NOT write implementation in Step 1.
 
-T9b code Files (already committed at HEAD):
-- `packages/core/src/approval-broker.ts`
-- `packages/core/test/approval-broker.test.ts`
-- `packages/core/test/no-method-literals.test.ts`
+**Step 2 of T9b blocker-fix — B-clean implementation** (only after user approves Step 1 report):
 
-The grep guard test (Step 9b.6, `bf97a49`) is correct and unrelated to the blockers — it can land independently if you want to lock the boundary while designing the lifecycle fix.
+Per plan §"Task 9b blocker-fix" → "Design (B-clean)":
+- Internal `PendingEntry` shape with `record` + `completion` + `settleOnce` + `settled` (private to `approval-broker.ts`; never leaks into `ApprovalRecord`)
+- `#handle` kicks off handler in background, awaits `entry.completion`
+- `expirePending` and `failPendingAsTransportLost` use `settleOnce` instead of direct `client.respond` / `client.reject`
+- Late handler completion observes `record.status !== "pending"` and is dropped
+- `reattach` resets `#transportLostFired = false` on success
+
+Run targeted tests + full ci-check. Tests should turn green. Report and STOP. Do NOT commit until user approves.
+
+**Step 3 — codex outside-voice review** on the fix diff (range parent-of-fix..HEAD-of-fix, filtered to `packages/core/`). Capture findings to `docs/phase-1/codex-review-t9b-blocker-fix.md`. Apply low/nit + obvious medium fixes inline; STOP on uncertain medium / blocker.
+
+**Step 4** — live-status sync marking T9b complete; resume autonomous loop for T10 if user approves.
+
+T9b blocker-fix authorized Files:
+- `packages/core/src/approval-broker.ts` (modify)
+- `packages/core/test/approval-broker.test.ts` (modify)
+- May modify if needed: `packages/core/test/approval-broker-dispatch.test.ts`, `packages/core/test/dispatch-coverage.test.ts`
+
+T9b blocker-fix forbidden:
+- `packages/app-server-client/` (Pre-3 owns; Option A is future backlog only)
+- `packages/codex-runtime/`, `packages/cli/`, `packages/testkit/`
+- Any IM adapter / Computer Use prod / WebSocket listener / approval method-name hardcode
 
 ## 6. Currently modified files (working tree)
 
@@ -124,18 +154,21 @@ Phase 1 specific:
 
 ## 10. Not allowed to advance until resolved
 
-**T9b's blocker 1 design decision required before any further loop work.**
+**Staged blocker-fix sequence — STOPs are mandatory, NOT advisory.**
 
-The blocker is a real correctness bug (codex outside-voice analysis is sound — see review doc for the manual repro steps). The autonomous loop deliberately did NOT apply a fix because the right design depends on a tradeoff the user owns:
+User specified gated execution on 2026-05-01:
+- Step 0 (this commit) — docs only. STOP for user review.
+- Step 1 — failing tests. STOP for user approval.
+- Step 2 — B-clean implementation. STOP for user approval.
+- Step 3 — codex outside-voice review on fix diff. Apply low/nit + obvious medium inline; STOP on uncertain medium/blocker.
+- Step 4 — live-status sync; user decides whether to resume autonomous loop for T10.
 
-- Option A (Pre-4 AppServerClient idempotence) — cleanest semantically, smallest local change, but expands T9b's scope into Phase 0 contract.
-- Option B (#handle refactor with completion promise) — stays inside packages/core/ but requires a non-trivial rewrite of #handle's contract. Higher risk of subtle bugs.
-- Option C (Phase 1 punt) — fastest, but leaves a known-broken edge case in production.
-
-Once a path is chosen, T9b's fix-up commit lands the chosen approach + blocker 2 + medium fixes + the missing tests, then we re-run codex review. After that:
-
-- T10 (CLI runtime send) — small, autonomous-safe; can resume autonomous mode for it.
-- T11a / T11b — explicit user approval per the autonomous-mode hard stop. Plan §397 marks these "lead session lifecycle correctness critical".
+While Step 0/1/2/3 are open:
+- Do NOT modify `packages/app-server-client/` — Option A (Pre-4 idempotent respond) is future backlog only, NOT this fix.
+- Do NOT modify `packages/codex-runtime/`, `packages/cli/`, `packages/testkit/`, or `packages/daemon/` (the latter doesn't exist yet anyway).
+- Do NOT add `_resolveWire` / `_rejectWire` capability handles to `ApprovalRecord` — keep the public data shape clean. Use private internal `PendingEntry` instead.
+- Do NOT call `client.respond` / `client.reject` directly from `expirePending` or `failPendingAsTransportLost` — both must go through `settleOnce` on the broker-owned completion promise.
+- Do NOT skip the "late handler resolve/reject after terminal status" tests — those are the load-bearing coverage that catches the original race.
 
 Other Phase 1 non-goals from handoff (unchanged across all tasks):
 - Any IM adapter (Phase 2+).
@@ -143,9 +176,11 @@ Other Phase 1 non-goals from handoff (unchanged across all tasks):
 - SQLite storage (Phase 2).
 - ChannelAdapter / SessionRouter / CommandRouter (Phase 2).
 - Public WebSocket / public HTTP listener (Phase 8).
-- Rewriting any Phase 0 module.
+- Rewriting any Phase 0 module beyond Pre-3's narrow extension.
 - Making `AppServerClient` restartable.
 - Default-approving any approval; bypassing approvals; failing-open on errors.
+
+T11a / T11b still need explicit user approval after T9b blocker-fix lands. Plan §397 marks these "lead session lifecycle correctness critical".
 
 Other Phase 1 non-goals from handoff (unchanged across all tasks):
 - Any IM adapter (Phase 2+).
