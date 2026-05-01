@@ -132,9 +132,13 @@ export interface AuditEmitterOptions {
 
 /**
  * Phase 2 audit emitter. In-memory FIFO ring + optional structured-log
- * sink. T5 will extend `emit()` to apply `redact()` to event metadata
- * BEFORE both ring storage and logger emit (Codex P1-3 / F10) — T3
- * ships the skeleton with no redaction.
+ * sink. `emit()` deep-walks every string in the event tree (metadata
+ * recursive + root string fields) through `redact()` BEFORE both ring
+ * storage AND logger emit (T5 / Codex P1-3 / F10). The same redacted
+ * object instance reaches both sinks — no divergence. Caller's input
+ * is never mutated; the walk is also a defensive copy. Non-string
+ * values (numbers, booleans, null, Dates, Buffers, custom-class
+ * instances) are preserved as-is via prototype check.
  *
  * Lifecycle:
  *   - Construct with options (or none). Constructor validates ringSize.

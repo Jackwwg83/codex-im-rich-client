@@ -144,20 +144,26 @@ describe("@codex-im/core AuditEmitter redaction (T5.1)", () => {
       expect(String(payload.metadata?.command)).toMatch(/REDACTED/);
     });
 
-    it("ring AND logger see the SAME redacted payload (no divergence)", () => {
+    it("ring AND logger see the SAME redacted payload (no divergence; full-payload equality)", () => {
       const info = vi.fn();
       const logger: AuditLogger = { info };
       const e = new AuditEmitter({ logger });
       e.emit({
         kind: "approval.resolved",
-        metadata: { secret: FAKE_GITHUB_PAT },
+        approvalId: "appr-77",
+        metadata: { secret: FAKE_GITHUB_PAT, nested: { token: FAKE_TELEGRAM_TOKEN } },
       });
       const stored = e._auditRingForTest()[0];
-      const logged = info.mock.calls[0]?.[0] as { metadata?: { secret?: string } };
-      // Both must be redacted, and the redacted forms must agree.
-      expect(stored?.metadata?.secret).not.toContain(FAKE_GITHUB_PAT);
-      expect(logged?.metadata?.secret).not.toContain(FAKE_GITHUB_PAT);
-      expect(stored?.metadata?.secret).toBe(logged?.metadata?.secret);
+      const logged = info.mock.calls[0]?.[0] as Record<string, unknown>;
+      // Strengthen vs. T5.1: every field must agree, not just the
+      // redacted-secret one. Full-payload deep equality pins that no
+      // divergence can land between ring and logger sinks.
+      expect(logged).toEqual(stored);
+      // And the nested redacted object reuses the same redacted instance
+      // (T5 design: single deep-walk per emit; no second walk for logger).
+      expect((logged.metadata as { nested: object }).nested).toBe(
+        (stored?.metadata as { nested: object })?.nested,
+      );
     });
   });
 
@@ -300,6 +306,13 @@ describe("@codex-im/core AuditEmitter redaction (T5.1)", () => {
       // Date preserved as-is (or as a same-time copy — both acceptable)
       expect(stored?.metadata?.when).toBeInstanceOf(Date);
       expect((stored?.metadata?.when as Date).getTime()).toBe(fixedDate.getTime());
+      // Codex T5 review P2-6: the test name claims "preserves undefined"
+      // but T5.1 didn't actually pin the property semantics. Pin them
+      // here. Plain-object walk preserves the `missing: undefined` entry
+      // verbatim (Object.entries iterates explicitly-undefined values).
+      const md = stored?.metadata as Record<string, unknown>;
+      expect("missing" in md).toBe(true);
+      expect(md.missing).toBeUndefined();
     });
   });
 
@@ -407,8 +420,125 @@ describe("@codex-im/core AuditEmitter redaction (T5.1)", () => {
     });
   });
 
-  // ─── 10. Full-event idempotency (T3 + T5 round-trip) ───────────────
-  describe("redact() output stability", () => {
+  // ─── Root string field redaction (Codex T5 review P2-3) ───────────
+  // Plan §5 T5.3 says "deep-walk metadata (and any string field at the
+  // event root)". Implementation walks the WHOLE input (root + nested);
+  // pin the root-string-field redaction so the contract doesn't drift.
+  // Broker-controlled fields like `approvalId` (= `approval-${id}`) and
+  // `appServerRequestId` will normally never carry secret-shaped values,
+  // but if a misbehaving caller puts a token there, the walk still
+  // catches it.
+  describe("Root string field redaction (Codex T5 review P2-3)", () => {
+    it("redacts a token-shaped value passed as approvalId (defensive)", () => {
+      const e = new AuditEmitter({ ringSize: 5 });
+      // approvalId is normally `approval-${id}`. If a caller misuses it
+      // by stuffing a token, the walk must still redact.
+      const synthetic = `approval-prefix-${FAKE_TELEGRAM_TOKEN}`;
+      e.emit({ kind: "approval.created", approvalId: synthetic });
+      const stored = e._auditRingForTest()[0];
+      expect(stored?.approvalId).not.toContain(FAKE_TELEGRAM_TOKEN);
+      expect(stored?.approvalId).toMatch(/REDACTED/);
+    });
+
+    it("redacts a token-shaped value passed as appServerRequestId (string form)", () => {
+      const e = new AuditEmitter({ ringSize: 5 });
+      e.emit({
+        kind: "approval.created",
+        appServerRequestId: `req-${FAKE_GITHUB_PAT}`,
+      });
+      const stored = e._auditRingForTest()[0];
+      expect(stored?.appServerRequestId).not.toContain(FAKE_GITHUB_PAT);
+      expect(String(stored?.appServerRequestId)).toMatch(/REDACTED/);
+    });
+
+    it("preserves numeric appServerRequestId (numbers aren't redacted)", () => {
+      const e = new AuditEmitter({ ringSize: 5 });
+      e.emit({ kind: "approval.created", appServerRequestId: 42 });
+      const stored = e._auditRingForTest()[0];
+      expect(stored?.appServerRequestId).toBe(42);
+    });
+
+    it("kind discriminator is structurally not redactable (passes through unchanged)", () => {
+      // `kind` is one of the 12 enumerated AuditEventKind strings; none
+      // of them match any T4 redact regex, so redact() is a no-op on
+      // them. Pin this so a future widening of T4's patterns doesn't
+      // accidentally clobber the discriminator.
+      const e = new AuditEmitter({ ringSize: 5 });
+      e.emit({ kind: "approval.unsupported_decision" });
+      const stored = e._auditRingForTest()[0];
+      expect(stored?.kind).toBe("approval.unsupported_decision");
+    });
+  });
+
+  // ─── Actor redaction (Codex T5 review P2-4) ───────────────────────
+  // The walk recurses into `actor` because it's a plain-object root
+  // field. Pin that actor.userId / actor.platform / actor.chatId etc.
+  // get redacted when they happen to carry secret-shaped strings.
+  describe("Actor field redaction (Codex T5 review P2-4)", () => {
+    it("redacts a token-shaped value in actor.userId", () => {
+      const e = new AuditEmitter({ ringSize: 5 });
+      e.emit({
+        kind: "approval.resolved",
+        actor: {
+          kind: "im",
+          platform: "telegram",
+          // Synthetic: real Telegram user ids are integer strings, but
+          // a misbehaving caller could put a token here.
+          userId: `tg-${FAKE_TELEGRAM_TOKEN}`,
+        },
+      });
+      const stored = e._auditRingForTest()[0];
+      const actor = stored?.actor as { kind: string; userId: string } | undefined;
+      expect(actor).toBeDefined();
+      expect(actor?.userId).not.toContain(FAKE_TELEGRAM_TOKEN);
+      expect(actor?.userId).toMatch(/REDACTED/);
+    });
+
+    it("redacts a token-shaped value in actor.chatId", () => {
+      const e = new AuditEmitter({ ringSize: 5 });
+      e.emit({
+        kind: "approval.resolved",
+        actor: {
+          kind: "im",
+          platform: "telegram",
+          userId: "tg-12345",
+          chatId: `chat-${FAKE_GITHUB_PAT}`,
+        },
+      });
+      const stored = e._auditRingForTest()[0];
+      const actor = stored?.actor as { kind: string; chatId?: string } | undefined;
+      expect(actor?.chatId).not.toContain(FAKE_GITHUB_PAT);
+      expect(actor?.chatId).toMatch(/REDACTED/);
+    });
+
+    it("preserves benign actor field values (non-secret userId)", () => {
+      const e = new AuditEmitter({ ringSize: 5 });
+      e.emit({
+        kind: "approval.resolved",
+        actor: { kind: "im", platform: "telegram", userId: "tg-12345" },
+      });
+      const stored = e._auditRingForTest()[0];
+      const actor = stored?.actor as { kind: string; platform: string; userId: string };
+      expect(actor.kind).toBe("im");
+      expect(actor.platform).toBe("telegram");
+      expect(actor.userId).toBe("tg-12345");
+    });
+
+    it("preserves system actor (no IM userId to redact)", () => {
+      const e = new AuditEmitter({ ringSize: 5 });
+      e.emit({
+        kind: "approval.transport_lost",
+        actor: { kind: "system", reason: "transport_lost" },
+      });
+      const stored = e._auditRingForTest()[0];
+      const actor = stored?.actor as { kind: string; reason: string };
+      expect(actor.kind).toBe("system");
+      expect(actor.reason).toBe("transport_lost");
+    });
+  });
+
+  // ─── 10. Redact-pass output stability (T3 + T5 round-trip) ─────────
+  describe("redact() output stability across the audit boundary", () => {
     it("the redact placeholder text from T4 is what appears in the ring", () => {
       // Consistency check: whatever T4's redact() produces for a given
       // input is exactly what emit() stores. If T4's placeholder format
