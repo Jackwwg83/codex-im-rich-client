@@ -907,3 +907,222 @@ describe("Supervisor T11b — close handling (idempotence + backoff + halt)", ()
     expect(audit.fatals[0]).toMatch(/spawnFresh failed.*simulated spawn failure/);
   });
 });
+
+// ─── Phase 1 integrated review Blocker 2 — spawn-failure cleanup ──────
+
+describe("Supervisor spawn-failure cleanup (Phase 1 integrated review blocker 2)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("initial start() with client.start() throwing — cleans up half-started client + transport, leaves halted (no recovery)", async () => {
+    // Build a transport whose `start()` throws. The supervisor should:
+    //   1. Catch the throw inside #spawnFresh.
+    //   2. Stop the failed client (which calls transport.stop()).
+    //   3. Detach the close subscription.
+    //   4. Set #halted = true.
+    //   5. Re-throw so start()'s caller sees the failure.
+    let transportStopped = false;
+    let onCloseUnsubCalled = false;
+    let clientStartCalled = false;
+
+    const failingTransport: Transport = {
+      start: async () => {
+        clientStartCalled = true;
+        throw new Error("simulated transport.start() failure");
+      },
+      stop: async () => {
+        transportStopped = true;
+      },
+      send: () => {},
+      onMessage: (_h) => () => {},
+      onError: (_h) => () => {},
+      onClose: (_h) => () => {
+        onCloseUnsubCalled = true;
+      },
+    };
+
+    const placeholderFake = new FakeAppServer();
+    const placeholderClient = new AppServerClient(placeholderFake.clientSide);
+    const broker = new ApprovalBroker(placeholderClient);
+    broker.attach();
+    const audit = recordingAudit();
+
+    const opts: SupervisorOptions = {
+      transportFactory: () => failingTransport,
+      clientFactory: (t) => new AppServerClient(t),
+      runtimeFactory: (c) => new CodexRuntime(c),
+      broker,
+      performHandshake: async () => ({}),
+      audit,
+    };
+
+    const sup = new Supervisor(opts);
+
+    // start() must throw with the original error.
+    await expect(sup.start()).rejects.toThrow(/simulated transport.start\(\) failure/);
+
+    // client.start() was actually called (the throw came from there).
+    expect(clientStartCalled).toBe(true);
+
+    // Supervisor is halted; subsequent start() refuses.
+    await expect(sup.start()).rejects.toThrow(/supervisor is halted/);
+
+    // currentClient / currentTransport / runtime were nulled out.
+    expect(sup.currentClientForTest()).toBeNull();
+    expect(sup.currentTransportForTest()).toBeNull();
+
+    // The onClose subscription was detached during cleanup.
+    expect(onCloseUnsubCalled).toBe(true);
+
+    // The transport was stopped (via client.stop() propagation) — this
+    // is what AppServerClient.stop() does in production. Our fake
+    // transport's stop() flag is set.
+    expect(transportStopped).toBe(true);
+
+    // No fatal was emitted by the cleanup itself (initial-start
+    // failure surfaces the throw to the caller; the host decides
+    // whether to fatal-log).
+    expect(audit.fatals.length).toBe(0);
+  });
+
+  it("initial start() with performHandshake throwing — same cleanup contract", async () => {
+    const placeholderFake = new FakeAppServer();
+    const placeholderClient = new AppServerClient(placeholderFake.clientSide);
+    const broker = new ApprovalBroker(placeholderClient);
+    broker.attach();
+    const audit = recordingAudit();
+    const gen = makeSpawnGen();
+    let lastEmission!: ReturnType<SpawnGen["next"]>;
+
+    const opts: SupervisorOptions = {
+      transportFactory: () => {
+        lastEmission = gen.next();
+        return lastEmission.transport;
+      },
+      clientFactory: (_t) => lastEmission.client,
+      runtimeFactory: (_c) => lastEmission.runtime,
+      broker,
+      performHandshake: async () => {
+        throw new Error("simulated handshake failure");
+      },
+      audit,
+    };
+
+    const sup = new Supervisor(opts);
+    await expect(sup.start()).rejects.toThrow(/simulated handshake failure/);
+    await expect(sup.start()).rejects.toThrow(/supervisor is halted/);
+    expect(sup.currentClientForTest()).toBeNull();
+    expect(sup.currentTransportForTest()).toBeNull();
+  });
+
+  it("initial start() with broker.reattach throwing — cleanup runs even though throw is from a sync step", async () => {
+    // Broker that's never been attached → reattach throws "has not
+    // been attached yet". This exercises the cleanup on a synchronous
+    // throw inside the try block.
+    const placeholderFake = new FakeAppServer();
+    const placeholderClient = new AppServerClient(placeholderFake.clientSide);
+    const unattachedBroker = new ApprovalBroker(placeholderClient);
+    // NOTE: NOT calling broker.attach()
+    const audit = recordingAudit();
+
+    let transportStopped = false;
+    const fake = new FakeAppServer();
+    const trackedTransport: Transport = {
+      start: () => fake.clientSide.start(),
+      stop: async () => {
+        transportStopped = true;
+        await fake.clientSide.stop();
+      },
+      send: (m) => fake.clientSide.send(m),
+      onMessage: (h) => fake.clientSide.onMessage(h),
+      onError: (h) => fake.clientSide.onError(h),
+      onClose: (h) => fake.clientSide.onClose(h),
+    };
+
+    const opts: SupervisorOptions = {
+      transportFactory: () => trackedTransport,
+      clientFactory: (t) => new AppServerClient(t),
+      runtimeFactory: (c) => new CodexRuntime(c),
+      broker: unattachedBroker,
+      performHandshake: async () => ({}),
+      audit,
+    };
+
+    const sup = new Supervisor(opts);
+    await expect(sup.start()).rejects.toThrow(/has not been attached yet/);
+    expect(sup.currentClientForTest()).toBeNull();
+    expect(sup.currentTransportForTest()).toBeNull();
+    // Transport was stopped during cleanup (AppServerClient.stop()
+    // propagates through to InMemoryTransport's stop, which calls
+    // our wrapper's stop()).
+    expect(transportStopped).toBe(true);
+    await fake.stop();
+  });
+
+  it("recovery spawn — client.start() throws — cleans up + emits fatal + no further recovery", async () => {
+    vi.useFakeTimers();
+
+    const audit = recordingAudit();
+    const placeholderFake = new FakeAppServer();
+    const placeholderClient = new AppServerClient(placeholderFake.clientSide);
+    const broker = new ApprovalBroker(placeholderClient);
+    broker.attach();
+
+    // First spawn succeeds; subsequent spawns have a transport that
+    // fails on start().
+    let spawnIndex = 0;
+    const firstFake = new FakeAppServer();
+    const firstClient = new AppServerClient(firstFake.clientSide);
+    const firstRuntime = new CodexRuntime(firstClient);
+
+    const opts: SupervisorOptions = {
+      transportFactory: () => {
+        spawnIndex++;
+        if (spawnIndex === 1) return firstFake.clientSide;
+        // Recovery spawn: failing transport.
+        return {
+          start: async () => {
+            throw new Error("simulated recovery start failure");
+          },
+          stop: async () => {},
+          send: () => {},
+          onMessage: (_h) => () => {},
+          onError: (_h) => () => {},
+          onClose: (_h) => () => {},
+        };
+      },
+      clientFactory: (t) => (spawnIndex === 1 ? firstClient : new AppServerClient(t)),
+      runtimeFactory: (_c) => firstRuntime,
+      broker,
+      performHandshake: async () => ({}),
+      audit,
+    };
+
+    const sup = new Supervisor(opts);
+    await sup.start();
+    expect(sup.currentClientForTest()).toBe(firstClient);
+
+    // Trigger a close — schedules recovery spawn via setTimeout.
+    sup._handleTransportCloseForTest(0);
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
+
+    // Recovery spawn failed inside setTimeout's catch:
+    // - audit.emitFatal was called with the start-failure message
+    // - supervisor is halted (cleanup set it)
+    // - currentClient is null (cleanup nulled it)
+    expect(audit.fatals.some((m) => /simulated recovery start failure/.test(m))).toBe(true);
+    expect(sup.currentClientForTest()).toBeNull();
+    expect(sup.currentTransportForTest()).toBeNull();
+
+    // Subsequent close after halt: silently dropped.
+    const fatalsBefore = audit.fatals.length;
+    sup._handleTransportCloseForTest(0);
+    await vi.advanceTimersByTimeAsync(8000);
+    await vi.runAllTimersAsync();
+    expect(audit.fatals.length).toBe(fatalsBefore);
+
+    await firstFake.stop();
+  });
+});

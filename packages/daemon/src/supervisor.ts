@@ -237,60 +237,161 @@ export class Supervisor {
       this.#currentCloseUnsub = null;
     }
 
-    // Step 1: transport. Capture the reference IMMEDIATELY so step 2
-    // can subscribe; do not interleave any other work between the
-    // factory call and the subscription.
-    const transport = this.#opts.transportFactory();
-    this.#currentTransport = transport;
-
-    // Step 2: subscribe-before-spawn (Codex B7). This ordering is
-    // load-bearing — see JSDoc above.
-    this.#currentCloseUnsub = transport.onClose((code) => {
-      this.#onTransportClose(code);
-    });
-
-    // Step 3: client. The clientFactory may apply AppServerClientOptions
-    // (logger override, timeout overrides) — that's the caller's
-    // responsibility. We pass a default-empty opts object; production
-    // CLI provides logger/timeouts via the factory closure.
-    const client = this.#constructClient(transport);
-    this.#currentClient = client;
-
-    // Step 4: broker.reattach(client). T9b B-clean: this is the only
-    // way to swap the broker's client reference without leaking handler
-    // state. attach() would throw because the broker was attached to
-    // the prior client (or the very first attach happens here for
-    // generation 1 — see note below).
+    // Locals track the in-flight spawn. On failure, we use these
+    // (not `this.#current*`) for cleanup — they always reflect THIS
+    // spawn's progress, even if `#current*` was overwritten or never
+    // assigned (e.g. transportFactory threw).
     //
-    // Note for generation 1: the caller is expected to have called
-    // broker.attach() against a placeholder client OR not at all.
-    // T11a's tests use the latter pattern (broker untouched until
-    // first reattach). T11b will document this contract precisely
-    // and may add a one-shot "first generation = attach, subsequent
-    // = reattach" branch if production wiring needs it.
-    this.#opts.broker.reattach(client);
+    // Phase 1 integrated review blocker 2: the supervisor must clean
+    // up the half-started generation on any spawn failure. Steps 1-7
+    // are wrapped in try/catch; the catch arm calls
+    // `#cleanupFailedGeneration` (stop client/transport, detach
+    // onClose, set `#halted = true`) and re-throws so the outer
+    // caller — `start()` for first-generation, the recovery `setTimeout`
+    // callback for subsequent generations — sees the failure. Both
+    // outer paths are responsible for surfacing the fatal to the
+    // host (`audit.emitFatal`); the cleanup itself is silent so we
+    // don't double-emit.
+    let transport: Transport | null = null;
+    let client: AppServerClient | null = null;
 
-    // Step 5: await client.start(). This opens the transport's send
-    // pipe (StdioTransport spawns the subprocess here in production).
-    await client.start();
+    try {
+      // Step 1: transport. Capture the reference IMMEDIATELY so step 2
+      // can subscribe; do not interleave any other work between the
+      // factory call and the subscription.
+      transport = this.#opts.transportFactory();
+      this.#currentTransport = transport;
 
-    // Step 6: handshake. Initialize round-trip; resolves with the
-    // codex InitializeResponse. The supervisor doesn't read the
-    // response — it just awaits it as a "the wire is live" gate.
-    await this.#opts.performHandshake(client);
+      // Step 2: subscribe-before-spawn (Codex B7). This ordering is
+      // load-bearing — see JSDoc above.
+      this.#currentCloseUnsub = transport.onClose((code) => {
+        this.#onTransportClose(code);
+      });
 
-    // Step 7: runtime. CodexRuntime constructs an EventNormalizer
-    // which subscribes to client.onNotification — that subscription
-    // lives until client closes (no separate teardown needed).
-    this.#currentRuntime = this.#opts.runtimeFactory(client);
+      // Step 3: client. The clientFactory may apply AppServerClientOptions
+      // (logger override, timeout overrides) — that's the caller's
+      // responsibility. We pass a default-empty opts object; production
+      // CLI provides logger/timeouts via the factory closure.
+      client = this.#constructClient(transport);
+      this.#currentClient = client;
 
-    // Reset close-handling state for the new generation. The
-    // failure counter resets on a successful spawn (T11b) — a
-    // healthy spawn should not count toward the halt threshold;
-    // halt-on-cascade only fires when 5 closes happen WITHOUT an
-    // intervening successful spawn.
-    this.#closing = false;
-    this.#consecutiveFailures = 0;
+      // Step 4: broker.reattach(client). T9b B-clean: this is the only
+      // way to swap the broker's client reference without leaking handler
+      // state. The broker MUST be pre-attached (see SupervisorOptions
+      // JSDoc). If reattach throws (e.g. cross-instance guard), we
+      // hit the cleanup path below.
+      this.#opts.broker.reattach(client);
+
+      // Step 5: await client.start(). This opens the transport's send
+      // pipe (StdioTransport spawns the subprocess here in production).
+      // If start() throws (e.g. subprocess spawn failed, transport-init
+      // race), cleanup below stops the half-started client.
+      await client.start();
+
+      // Step 6: handshake. Initialize round-trip; resolves with the
+      // codex InitializeResponse. The supervisor doesn't read the
+      // response — it just awaits it as a "the wire is live" gate.
+      // If the handshake throws (e.g. codex returns -32600 on init,
+      // version mismatch), cleanup stops the started client.
+      await this.#opts.performHandshake(client);
+
+      // Step 7: runtime. CodexRuntime constructs an EventNormalizer
+      // which subscribes to client.onNotification — that subscription
+      // lives until client closes (no separate teardown needed).
+      // If runtimeFactory throws (e.g. caller-supplied factory has
+      // a bug), cleanup again stops the client cleanly.
+      this.#currentRuntime = this.#opts.runtimeFactory(client);
+
+      // Success — reset close-handling state for the new generation.
+      // The failure counter resets on a successful spawn (T11b) — a
+      // healthy spawn should not count toward the halt threshold.
+      this.#closing = false;
+      this.#consecutiveFailures = 0;
+    } catch (err) {
+      await this.#cleanupFailedGeneration(transport, client);
+      throw err;
+    }
+  }
+
+  /**
+   * Cleanup helper for `#spawnFresh` failure paths. Tears down the
+   * half-started generation atomically from the supervisor's perspective:
+   *
+   *   1. Sets `#halted = true` (durable; never cleared) — future
+   *      operations on this supervisor refuse via the halted-guard
+   *      at the top of `#onTransportClose` and `start()`.
+   *   2. Detaches the new generation's onClose subscription so a
+   *      transport-close fired during cleanup doesn't re-enter
+   *      `#onTransportClose` and schedule another respawn.
+   *   3. Stops the half-started client (which propagates to the
+   *      transport via AppServerClient.stop()'s implementation). If
+   *      client construction failed before the client was assigned,
+   *      stops the transport directly.
+   *   4. Nulls out `#currentTransport` / `#currentClient` /
+   *      `#currentRuntime` so any test-door / Phase 2 reader sees
+   *      a clean halted state, not stale references to a stopped
+   *      generation.
+   *
+   * All inner steps swallow their own errors — cleanup must be
+   * best-effort. The caller (try/catch in `#spawnFresh`) re-throws
+   * the original error so the outer caller (`start()` or recovery
+   * `setTimeout`) sees the spawn failure.
+   *
+   * Phase 1 integrated review blocker 2 fix.
+   */
+  async #cleanupFailedGeneration(
+    transport: Transport | null,
+    client: AppServerClient | null,
+  ): Promise<void> {
+    this.#halted = true;
+
+    // Detach the new generation's onClose subscription FIRST so any
+    // transport-close fired by the imminent client.stop() doesn't
+    // re-enter #onTransportClose.
+    if (this.#currentCloseUnsub !== null) {
+      try {
+        this.#currentCloseUnsub();
+      } catch {
+        // Ignore: transport's onClose unsub contract is "synchronous,
+        // idempotent". A throw here would be a transport-implementation
+        // bug; cleanup must continue.
+      }
+      this.#currentCloseUnsub = null;
+    }
+
+    // Stop the half-started client. AppServerClient.stop() is
+    // idempotent (its `if (this.closed) return` guard) and propagates
+    // to transport.stop(). If client construction itself failed before
+    // the client was assigned, fall back to stopping the transport
+    // directly.
+    if (client !== null) {
+      try {
+        await client.stop();
+      } catch {
+        // Ignore: the client is doomed; cleanup must continue.
+      }
+    } else if (transport !== null) {
+      try {
+        await transport.stop();
+      } catch {
+        // Ignore.
+      }
+    }
+
+    // Cancel any pending re-spawn timer in case cleanup was triggered
+    // mid-recovery (shouldn't happen because the caller sets #halted
+    // BEFORE the timer fires, but defense-in-depth).
+    if (this.#pendingRespawnTimer !== null) {
+      clearTimeout(this.#pendingRespawnTimer);
+      this.#pendingRespawnTimer = null;
+    }
+
+    // Clear stale references — observers should see "halted, no
+    // current generation" rather than "halted, but #currentClient
+    // points at a stopped instance".
+    this.#currentClient = null;
+    this.#currentTransport = null;
+    this.#currentRuntime = null;
   }
 
   /**
