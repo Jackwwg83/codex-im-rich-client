@@ -19,3 +19,9 @@ export type {
 } from "./types.js";
 export { ApprovalBroker } from "./approval-broker.js";
 export type { DispatcherSpec } from "./approval-broker.js";
+
+// Phase 2 T2 — ApprovalRequestKind classifier (the only Phase 2 production
+// source allowed to read raw approval server-request method strings; see
+// `approval-request-kind.ts` header for the boundary rationale).
+export { classifyApprovalRequest } from "./approval-request-kind.js";
+export type { ApprovalRequestKind } from "./approval-request-kind.js";
