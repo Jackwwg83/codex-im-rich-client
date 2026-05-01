@@ -1,0 +1,21 @@
+{
+  "name": "@codex-im/daemon",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run --project unit"
+  },
+  "dependencies": {
+    "@codex-im/app-server-client": "workspace:*",
+    "@codex-im/codex-runtime": "workspace:*",
+    "@codex-im/core": "workspace:*",
+    "@codex-im/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@codex-im/testkit": "workspace:*",
+    "pino": "^9"
+  }
+}

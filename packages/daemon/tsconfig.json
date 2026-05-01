@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../app-server-client" },
+    { "path": "../codex-protocol" },
+    { "path": "../codex-runtime" },
+    { "path": "../core" }
+  ]
+}
