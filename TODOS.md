@@ -92,6 +92,36 @@ summary and Phase 2 hand-off.
 - [x] ~~**`AppServerClient` ONE-SHOT lifecycle JSDoc**~~ — applied in commit `2055646`. Header documents 7-step supervisor recovery protocol.
 - [x] ~~**`pnpm audit` baseline**~~ — clean run recorded in `docs/phase-0/host-environment.md` Security baseline section. 193 deps, 0 vulnerabilities.
 
+## Phase 2 P2 polish backlog (round-3 deep-review deferred, 2026-05-01)
+
+5 P2 test-hardening items surfaced by the post-T3 Codex deep review (`/tmp/phase2-deep-review-output.txt`). User chose Option B+ at round-3: apply 6 P1 + 2 docs-P2 immediately; defer these 5 test-hardening items to organic future tasks. None block T4 / Phase 2 progress; pick up when the relevant task naturally touches them.
+
+- [ ] **P2-poly-1 — Tighten T2 / T3 type-level "exact union" guards.**
+  - **Why:** Current array-membership tests in `packages/core/test/approval-request-kind.test.ts` and `packages/core/test/audit.test.ts` would still pass if an 11th `ApprovalRequestKind` or 13th `AuditEventKind` were added. Codex round-3 P2-2 / P2-4.
+  - **Where:** Add `Exclude<ApprovalRequestKind, Listed[number]> extends never ? true : never` style guard in both test files (and equivalent for `AuditEventKind`).
+  - **Pick up:** when T16 (render per-kind tests) lands — same pattern applies.
+
+- [ ] **P2-poly-2 — Add T2 classifier `Object.hasOwn` prototype-key tests.**
+  - **Why:** Implementation correctly rejects `"toString"` / `"constructor"` / `"hasOwnProperty"` etc. via `Object.hasOwn`, but tests don't cover the edge. Codex round-3 P2-3.
+  - **Where:** `packages/core/test/approval-request-kind.test.ts` — add 3 assertions.
+  - **Pick up:** during T11 actor-validation work (when broker `#handle` is exercised under adversarial fixtures).
+
+- [ ] **P2-poly-3 — T3 audit constructor edge tests.**
+  - **Why:** Implementation handles NaN, Infinity, MAX_SAFE_INTEGER, -0 via `Number.isInteger` + `<= 0` checks; tests don't pin. Codex round-3 P2-5.
+  - **Where:** `packages/core/test/audit.test.ts` — add 4 assertions in the constructor block.
+  - **Pick up:** during T5 audit-redact wiring (when audit.ts is touched again anyway).
+
+- [ ] **P2-poly-4 — T3 multi-cycle FIFO ring stress test.**
+  - **Why:** Current FIFO test covers a single overflow; multi-cycle (e.g. ringSize 3 + 10 emits → assert `[7, 8, 9]`) would catch any off-by-one rotate-path bug. Codex round-3 P2-6.
+  - **Where:** `packages/core/test/audit.test.ts` — add 1 stress test.
+  - **Pick up:** during T5 audit-redact wiring.
+
+- [ ] **P2-poly-5 — Decide `outcome` field placement on AuditEvent (root vs. metadata).**
+  - **Why:** D12/D21 pseudocode references `outcome: "lost-race"` as a root field on AuditEvent, but `packages/core/src/audit.ts:88` AuditEvent has no root `outcome` field. Either move under `metadata` or add explicit optional root field. Codex round-3 P2-7a.
+  - **Where:** Update `packages/core/src/audit.ts` AuditEvent shape AND the D12/D21 pseudocode in plan §1.
+  - **Pick up: BEFORE T7 starts.** T7 wires `#settleEntry` (which emits the `outcome` field); the decision must land before T7 implementation — either as a dedicated task between T6 and T7, or folded into T7.1 as a prerequisite.
+  - **Default if unaddressed at T7 time:** put `outcome` under `metadata.outcome` (no AuditEvent shape change; conservative).
+
 ## External (not gated on a phase)
 
 - [ ] **Report codex 0.125 `generate-json-schema` non-determinism upstream**

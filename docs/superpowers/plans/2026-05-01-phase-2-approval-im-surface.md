@@ -40,7 +40,7 @@
 | **P2.2** | `ApprovalBroker.enablePendingMode<M>(method)` — the IM-driven pending bootstrap that creates `PendingEntry` and awaits external `resolve()` instead of running a handler IIFE | Codex P0-2 / F2; D18 |
 | **P2.3** | `ApprovalBroker.resolve(input) / listPending() / getPending(id)` public surface, with internal `#pendingById` terminal lookup, in-resolve expiry check, per-card actor binding validation, and routing through `#settleEntry` | Codex P0-3, P0-4, P0-5, P0-6 / F3, F4, F5, F6; D19, D20, D21 |
 | **P2.4** | Per-method wire decision mapper (`mapDecisionForPending(record, decision)`) using real generated values; UI-action → decision translator (`actionToDecision`); fail-closed for unsupported decisions | Codex P0-1 + P1-1 / F8, F11; D11 |
-| **P2.5** | `AuditEmitter` with 10 event kinds, redact-applied at emit, in-memory ring + structured pino, `_auditRingForTest()` test escape hatch | Codex P0-7 + P1-2 + gstack Q4 / F7, F9 |
+| **P2.5** | `AuditEmitter` with **12 event kinds**, redact-applied at emit, in-memory ring + structured pino-compatible sink (duck-typed `AuditLogger`), `_auditRingForTest()` test escape hatch | Codex P0-7 + P1-2 + gstack Q4 / F7, F9; round-2 deep-review P1-3 (count fix), P2-7b (logger doc) |
 | **P2.6** | `redact.ts` relocated to `@codex-im/core`; expanded coverage (env-var values, PEM/TLS certs, Slack/OpenAI tokens, contextual long base64) per Codex Q5; truncate utility | gstack A4 + Codex Q5 / F10 |
 | **P2.7** | `@codex-im/render` package: `RichBlock` discriminated union (text/approval/unknown, Phase 2 minimum), `ApprovalCard`, `ApprovalUiAction`, `project-approval.ts` switching on `ApprovalRequestKind` (zero protocol method literals), plain-text capability fallback | F12 + F1 boundary preservation |
 | **P2.8** | `@codex-im/channel-core`: `ChannelAdapter` interface (closed for Phase 2 with reviewer-amendment escape clause), `Target` / `Sender` / `MessageRef` / `InboundMessage` / `InboundAction`, `ChannelCapabilities`, `TelegramShapeFakeChannelAdapter` with cited Telegram Bot API source | gstack A7 + Codex P2 + F13 |
@@ -269,8 +269,20 @@ export type AuditEvent = {
   readonly createdAt: Date;
 };
 
+/**
+ * Minimal duck-typed logger sink (round-2 deep-review P2-7b / approved T3
+ * decision): `pino.Logger.info(obj)` and any structured-log shim with the
+ * same single-object shape satisfy this. `@codex-im/core` does NOT take a
+ * runtime dependency on pino — daemon wire-up passes a real pino logger,
+ * tests pass `vi.fn()` mocks. Behaviorally identical to D13's intent;
+ * keeps core logger-implementation-agnostic.
+ */
+export interface AuditLogger {
+  info(payload: object): void;
+}
+
 export class AuditEmitter {
-  constructor(opts?: { ringSize?: number; logger?: pino.Logger; redact?: typeof defaultRedact });
+  constructor(opts?: { ringSize?: number; logger?: AuditLogger; redact?: typeof defaultRedact });
   // Hard MAX (D13 round-2 fix per Codex Q4): if `opts.ringSize > 100_000`, throw on construction.
   // Default 1000. Anything reasonable up to 100_000 is allowed; above that is a config bug.
   emit(event: AuditEventInput): void;          // applies redact to event.metadata BEFORE pino emit AND ring storage
@@ -496,7 +508,11 @@ export type ResolveApprovalInput = {
 ```ts
 broker.resolve(input): ResolveApprovalResult {
   const entry = this.#pendingById.get(input.approvalId);
-  if (!entry) { audit.emit({kind:"approval.unsupported_method"...}); return {kind:"error", error:{kind:"unknown_approval_id"}}; }
+  if (!entry) { audit.emit({kind:"approval.unknown_approval_id"...}); return {kind:"error", error:{kind:"unknown_approval_id"}}; }
+  // (round-2 deep-review P1-4: emit `approval.unknown_approval_id`, NOT
+  // `approval.unsupported_method` — the latter is for wire-level unknown methods
+  // arriving at #handle, which never produce a PendingEntry. resolve()'s
+  // unknown-id branch is a separate code path and gets its own audit kind per D13.)
   if (entry.record.status === "resolved") { audit.emit("approval.duplicate_attempt"); return {kind:"error", error:{kind:"already_resolved", priorDecision: entry.record.decision!}}; }
   if (entry.record.status === "expired") { audit.emit("approval.duplicate_attempt"); return {kind:"error", error:{kind:"expired", ...}}; }
   if (entry.record.status === "transport_lost") { audit.emit("approval.duplicate_attempt"); return {kind:"error", error:{kind:"transport_lost", ...}}; }
@@ -580,8 +596,11 @@ packages/core/src/
                               #      fail-closed for unsupported (decision, kind) pairs.
   action-to-decision.ts       # NEW: actionToDecision(uiAction) — pure UI→decision-kind translator
                               #      (no method awareness; method awareness lives in decision-mapper).
-  audit.ts                    # NEW: AuditEvent + AuditEmitter; emits 10 event kinds; redact applied
-                              #      at emit AND ring storage.
+  audit.ts                    # NEW: AuditEvent + AuditEmitter; emits 12 event kinds (round-2
+                              #      deep-review P1-3); redact applied at emit AND ring storage
+                              #      (T5 owns the redact wire-up; T3 ships skeleton). Logger
+                              #      surface is duck-typed AuditLogger (round-2 deep-review P2-7b /
+                              #      approved T3 decision); core has no pino runtime dep.
   redact.ts                   # NEW (relocated from render — Codex P1-3 fix F10): tokens, paths, SSH keys,
                               #      env-var values, PEM/TLS certs, Slack/OpenAI tokens, contextual long
                               #      base64 (per Codex Q5 expanded coverage).
@@ -605,7 +624,7 @@ packages/core/test/
   decision-mapper.test.ts                      # NEW: per-kind × per-action table; fail-closed for unsupported
   decision-mapper-shapes.test.ts               # NEW: _v2_* type-only assertions vs generated wire shapes
   action-to-decision.test.ts                   # NEW: pure translator
-  audit.test.ts                                # NEW: 10 event kinds + ring + redact + _auditRingForTest
+  audit.test.ts                                # NEW: 12 event kinds + ring + redact + _auditRingForTest
   audit-redaction.test.ts                      # NEW: every failure-branch fixture verified redacted (Codex missing #7)
   redact.test.ts                               # NEW: expanded coverage per Codex Q5
   no-method-literals.test.ts                   # MODIFIED: extend scope; exempt approval-request-kind.ts ONLY.
@@ -739,7 +758,8 @@ CLAUDE.md                                      # MODIFIED at T22: "Method litera
 │   classifyApprovalRequest(method) → ApprovalRequestKind            │
 │   ApprovalBroker.resolve / listPending / getPending / bindActorPolicy│
 │   actionToDecision / mapDecisionForPending(record, uiAction)        │
-│   AuditEmitter.emit(event) — applies redact before pino + ring     │
+│   AuditEmitter.emit(event) — applies redact before structured-log + ring│
+│     (logger sink is duck-typed AuditLogger; core has NO pino runtime dep)│
 │   #settleEntry(entry, outcome, audit) — calls settleOnce; emits   │
 │   onPendingCreated / onPendingResolved (at #settleEntry boundary) │
 └────────────────────────┬─────────────────────────────────────────┘
@@ -760,6 +780,8 @@ CLAUDE.md                                      # MODIFIED at T22: "Method litera
 ```
 
 **Boundary invariants** (each enforced by build-time grep guard or type guard or test):
+
+0. **`@codex-im/core` is logger-implementation-agnostic** (round-2 deep-review P2-7b / approved T3 decision). The audit emitter takes a duck-typed `AuditLogger` (`info(payload: object): void`); `pino.Logger` naturally satisfies it; daemon wire-up passes a real pino logger. Core's `package.json` has NO runtime dep on pino — same architectural posture as F13's "channel-core has no @codex-im/core runtime dep". This boundary is preserved by NOT adding pino to core's deps; verified by `grep "pino"` returning empty in `packages/core/package.json`.
 
 1. `ChannelAdapter` MUST NOT runtime-import from `@codex-im/codex-runtime`, `@codex-im/app-server-client`, or `@codex-im/core`. Test: `packages/channel-core/test/no-broker-import.test.ts` + `no-protocol-import.test.ts` grep guards.
 2. `Renderer` MUST NOT import `AppServerClient`, `JsonRpcRequest`, `JsonRpcNotification`. It consumes only `PendingApprovalSnapshot`, `ApprovalRequestKind`, redact/truncate from core. Test: `packages/render/test/no-protocol-import.test.ts`.
@@ -800,11 +822,15 @@ T8   broker.enablePendingMode<M> + #handle pending-mode arm. Pending-mode bootst
      server-request → PendingEntry without default-reject (Codex missing #2)
 T9   broker.bindActorPolicy + ActorPolicy validation in resolve (D19) — wrong actor / wrong target
      / stale callback / binding_required branches. Tests: wrong actor BEFORE first decision (Codex missing #5)
-T10  broker.resolve happy path + expiry-in-resolve (D20) + 9 ResolveError branches + tests.
-     resolve uses INTERNAL #pendingById lookup, NOT public getPending (Codex P0-3 / missing #3, #4).
-     Includes expiry-without-sweeper test.
-T11  decision-mapper.ts: mapDecisionForPending per-kind table + _v2_* shape tests.
+T10  decision-mapper.ts: mapDecisionForPending per-kind table + _v2_* shape tests.
      action-to-decision.ts: pure translator + tests.
+     (round-2 deep-review P1-5: moved BEFORE resolve so T11 can call mapDecisionForPending
+     without forward-references; resolve's wire path materializes here first.)
+T11  broker.resolve happy path + expiry-in-resolve (D20) + 9 ResolveError branches + tests.
+     resolve uses INTERNAL #pendingById lookup, NOT public getPending (Codex P0-3 / missing #3, #4).
+     Includes expiry-without-sweeper test. Calls mapDecisionForPending (now in T10) +
+     actionToDecision (now in T10). Hosts all D19 actor-validation tests originally in T9.
+     (round-2 deep-review P1-5: was T10 in plan v2.2; renumbered/reordered.)
 T12  Broker fake e2e happy path (proves T2–T11 wired correctly). Uses FakeAppServer + InMemoryTransport.
 T13  render package skeleton + tsconfig + biome
 T14  render/rich-block.ts + render/approval-card.ts + ApprovalUiAction types
@@ -853,8 +879,8 @@ T24  Tag gate — Codex outside-voice integrated review on phase-1-runtime-compl
 | T7 emitters + secondary index + #settleEntry | **Lead session** — modifies B-clean preservation surface | **Codex review** before T8 |
 | T8 enablePendingMode | **Lead session** — modifies dispatch lifecycle | **Codex review** |
 | T9 bindActorPolicy | **Lead session** — security-critical | **Codex review** |
-| T10 resolve | **Lead session** — centerpiece | **Codex review with adversarial mode** before T11 |
-| T11 mappers | Subagent (per-kind table) | Inline |
+| T10 mappers (decision-mapper + action-to-decision) | Subagent (per-kind table) | Inline (round-2 deep-review P1-5: moved before resolve) |
+| T11 resolve | **Lead session** — centerpiece | **Codex review with adversarial mode** after T10 mapper lands |
 | T12 fake e2e happy | Subagent | Inline |
 | T13–T17 render | Subagent per task | Codex review after T17 |
 | T18–T19 channel-core | Subagent per task | Codex review after T19 |
@@ -895,7 +921,8 @@ packages/codex-protocol/src/generated/v2/PermissionGrantScope.ts
 
 **Files:**
 - Create: `packages/core/src/approval-request-kind.ts`
-- Test: `packages/core/test/approval-request-kind.test.ts`
+- Create: `packages/core/test/approval-request-kind.test.ts`
+- Modify: `packages/core/src/index.ts` (export `classifyApprovalRequest` + `ApprovalRequestKind`; round-2 deep-review P1-1 — T2 actually exported through index.ts so the file list is corrected here to match implementation)
 
 - [ ] **T2.1 Write failing test** — assert `classifyApprovalRequest("item/commandExecution/requestApproval")` → `"command_execution"`. One assertion per row of this table:
 
@@ -939,7 +966,12 @@ const METHOD_TO_KIND = {
   applyPatchApproval: "legacy_apply_patch",
   execCommandApproval: "legacy_exec_command",
   "account/chatgptAuthTokens/refresh": "auth_token_refresh",
-} as const satisfies Record<string, Exclude<ApprovalRequestKind, "unknown">>;
+} as const satisfies Record<ServerRequest["method"], Exclude<ApprovalRequestKind, "unknown">>;
+// Tighter than v1's `Record<string, ...>` (round-2 deep-review P1-2): using
+// `ServerRequest["method"]` as the key constraint adds a load-bearing
+// compile-time guard — codex 0.126+ adding a 10th ServerRequest variant
+// fails this file to compile, mirroring the Phase 1 _ExhaustiveDispatch
+// check on approval-broker.ts.
 
 export function classifyApprovalRequest(method: string): ApprovalRequestKind {
   return Object.hasOwn(METHOD_TO_KIND, method)
@@ -1044,43 +1076,48 @@ export function classifyApprovalRequest(method: string): ApprovalRequestKind {
 - Modify: `packages/core/src/approval-broker.ts`
 - Test: `packages/core/test/approval-broker-actor-binding.test.ts`
 
-- [ ] **T9.1** Write failing tests covering D19 invariants (one test per branch):
-  - bind → resolve(allowed actor, matching target+nonce) → ok.
-  - bind → resolve(disallowed actor) → wrong_actor; pending stays open; audit emitted; no settle.
-  - bind → resolve(wrong target) → wrong_target.
-  - bind → resolve(stale nonce) → stale_callback.
-  - resolve before bind → binding_required; pending stays open; audit `approval.binding_required` emitted; no settle.
-  - bind twice with same policy → second is idempotent ok.
-  - bind twice with different policy → second returns BindError.
+**Scope split (round-2 deep-review P1-5):** T9 ships `bindActorPolicy` storage and idempotency only. The D19 validation tests that invoke `resolve()` (wrong actor / wrong target / stale callback / binding_required / happy-path-bind-then-resolve) are deferred to **T11.x** (renumbered: was T10) — `resolve()` doesn't exist yet at T9 time, so testing through it would force a forward-reference. T9 implementation still includes the `bindActorPolicy()` method on the broker AND the internal stored-policy state; T11 wires `resolve()` to consume that stored state.
+
+- [ ] **T9.1** Write failing tests covering D19 binding-storage invariants (no `resolve()` calls):
+  - `bindActorPolicy(approvalId, policy)` returns `{kind: "ok"}` on first call.
+  - `bindActorPolicy` twice with identical policy → second returns `{kind: "ok"}` (idempotent).
+  - `bindActorPolicy` twice with different policy → second returns `{kind: "error", error: BindError}`.
+  - `bindActorPolicy` before pending exists → returns `{kind: "error", error: ...}` (no orphan bindings).
+  - Internal accessor (test-only — mirrors `_pendingRecordsForTest` pattern) `_actorPolicyForTest(approvalId)` returns the stored policy after a successful bind.
+  - Stored policy includes `allowedActors`, `target`, `callbackNonce` verbatim.
 - [ ] **T9.2** Run, FAIL.
-- [ ] **T9.3** Implement `bindActorPolicy(approvalId, policy)` and the validation logic (called from `resolve()` in T10).
+- [ ] **T9.3** Implement `bindActorPolicy(approvalId, policy)` storage + idempotency. The validation logic (`resolve()` consumes the stored policy and emits `wrong_actor`/`wrong_target`/`stale_callback`/`binding_required`) lands in T11; T9 only defines the storage surface and the validation FUNCTION SIGNATURES the broker will use internally.
 - [ ] **T9.4** Run. PASS. Codex review.
-- [ ] **T9.5** Commit `feat(core): T9 bindActorPolicy per-card binding (D19 / F4+F5 / Codex P0-5)`.
+- [ ] **T9.5** Commit `feat(core): T9 bindActorPolicy per-card binding storage (D19 / F4+F5 / Codex P0-5; resolve()-invoking validation tests deferred to T11 per round-2 P1-5)`.
 
-### Task T10 — `resolve()` happy + 8 error branches + expiry-in-resolve
+### Task T10 — `decision-mapper.ts` + `action-to-decision.ts` (corrected D11)
 
-**Files:**
-- Modify: `packages/core/src/approval-broker.ts` — replace throwing stub
-- Test: `packages/core/test/approval-broker-resolve.test.ts`, `approval-broker-resolve-internal-lookup.test.ts`, `approval-broker-expiry-in-resolve.test.ts`
-
-- [ ] **T10.1 TDD per ResolveError branch** — one subtask per branch (**9 branches + happy path = 10 subtasks**). Each has its own failing test + impl + commit. Each subtask asserts both fail-closed behavior AND the matching audit event kind (per D13's 12-kind enumeration).
-- [ ] **T10.2 Internal lookup test (Codex P0-3 / missing #3):** assert resolve uses `#pendingById.get` directly, NOT `getPending`. Use a terminal-state record (status="expired"); resolve must return `expired`, not `unknown_approval_id`.
-- [ ] **T10.3 Expiry-without-sweeper test (Codex P0-4 / missing #4):** create pending; advance fake clock past `expiresAt`; do NOT call `expirePending()`; call `resolve(allow_once, valid actor, valid target, valid nonce)`; expect `expired` error AND no accept wire response sent. Verify `audit.emit("approval.expired")` fires.
-- [ ] **T10.4 Wrong-actor-before-first-decision test (Codex P0-5 / missing #5):** bind actor A; B clicks first; expect `wrong_actor`; pending stays open; A then resolves successfully.
-- [ ] **T10.5 Codex adversarial review** with prompt: "find a way to produce duplicate wire response, bypass actor binding, bypass expiry, race resolve with expirePending."
-- [ ] **T10.6 Commit chain** `feat(core): T10.x resolve <branch> (D11/D19/D20)`.
-
-### Task T11 — `decision-mapper.ts` + `action-to-decision.ts` (corrected D11)
+> **Round-2 deep-review P1-5:** moved before T11 resolve so the wire-mapping function table exists before resolve() needs to call it. No forward-references at T11 implementation time.
 
 **Files:**
 - Create: `packages/core/src/decision-mapper.ts`, `packages/core/src/action-to-decision.ts`
 - Test: `packages/core/test/decision-mapper.test.ts`, `decision-mapper-shapes.test.ts`, `action-to-decision.test.ts`
 
-- [ ] **T11.1** Write failing tests for decision-mapper per the D11 table — one row per kind × supported uiAction. Use REAL generated types: assert `mapDecisionForPending(record_with_command_kind, {kind:"allow_once"})` returns `{kind:"ok", value: {decision:"accept"}}`. Use `_v2_*` type-only constants per generated wire shape (`_v2_cmd_accept: CommandExecutionRequestApprovalResponse = { decision: "accept" };`).
-- [ ] **T11.2** Run. FAIL.
-- [ ] **T11.3** Implement decision-mapper switching on `classifyApprovalRequest(record.method)` — kind-aware, returning `{kind: "ok", value}` / `{kind: "error", error: JsonRpcResponseError}` / `{kind: "unsupported", reason}`. Implement action-to-decision: pure `(uiAction) → ApprovalDecision` translator.
-- [ ] **T11.4** Run + typecheck. PASS.
-- [ ] **T11.5** Commit `feat(core): T11 decision-mapper per-kind (D11 corrected) + actionToDecision (F11)`.
+- [ ] **T10.1** Write failing tests for decision-mapper per the D11 table — one row per kind × supported uiAction. Use REAL generated types: assert `mapDecisionForPending(record_with_command_kind, {kind:"allow_once"})` returns `{kind:"ok", value: {decision:"accept"}}`. Use `_v2_*` type-only constants per generated wire shape (`_v2_cmd_accept: CommandExecutionRequestApprovalResponse = { decision: "accept" };`).
+- [ ] **T10.2** Run. FAIL.
+- [ ] **T10.3** Implement decision-mapper switching on `classifyApprovalRequest(record.method)` — kind-aware, returning `{kind: "ok", value}` / `{kind: "error", error: JsonRpcResponseError}` / `{kind: "unsupported", reason}`. Implement action-to-decision: pure `(uiAction) → ApprovalDecision` translator.
+- [ ] **T10.4** Run + typecheck. PASS.
+- [ ] **T10.5** Commit `feat(core): T10 decision-mapper per-kind (D11 corrected) + actionToDecision (F11; round-2 P1-5 reorder)`.
+
+### Task T11 — `resolve()` happy + 9 error branches + expiry-in-resolve + actor validation
+
+> **Round-2 deep-review P1-5:** was T10 in plan v2.2; renumbered/reordered so the decision mapper (now T10) materializes first. T11 also hosts the D19 actor-validation tests originally in T9 (split per Codex round-2 P1-5).
+
+**Files:**
+- Modify: `packages/core/src/approval-broker.ts` — replace throwing stub
+- Test: `packages/core/test/approval-broker-resolve.test.ts`, `approval-broker-resolve-internal-lookup.test.ts`, `approval-broker-expiry-in-resolve.test.ts`, `approval-broker-actor-binding.test.ts` (the resolve-invoking validation tests; T9 already shipped binding-storage tests)
+
+- [ ] **T11.1 TDD per ResolveError branch** — one subtask per branch (**9 branches + happy path = 10 subtasks**). Each has its own failing test + impl + commit. Each subtask asserts both fail-closed behavior AND the matching audit event kind (per D13's 12-kind enumeration).
+- [ ] **T11.2 Internal lookup test (Codex P0-3 / missing #3):** assert resolve uses `#pendingById.get` directly, NOT `getPending`. Use a terminal-state record (status="expired"); resolve must return `expired`, not `unknown_approval_id`.
+- [ ] **T11.3 Expiry-without-sweeper test (Codex P0-4 / missing #4):** create pending; advance fake clock past `expiresAt`; do NOT call `expirePending()`; call `resolve(allow_once, valid actor, valid target, valid nonce)`; expect `expired` error AND no accept wire response sent. Verify `audit.emit("approval.expired")` fires.
+- [ ] **T11.4 Actor binding validation tests (round-2 P1-5: deferred from T9):** bind via `bindActorPolicy` (T9 surface), then call `resolve(...)` to assert `wrong_actor` (B clicks first; happy path; A still resolves), `wrong_target`, `stale_callback`, `binding_required` (resolve before bind), `already_resolved` (duplicate click). Each branch asserts: matching ResolveError kind + matching D13 audit event + pending state preservation when not settled.
+- [ ] **T11.5 Codex adversarial review** with prompt: "find a way to produce duplicate wire response, bypass actor binding, bypass expiry, race resolve with expirePending."
+- [ ] **T11.6 Commit chain** `feat(core): T11.x resolve <branch> (D11/D19/D20)`.
 
 ### Task T12 — Broker fake e2e happy path (proves T2–T11 wired)
 
@@ -1600,7 +1637,7 @@ Redact pattern miss has no error handling; T-G1 closes it for known patterns. Ad
 
 **Implementation may begin after:** P0/P1 edits applied + plan re-reviewed by both gstack and codex.
 
-**Round-2 update (2026-05-01):** both reviewers re-reviewed plan v1.5 (post-fix-arc-v1) and returned **APPROVE_WITH_CHANGES** with **0 P0 blockers**. Codex explicitly authorized T2 to begin AFTER P1 polish is applied — **no third review cycle required**. See §10C for the round-2 polish applied to the plan body, §10D for the round-2 review reports verbatim.
+**Round-2 update — appended non-verbatim (2026-05-01)** *(round-2 deep-review P2-1: this paragraph is appended after the verbatim round-1 §10A disposition; it is NOT part of the historical round-1 record. The verbatim round-1 block ends at the table above. For round-2 + round-3 disposition see §10C / §10D / §10E.)*: both reviewers re-reviewed plan v1.5 (post-fix-arc-v1) and returned **APPROVE_WITH_CHANGES** with **0 P0 blockers**. Codex explicitly authorized T2 to begin AFTER P1 polish is applied — **no third review cycle required**. See §10C for the round-2 polish applied to the plan body, §10D for the round-2 review reports verbatim.
 
 ---
 
@@ -1889,6 +1926,57 @@ Cross-model agreement:
 - Both confirm T2 authorized after polish
 
 Output file: `/tmp/phase2-plan-codex-rereview-output.txt` (3243 lines).
+
+---
+
+## 10E. Round-3 deep-review (Codex post-T3, 2026-05-01) + Option B+ polish applied (plan v2.3)
+
+After T2 + T3 landed (commits `89968ee` + `bd99dd1`), a Codex deep review was run on `phase-1-runtime-complete..HEAD` (3 commits + plan v2.2). Output: `/tmp/phase2-deep-review-output.txt` (9085 lines).
+
+**Verdict: APPROVE_T4_AFTER_FIXES.** No P0 blockers; T2/T3 code sound; B-clean `settleOnce` byte-for-byte unchanged; method-literal boundary clean. **6 P1 + 7 P2 findings** — mostly plan/status drift caught by holistic cross-check between plan body, §10C tracking, and the actual code/handoff state.
+
+User chose **Option B+**: apply all 6 P1 fixes + 2 docs-only P2 (AuditLogger doc + §10A wording); defer the 5 test-hardening P2 items to organic future tasks. This block (plan v2.3) records the polish applied.
+
+### P1 fixes applied (6)
+
+| # | Codex finding | Fix applied |
+|---|---|---|
+| **P1-1** | T2 file list omitted `index.ts` (T2 actually exported through it) | §5 T2 file list now lists `Modify: packages/core/src/index.ts` explicitly. Implementation already matched; this is a plan-body-catches-up edit. |
+| **P1-2** | T2 plan snippet showed `Record<string, ...>` while implementation used the tighter `Record<ServerRequest["method"], ...>` | §5 T2.3 snippet updated to the implementation-equivalent type, with inline note explaining the codex 0.126+ compile-fail guard rationale. |
+| **P1-3** | "10 event kinds" still present in active plan body (§0.1, §2.1) while D13/T3/code are 12 | Active body references at §0.1 line 43, §2.1 audit.ts comment, §2.1 audit.test.ts comment all updated to **12**. Historical §10B wording (which describes what plan v2 said at fix-arc time, when it was 10) is left as historical record per Codex's explicit guidance. |
+| **P1-4** | D20 resolve() pseudocode emitted `approval.unsupported_method` for unknown approval id, contradicting D13 (which has both `unsupported_method` and `unknown_approval_id` as distinct kinds) | D20 step 1 now emits **`approval.unknown_approval_id`** with inline note distinguishing the two code paths (wire-level `#handle` unknown vs. resolve()-level unknown id). |
+| **P1-5** | T9 tests called `resolve()` (T10 territory); T10's resolve called `mapDecisionForPending()` (T11 territory) — mechanical dependency violation | **Reorder applied**: §4 dep-graph + serial spine + §4 lead-session-table + §5 task-body sections. Old T10 (resolve) is now T11; old T11 (mapper) is now T10. T9 trimmed to `bindActorPolicy` storage + idempotency only; resolve()-invoking actor-validation tests deferred to **T11.4** (was T9.1). T11.4 explicitly assumes T10 mapper exists. No forward-references. |
+| **P1-6** | `phase2-live-status.md` was stale (said "no implementation started, next=T2"; HEAD was T3) | File rewritten to reflect HEAD = T3 (`bd99dd1`); T2 + T3 marked complete; next = T4. Sibling commit. |
+
+### P2 docs-only fixes applied (2)
+
+| # | Codex finding | Fix applied |
+|---|---|---|
+| **P2-7b** | D13 still names `pino.Logger`; §3 didn't reflect the approved T3 duck-typed AuditLogger / no-pino-runtime-dep decision | D13 now defines `AuditLogger` interface + uses it as the constructor option type. §3 boundary diagram + a new invariant 0 explicitly state "core is logger-implementation-agnostic; no pino runtime dep". §0.1 P2.5 row updated. §2.1 audit.ts comment updated. |
+| **P2-1** | §10A "Round-2 update" paragraph was inside the verbatim-immutable round-1 block (line 1640 within §10A) | Paragraph rewritten to begin with **"Round-2 update — appended non-verbatim (2026-05-01)"** + inline parenthetical noting the verbatim round-1 block ends at the table above. No content lost; historical posture preserved. |
+
+### P2 deferred to backlog (5 items; tracked in TODOS.md)
+
+These are quality-of-life test hardenings that don't block T4 / Phase 2 progress. Will be picked up organically when the relevant task naturally touches them (T6/T7 for outcome-field design; T11/T21 for additional resolve-branch coverage; T16/T17 for similar union exhaustiveness in render):
+
+1. **T2 / T3 type-level "exact union" tests use array-membership shape; would still pass if an 11th / 13th kind were added.** Recommend `Exclude<ApprovalRequestKind, Listed[number]> extends never` style guard (and same for `AuditEventKind`).
+2. **T2 classifier tests don't exercise `Object.hasOwn` defenses against `"toString"` / `"constructor"`.** Implementation is correct; tests are missing the edge case.
+3. **T3 audit constructor edge tests miss `NaN`, `Infinity`, `Number.MAX_SAFE_INTEGER`, `-0`.** Implementation handles them via `Number.isInteger`; tests should pin.
+4. **T3 ring FIFO test covers one overflow only; multi-cycle stress test (e.g. ringSize 3 + 10 emits → assert `[7, 8, 9]`) would catch any off-by-one in the rotate path.**
+5. **D12/D21 pseudocode references `outcome: "lost-race"` as a root field on AuditEvent, but `audit.ts:88` AuditEvent has no root `outcome` field.** Either move under `metadata` or add an explicit optional root field. Decision should land BEFORE T7 starts (T7 wires `#settleEntry` and would emit `outcome` from there).
+
+**These five items are tracked in TODOS.md under "Phase 2 P2 polish backlog (round-3 deep-review deferred)".**
+
+### Re-verification
+
+Post-polish gates after this block lands:
+- `pnpm typecheck` — to be re-run
+- `pnpm test` — 354 baseline (T2 + T3 contributions; no Phase 2 implementation tests removed)
+- `pnpm lint` — to be re-run
+- `pnpm protocol:check` — unchanged
+- `bash scripts/ci-check.sh` — to be re-run
+
+T4 (redact relocation to core) authorized to begin after this commit lands and gates re-confirm green.
 
 ---
 
