@@ -9,7 +9,7 @@
 - `@codex-im/core` — `ApprovalBroker` with B-clean single-completion-promise lifecycle (race-free across handler / expirePending / failPendingAsTransportLost)
 - `@codex-im/daemon` — `Supervisor` with ONE-SHOT lifecycle, exponential-backoff recovery (500ms → 1s → 2s → 4s → 8s), halt-on-spawn-failure
 
-10 codex outside-voice review reports under `docs/phase-1/`. 测试数 73 → 315. 详见 `docs/superpowers/plans/2026-04-30-phase-1-runtime.md` + `docs/handoffs/2026-05-01-phase1-to-phase2.md`. 下一步：Phase 2 (Telegram MVP).
+10 codex outside-voice review reports under `docs/phase-1/` plus a tag-gate re-review. 测试数 73 → 320 (315 at T12 close + 5 from tag-gate fix arc: Supervisor cleanup + ClientRequest grep guard). 详见 `docs/superpowers/plans/2026-04-30-phase-1-runtime.md` + `docs/handoffs/2026-05-01-phase1-to-phase2.md`. 下一步：Phase 2 (Telegram MVP).
 
 ## Phase 0 quick start
 

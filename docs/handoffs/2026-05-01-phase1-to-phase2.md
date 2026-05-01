@@ -8,11 +8,11 @@
 
 ## Phase 1 状态快照
 
-- **Tag candidate**: `phase-1-runtime-complete` (apply after T12 commits land)
+- **Tag candidate**: `phase-1-runtime-complete` (apply after tag-gate fix arc + Codex re-review GO)
 - **Branch**: `phase-1-runtime`
-- **HEAD**: T12 docs commits (this handoff is one of them)
-- **Total commits in branch**: 56+ (from `1b4a588` Pre-1 Node bump through T12)
-- **Test count**: 315 (was 73 at Phase 0 close; +242 across Phase 1)
+- **HEAD**: tag-gate fix arc complete (`a484014` + low-nit doc fixes); awaiting tag.
+- **Total commits in branch**: 60+ (from `1b4a588` Pre-1 Node bump through T12 + 4 tag-gate fix commits + nit docs)
+- **Test count**: 320 (was 73 at Phase 0 close; +242 across Phase 1 T1-T12 = 315; +5 from tag-gate fix arc — 4 Supervisor cleanup tests + 1 ClientRequest grep guard)
 
 ### Gate matrix（Phase 1 close-out 全绿）
 
@@ -20,7 +20,7 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | exit 0 (7 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Type-only test assertions | `pnpm typecheck:tests` | exit 0 |
-| Tests | `pnpm test` | 315 passing (29 unit + contract files) |
+| Tests | `pnpm test` | 320 passing (31 unit + contract files; +5 from tag-gate fix arc) |
 | CLI smoke (FakeAppServer-injected) | `pnpm test:cli-smoke` | 2 passing |
 | Lint | `pnpm lint` | exit 0 (biome 90+ files clean) |
 | Version pin | `pnpm check:codex-version` | `OK: 0.125.0` |
