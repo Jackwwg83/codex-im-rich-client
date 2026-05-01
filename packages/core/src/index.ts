@@ -52,3 +52,10 @@ export { actionToDecision } from "./action-to-decision.js";
 // it to surface unsupported / error branches.
 export { mapDecisionForPending } from "./decision-mapper.js";
 export type { WireDecisionResult } from "./decision-mapper.js";
+
+// Phase 2 T4 / T15 — pure secret-redaction primitive. Audit emit applies
+// it internally; @codex-im/render re-exports for project-approval text
+// fields per F10 (renderer applies redact + truncate before card lands
+// on a wire). Keeping the source of truth in core means the regex
+// patterns and idempotency guarantees are tested in one place.
+export { redact } from "./redact.js";

@@ -23,3 +23,10 @@ export type {
   ApprovalStatus,
   ApprovalTarget,
 } from "./approval-card.js";
+
+// T15: pure utilities used by T16 projection — truncate (byte-bounded UTF-8
+// safe) + redact (re-exported from @codex-im/core; canonical home is core
+// per F10 / Codex Q5).
+export { truncate } from "./truncate.js";
+export type { TruncateOptions } from "./truncate.js";
+export { redact } from "./redact.js";
