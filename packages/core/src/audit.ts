@@ -18,8 +18,6 @@
 //   - `AUDIT_RING_HARD_MAX` exported constant
 //
 // What T3 does NOT ship (deferred to later tasks per plan):
-//   - Redaction inside `emit()` — T5 wires `redact.ts` (Codex P1-3 / F10).
-//     T3's `emit()` stores event metadata verbatim; T5 will wrap.
 //   - `target?: Target` field on `AuditEvent` — T6 introduces `Target` in
 //     core/types.ts alongside `ActorPolicy` / `ResolveApprovalInput`. T3
 //     ships AuditEvent without target; T6 amends. Same forward-compat
@@ -29,9 +27,19 @@
 //     (broker work in T7+) import via relative path; external consumers
 //     (daemon wire-up in Phase 3) get the export when a later task adds it.
 //
+// Wired in T5 (Codex P1-3 / F10):
+//   `emit()` now deep-walks `event.metadata` (recursive into nested
+//   objects + arrays) AND every string-typed root field through
+//   `redact()` from `./redact.js` BEFORE pushing to the ring AND BEFORE
+//   calling `logger.info()`. Caller's input is never mutated — the walk
+//   is also a defensive copy. Non-string values (numbers, booleans,
+//   null, Dates, Buffers, custom-class instances) are preserved as-is.
+//   Object keys are preserved verbatim — only values are redacted.
+//
 // Phase 3 SQLite migration replaces the ring with a repository, leaving
 // the `emit()` API stable.
 
+import { redact } from "./redact.js";
 import type { ApprovalActor } from "./types.js";
 
 /**
@@ -165,18 +173,28 @@ export class AuditEmitter {
   }
 
   /**
-   * Emit one audit event. Generates `id` + `createdAt`, pushes to ring
-   * (dropping oldest if at capacity), and writes a structured info-level
-   * log line if a logger was provided at construction.
+   * Emit one audit event. Generates `id` + `createdAt`, deep-walks every
+   * string in the input (metadata recursive + root string fields) through
+   * `redact()` from `./redact.js` (T5 / Codex P1-3 / F10), pushes to the
+   * ring (dropping oldest if at capacity), and writes a structured info-
+   * level log line if a logger was provided at construction.
    *
-   * The logger payload is a flat shallow copy of the stored event — log
-   * consumers can filter on `kind`, `approvalId`, etc. without traversing
-   * a wrapper. T5 will refine this so metadata strings are passed through
-   * `redact()` before either ring storage or logger emit.
+   * Redaction order — same redacted value reaches BOTH ring AND logger:
+   *
+   *   input (caller-owned; never mutated)
+   *      ↓ redactInput() — recursive walk, defensive copy
+   *   redacted (new object tree, secrets replaced by ***REDACTED:***)
+   *      ↓ + id + createdAt
+   *   event (the AuditEvent stored in the ring)
+   *      ↓ shallow {...event}
+   *   logger.info(payload)
    */
   emit(input: AuditEventInput): void {
+    // T5: deep-walk strings through redact() BEFORE ring + logger.
+    // `redactInput` is module-level pure; see file footer.
+    const redacted = redactInput(input);
     const event: AuditEvent = {
-      ...input,
+      ...redacted,
       id: this.#nextId(),
       createdAt: new Date(),
     };
@@ -230,4 +248,81 @@ export class AuditEmitter {
     this.#idCounter += 1;
     return `audit-${Date.now()}-${this.#idCounter}-${Math.random().toString(36).slice(2, 10)}`;
   }
+}
+
+// ─── Module-level redaction helpers (T5) ───────────────────────────────────
+//
+// Pure functions; no class state. Kept module-level (not class methods) so
+// `redactValue` is genuinely reusable as a building block and so
+// AuditEmitter doesn't accidentally close over `this` inside the recursion.
+
+/**
+ * Deep-walk the caller's `AuditEventInput` and return a NEW object whose
+ * strings have been passed through `redact()`. Caller's input is never
+ * mutated — the walk also serves as a defensive deep copy along every
+ * branch we touch.
+ *
+ * Why walk the WHOLE input (root + metadata + actor) and not just
+ * metadata: plan §5 T5.3 says "deep-walk event.metadata (and any string
+ * field at the event root) through redact()". Defense in depth: if a
+ * future caller stuffs a credential into `actor.username` or
+ * `appServerRequestId` (string form), the redactor still catches it.
+ * Broker-controlled fields like `kind` and the to-be-emitter-generated
+ * `id` are passed through `redact()` too, but they never match a
+ * redaction regex by construction (the ID format is `audit-${ms}-...`,
+ * which has no embedded secret shape).
+ *
+ * Undefined values are skipped (consistent with `exactOptionalPropertyTypes`).
+ */
+function redactInput(input: AuditEventInput): AuditEventInput {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (value === undefined) continue;
+    out[key] = redactValue(value);
+  }
+  return out as AuditEventInput;
+}
+
+/**
+ * Recursively walk a value:
+ *   - `string`                       → `redact(value)`
+ *   - `Array`                        → `array.map(redactValue)`
+ *   - plain object (Object.prototype)→ for each [k, v], `[k, redactValue(v)]`
+ *                                       (keys preserved verbatim — only values walked)
+ *   - everything else (`null`,
+ *     primitives, `Date`, `Buffer`,
+ *     `Map`, `Set`, custom classes)  → preserved as-is
+ *
+ * The plain-object check uses `Object.getPrototypeOf(v) === Object.prototype`
+ * (or `null`-prototype) so wrapped objects with semantic identity (Date,
+ * Buffer, RegExp, Map, Set, custom classes) are NOT walked — walking
+ * them would either lose semantic information (Date converted to
+ * `{}`-shaped POJO) or recurse into private state of a class. Conservative
+ * by design.
+ *
+ * Idempotency: T4's `redact()` is a fixed point on its own output, so
+ * `redactValue(redactValue(x)) === redactValue(x)` for every reachable
+ * input value (verified by the audit-redaction.test.ts idempotency suite).
+ */
+function redactValue(v: unknown): unknown {
+  if (typeof v === "string") {
+    return redact(v);
+  }
+  if (Array.isArray(v)) {
+    return v.map(redactValue);
+  }
+  if (v === null || typeof v !== "object") {
+    return v;
+  }
+  const proto = Object.getPrototypeOf(v);
+  if (proto !== null && proto !== Object.prototype) {
+    // Date / Buffer / Map / Set / RegExp / custom-class instance — preserve.
+    return v;
+  }
+  // Plain object — walk values, preserve keys.
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(v as Record<string, unknown>)) {
+    out[key] = redactValue(value);
+  }
+  return out;
 }
