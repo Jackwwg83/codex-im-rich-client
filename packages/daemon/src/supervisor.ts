@@ -71,12 +71,19 @@ export class Supervisor {
   #currentRuntime: CodexRuntime | null = null;
   #currentCloseUnsub: (() => void) | null = null;
 
-  // T11b will use these — kept here so the field shape is stable
-  // between T11a and T11b (avoids a rebase-conflict pattern where
-  // T11b's edge-impl PR would have to add fields to the same class
-  // body T11a created).
+  // T11b close-handling state.
   #closing = false;
   #consecutiveFailures = 0;
+  // Halted = supervisor refuses further work. Set by:
+  //   - 5 consecutive transport closes without recovery (cascade halt)
+  //   - spawn-during-recovery failure (handshake throws, etc.)
+  //   - explicit stop() call
+  // Once set, never cleared. Codex T11b review P1-2: prevents the
+  // mixed-generation state where #currentClient points at a failed
+  // new client while #currentRuntime is the prior generation.
+  #halted = false;
+  // Pending re-spawn timer handle; cleared on cancel-during-stop.
+  #pendingRespawnTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: SupervisorOptions) {
     this.#opts = opts;
@@ -93,10 +100,67 @@ export class Supervisor {
    * subscription.
    */
   async start(): Promise<void> {
+    if (this.#halted) {
+      throw new Error("Supervisor.start: supervisor is halted; construct a fresh one");
+    }
     if (this.#currentTransport !== null) {
       throw new Error("Supervisor.start: already started; supervisors are one-shot per instance");
     }
     await this.#spawnFresh();
+  }
+
+  /**
+   * Intentional teardown (Codex T11b review P1-1). Stops the current
+   * client cleanly and prevents the close handler from triggering a
+   * re-spawn. Call this when the host process is shutting down or when
+   * the supervisor's owning context (IM adapter, CLI, etc.) is going
+   * away.
+   *
+   * After stop():
+   *   - The supervisor is halted; further start() / re-spawn calls
+   *     throw or no-op.
+   *   - `#currentCloseUnsub` is invoked, so transport.onClose can no
+   *     longer reach `#onTransportClose`.
+   *   - Any pending re-spawn timer (from a prior close) is cleared.
+   *   - `#currentClient.stop()` is awaited; transport closes propagate
+   *     normally but won't trigger recovery.
+   *
+   * Idempotent: a second stop() is a no-op (broker.failPendingAsTransportLost
+   * stays correctly idempotent via T9b's per-client flag, but the
+   * supervisor's own state is just a `#halted = true` write that's
+   * already true).
+   */
+  async stop(): Promise<void> {
+    // Order matters: SET #halted BEFORE detaching the close handler,
+    // so any close events that fire between detach and clientStop are
+    // ignored by #onTransportClose's halted-guard at the top.
+    this.#halted = true;
+
+    // Cancel any pending re-spawn timer (from a prior close that hadn't
+    // yet fired its setTimeout callback).
+    if (this.#pendingRespawnTimer !== null) {
+      clearTimeout(this.#pendingRespawnTimer);
+      this.#pendingRespawnTimer = null;
+    }
+
+    // Detach the supervisor's onClose subscription. The next close
+    // (which client.stop() will emit) won't reach #onTransportClose.
+    if (this.#currentCloseUnsub !== null) {
+      this.#currentCloseUnsub();
+      this.#currentCloseUnsub = null;
+    }
+
+    // Stop the current client. AppServerClient.stop() is idempotent
+    // (its `if (this.closed) return` guard); safe to call even if
+    // start() wasn't ever called or already-stopped.
+    if (this.#currentClient !== null) {
+      try {
+        await this.#currentClient.stop();
+      } catch {
+        // Swallow — host already requested teardown; reporting the
+        // stop error doesn't help.
+      }
+    }
   }
 
   /**
@@ -278,6 +342,9 @@ export class Supervisor {
    * `_handleTransportCloseForTest`.
    */
   #onTransportClose(code: number | null): void {
+    // Halted = supervisor is shutting down or has cascaded out.
+    // Halts (cascade or stop()) are durable; never re-enter recovery.
+    if (this.#halted) return;
     if (this.#closing) return;
     this.#closing = true;
 
@@ -297,6 +364,7 @@ export class Supervisor {
 
     // Step 6: halt-on-cascade.
     if (this.#consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      this.#halted = true;
       this.#opts.audit.emitFatal(
         `supervisor halted: ${MAX_CONSECUTIVE_FAILURES} consecutive transport closes`,
       );
@@ -305,13 +373,23 @@ export class Supervisor {
 
     // Step 7: schedule recovery spawn after backoff.
     const delayMs = this.#backoff();
-    setTimeout(() => {
+    this.#pendingRespawnTimer = setTimeout(() => {
+      this.#pendingRespawnTimer = null;
+      // Re-check halted in case stop() was called during the backoff
+      // window. Without this, a stop() during backoff would still
+      // trigger a re-spawn from the timer callback.
+      if (this.#halted) return;
       // Clear #closing BEFORE entering #spawnFresh so a close that
       // fires during the new spawn (e.g. immediate subprocess exit)
       // can flip #closing again. Without this clear, a re-close
       // during spawn would be silently dropped.
       this.#closing = false;
       this.#spawnFresh().catch((err: unknown) => {
+        // Codex T11b review P1-2: spawn failure during recovery means
+        // we have a half-mutated state (broker reattached to a failed
+        // client, runtime maybe stale). Halt the supervisor so a future
+        // close can't trigger another mixed-state recovery.
+        this.#halted = true;
         const message = err instanceof Error ? err.message : String(err);
         this.#opts.audit.emitFatal(`supervisor halted: spawnFresh failed (${message})`);
       });
