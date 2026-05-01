@@ -220,9 +220,13 @@ export class Supervisor {
     // lives until client closes (no separate teardown needed).
     this.#currentRuntime = this.#opts.runtimeFactory(client);
 
-    // Reset close-handling state for the new generation. T11b uses
-    // these fields; T11a leaves them at safe initial values.
+    // Reset close-handling state for the new generation. The
+    // failure counter resets on a successful spawn (T11b) — a
+    // healthy spawn should not count toward the halt threshold;
+    // halt-on-cascade only fires when 5 closes happen WITHOUT an
+    // intervening successful spawn.
     this.#closing = false;
+    this.#consecutiveFailures = 0;
   }
 
   /**
@@ -237,30 +241,112 @@ export class Supervisor {
   }
 
   /**
-   * Transport-close handler. T11a is intentionally a no-op — T11b
-   * lands the real edge handling (idempotence, exponential backoff,
-   * halt-on-cascade, audit on fatal, broker.failPendingAsTransportLost
-   * invocation, synthesized turn_failed events).
+   * Transport-close handler (T11b). Drives the close-recovery
+   * lifecycle:
    *
-   * The supervisor MUST subscribe to transport.onClose during T11a
-   * (Codex B7 — the subscription has to happen before client
-   * construction so a synchronous close-during-construction is
-   * observable). This stub satisfies the wiring contract without
-   * making any decisions about recovery — leaving close-driven
-   * recovery entirely in T11b's scope.
+   *   1. Idempotence guard via `#closing` flag — concurrent close
+   *      events (rare but possible if the OS layer fires multiple
+   *      events on subprocess exit) collapse to a single cleanup.
+   *   2. `broker.failPendingAsTransportLost()` — D6: every pending
+   *      approval flips to `transport_lost` terminal. T9b's B-clean
+   *      lifecycle guarantees this is race-free; AppServerClient.respond
+   *      on a closed client is a no-op so the wire frame is harmlessly
+   *      dropped.
+   *   3. `runtime.events.endOfStream()` — signals the EventNormalizer
+   *      that no more notifications will arrive on this generation.
+   *      Consumers awaiting `runtime.events.events()` see `done: true`
+   *      after the queue drains. (Plan §2108 originally specified
+   *      synthetic `turn_failed` events per pending turn; this would
+   *      require turn-tracking state on the runtime which doesn't
+   *      exist yet. Calling endOfStream is the minimum-viable
+   *      Phase 1 contract; Phase 2 IM adapter integration can extend
+   *      to per-turn synthesis if the consumer needs it.)
+   *   4. `audit.emit` — informational record of the close + cleanup.
+   *   5. `#consecutiveFailures++` — bounded retry counter. Reset to 0
+   *      on a successful subsequent spawn (in `#spawnFresh`).
+   *   6. Halt at 5 consecutive failures: `audit.emitFatal` + return
+   *      (no further `#spawnFresh`). The host process decides what to
+   *      do with the fatal; the supervisor never calls `process.exit`.
+   *   7. Otherwise schedule `#spawnFresh` via `setTimeout(#backoff())`.
+   *      Backoff: 500ms → 1s → 2s → 4s → 8s (capped). On spawn failure,
+   *      `audit.emitFatal` and stop — the spawn-recovery path is
+   *      not infinitely retryable; once `#spawnFresh` itself fails
+   *      we surface to the host.
    *
-   * Why a no-op rather than a throw: client.stop() in tests (and in
-   * production teardown) propagates through the InMemoryTransport
-   * pair to fire the supervisor's onClose subscription. A throwing
-   * stub would crash test cleanup paths. The no-op is safe; T11b
-   * replaces it with the real handler that flips a #closing flag,
-   * notifies the broker, and drives the backoff loop.
-   *
-   * @internal — paired with the subscribe-before-spawn invariant
-   * tested in `subscribes to transport.onClose BEFORE constructing
-   * the client (Codex B7)`.
+   * @internal — production invocation is via the transport.onClose
+   * subscription; tests drive it via the test-door
+   * `_handleTransportCloseForTest`.
    */
-  #onTransportClose(_code: number | null): void {
-    // Intentional no-op for T11a. T11b replaces.
+  #onTransportClose(code: number | null): void {
+    if (this.#closing) return;
+    this.#closing = true;
+
+    // Step 2: fail pending approvals as transport-lost (D6).
+    this.#opts.broker.failPendingAsTransportLost();
+
+    // Step 3: signal the EventNormalizer to drain + close iterator.
+    if (this.#currentRuntime !== null) {
+      this.#currentRuntime.events.endOfStream();
+    }
+
+    // Step 4: audit.
+    this.#opts.audit.emit(`transport closed (code=${code ?? "null"}); cleanup complete`);
+
+    // Step 5: failure counter.
+    this.#consecutiveFailures++;
+
+    // Step 6: halt-on-cascade.
+    if (this.#consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      this.#opts.audit.emitFatal(
+        `supervisor halted: ${MAX_CONSECUTIVE_FAILURES} consecutive transport closes`,
+      );
+      return;
+    }
+
+    // Step 7: schedule recovery spawn after backoff.
+    const delayMs = this.#backoff();
+    setTimeout(() => {
+      // Clear #closing BEFORE entering #spawnFresh so a close that
+      // fires during the new spawn (e.g. immediate subprocess exit)
+      // can flip #closing again. Without this clear, a re-close
+      // during spawn would be silently dropped.
+      this.#closing = false;
+      this.#spawnFresh().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.#opts.audit.emitFatal(`supervisor halted: spawnFresh failed (${message})`);
+      });
+    }, delayMs);
+  }
+
+  /**
+   * Compute backoff delay in milliseconds based on the current failure
+   * count. Bounded at 8s (`#consecutiveFailures - 1` capped at index
+   * 4 — but with halt-at-5 in place, the 8s slot is unreachable in
+   * practice; the formula's cap is a defense-in-depth in case the
+   * halt threshold ever moves).
+   *
+   * Sequence: 500ms → 1s → 2s → 4s → 8s.
+   */
+  #backoff(): number {
+    const idx = Math.min(this.#consecutiveFailures - 1, 4);
+    return 500 * (1 << idx);
+  }
+
+  /**
+   * @internal — drives `#onTransportClose` from tests without going
+   * through a real transport's onClose subscription. Lets tests
+   * exercise close idempotence, backoff timing, and halt-on-cascade
+   * without depending on transport-implementation specifics.
+   */
+  _handleTransportCloseForTest(code: number | null): void {
+    this.#onTransportClose(code);
   }
 }
+
+/**
+ * Halt threshold: number of consecutive transport closes after which
+ * the supervisor stops trying to recover and signals fatal. Five is
+ * a heuristic — long enough to ride out normal codex restarts, short
+ * enough that a permanently-broken codex install gets surfaced.
+ */
+const MAX_CONSECUTIVE_FAILURES = 5;
