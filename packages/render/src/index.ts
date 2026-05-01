@@ -36,3 +36,9 @@ export { redact } from "./redact.js";
 // method strings — F1 boundary). C-P1 unknown-defensive decline-only card.
 export { projectApprovalCard, projectAsRichBlock } from "./project-approval.js";
 export type { ProjectApprovalOptions } from "./project-approval.js";
+
+// T17: plain-text capability fallback. Adapters without inline keyboards
+// or webhook-only setups consume this; English defaults per Codex Q1
+// (localization is adapter scope per D17).
+export { formatPlainText } from "./plain-text.js";
+export type { ChannelCapabilities } from "./plain-text.js";
