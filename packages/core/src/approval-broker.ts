@@ -72,7 +72,28 @@ import type {
   ToolRequestUserInputParams,
   ToolRequestUserInputResponse,
 } from "@codex-im/protocol";
-import type { ApprovalActor, ApprovalDecision, ApprovalRecord } from "./types.js";
+import { AuditEmitter, type AuditEventInput } from "./audit.js";
+import type {
+  ApprovalActor,
+  ApprovalDecision,
+  ApprovalRecord,
+  ApprovalUiAction,
+  PendingApprovalSnapshot,
+} from "./types.js";
+
+/**
+ * Outcome reported to `onPendingResolved` subscribers when a pending
+ * approval settles.
+ *
+ *   user    — IM-driven resolve() (T11). Actor + decision captured.
+ *   handler — Phase 1 / handler-mode auto-resolve via the registered
+ *             per-method handler. No IM actor.
+ *   system  — broker-driven settle: `expired` or `transport_lost`.
+ */
+export type ResolvedOutcome =
+  | { kind: "user"; decision: ApprovalUiAction; actor: NonNullable<ApprovalActor> }
+  | { kind: "handler" }
+  | { kind: "system"; reason: "expired" | "transport_lost" };
 
 // T6 type cascade: default TTL for the new ApprovalRecord.expiresAt field.
 // 30 minutes matches plan §1 D20's documented default. T8 / T11 will
@@ -258,6 +279,29 @@ export class ApprovalBroker {
   // expirePending / failPendingAsTransportLost can settle from outside
   // (T9b B-clean blocker-fix). See PendingEntry definition above.
   readonly #pending = new Map<string | number, PendingEntry>();
+  // T7 (Phase 2 D12 / D15): secondary index keyed by stable approvalId
+  // (`approval-${appServerRequestId}`). Inserted in lock-step with
+  // `#pending` inside `#handle`; deleted in lock-step in the `finally`
+  // block when the handler-mode happy path completes. Terminal records
+  // (resolved / expired / transport_lost) stay in BOTH maps until prune.
+  // T11's `resolve()` looks up via this map directly (NOT via
+  // `getPending` which filters by status) so terminal-state error
+  // branches (already_resolved / expired / transport_lost) can fire.
+  readonly #pendingById = new Map<string, PendingEntry>();
+  // T7 (Phase 2 D12): pending-lifecycle event subscribers. Fired at the
+  // `#settleEntry` boundary so observation order matches the wire-
+  // response order. `created` fires synchronously in `#handle`; `resolved`
+  // fires only on settleOnce-WIN paths (D21: losing settles emit
+  // approval.duplicate_attempt audit, NOT this observer).
+  readonly #createdHandlers = new Set<(snap: PendingApprovalSnapshot) => void>();
+  readonly #resolvedHandlers = new Set<
+    (snap: PendingApprovalSnapshot, outcome: ResolvedOutcome) => void
+  >();
+  // T7: structured audit emission. T5 ships AuditEmitter (in-memory ring
+  // + optional logger sink + redact applied at emit). Constructor takes
+  // an optional pre-built emitter; default = new no-logger emitter so
+  // Phase 1 broker tests still pass.
+  readonly #audit: AuditEmitter;
   #attached = false;
   // T9b D6 idempotence: failPendingAsTransportLost() is called by the
   // supervisor from its transport.onClose subscription. Reset on
@@ -268,8 +312,9 @@ export class ApprovalBroker {
   // fresh.
   #transportLostFired = false;
 
-  constructor(client: AppServerClient) {
+  constructor(client: AppServerClient, opts: { audit?: AuditEmitter } = {}) {
     this.#client = client;
+    this.#audit = opts.audit ?? new AuditEmitter();
     this.#table = {
       "item/commandExecution/requestApproval": {
         handler: null,
@@ -478,6 +523,17 @@ export class ApprovalBroker {
     };
     const entry = createPendingEntry(record, spec);
     this.#pending.set(req.id, entry);
+    // T7: secondary index + audit emit + onPendingCreated observer.
+    // Insert order matters: secondary index first so getPending() works
+    // immediately; emit-created last so subscribers see consistent state.
+    this.#pendingById.set(record.id, entry);
+    this.#audit.emit({
+      kind: "approval.created",
+      approvalId: record.id,
+      appServerRequestId: req.id,
+      metadata: { method: req.method },
+    });
+    this.#emitPendingCreated(record);
 
     // Background handler invocation. The void-IIFE pattern lets us not
     // await directly — instead we await entry.completion below. The
@@ -487,6 +543,10 @@ export class ApprovalBroker {
     // already fired, settleOnce returns false and the handler's
     // result is dropped (never reaches wire).
     //
+    // T7: routes through #settleEntry so audit emit + onPendingResolved
+    // observer fire at the boundary. settleOnce body itself is byte-for-
+    // byte unchanged (D21 / round-2 T3); only the call site is wrapped.
+    //
     // The `as` cast is load-bearing: TypeScript can't prove that
     // req.method (string) corresponds to spec.handler's parameterized P,
     // even though the dispatch-table key already proved it. The runtime
@@ -494,9 +554,29 @@ export class ApprovalBroker {
     void (async () => {
       try {
         const result = await (spec.handler as (r: JsonRpcRequest) => Promise<unknown>)(req);
-        entry.settleOnce({ type: "resolve", value: result });
+        this.#settleEntry(
+          entry,
+          { type: "resolve", value: result },
+          {
+            kind: "approval.resolved",
+            approvalId: record.id,
+            appServerRequestId: req.id,
+            metadata: { method: req.method, source: "handler" },
+          },
+          { kind: "handler" },
+        );
       } catch (err) {
-        entry.settleOnce({ type: "reject", error: err });
+        this.#settleEntry(
+          entry,
+          { type: "reject", error: err },
+          {
+            kind: "approval.resolved",
+            approvalId: record.id,
+            appServerRequestId: req.id,
+            metadata: { method: req.method, source: "handler-error", error: String(err) },
+          },
+          { kind: "handler" },
+        );
       }
     })();
 
@@ -507,12 +587,12 @@ export class ApprovalBroker {
       // the pending entry when the handler won the race normally
       // (status still "pending" — neither expirePending nor
       // failPendingAsTransportLost flipped it). Terminal records
-      // (expired / transport_lost) stay in #pending for audit until an
-      // explicit prune path (T11b future). resolve() / expirePending() /
-      // failPendingAsTransportLost() all check status before processing,
-      // so terminal records are skipped by subsequent passes.
+      // (expired / transport_lost / resolved-via-IM-pending-mode) stay
+      // in BOTH maps for audit until an explicit prune path (Phase 3).
+      // T7 deletes from BOTH `#pending` AND `#pendingById` lock-step.
       if (entry.record.status === "pending") {
         this.#pending.delete(req.id);
+        this.#pendingById.delete(record.id);
       }
     }
   }
@@ -575,15 +655,20 @@ export class ApprovalBroker {
       entry.record.actor = { kind: "system", reason: "transport_lost" };
       entry.record.decision = { kind: "denied", reason: "transport_lost" };
       entry.record.decidedAt = decidedAt;
-      // Settle the broker completion via settleOnce (no direct
-      // client.respond/reject). AppServerClient's catch arm preserves
-      // JsonRpcResponseError envelopes (Pre-3); generic throws collapse
-      // to -32603 with the legacy "handler error: " prefix.
+      // T7: route settle through #settleEntry so audit emit
+      // (`approval.transport_lost`) + onPendingResolved observer fire
+      // at the boundary. settleOnce body itself unchanged.
+      const audit: AuditEventInput = {
+        kind: "approval.transport_lost",
+        approvalId: entry.record.id,
+        appServerRequestId: entry.record.appServerRequestId,
+      };
+      const resolved: ResolvedOutcome = { kind: "system", reason: "transport_lost" };
       try {
         const value = entry.spec.defaultReject();
-        entry.settleOnce({ type: "resolve", value });
+        this.#settleEntry(entry, { type: "resolve", value }, audit, resolved);
       } catch (err) {
-        entry.settleOnce({ type: "reject", error: err });
+        this.#settleEntry(entry, { type: "reject", error: err }, audit, resolved);
       }
     }
   }
@@ -628,13 +713,20 @@ export class ApprovalBroker {
       entry.record.decision = { kind: "denied", reason: "expired" };
       entry.record.decidedAt = decidedAt;
       count++;
-      // Settle the broker completion (B-clean). No direct
-      // client.respond / client.reject — the wire response goes through
-      // #handle's await of entry.completion → AppServerClient's
-      // single-respond path.
+      // T7: route settle through #settleEntry so audit emit
+      // (`approval.expired`) + onPendingResolved observer fire at the
+      // boundary. settleOnce body itself unchanged. The wire response
+      // goes through #handle's await of entry.completion →
+      // AppServerClient's single-respond path.
+      const audit: AuditEventInput = {
+        kind: "approval.expired",
+        approvalId: entry.record.id,
+        appServerRequestId: entry.record.appServerRequestId,
+      };
+      const resolved: ResolvedOutcome = { kind: "system", reason: "expired" };
       try {
         const value = entry.spec.defaultReject();
-        entry.settleOnce({ type: "resolve", value });
+        this.#settleEntry(entry, { type: "resolve", value }, audit, resolved);
       } catch (err) {
         // defaultReject for account/chatgptAuthTokens/refresh throws
         // JsonRpcResponseError(-32601). Settle as reject so the
@@ -643,10 +735,196 @@ export class ApprovalBroker {
         // forward them through settleOnce too rather than swallowing
         // silently; the handler's eventual reject path produces
         // -32603 "handler error: ..." which makes the bug visible.
-        entry.settleOnce({ type: "reject", error: err });
+        this.#settleEntry(entry, { type: "reject", error: err }, audit, resolved);
       }
     }
     return count;
+  }
+
+  // ── T7: Phase 2 public surface ─────────────────────────────────────
+
+  /**
+   * Whether `attach()` has been called on this broker. Used by
+   * Supervisor (T22) to assert the pre-attach contract at `#spawnFresh`
+   * head: the broker MUST be attached before clientFactory completes.
+   * Round-2 / Codex round-1 D16 + A8.
+   */
+  isAttached(): boolean {
+    return this.#attached;
+  }
+
+  /**
+   * Read-only snapshot of pending approvals (status === "pending" only).
+   * Phase 2 D12. Returns a defensive copy — mutations have no effect on
+   * broker state. Terminal records (resolved / expired / transport_lost)
+   * are NOT included; for the broker-internal terminal lookup that
+   * `resolve()` uses, see `#pendingById` (private).
+   *
+   * Order: insertion order over the `#pending` Map iteration (oldest
+   * first by `#handle` arrival time).
+   */
+  listPending(): readonly PendingApprovalSnapshot[] {
+    const result: PendingApprovalSnapshot[] = [];
+    for (const entry of this.#pending.values()) {
+      if (entry.record.status !== "pending") continue;
+      result.push(this.#toSnapshot(entry.record));
+    }
+    return result;
+  }
+
+  /**
+   * Read one pending-approval snapshot by stable approvalId
+   * (`approval-${appServerRequestId}`). Returns null for unknown id OR
+   * for terminal records (resolved / expired / transport_lost) — the
+   * status filter matches `listPending` semantic.
+   *
+   * Phase 2 D12. T11 `resolve()` does NOT use this method — it uses
+   * the internal `#pendingById` lookup directly so it can SEE terminal
+   * records and route them to the matching ResolveError kind
+   * (already_resolved / expired / transport_lost). The status-filter
+   * here is for IM-rendering layers that should NEVER see terminal
+   * approvals (D15).
+   */
+  getPending(approvalId: string): PendingApprovalSnapshot | null {
+    const entry = this.#pendingById.get(approvalId);
+    if (entry === undefined || entry.record.status !== "pending") return null;
+    return this.#toSnapshot(entry.record);
+  }
+
+  /**
+   * Subscribe to "pending approval created" lifecycle events. Fires
+   * synchronously inside `#handle` after the PendingEntry has landed
+   * in both `#pending` and `#pendingById` — subscribers see consistent
+   * state. Returns an unsubscribe function.
+   *
+   * Handler exceptions are swallowed (logged-only via audit if needed);
+   * broker behavior must not depend on subscriber stability.
+   *
+   * Phase 2 D12. Used by daemon wire-up to project the snapshot via
+   * the renderer and dispatch the resulting `ApprovalCard` to the
+   * channel adapter.
+   */
+  onPendingCreated(handler: (snap: PendingApprovalSnapshot) => void): () => void {
+    this.#createdHandlers.add(handler);
+    return () => {
+      this.#createdHandlers.delete(handler);
+    };
+  }
+
+  /**
+   * Subscribe to "pending approval resolved" lifecycle events. Fires
+   * at the `#settleEntry` boundary ONLY when settleOnce wins (D21 —
+   * losing late settles emit `approval.duplicate_attempt` audit but
+   * do NOT fire this observer). Returns an unsubscribe function.
+   *
+   * The `outcome` carries the discriminator (user / handler / system).
+   *
+   * Handler exceptions are swallowed; broker behavior must not depend
+   * on subscriber stability.
+   */
+  onPendingResolved(
+    handler: (snap: PendingApprovalSnapshot, outcome: ResolvedOutcome) => void,
+  ): () => void {
+    this.#resolvedHandlers.add(handler);
+    return () => {
+      this.#resolvedHandlers.delete(handler);
+    };
+  }
+
+  // ── T7: Private helpers (snapshot projection + observer dispatch +
+  //         single-source-of-truth #settleEntry) ───────────────────────
+
+  /**
+   * Project an `ApprovalRecord` into a public `PendingApprovalSnapshot`.
+   * Frozen so callers can't mutate broker-internal state through the
+   * snapshot reference.
+   */
+  #toSnapshot(record: ApprovalRecord): PendingApprovalSnapshot {
+    return Object.freeze({
+      id: record.id,
+      appServerRequestId: record.appServerRequestId,
+      method: record.method,
+      params: record.params,
+      createdAt: record.createdAt,
+      expiresAt: record.expiresAt,
+    });
+  }
+
+  #emitPendingCreated(record: ApprovalRecord): void {
+    const snap = this.#toSnapshot(record);
+    for (const h of this.#createdHandlers) {
+      try {
+        h(snap);
+      } catch {
+        // Subscribers must not break broker. Swallow.
+      }
+    }
+  }
+
+  #emitPendingResolved(record: ApprovalRecord, outcome: ResolvedOutcome): void {
+    const snap = this.#toSnapshot(record);
+    for (const h of this.#resolvedHandlers) {
+      try {
+        h(snap, outcome);
+      } catch {
+        // Subscribers must not break broker. Swallow.
+      }
+    }
+  }
+
+  /**
+   * Single source of truth for routing wire-outcome settlement through
+   * the broker. ALL settle call sites (handler IIFE inside `#handle`,
+   * `expirePending`, `failPendingAsTransportLost`, and T11's `resolve()`)
+   * route through this helper.
+   *
+   * Behavior (Phase 2 D21):
+   *   - Calls `entry.settleOnce(outcome)` — body unchanged from Phase 1
+   *     (verified by approval-broker-settle-entry.test.ts byte-identical
+   *     check against `phase-1-runtime-complete`).
+   *   - On WIN (settleOnce returned `true`): emits the original semantic
+   *     audit kind + fires `onPendingResolved` observer.
+   *   - On LOSS (settleOnce returned `false` — late settler): emits
+   *     `approval.duplicate_attempt` audit (with the original kind +
+   *     `outcome: "lost-race"` recorded in metadata for traceability)
+   *     + does NOT fire `onPendingResolved` (only winners emit).
+   *
+   * The losing-settle audit visibility is the load-bearing observability
+   * for B-clean races (handler completion racing expirePending,
+   * resolve() racing failPendingAsTransportLost, etc.). Without it,
+   * concurrent settle attempts would silently drop with no diagnostic.
+   */
+  #settleEntry(
+    entry: PendingEntry,
+    outcome: WireOutcome,
+    audit: AuditEventInput,
+    resolved: ResolvedOutcome,
+  ): { won: boolean } {
+    const won = entry.settleOnce(outcome);
+    if (won) {
+      this.#audit.emit(audit);
+      this.#emitPendingResolved(entry.record, resolved);
+    } else {
+      // Late settler: record visibility for the lost race. Original
+      // intent (kind: audit.kind) is preserved in metadata so audit
+      // consumers can reconstruct what was attempted. exactOptional-
+      // PropertyTypes: only include optional fields if defined.
+      const dup: AuditEventInput = {
+        kind: "approval.duplicate_attempt",
+        metadata: {
+          ...(audit.metadata ?? {}),
+          outcome: "lost-race",
+          attemptedKind: audit.kind,
+        },
+        ...(audit.approvalId !== undefined && { approvalId: audit.approvalId }),
+        ...(audit.appServerRequestId !== undefined && {
+          appServerRequestId: audit.appServerRequestId,
+        }),
+        ...(audit.actor !== undefined && { actor: audit.actor }),
+      };
+      this.#audit.emit(dup);
+    }
+    return { won };
   }
 
   // ── Test-only accessor ───────────────────────────────────────────
