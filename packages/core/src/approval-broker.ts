@@ -74,6 +74,13 @@ import type {
 } from "@codex-im/protocol";
 import type { ApprovalActor, ApprovalDecision, ApprovalRecord } from "./types.js";
 
+// T6 type cascade: default TTL for the new ApprovalRecord.expiresAt field.
+// 30 minutes matches plan §1 D20's documented default. T8 / T11 will
+// parameterize via broker constructor option when in-resolve expiry
+// lands; this constant is the placeholder used by Phase 1's #handle
+// PendingEntry creation so the type compiles after T6.
+const DEFAULT_APPROVAL_TTL_MS = 30 * 60 * 1000;
+
 // Module-level guard against two brokers claiming the same client.
 // AppServerClient.setServerRequestHandler is a single slot — calling it
 // twice silently overwrites. The per-broker `#attached` flag protects
@@ -452,6 +459,13 @@ export class ApprovalBroker {
     // settler put on the completion. Late settlers no-op via the
     // `settled` flag, so duplicate wire responses are impossible by
     // construction.
+    // T6 type cascade: ApprovalRecord requires expiresAt: Date (D20).
+    // Phase 1 broker has no TTL plumbing — set a 30-minute default here so
+    // the type checks. T8 / T11 will parameterize via broker constructor
+    // option when resolve() / pending-mode lands; for now this is a
+    // defensive placeholder. Actual D20 in-resolve expiry check happens
+    // in T11.
+    const createdAt = new Date();
     const record: ApprovalRecord = {
       id: `approval-${req.id}`,
       appServerRequestId: req.id,
@@ -459,7 +473,8 @@ export class ApprovalBroker {
       params: req.params,
       status: "pending",
       actor: null,
-      createdAt: new Date(),
+      createdAt,
+      expiresAt: new Date(createdAt.getTime() + DEFAULT_APPROVAL_TTL_MS),
     };
     const entry = createPendingEntry(record, spec);
     this.#pending.set(req.id, entry);

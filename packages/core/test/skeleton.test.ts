@@ -72,6 +72,7 @@ describe("@codex-im/core skeleton (T5)", () => {
       status: "pending",
       actor: null,
       createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 60_000), // T6 D20: required field.
     };
     expect(pending.status).toBe("pending");
     expect(pending.actor).toBeNull();
@@ -88,6 +89,7 @@ describe("@codex-im/core skeleton (T5)", () => {
       status: "transport_lost",
       actor: { kind: "system", reason: "transport_lost" },
       createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 60_000), // T6 D20: required field.
       decidedAt: new Date(),
       decision: { kind: "denied", reason: "transport_lost" },
     };

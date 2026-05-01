@@ -25,3 +25,20 @@ export type { DispatcherSpec } from "./approval-broker.js";
 // `approval-request-kind.ts` header for the boundary rationale).
 export { classifyApprovalRequest } from "./approval-request-kind.js";
 export type { ApprovalRequestKind } from "./approval-request-kind.js";
+
+// Phase 2 T6 — resolve / binding / snapshot / target type surface (D11 /
+// D12 / D19 / D20). Public contracts T7 (broker emitters), T9
+// (bindActorPolicy), T10 (decision mapper), T11 (broker.resolve()) consume.
+// `Target` and `ApprovalUiAction` live here as canonical home; channel-core
+// (T18) and render (T14) re-export type-only.
+export type {
+  ActorPolicy,
+  ApprovalUiAction,
+  BindError,
+  BindResult,
+  PendingApprovalSnapshot,
+  ResolveApprovalInput,
+  ResolveApprovalResult,
+  ResolveError,
+  Target,
+} from "./types.js";
