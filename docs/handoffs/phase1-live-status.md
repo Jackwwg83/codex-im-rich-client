@@ -1,24 +1,25 @@
 # Phase 1 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-01 (post-decision) — User chose **B-clean** for T9b blocker 1 + fix blocker 2 in the same stage. Plan amended with `T9b blocker-fix` subsection. Next: failing tests first (Step 1), then implementation (Step 2), then codex review. Autonomous loop NOT resumed yet — staged execution with explicit STOPs between Steps. HEAD `0bae49b`. Test count 277/277.
+> **Last updated:** 2026-05-01 — **T9b complete.** Blocker-fix (B-clean) applied + codex review verdict: **APPROVE** (0 P0, 0 P1, 4 P2 — 3 resolved + 1 deferred-with-justification). HEAD `f9915f7`. Test count 283/283; all 8 ci-check gates green. Autonomous loop is paused awaiting your call on T10.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 1 — Codex Runtime Core
-- **Active task:** **T9b blocker-fix in progress** — user-decided design: **B-clean** for blocker 1 (broker owns single completion promise per pending request, internal `PendingEntry` keeps `ApprovalRecord` data-only) + fix blocker 2 (`#transportLostFired = false` in `reattach`) in the same stage. Plan §"Task 9b blocker-fix" subsection added 2026-05-01 with full design.
-- **Autonomous mode:** **STAGED, not free-running.** User specified an explicit Step 0 → Step 1 → Step 2 → codex review sequence with STOPs between. No ScheduleWakeup until the staged sequence completes.
-- **Last completed task:** **T9a** + Pre-3 + T1-T8 (see §3).
-- **Rejected alternatives** (do not relitigate): Option A (Pre-4 `AppServerClient` idempotent respond/reject) recorded as future backlog in `TODOS.md`, NOT implemented now. Option C (Phase 1 punt) declined.
+- **Active task:** **T10 — ready to start** (`codex-im runtime send` CLI per plan §1813). Has not started yet; awaiting user approval to resume the autonomous loop OR do it manually.
+- **Autonomous mode:** **PAUSED.** The staged T9b blocker-fix sequence (Step 0 docs → Step 1 failing tests → Step 2 implementation → Step 3 codex review APPROVE → Step 4 live-status sync) completed at HEAD `f9915f7`. ScheduleWakeup loop is not active; resuming for T10 is a single-message decision.
+- **Last completed task:** **T9b** (broker edges + B-clean lifecycle fix + reviews) — 4 T9b code commits (`1ecb394`, `4798c02`, `decb570`, `bf97a49`) + 2 codex reviews + 1 blocker-fix (`e814880` B-clean + `429fc2c` P2 follow-ups) + 2 review docs.
+- **Prior tasks:** T9a + Pre-3 + T1-T8 (see §3).
+- **Rejected alternatives** (do not relitigate): Option A (Pre-4 `AppServerClient` idempotent respond/reject) recorded as future backlog in `TODOS.md`, NOT implemented. Option C (Phase 1 punt) declined.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-1-runtime`
-- **HEAD:** `bf97a49 test(core): build-time grep guard for approval method-name literals (T9b Step 9b.6)`
-- **Full T9b chain:** `bf97a49` (9b.6 grep guard) ← `e890c69` (live-status sync) ← `decb570` (9b.4+9b.5 pending lifecycle) ← `3e1a300` (live-status sync) ← `4798c02` (9b.2+9b.3 timeout/throw) ← `1ecb394` (9b.1 reattach) ← `0a4bf72` (T9a complete).
-- **T9b code commits:** `1ecb394`, `4798c02`, `decb570`, `bf97a49` (4 logical chunks).
+- **HEAD:** `f9915f7 docs(phase-1): codex outside-voice review report — T9b blocker-fix (APPROVE)`
+- **T9b blocker-fix arc:** `f9915f7` (review doc) ← `429fc2c` (P2 follow-ups) ← `e814880` (B-clean fix) ← `8a14bbe` (Step 0 docs) ← `0bae49b` (STOPPED status from prior review).
+- **T9b code commits (5 total):** `1ecb394`, `4798c02`, `decb570`, `bf97a49`, `e814880`, `429fc2c`.
 - **Main:** `main`
 
 ## 3. Completed tasks (Phase 1)
@@ -37,72 +38,46 @@
 - T8 (CodexRuntime typed wrappers) — landed + reviewed (5/5 low+nit fixes applied)
 - **Pre-3 (`AppServerClient` `JsonRpcResponseError` propagation) — landed (docs `c96d36d` + code `44e2623`).** No outside-voice review run on Pre-3; the change is purely additive (single new branch in catch arm; existing `-32603` path bit-identical). 231/231 tests pass.
 - **T9a (`ApprovalBroker` skeleton + happy-path dispatch + dispatch coverage) — landed.** 5 code commits (`fad862d` 9a.1 failing test, `f274aae` 9a.2 broker impl, `e8d5c1a` 9a.3 per-method dispatch + default-reject, `7a05598` 9a.4+9a.5 dispatch coverage + type-only response shapes, `7fe48c6` codex review fixes) + review doc `06d9e3c`. Codex outside-voice review: 4 findings (2 medium + 2 low), all resolved inline. 254/254 tests pass.
+- **T9b (`ApprovalBroker` edges + B-clean lifecycle fix + reviews) — landed.** Steps 9b.1-9b.6 (`1ecb394`, `4798c02`, `decb570`, `bf97a49`) + first codex review found 2 blockers + 2 medium + 1 low + 1 nit; user chose **B-clean** design. Blocker fix `e814880` (B-clean: broker owns single completion promise per pending request via internal `PendingEntry` + `settleOnce` race-free guard; `reattach()` resets `#transportLostFired`). Second codex review **APPROVE** (0 P0, 0 P1, 4 P2). P2 follow-ups `429fc2c` (comment polish + 2 missing tests). Review docs `06d9e3c` (T9b first review) + `f9915f7` (blocker-fix review). 283/283 tests pass.
 
 ## 4. Currently doing
 
-**Step 0 of T9b blocker-fix — docs only.** This commit adds:
+**Nothing in flight.** T9b is fully landed with codex APPROVE. Awaiting your decision on T10.
 
-- Plan §"Task 9b blocker-fix" subsection with full B-clean design + rejected alternatives + execution order.
-- This live-status update (§1 / §4 / §5 / §10).
-- TODOS.md entry recording AppServerClient idempotent respond/reject as future defensive guardrail (NOT this fix).
+T9b blocker-fix arc summary (this morning):
+- Step 0 docs commit (`8a14bbe`) — plan + live-status + TODOS amendments.
+- Step 1 failing tests (committed together with Step 2 — TDD red-green pair).
+- Step 2 B-clean implementation (`e814880`) — `PendingEntry` + `settleOnce` + conditional delete + reattach reset.
+- Step 3 codex outside-voice review **APPROVE** with 3 P2 + 1 risky-assumption infos.
+- Step 3a P2 follow-ups (`429fc2c`) — comment polish + 2 missing tests.
+- Step 3b review doc (`f9915f7`).
+- Step 4 (this commit) — live-status sync.
 
-After this commit lands and gates are green: STOP for user review before Step 1.
-
-Step 1: failing tests first (4 new tests). Step 2: B-clean implementation. Step 3: codex outside-voice review on the fix.
-
-Total overnight session (closed): 5 wakes, 21 commits. T9a complete + Pre-3 + T9b code through Step 9b.6. The blocker fix opens a new staged sequence on top of HEAD `0bae49b`.
+Total Phase 1 work to date: 6 wakes worth of autonomous + 1 staged session. T1-T9b + Pre-1/2/3 all complete. Test count 231 → 283.
 
 ## 5. Next exact action
 
-**Step 1 of T9b blocker-fix — write 4 failing tests** in `packages/core/test/approval-broker.test.ts`. Authorized files for the whole blocker-fix: `packages/core/{src,test}/...` only. Do NOT touch `packages/app-server-client/`.
+**T10 Step 10.1** (per plan §1813-1816, "`codex-im runtime send` CLI"):
 
-The 4 tests:
+Plan files:
+- Create: `packages/cli/src/runtime-send.ts`
+- Modify: `packages/cli/src/index.ts`
+- Modify: `packages/cli/README.md`
+- Create: `packages/cli/test/runtime-send.test.ts`
 
-1. **late-resolving handler after expirePending does not produce duplicate response**
-   - broker attached, handler returns a manually-controlled Promise (not yet settled)
-   - emit a server request → broker tracks pending
-   - call `broker.expirePending(maxAgeMs)` while handler is still pending
-   - assert the wire response is the per-method default-reject (one wire response total)
-   - then resolve the original handler promise
-   - assert NO second wire response is emitted; record stays terminal `expired`
-2. **late-rejecting handler after expirePending also does not produce duplicate response**
-   - same as #1 but the handler eventually rejects
-   - the expire path is the only wire outcome
-3. **failPendingAsTransportLost does not produce duplicate response on late handler resolution**
-   - handler manually controlled, `failPendingAsTransportLost()` called, then handler settles
-   - record terminal status `transport_lost`; no second wire response
-4. **reattach resets transportLostFired (allows second-generation transport_lost)**
-   - attach to clientA → emit hanging request → `failPendingAsTransportLost()` → assert clientA record is `transport_lost`
-   - reattach to clientB → emit hanging request on clientB → `failPendingAsTransportLost()` → assert clientB record is ALSO `transport_lost` (current bug: second call no-ops because flag stays true)
+Plan steps:
+- 10.1: failing test — `runtimeSend` with `InMemoryTransport` completes one turn and prints final summary.
+- 10.2: implement using `CodexRuntime` + `EventNormalizer.events()` + `ApprovalBroker.attach()`.
+- 10.3: subcommand wiring + README + safety rails (read-only sandbox + default-reject through ApprovalBroker — same as smoke).
+- 10.4: test, typecheck, lint, commit.
 
-Wire-frame counting: prefer using existing FakeAppServer / InMemoryTransport observability. If neither can count duplicate frames cleanly, do NOT fake the assertion silently — STOP and report. Modifying `packages/testkit/` is out of authorized scope unless explicitly approved.
+Exit criteria (plan §1759): `pnpm runtime:send -- --prompt 'Reply OK'` runs end-to-end against real codex with same safety rails as smoke.
 
-Run targeted tests, expect fail-for-the-right-reason, report and STOP. Do NOT write implementation in Step 1.
+**User decision needed before T10 starts:** resume the autonomous overnight loop (ScheduleWakeup) OR drive T10 manually in this session. T10 is small and autonomous-safe per the original task table.
 
-**Step 2 of T9b blocker-fix — B-clean implementation** (only after user approves Step 1 report):
-
-Per plan §"Task 9b blocker-fix" → "Design (B-clean)":
-- Internal `PendingEntry` shape with `record` + `completion` + `settleOnce` + `settled` (private to `approval-broker.ts`; never leaks into `ApprovalRecord`)
-- `#handle` kicks off handler in background, awaits `entry.completion`
-- `expirePending` and `failPendingAsTransportLost` use `settleOnce` instead of direct `client.respond` / `client.reject`
-- Late handler completion observes `record.status !== "pending"` and is dropped
-- `reattach` resets `#transportLostFired = false` on success
-
-Run targeted tests + full ci-check. Tests should turn green. Report and STOP. Do NOT commit until user approves.
-
-**Step 3 — codex outside-voice review** on the fix diff (range parent-of-fix..HEAD-of-fix, filtered to `packages/core/`). Capture findings to `docs/phase-1/codex-review-t9b-blocker-fix.md`. Apply low/nit + obvious medium fixes inline; STOP on uncertain medium / blocker.
-
-**Step 4** — live-status sync marking T9b complete; resume autonomous loop for T10 if user approves.
-
-T9b blocker-fix authorized Files:
-- `packages/core/src/approval-broker.ts` (modify)
-- `packages/core/test/approval-broker.test.ts` (modify)
-- May modify if needed: `packages/core/test/approval-broker-dispatch.test.ts`, `packages/core/test/dispatch-coverage.test.ts`
-
-T9b blocker-fix forbidden:
-- `packages/app-server-client/` (Pre-3 owns; Option A is future backlog only)
-- `packages/codex-runtime/`, `packages/cli/`, `packages/testkit/`
-- Any IM adapter / Computer Use prod / WebSocket listener / approval method-name hardcode
+After T10:
+- T11a / T11b — explicit user approval per the autonomous-mode hard stop. Plan §397 marks these "lead session lifecycle correctness critical".
+- T12 — docs + roadmap update + Phase 1→2 handoff.
 
 ## 6. Currently modified files (working tree)
 
@@ -114,17 +89,17 @@ Clean (only the gstack runtime lock):
 
 `git stash list` is empty. The autonomous loop's recovery scan treats anything beyond this exact list as drift and triggers a hard stop.
 
-## 7. Current test results (at HEAD `bf97a49`)
+## 7. Current test results (at HEAD `f9915f7`)
 
 - `pnpm typecheck` → exit 0 (6 packages)
-- `pnpm test` → **277 passed (277)**, 28 files (was 254 pre-T9b; +4 reattach + +4 timeout/throw + +6 pending-lifecycle + +9 grep guard)
+- `pnpm test` → **283 passed (283)**, 28 files (was 277 pre-blocker-fix; +4 blocker-fix tests + +2 codex P2 follow-up tests)
 - `pnpm typecheck:tests` → exit 0
 - `pnpm test:cli-smoke` → 2 passed
 - `pnpm lint` → exit 0 (82 files biome)
 - `pnpm protocol:check` → exit 0
-- `bash scripts/ci-check.sh` → all 8 gates green at `bf97a49`
+- `bash scripts/ci-check.sh` → all 8 gates green at `f9915f7`
 
-Note: the green test count does NOT prove correctness on the 2 blockers. T9b's tests use never-resolving handlers which intentionally mask the duplicate-response race (codex review medium-4 explicitly calls this out — the late-resolving handler test is one of the missing tests).
+Codex T9b blocker-fix review verdict: **APPROVE** (0 P0, 0 P1, 4 P2 — 3 resolved + 1 deferred-with-justification, 2 risky-assumption infos acknowledged for T11b).
 
 ## 8. Current key decisions (Phase 1, decided — do not relitigate)
 
