@@ -26,7 +26,7 @@
 import { FakeAppServer } from "@codex-im/testkit";
 import pino from "pino";
 import { describe, expect, it } from "vitest";
-import { runRuntimeSendCore } from "../src/runtime-send.js";
+import { parseRuntimeSendArgs, runRuntimeSendCore } from "../src/runtime-send.js";
 
 describe("runRuntimeSendCore (T10)", () => {
   it("completes one turn end-to-end and streams events as JSONL", async () => {
@@ -232,10 +232,10 @@ describe("runRuntimeSendCore (T10)", () => {
     await fake.stop();
   });
 
-  it("delegates AppServerClient construction so logger and transport are honored", async () => {
-    // Sanity check that the `clientFactory`-style options the test sets
-    // (logger, transport) actually reach the underlying AppServerClient.
-    // We verify by counting outbound frames on an instrumented transport.
+  it("output sink receives at least the terminal event for a happy turn (sanity)", async () => {
+    // Sanity check that the `output` callback is wired into the
+    // event-streaming loop; we don't instrument transport/logger here
+    // (those are exercised more thoroughly by the JSONL test above).
     const fake = new FakeAppServer();
 
     fake.respondTo("thread/start", () => ({
@@ -299,5 +299,179 @@ describe("runRuntimeSendCore (T10)", () => {
 
     // At minimum the turn_completed event was streamed.
     expect(outputCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("parseRuntimeSendArgs (T10 — codex T10 review missing-tests)", () => {
+  it("returns empty flags for empty argv", () => {
+    expect(parseRuntimeSendArgs([])).toEqual({});
+  });
+
+  it("parses --prompt with a value", () => {
+    expect(parseRuntimeSendArgs(["--prompt", "Reply OK"])).toEqual({ prompt: "Reply OK" });
+  });
+
+  it("parses --prompt-file with a value", () => {
+    expect(parseRuntimeSendArgs(["--prompt-file", "/tmp/p.txt"])).toEqual({
+      promptFile: "/tmp/p.txt",
+    });
+  });
+
+  it("parses --cwd with a value", () => {
+    expect(parseRuntimeSendArgs(["--cwd", "/tmp/work"])).toEqual({ subprocessCwd: "/tmp/work" });
+  });
+
+  it("parses multiple flags in any order", () => {
+    expect(parseRuntimeSendArgs(["--cwd", "/tmp/w", "--prompt", "hi"])).toEqual({
+      subprocessCwd: "/tmp/w",
+      prompt: "hi",
+    });
+  });
+
+  it("rejects an unknown flag", () => {
+    expect(() => parseRuntimeSendArgs(["--bogus"])).toThrow(/unknown flag/);
+  });
+
+  it("rejects a missing value (end-of-argv)", () => {
+    expect(() => parseRuntimeSendArgs(["--prompt"])).toThrow(/--prompt requires a value/);
+  });
+
+  it("rejects a missing value (next-token-is-flag — '--prompt --cwd /tmp')", () => {
+    // The "next-token-is-flag" detection prevents silently treating
+    // "--cwd" as the value for "--prompt".
+    expect(() => parseRuntimeSendArgs(["--prompt", "--cwd", "/tmp"])).toThrow(
+      /--prompt requires a value/,
+    );
+  });
+
+  it("rejects --prompt and --prompt-file together (mutually exclusive)", () => {
+    expect(() => parseRuntimeSendArgs(["--prompt", "x", "--prompt-file", "y"])).toThrow(
+      /mutually exclusive/,
+    );
+  });
+});
+
+describe("runRuntimeSendCore — terminal turn variants (T10 — codex T10 review missing-tests)", () => {
+  // Helper: build a fake that responds to thread/start with a stub
+  // response and lets the test drive turn/start's behavior.
+  function setupThreadStart(fake: FakeAppServer): void {
+    fake.respondTo("thread/start", () => ({
+      thread: {
+        id: "thread-terminal-test",
+        forkedFromId: null,
+        preview: "",
+        ephemeral: true,
+        modelProvider: "openai",
+        createdAt: 0,
+        updatedAt: 0,
+        status: "active",
+        path: null,
+        cwd: "/tmp/test",
+        cliVersion: "test",
+        source: { type: "appServer" },
+        agentNickname: null,
+        agentRole: null,
+        gitInfo: null,
+        name: null,
+        turns: [],
+      },
+      model: "gpt-X",
+      modelProvider: "openai",
+      serviceTier: null,
+      cwd: "/tmp/test",
+      instructionSources: [],
+      approvalPolicy: "on-request",
+      approvalsReviewer: { type: "default" },
+      sandbox: { mode: "read-only" },
+      permissionProfile: null,
+      reasoningEffort: null,
+    }));
+  }
+
+  it("breaks the event loop on turn_failed terminal event", async () => {
+    const fake = new FakeAppServer();
+    setupThreadStart(fake);
+    fake.respondTo("turn/start", () => {
+      queueMicrotask(() => {
+        fake.emitNotification("turn/completed", {
+          threadId: "thread-terminal-test",
+          turn: { id: "turn-failed-test", items: [], status: "failed" },
+        });
+      });
+      return { turn: { id: "turn-failed-test", items: [], status: "inProgress" } };
+    });
+
+    const log = pino({ level: "silent" });
+    const lines: string[] = [];
+    await runRuntimeSendCore({
+      transport: fake.clientSide,
+      logger: log,
+      prompt: "anything",
+      output: (l) => lines.push(l),
+      turnTimeoutMs: 5_000,
+      clientName: "test",
+      clientVersion: "0.0.0",
+    });
+    await fake.stop();
+
+    const events = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    const types = events.map((e) => e.type);
+    expect(types).toContain("turn_failed");
+  });
+
+  it("breaks the event loop on turn_interrupted terminal event", async () => {
+    const fake = new FakeAppServer();
+    setupThreadStart(fake);
+    fake.respondTo("turn/start", () => {
+      queueMicrotask(() => {
+        fake.emitNotification("turn/completed", {
+          threadId: "thread-terminal-test",
+          turn: { id: "turn-interrupted-test", items: [], status: "interrupted" },
+        });
+      });
+      return { turn: { id: "turn-interrupted-test", items: [], status: "inProgress" } };
+    });
+
+    const log = pino({ level: "silent" });
+    const lines: string[] = [];
+    await runRuntimeSendCore({
+      transport: fake.clientSide,
+      logger: log,
+      prompt: "anything",
+      output: (l) => lines.push(l),
+      turnTimeoutMs: 5_000,
+      clientName: "test",
+      clientVersion: "0.0.0",
+    });
+    await fake.stop();
+
+    const events = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    const types = events.map((e) => e.type);
+    expect(types).toContain("turn_interrupted");
+  });
+
+  it("throws with timeout message when turn never reaches terminal", async () => {
+    const fake = new FakeAppServer();
+    setupThreadStart(fake);
+    fake.respondTo("turn/start", () => {
+      // Never emits a terminal turn event — the runtime-send timeout
+      // should fire and throw.
+      return { turn: { id: "turn-stuck-test", items: [], status: "inProgress" } };
+    });
+
+    const log = pino({ level: "silent" });
+    await expect(
+      runRuntimeSendCore({
+        transport: fake.clientSide,
+        logger: log,
+        prompt: "anything",
+        output: () => {},
+        turnTimeoutMs: 80,
+        clientName: "test",
+        clientVersion: "0.0.0",
+      }),
+    ).rejects.toThrow(/did not complete within 80ms/);
+
+    await fake.stop();
   });
 });

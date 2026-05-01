@@ -29,13 +29,23 @@
  *   - sandbox=read-only             (no shell side effects)
  *   - approval_policy=on-request    (every approval funnels through us)
  *   - ApprovalBroker default-deny   (T9b: handler=null per method →
- *                                    per-method default-reject response)
- *   - account/chatgptAuthTokens/refresh defaults to throw -32601
- *     (Phase 1 cannot fabricate tokens)
+ *                                    per-method default-reject response;
+ *                                    auth-refresh defaults to throw -32601
+ *                                    because Phase 1 cannot fabricate
+ *                                    tokens)
  *
  * The broker handles the approval default-deny; we never call
  * `setServerRequestHandler` directly here. Method-name string literals
- * are confined to packages/core/src/approval-broker.ts (D7 boundary).
+ * are confined to packages/core/src/approval-broker.ts (D7 boundary);
+ * even mentioning them in comments inside packages/cli/src/ trips T9b's
+ * grep guard, so this header sticks to category names.
+ *
+ * Logging:
+ *   - The `output` callback is the EVENT JSONL sink (defaults to
+ *     process.stdout — one CodexRichEvent per line, machine-parseable).
+ *   - The `logger` is a pino Logger that goes to STDERR by default
+ *     when constructed via the CLI entry — keeps stdout event-only.
+ *     Tests pass a silent logger so test output stays clean.
  */
 
 import { readFileSync } from "node:fs";
@@ -269,7 +279,14 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
   }
 
   const flags = parseRuntimeSendArgs(argv);
-  const log = pino({ name: "runtime:send", level: "info" });
+  // Route logs to STDERR (codex T10 review P1-2): the runtime-send
+  // contract is "stdout = event JSONL only". Default pino destination
+  // is stdout, which would mix log records with CodexRichEvent JSONL
+  // and break downstream parsers. pino.destination(2) routes to stderr.
+  const log = pino(
+    { name: "runtime:send", level: "info" },
+    pino.destination({ fd: 2, sync: true }),
+  );
 
   let prompt: string;
   if (flags.prompt !== undefined) {
