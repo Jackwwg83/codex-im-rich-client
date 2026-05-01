@@ -51,20 +51,6 @@ import {
   type JsonRpcRequest,
   JsonRpcResponseError,
 } from "@codex-im/app-server-client";
-
-// Module-level guard against two brokers claiming the same client.
-// AppServerClient.setServerRequestHandler is a single slot — calling it
-// twice silently overwrites. The per-broker `#attached` flag protects
-// against the same broker attaching twice; this WeakSet protects against
-// two different brokers attaching to the same client (D7 single-handler
-// invariant is meant to be per client, not per broker — Codex T9a review
-// medium-1).
-//
-// WeakSet is the right container: entries auto-clear when the client is
-// GC'd, so this does not violate ONE-SHOT lifecycle. T11b's supervisor
-// constructs a fresh client on every recovery; the prior client becomes
-// unreachable and the WeakSet entry vanishes naturally.
-const _attachedClients: WeakSet<AppServerClient> = new WeakSet();
 import type {
   ApplyPatchApprovalParams,
   ApplyPatchApprovalResponse,
@@ -87,6 +73,20 @@ import type {
   ToolRequestUserInputResponse,
 } from "@codex-im/protocol";
 import type { ApprovalActor, ApprovalDecision, ApprovalRecord } from "./types.js";
+
+// Module-level guard against two brokers claiming the same client.
+// AppServerClient.setServerRequestHandler is a single slot — calling it
+// twice silently overwrites. The per-broker `#attached` flag protects
+// against the same broker attaching twice; this WeakSet protects against
+// two different brokers attaching to the same client (D7 single-handler
+// invariant is meant to be per client, not per broker — Codex T9a review
+// medium-1).
+//
+// WeakSet is the right container: entries auto-clear when the client is
+// GC'd, so this does not violate ONE-SHOT lifecycle. T11b's supervisor
+// constructs a fresh client on every recovery; the prior client becomes
+// unreachable and the WeakSet entry vanishes naturally.
+const _attachedClients: WeakSet<AppServerClient> = new WeakSet();
 
 /**
  * Per-method dispatcher specification. The handler slot is null until a
@@ -151,6 +151,74 @@ type _ExhaustiveDispatch = ServerRequest["method"] extends keyof DispatchTable
 const _exhaustiveCheck: _ExhaustiveDispatch = true;
 void _exhaustiveCheck;
 
+// ─── PendingEntry — internal-only completion-promise machinery ────────
+//
+// T9b blocker-fix (B-clean, 2026-05-01): the broker owns a single
+// completion promise per in-flight server-request. Three sources can
+// settle it: (1) the registered handler's eventual resolve/reject, (2)
+// expirePending(), (3) failPendingAsTransportLost(). All three race
+// through `settleOnce`; the first call wins and subsequent calls
+// no-op. AppServerClient sees exactly one wire response per id —
+// whatever value the winning settler put on the completion. Late
+// handler completions (after expire / transport-lost) are observed but
+// dropped, so no duplicate wire frames are produced.
+//
+// PendingEntry is intentionally NOT exported. ApprovalRecord stays
+// data-only; capability handles (resolveWire / rejectWire) live inside
+// the closure and are reachable only through PendingEntry.settleOnce.
+// Tests inspect record state via `_pendingRecordsForTest()`, which
+// projects the entry-keyed Map back to a record-keyed view.
+
+type WireOutcome = { type: "resolve"; value: unknown } | { type: "reject"; error: unknown };
+
+interface PendingEntry {
+  /** Public-shape audit record. Mutated in-place when status flips. */
+  record: ApprovalRecord;
+  /** Awaited by `#handle`; resolves/rejects to the wire response. */
+  completion: Promise<unknown>;
+  /**
+   * Settle the completion promise. Returns `true` if this call won the
+   * race, `false` if a prior call already settled. The flag prevents the
+   * duplicate-response bug (codex T9b review blocker 1) by making sure
+   * only one of {handler resolve, handler reject, expirePending,
+   * failPendingAsTransportLost} drives the wire response.
+   */
+  settleOnce: (outcome: WireOutcome) => boolean;
+  /** Public-readable mirror of "has settleOnce ever fired". */
+  settled: boolean;
+  /** Captured at handle-time so settle paths don't re-key the dispatch table. */
+  spec: DispatchTable[keyof DispatchTable];
+}
+
+function createPendingEntry(
+  record: ApprovalRecord,
+  spec: DispatchTable[keyof DispatchTable],
+): PendingEntry {
+  let resolveWire!: (v: unknown) => void;
+  let rejectWire!: (e: unknown) => void;
+  const completion = new Promise<unknown>((res, rej) => {
+    resolveWire = res;
+    rejectWire = rej;
+  });
+  const entry: PendingEntry = {
+    record,
+    completion,
+    spec,
+    settled: false,
+    settleOnce(outcome) {
+      if (this.settled) return false;
+      this.settled = true;
+      if (outcome.type === "resolve") {
+        resolveWire(outcome.value);
+      } else {
+        rejectWire(outcome.error);
+      }
+      return true;
+    },
+  };
+  return entry;
+}
+
 /**
  * ApprovalBroker — single owner of `AppServerClient.setServerRequestHandler`.
  *
@@ -178,12 +246,19 @@ void _exhaustiveCheck;
 export class ApprovalBroker {
   #client: AppServerClient;
   readonly #table: DispatchTable;
-  readonly #pending = new Map<string | number, ApprovalRecord>();
+  // Map of in-flight server-requests keyed by JSON-RPC id. Each entry
+  // owns a completion promise that #handle awaits and that
+  // expirePending / failPendingAsTransportLost can settle from outside
+  // (T9b B-clean blocker-fix). See PendingEntry definition above.
+  readonly #pending = new Map<string | number, PendingEntry>();
   #attached = false;
   // T9b D6 idempotence: failPendingAsTransportLost() is called by the
-  // supervisor from its transport.onClose subscription. If the supervisor
-  // calls it twice (e.g. close fires more than once), the second call
-  // must be a no-op — pending records are already terminal.
+  // supervisor from its transport.onClose subscription. Reset on
+  // reattach() so a second client generation can also fail its own
+  // pending requests (codex T9b review blocker 2). Idempotency is
+  // per-generation: within a single generation the second call no-ops;
+  // after reattach the flag is cleared and the new generation starts
+  // fresh.
   #transportLostFired = false;
 
   constructor(client: AppServerClient) {
@@ -317,6 +392,11 @@ export class ApprovalBroker {
     newClient.setServerRequestHandler((req) => this.#handle(req));
     _attachedClients.add(newClient);
     this.#client = newClient;
+    // Reset transport-lost generation flag (codex T9b review blocker 2).
+    // The new client is its own generation; if its transport later
+    // closes, the supervisor's failPendingAsTransportLost() call must
+    // actually fire instead of no-op'ing on the prior generation's flag.
+    this.#transportLostFired = false;
   }
 
   /**
@@ -356,20 +436,22 @@ export class ApprovalBroker {
     }
     const spec = this.#table[m];
     if (spec.handler === null) {
-      // Synchronously invoke defaultReject so a throwing default
-      // (account/chatgptAuthTokens/refresh) propagates as a thrown
-      // JsonRpcResponseError, not a rejected Promise wrapping the throw.
-      // No pending tracking on the default-reject path: codex sees a
-      // synchronous response and never thinks of this as "in flight"
-      // from the broker's perspective.
+      // Synchronous default-reject path. No PendingEntry, no completion
+      // promise — codex sees an immediate response. defaultReject may
+      // throw JsonRpcResponseError (auth-refresh case); the throw
+      // propagates to AppServerClient's catch arm verbatim (Pre-3 path).
       return spec.defaultReject();
     }
-    // T9b Step 9b.5: track in-flight approvals in #pending so
-    // failPendingAsTransportLost (D6) and expirePending have something
-    // to drain. The record is inserted BEFORE invoking the handler so
-    // a synchronous throw still leaves a snapshot for transport-loss
-    // bookkeeping (the try/finally below removes it after the handler
-    // settles, success or throw).
+
+    // T9b B-clean (codex T9b review blocker 1): build a PendingEntry
+    // with a broker-owned completion promise. The handler runs in the
+    // background; its result, expirePending(), and
+    // failPendingAsTransportLost() all race through entry.settleOnce
+    // to settle the same completion. AppServerClient receives exactly
+    // one wire response per request id — whatever value the winning
+    // settler put on the completion. Late settlers no-op via the
+    // `settled` flag, so duplicate wire responses are impossible by
+    // construction.
     const record: ApprovalRecord = {
       id: `approval-${req.id}`,
       appServerRequestId: req.id,
@@ -379,20 +461,44 @@ export class ApprovalBroker {
       actor: null,
       createdAt: new Date(),
     };
-    this.#pending.set(req.id, record);
+    const entry = createPendingEntry(record, spec);
+    this.#pending.set(req.id, entry);
+
+    // Background handler invocation. The void-IIFE pattern lets us not
+    // await directly — instead we await entry.completion below. The
+    // handler's resolve/reject feeds into settleOnce; if the handler
+    // wins the race normally, settleOnce returns true and entry.completion
+    // is settled with the handler's outcome. If expire/transportLost
+    // already fired, settleOnce returns false and the handler's
+    // result is dropped (never reaches wire).
+    //
+    // The `as` cast is load-bearing: TypeScript can't prove that
+    // req.method (string) corresponds to spec.handler's parameterized P,
+    // even though the dispatch-table key already proved it. The runtime
+    // dispatch path narrows by key, so the cast is sound.
+    void (async () => {
+      try {
+        const result = await (spec.handler as (r: JsonRpcRequest) => Promise<unknown>)(req);
+        entry.settleOnce({ type: "resolve", value: result });
+      } catch (err) {
+        entry.settleOnce({ type: "reject", error: err });
+      }
+    })();
+
     try {
-      // The `as never` cast is load-bearing: TypeScript can't prove that
-      // req.method (string) corresponds to spec.handler's parameterized P,
-      // even though the dispatch-table key already proved it. The runtime
-      // dispatch path narrows by key, so the cast is sound.
-      return await (spec.handler as (req: JsonRpcRequest) => Promise<unknown>)(req);
+      return await entry.completion;
     } finally {
-      // Remove on resolve/throw. If failPendingAsTransportLost ran
-      // concurrently and already cleared the entry, this delete is a
-      // no-op; if expirePending updated the record's status to
-      // "expired" but didn't remove (it does remove), same. The Map
-      // delete is idempotent.
-      this.#pending.delete(req.id);
+      // Conditional delete (codex T9b review medium 3): only clean up
+      // the pending entry when the handler won the race normally
+      // (status still "pending" — neither expirePending nor
+      // failPendingAsTransportLost flipped it). Terminal records
+      // (expired / transport_lost) stay in #pending for audit until an
+      // explicit prune path (T11b future). resolve() / expirePending() /
+      // failPendingAsTransportLost() all check status before processing,
+      // so terminal records are skipped by subsequent passes.
+      if (entry.record.status === "pending") {
+        this.#pending.delete(req.id);
+      }
     }
   }
 
@@ -418,28 +524,49 @@ export class ApprovalBroker {
   }
 
   /**
-   * Mark every pending approval as transport-lost (D6). Idempotent:
-   * subsequent calls return immediately. The supervisor (T11b) calls
-   * this from its transport.onClose subscription. We do NOT call
-   * `client.respond` — the client is dead by the time this runs and
-   * the wire frame would be dropped anyway (AppServerClient.respond is
-   * a no-op when closed).
+   * Mark every pending approval as transport-lost (D6). Idempotent
+   * within a single client generation; reattach() resets the flag so
+   * the next generation can fire its own transport-loss sweep.
    *
-   * Records are NOT removed from `#pending` after the status flip. The
-   * decision was deliberate: tests + audit need to inspect the
+   * The supervisor (T11b) calls this from its transport.onClose
+   * subscription. T9b B-clean blocker-fix: each pending entry's
+   * completion is settled via `settleOnce` with the per-method
+   * defaultReject value. AppServerClient receives that value via
+   * `#handle`'s return and emits exactly one wire response per id.
+   * If the transport is already closed (the production T11b path),
+   * AppServerClient.respond is a no-op so the wire frame is harmlessly
+   * dropped. If the transport is still alive (the test path), the
+   * defaultReject is the actual wire response.
+   *
+   * Late handler completions (after this method runs) observe
+   * record.status !== "pending" and `settleOnce` returns false — no
+   * duplicate wire frame, no leaked work.
+   *
+   * Records are NOT removed from `#pending` after the status flip.
+   * The decision was deliberate: tests + audit need to inspect the
    * terminal records. resolve() / expirePending() check status before
    * processing, so terminal records are skipped automatically.
    */
   failPendingAsTransportLost(): void {
     if (this.#transportLostFired) return;
     this.#transportLostFired = true;
-    const now = new Date();
-    for (const record of this.#pending.values()) {
-      if (record.status !== "pending") continue;
-      record.status = "transport_lost";
-      record.actor = { kind: "system", reason: "transport_lost" };
-      record.decision = { kind: "denied", reason: "transport_lost" };
-      record.decidedAt = now;
+    const decidedAt = new Date();
+    for (const entry of this.#pending.values()) {
+      if (entry.record.status !== "pending") continue;
+      entry.record.status = "transport_lost";
+      entry.record.actor = { kind: "system", reason: "transport_lost" };
+      entry.record.decision = { kind: "denied", reason: "transport_lost" };
+      entry.record.decidedAt = decidedAt;
+      // Settle the broker completion via settleOnce (no direct
+      // client.respond/reject). AppServerClient's catch arm preserves
+      // JsonRpcResponseError envelopes (Pre-3); generic throws collapse
+      // to -32603 with the legacy "handler error: " prefix.
+      try {
+        const value = entry.spec.defaultReject();
+        entry.settleOnce({ type: "resolve", value });
+      } catch (err) {
+        entry.settleOnce({ type: "reject", error: err });
+      }
     }
   }
 
@@ -458,58 +585,46 @@ export class ApprovalBroker {
    * transport_lost). The status check makes this safe to call after
    * failPendingAsTransportLost without double-processing.
    *
+   * T9b B-clean blocker-fix: each expired record's completion is
+   * settled via `settleOnce` (no direct client.respond / client.reject).
+   * AppServerClient receives the defaultReject value via #handle's
+   * return and emits exactly one wire response per id. Late handler
+   * completions observe record.status !== "pending" and settleOnce
+   * returns false — no duplicate wire frame.
+   *
    * Edge case: account/chatgptAuthTokens/refresh's defaultReject
-   * throws JsonRpcResponseError(-32601). For an expired auth-refresh,
-   * we still record the record as expired but call client.reject
-   * directly with the -32601 envelope (instead of letting the throw
-   * propagate to nowhere). This keeps the wire contract consistent
-   * with the synchronous default-reject path.
+   * throws JsonRpcResponseError(-32601). settleOnce as `reject` so
+   * AppServerClient's catch arm preserves the explicit code/message/data
+   * envelope on the wire (Pre-3 path).
    */
   expirePending(maxAgeMs = 600_000): number {
     const cutoff = Date.now() - maxAgeMs;
     const decidedAt = new Date();
     let count = 0;
-    const expiredIds: Array<string | number> = [];
-    for (const record of this.#pending.values()) {
-      if (record.status !== "pending") continue;
-      if (record.createdAt.getTime() > cutoff) continue;
-      record.status = "expired";
-      record.actor = { kind: "system", reason: "expired" };
-      record.decision = { kind: "denied", reason: "expired" };
-      record.decidedAt = decidedAt;
-      expiredIds.push(record.appServerRequestId);
+    for (const entry of this.#pending.values()) {
+      if (entry.record.status !== "pending") continue;
+      if (entry.record.createdAt.getTime() > cutoff) continue;
+      entry.record.status = "expired";
+      entry.record.actor = { kind: "system", reason: "expired" };
+      entry.record.decision = { kind: "denied", reason: "expired" };
+      entry.record.decidedAt = decidedAt;
       count++;
-    }
-    // Emit wire responses outside the iteration so #pending mutations
-    // (the in-flight handler's try/finally `delete`) cannot interfere.
-    // Records remain in #pending with terminal status until the
-    // handler resolves — but at that point its try/finally `delete` is
-    // a no-op for already-removed keys. We keep them around explicitly
-    // for audit; T11b may add a separate prune sweep.
-    for (const id of expiredIds) {
-      const record = this.#pending.get(id);
-      if (!record) continue;
-      const spec = this.#table[record.method as keyof DispatchTable];
-      if (!spec) continue;
+      // Settle the broker completion (B-clean). No direct
+      // client.respond / client.reject — the wire response goes through
+      // #handle's await of entry.completion → AppServerClient's
+      // single-respond path.
       try {
-        const resp = spec.defaultReject();
-        this.#client.respond(id, resp);
+        const value = entry.spec.defaultReject();
+        entry.settleOnce({ type: "resolve", value });
       } catch (err) {
         // defaultReject for account/chatgptAuthTokens/refresh throws
-        // JsonRpcResponseError(-32601). Translate to a wire reject.
-        if (err instanceof JsonRpcResponseError) {
-          this.#client.reject(id, {
-            code: err.code,
-            message: err.rawMessage,
-            data: err.data,
-          });
-        } else {
-          // Non-JsonRpcResponseError throw from a defaultReject is
-          // unexpected — this would be a bug in the dispatch table.
-          // Re-throw so the developer sees the failure rather than
-          // silently dropping the wire response.
-          throw err;
-        }
+        // JsonRpcResponseError(-32601). Settle as reject so the
+        // AppServerClient catch arm produces the right wire envelope.
+        // Other thrown values would be a dispatch-table bug — we
+        // forward them through settleOnce too rather than swallowing
+        // silently; the handler's eventual reject path produces
+        // -32603 "handler error: ..." which makes the bug visible.
+        entry.settleOnce({ type: "reject", error: err });
       }
     }
     return count;
@@ -525,10 +640,17 @@ export class ApprovalBroker {
 
   /**
    * @internal — for tests only. Returns a defensive shallow copy of
-   * the pending records Map. The records themselves are aliased; if
-   * the test mutates a record's fields, broker behavior is undefined.
+   * the pending records keyed by request id, projected from the
+   * internal `#pending` Map (which keys to PendingEntry, an
+   * implementation detail kept private so ApprovalRecord remains
+   * data-only). The records themselves are aliased; if the test
+   * mutates a record's fields, broker behavior is undefined.
    */
   _pendingRecordsForTest(): ReadonlyMap<string | number, ApprovalRecord> {
-    return new Map(this.#pending);
+    const result = new Map<string | number, ApprovalRecord>();
+    for (const [id, entry] of this.#pending) {
+      result.set(id, entry.record);
+    }
+    return result;
   }
 }

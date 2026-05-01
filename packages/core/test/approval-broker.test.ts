@@ -19,7 +19,7 @@
 // bump can't accidentally make the "unknown method" test passable via
 // real dispatch.
 
-import { AppServerClient, JsonRpcResponseError } from "@codex-im/app-server-client";
+import { AppServerClient, JsonRpcResponseError, type Transport } from "@codex-im/app-server-client";
 import { FakeAppServer } from "@codex-im/testkit";
 import { describe, expect, it } from "vitest";
 import { ApprovalBroker } from "../src/approval-broker.js";
@@ -48,6 +48,49 @@ async function harness(): Promise<Harness> {
 async function teardown(h: Harness): Promise<void> {
   await h.client.stop();
   await h.fake.stop();
+}
+
+/**
+ * Test-only Transport proxy that records every outbound frame the
+ * AppServerClient sends. Used by the T9b blocker-fix tests to count
+ * wire responses for a given JSON-RPC id and prove that the broker
+ * doesn't produce duplicate responses on late-handler completion.
+ *
+ * Lives in this test file (not in `packages/testkit/`) because the
+ * blocker-fix is scoped to `packages/core/` only — modifying testkit
+ * was explicitly disallowed by the user's Step 1 instructions
+ * ("If this requires changing packages/testkit, stop and report
+ * before modifying it"). Wrapping the inner Transport here is a
+ * test-local concern that doesn't require any testkit changes.
+ */
+interface InstrumentedTransport {
+  transport: Transport;
+  outboundFrames: unknown[];
+}
+
+function instrumentTransport(inner: Transport): InstrumentedTransport {
+  const outboundFrames: unknown[] = [];
+  const transport: Transport = {
+    start: () => inner.start(),
+    stop: () => inner.stop(),
+    send: (msg) => {
+      outboundFrames.push(msg);
+      inner.send(msg);
+    },
+    onMessage: (h) => inner.onMessage(h),
+    onError: (h) => inner.onError(h),
+    onClose: (h) => inner.onClose(h),
+  };
+  return { transport, outboundFrames };
+}
+
+/** Count wire frames addressed to a particular JSON-RPC id. Counts BOTH
+ * `{id, result}` and `{id, error}` shapes since either is a wire response. */
+function countFramesForId(frames: readonly unknown[], id: number | string): number {
+  return frames.filter(
+    (f): f is { id: number | string } =>
+      typeof f === "object" && f !== null && "id" in f && (f as { id: unknown }).id === id,
+  ).length;
 }
 
 describe("ApprovalBroker skeleton (T9a Step 9a.1)", () => {
@@ -596,5 +639,257 @@ describe("ApprovalBroker pending-state lifecycle (T9b Steps 9b.4 + 9b.5)", () =>
     ).toThrow(/deferred to Phase 2/);
     await client.stop();
     await fake.stop();
+  });
+});
+
+// ─── T9b blocker-fix tests (TDD red — design = B-clean) ────────────────
+//
+// Plan section: docs/superpowers/plans/2026-04-30-phase-1-runtime.md
+// "Task 9b blocker-fix — broker completion race".
+//
+// These tests prove the duplicate-response race exists in the current
+// implementation. They fail at Step 1 (this commit) and turn green when
+// Step 2 lands the B-clean refactor (broker owns single completion
+// promise per pending request; expirePending and
+// failPendingAsTransportLost route through settleOnce instead of
+// directly calling client.respond/client.reject; late handler
+// completion observes terminal record status and is dropped).
+//
+// Wire-frame counting strategy: a test-local `instrumentTransport`
+// proxy (defined above near the harness helpers) records every outbound
+// frame from the AppServerClient. The blocker-fix tests then count
+// frames matching a specific JSON-RPC id; the duplicate-response bug
+// shows up as count > 1, and B-clean keeps it at exactly 1.
+
+describe("ApprovalBroker T9b blocker-fix — broker completion race (failing under current code)", () => {
+  it("late-resolving handler after expirePending does not produce duplicate wire response (Blocker 1)", async () => {
+    const fake = new FakeAppServer();
+    const { transport, outboundFrames } = instrumentTransport(fake.clientSide);
+    const client = new AppServerClient(transport);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    // Manually-controlled handler — won't settle until the test releases it.
+    let release!: (v: { decision: "accept" | "decline" | "acceptForSession" | "cancel" }) => void;
+    const handlerPromise = new Promise<{
+      decision: "accept" | "decline" | "acceptForSession" | "cancel";
+    }>((res) => {
+      release = res;
+    });
+    broker.registerHandler("item/fileChange/requestApproval", () => handlerPromise);
+
+    // Fire the server request; promise won't settle until handler does
+    // (current code) or until expirePending fires (B-clean).
+    const respP = fake.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      700,
+    );
+
+    // Wait for the broker's #handle to insert the pending record AND
+    // start awaiting the handler.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(broker._pendingRecordsForTest().get(700)?.status).toBe("pending");
+    expect(countFramesForId(outboundFrames, 700)).toBe(0);
+
+    // Trigger the expire path. Under B-clean this immediately produces
+    // a single wire response carrying the per-method default-reject
+    // shape (decision="decline" for fileChange). Under current code
+    // expirePending also writes a wire response — count goes to 1.
+    broker.expirePending(5);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(countFramesForId(outboundFrames, 700)).toBe(1);
+
+    // emitServerRequest's promise sees the expire response.
+    const wireResp = await respP;
+    expect(wireResp).toEqual({ decision: "decline" });
+
+    // Now the late handler completes. Under current buggy code, this
+    // causes AppServerClient.dispatchServerRequest to call
+    // client.respond again — count goes to 2. Under B-clean, the late
+    // handler observes record.status !== "pending" and bails;
+    // settleOnce no-ops; count stays at 1.
+    release({ decision: "accept" });
+    await new Promise((r) => setTimeout(r, 30));
+
+    // CRITICAL: still exactly one wire frame for id 700. This is the
+    // load-bearing assertion; it fails under current code.
+    expect(countFramesForId(outboundFrames, 700)).toBe(1);
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("late-rejecting handler after expirePending does not produce duplicate wire response (Blocker 1)", async () => {
+    const fake = new FakeAppServer();
+    const { transport, outboundFrames } = instrumentTransport(fake.clientSide);
+    const client = new AppServerClient(transport);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    let reject!: (err: Error) => void;
+    const handlerPromise = new Promise<{
+      decision: "accept" | "decline" | "acceptForSession" | "cancel";
+    }>((_res, rej) => {
+      reject = rej;
+    });
+    broker.registerHandler("item/fileChange/requestApproval", () => handlerPromise);
+
+    const respP = fake.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      701,
+    );
+
+    await new Promise((r) => setTimeout(r, 30));
+    expect(broker._pendingRecordsForTest().get(701)?.status).toBe("pending");
+
+    broker.expirePending(5);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(countFramesForId(outboundFrames, 701)).toBe(1);
+
+    const wireResp = await respP;
+    expect(wireResp).toEqual({ decision: "decline" });
+
+    // Late rejection. Under current buggy code, AppServerClient's catch
+    // arm calls client.reject({code: -32603, message: "handler error: ..."})
+    // — that's the duplicate. Under B-clean, the rejection observes
+    // terminal record status and is dropped.
+    reject(new Error("late rejection"));
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(countFramesForId(outboundFrames, 701)).toBe(1);
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("failPendingAsTransportLost does not produce duplicate response on late handler resolution (Blocker 1)", async () => {
+    const fake = new FakeAppServer();
+    const { transport, outboundFrames } = instrumentTransport(fake.clientSide);
+    const client = new AppServerClient(transport);
+    await client.start();
+    const broker = new ApprovalBroker(client);
+    broker.attach();
+
+    let release!: (v: { decision: "accept" | "decline" | "acceptForSession" | "cancel" }) => void;
+    const handlerPromise = new Promise<{
+      decision: "accept" | "decline" | "acceptForSession" | "cancel";
+    }>((res) => {
+      release = res;
+    });
+    broker.registerHandler("item/fileChange/requestApproval", () => handlerPromise);
+
+    const respP = fake.emitServerRequest(
+      "item/fileChange/requestApproval",
+      { threadId: "t", turnId: "u", itemId: "i" },
+      702,
+    );
+
+    await new Promise((r) => setTimeout(r, 30));
+    expect(broker._pendingRecordsForTest().get(702)?.status).toBe("pending");
+    expect(countFramesForId(outboundFrames, 702)).toBe(0);
+
+    // Transport is intentionally still alive here so we can observe
+    // wire frames. In production T11b drives this path from
+    // transport.onClose, where AppServerClient.respond is a no-op
+    // anyway — but the broker contract should still be: exactly one
+    // wire response per server-request id, regardless of whether the
+    // transport is alive.
+    //
+    // Under B-clean: settleOnce → #handle returns defaultReject →
+    //   AppServerClient.respond → 1 frame.
+    // Under current code: failPendingAsTransportLost only flips record
+    //   status, no wire send → 0 frames here, then late handler wins
+    //   the wire → 1 frame with WRONG content (handler's accept
+    //   instead of the transport-lost denial).
+    broker.failPendingAsTransportLost();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(countFramesForId(outboundFrames, 702)).toBe(1);
+
+    const wireResp = await respP;
+    // The wire content must be the transport-lost default-reject, NOT
+    // the handler's eventual accept. This is the substance of "no
+    // second response path" — the late handler's path doesn't get to
+    // write to the wire.
+    expect(wireResp).toEqual({ decision: "decline" });
+
+    // Late handler completion. Under current code it would write
+    // {decision: "accept"} as a SECOND wire frame for id 702. Under
+    // B-clean it's dropped (settleOnce no-ops on terminal record).
+    release({ decision: "accept" });
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(countFramesForId(outboundFrames, 702)).toBe(1);
+
+    await client.stop();
+    await fake.stop();
+  });
+
+  it("reattach resets transportLostFired so a second client generation can flag transport_lost (Blocker 2)", async () => {
+    // First generation
+    const fakeA = new FakeAppServer();
+    const clientA = new AppServerClient(fakeA.clientSide);
+    await clientA.start();
+    const broker = new ApprovalBroker(clientA);
+    broker.attach();
+
+    broker.registerHandler(
+      "item/fileChange/requestApproval",
+      () =>
+        new Promise<{ decision: "accept" | "decline" | "acceptForSession" | "cancel" }>(() => {}),
+    );
+    // Hanging request on clientA. Suppress the eventual rejection; we
+    // care about the broker's record state, not emitServerRequest's
+    // resolution.
+    const _hA = fakeA
+      .emitServerRequest(
+        "item/fileChange/requestApproval",
+        { threadId: "t", turnId: "u", itemId: "i" },
+        710,
+        { timeoutMs: 200 },
+      )
+      .catch(() => {});
+    void _hA;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(broker._pendingRecordsForTest().get(710)?.status).toBe("pending");
+
+    broker.failPendingAsTransportLost();
+    expect(broker._pendingRecordsForTest().get(710)?.status).toBe("transport_lost");
+
+    // Supervisor swap: attach the SAME broker to a fresh client (the
+    // pattern T11b uses).
+    const fakeB = new FakeAppServer();
+    const clientB = new AppServerClient(fakeB.clientSide);
+    await clientB.start();
+    broker.reattach(clientB);
+
+    // Hanging request on clientB.
+    const _hB = fakeB
+      .emitServerRequest(
+        "item/fileChange/requestApproval",
+        { threadId: "t", turnId: "u", itemId: "i" },
+        720,
+        { timeoutMs: 200 },
+      )
+      .catch(() => {});
+    void _hB;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(broker._pendingRecordsForTest().get(720)?.status).toBe("pending");
+
+    // Second-generation transport-loss. Under current buggy code,
+    // #transportLostFired stays `true` from the first call, so this
+    // returns immediately and the clientB record stays "pending".
+    // Under B-clean (with `this.#transportLostFired = false` reset in
+    // reattach), this works and flips the record to terminal.
+    broker.failPendingAsTransportLost();
+    expect(broker._pendingRecordsForTest().get(720)?.status).toBe("transport_lost");
+
+    await clientB.stop();
+    await fakeB.stop();
+    await clientA.stop();
+    await fakeA.stop();
   });
 });
