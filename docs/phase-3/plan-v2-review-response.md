@@ -67,11 +67,24 @@ where it is fixed in v2.
 
 ## Pre-implementation re-review checklist
 
-Before plan v2 is approved for T1:
+Before plan v2.1 is approved for T1:
 
-1. ☐ `gstack /plan-eng-review` round 2 on plan v2 — verify all 12 P0+P1 fixes land as intended.
-2. ☐ Codex outside-voice review round 2 on plan v2 — verify no new structural bugs introduced by the redesign (especially D33 two-phase token flow).
-3. ☐ Cross-model agreement: both verdicts must be APPROVE or APPROVE_WITH_CHANGES. A second REJECT triggers v3.
-4. ☐ Verify `pnpm protocol:check` either passes (rebase onto `chore/codex-upgrade-0.128`) or is documented as deferred.
+1. ☑ **gstack `/plan-eng-review` round 2 on plan v2** — APPROVE_WITH_CHANGES, 4 P1 + 4 P2, 0 P0. All round-2 P1s + 2 P2s integrated into v2.1; 2 P2s deferred-justified. See `docs/phase-3/plan-v2-gstack-round2-review.md`.
+2. ☐ **Codex outside-voice review round 2 on plan v2.1** — verify no new structural bugs introduced by either v1→v2 redesign (especially D33 two-phase token flow) OR v2→v2.1 round-2 fixes.
+3. ☐ Cross-model agreement: Codex round 2 must return APPROVE or APPROVE_WITH_CHANGES on v2.1. Codex REJECT triggers v3.
+4. ☐ Verify `pnpm protocol:check` either passes (rebase onto `chore/codex-upgrade-0.128`) or is documented as deferred (T0.5 / R6).
 
-If any reviewer surfaces a new P0, plan v2 → v3 BEFORE T1.
+If Codex round 2 surfaces a new P0, plan v2.1 → v3 BEFORE T1.
+
+## v2 → v2.1 round-2 fix matrix
+
+| Round-2 ID | Severity | Source | Finding | v2.1 fix | v2.1 location | Status |
+|---|---|---|---|---|---|---|
+| Round-2-P1-A | P1 | gstack round 2 | Step-5 UPDATE-to-bound failure unhandled | §10.2 4th failure-mode bullet (retry + audit + sweep handoff to T19e.4) + new T-Sec-15 row + P3.T-Sec-step5-failure test | §10.2 + §10.4 + §11 + §16 T19e.4 | fixed |
+| Round-2-P1-B | P1 | gstack round 2 | Telegram `callback_query.message` null path missing | §10.3 step 2 explicit `messageId === "<unknown>"` branch + new T-Sec-16 row + P3.T-Sec-message-ref-unknown test + T28d.1/2/3 split | §10.3 + §10.4 + §11 + §16 T28d.1 | fixed |
+| Round-2-P1-C | P1 | gstack round 2 | T-Sec-12 expire-sweep CAS unspecified | T19e.1 explicit CAS SQL `UPDATE ... WHERE status='bound' AND expires_at < ? RETURNING ...` + spec for concurrent-click-vs-sweep contract | §16 T19e.1 | fixed |
+| Round-2-P1-D | P1 | gstack round 2 | G8 + G9 P0 task entries undersized (single line each) | T19d split into T19d.1-4 (detect / synthesize / deliver / render); T19e split into T19e.1-4 (callback_tokens sweep / pendingById sweep / interval trigger / step-5-stuck early-revoke) | §16 T19d + T19e | fixed |
+| Round-2-P2-A | P2 | gstack round 2 | `actor_kind` NOT NULL but actor populated at click time — schema vs prose | §9 callback_tokens explicit population contract: actor_kind set at INSERT per policy; actor_user_id/platform NULL at INSERT, populated at click-time CAS | §9 | fixed |
+| Round-2-P2-B | P2 | gstack round 2 | launchd Keychain wrapper has no integration test path | T29 detail + new T29a (load-and-run.sh wrapper + golden render + `--dry-run` test) + T29b (operator-gated Keychain integration smoke) | §16 T29 + T29a + T29b | fixed |
+| Round-2-P2-C | P2 | gstack round 2 | `SessionRouter.bindThread` orphan-codex-thread risk on partial failure | Documented as deferred in §23 P2 deferred subsection | §23 | deferred-justified |
+| Round-2-P2-D | P2 | gstack round 2 | Raw token in-process-memory lifetime test missing | Documented as deferred in §23 P2 deferred subsection (heap-dump scan tooling not in Phase 3 scope) | §23 | deferred-justified |
