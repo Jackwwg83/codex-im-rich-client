@@ -1,0 +1,22 @@
+{
+  "update_id": 2004,
+  "callback_query": {
+    "id": "cb-stale-message",
+    "from": {
+      "id": 888999000,
+      "is_bot": false,
+      "first_name": "Linus"
+    },
+    "message": {
+      "message_id": 999,
+      "date": 1710000360,
+      "chat": {
+        "id": -1009876543210,
+        "type": "supergroup",
+        "title": "Codex Operators"
+      }
+    },
+    "chat_instance": "opaque-chat-instance",
+    "data": "v1:QRSTUVWXABCDEFGH"
+  }
+}

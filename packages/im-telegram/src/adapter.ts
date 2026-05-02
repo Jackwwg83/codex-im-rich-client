@@ -47,6 +47,25 @@ export interface TelegramMessageContextLike {
   readonly from?: TelegramUserLike;
 }
 
+export interface TelegramCallbackMessageLike {
+  readonly message_id: number | string;
+  readonly message_thread_id?: number | string;
+  readonly date?: number;
+  readonly chat: TelegramChatLike;
+}
+
+export interface TelegramCallbackQueryLike {
+  readonly id: string;
+  readonly from: TelegramUserLike;
+  readonly message?: TelegramCallbackMessageLike | null;
+  readonly data?: string;
+  readonly chat_instance?: string;
+}
+
+export interface TelegramCallbackQueryContextLike {
+  readonly callbackQuery?: TelegramCallbackQueryLike;
+}
+
 export interface TelegramReplyMarkup {
   inline_keyboard: TelegramInlineKeyboardButton[][];
 }
@@ -104,12 +123,18 @@ export interface TelegramBotApiLike {
 }
 
 export type TelegramMessageHandlerLike = (ctx: TelegramMessageContextLike) => void | Promise<void>;
+export type TelegramCallbackQueryHandlerLike = (
+  ctx: TelegramCallbackQueryContextLike,
+) => void | Promise<void>;
 
 export interface TelegramBotLike {
   start(): Promise<void>;
   stop(): void | Promise<void>;
   readonly api?: TelegramBotApiLike;
-  on?(filter: "message:text", handler: TelegramMessageHandlerLike): unknown;
+  on?(
+    filter: "message:text" | "callback_query:data",
+    handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
+  ): unknown;
 }
 
 export interface TelegramChannelAdapterOptions {
@@ -126,7 +151,9 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   #bot: TelegramBotLike | undefined;
   #started = false;
   #messageHandlerInstalled = false;
+  #actionHandlerInstalled = false;
   readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
+  readonly #onActionHandlers = new Set<(action: InboundAction) => void>();
 
   constructor(options: TelegramChannelAdapterOptions = {}) {
     this.#options = options;
@@ -139,6 +166,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     }
     const bot = this.#bot ?? this.#createBot();
     this.#installMessageHandler(bot);
+    this.#installActionHandler(bot);
     await bot.start();
     this.#bot = bot;
     this.#started = true;
@@ -160,8 +188,12 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     };
   }
 
-  onAction(_handler: (action: InboundAction) => void): () => void {
-    throw notImplemented("onAction");
+  onAction(handler: (action: InboundAction) => void): () => void {
+    this.#onActionHandlers.add(handler);
+    this.#installActionHandler(this.#bot);
+    return () => {
+      this.#onActionHandlers.delete(handler);
+    };
   }
 
   async sendCard(target: Target, card: ApprovalCardInput): Promise<SendCardResult> {
@@ -269,10 +301,23 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     if (bot.on === undefined) {
       throw new Error('TelegramChannelAdapter.onMessage requires bot.on("message:text")');
     }
-    bot.on("message:text", (ctx) => {
+    bot.on("message:text", (ctx: TelegramMessageContextLike) => {
       this.#emitTelegramTextMessage(ctx);
     });
     this.#messageHandlerInstalled = true;
+  }
+
+  #installActionHandler(bot: TelegramBotLike | undefined): void {
+    if (bot === undefined || this.#actionHandlerInstalled || this.#onActionHandlers.size === 0) {
+      return;
+    }
+    if (bot.on === undefined) {
+      throw new Error('TelegramChannelAdapter.onAction requires bot.on("callback_query:data")');
+    }
+    bot.on("callback_query:data", (ctx: TelegramCallbackQueryContextLike) => {
+      this.#emitTelegramCallbackQuery(ctx);
+    });
+    this.#actionHandlerInstalled = true;
   }
 
   #emitTelegramTextMessage(ctx: TelegramMessageContextLike): void {
@@ -280,6 +325,17 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     for (const handler of this.#onMessageHandlers) {
       try {
         handler(msg);
+      } catch {
+        // Keep one subscriber failure from blocking other subscribers.
+      }
+    }
+  }
+
+  #emitTelegramCallbackQuery(ctx: TelegramCallbackQueryContextLike): void {
+    const action = normalizeTelegramCallbackQuery(ctx, this.#nowMs());
+    for (const handler of this.#onActionHandlers) {
+      try {
+        handler(action);
       } catch {
         // Keep one subscriber failure from blocking other subscribers.
       }
@@ -375,6 +431,45 @@ function telegramTarget(
     platform: "telegram",
     chatId: String(chat.id),
     ...(topicId !== undefined ? { topicId } : {}),
+  };
+}
+
+function normalizeTelegramCallbackQuery(
+  ctx: TelegramCallbackQueryContextLike,
+  nowMs: number,
+): InboundAction {
+  const query = ctx.callbackQuery;
+  if (query === undefined || query.data === undefined) {
+    throw new Error(
+      "TelegramChannelAdapter.onAction received incomplete callback_query:data context",
+    );
+  }
+
+  const receivedAt = new Date(nowMs);
+  const target =
+    query.message !== undefined && query.message !== null
+      ? telegramTarget(query.message.chat, query.message.message_thread_id)
+      : { platform: "telegram", chatId: "<unknown>" };
+  const rawCallbackData = query.data;
+  return {
+    approvalId: "<opaque>",
+    uiAction: { kind: "decline" },
+    target,
+    sender: {
+      userId: String(query.from.id),
+      ...optionalDisplayName(query.from),
+    },
+    messageRef: {
+      target,
+      messageId:
+        query.message !== undefined && query.message !== null
+          ? String(query.message.message_id)
+          : "<unknown>",
+    },
+    callbackNonce: decodeCallbackData(rawCallbackData) ?? "",
+    rawCallbackData,
+    receivedAt,
+    callbackHandle: encodeTelegramCallbackHandle(query.id, receivedAt),
   };
 }
 

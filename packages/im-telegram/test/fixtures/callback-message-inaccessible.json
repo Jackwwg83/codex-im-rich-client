@@ -1,0 +1,24 @@
+{
+  "update_id": 2003,
+  "callback_query": {
+    "id": "cb-inaccessible-message",
+    "from": {
+      "id": 555666777,
+      "is_bot": false,
+      "first_name": "Katherine",
+      "last_name": "Johnson",
+      "username": "kj"
+    },
+    "message": {
+      "message_id": 45,
+      "date": 0,
+      "chat": {
+        "id": -1009876543210,
+        "type": "supergroup",
+        "title": "Codex Operators"
+      }
+    },
+    "chat_instance": "opaque-chat-instance",
+    "data": "v1:ABCDEFGH234567AA"
+  }
+}

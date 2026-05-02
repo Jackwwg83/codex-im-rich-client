@@ -102,6 +102,14 @@ export type InboundAction = {
   readonly target: Target;
   readonly sender: Sender;
   /**
+   * Stable reference to the rendered IM message that produced this
+   * action. Real IM adapters set this when the platform exposes it.
+   * When Telegram callback_query.message is null, adapters use
+   * messageId="<unknown>" so daemon-side messageRef validation fails
+   * closed before broker.resolve().
+   */
+  readonly messageRef?: MessageRef;
+  /**
    * Legacy fallback round-tripped from the rendered card. Production
    * Phase 3 daemon action handling ignores this field and uses
    * `rawCallbackData` as the callback source of truth.

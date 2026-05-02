@@ -1,0 +1,23 @@
+{
+  "update_id": 2002,
+  "callback_query": {
+    "id": "cb-deleted-message",
+    "from": {
+      "id": 222333444,
+      "is_bot": false,
+      "first_name": "Grace",
+      "last_name": "Hopper"
+    },
+    "message": {
+      "message_id": 44,
+      "date": 1710000300,
+      "chat": {
+        "id": -1009876543210,
+        "type": "supergroup",
+        "title": "Codex Operators"
+      }
+    },
+    "chat_instance": "opaque-chat-instance",
+    "data": "v1:QRSTUVWXYZ234567"
+  }
+}
