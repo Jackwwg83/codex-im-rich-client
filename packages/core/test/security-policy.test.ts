@@ -24,6 +24,15 @@ const ALLOW_CONFIG: SecurityPolicyConfig = {
   },
 };
 
+const RELOAD_CONFIG: SecurityPolicyConfig = {
+  allowedUsers: ["telegram:456"],
+  allowedChats: ["telegram:-2002"],
+  commands: {
+    denyPatterns: ["shutdown now"],
+    requireAdminPatterns: ["gh pr merge"],
+  },
+};
+
 function approvalSnapshot() {
   return {
     id: "approval-1",
@@ -163,5 +172,39 @@ describe("SecurityPolicy.checkCommand (T9.4 / D22)", () => {
       kind: "deny",
       reason: "command_denied",
     });
+  });
+});
+
+describe("SecurityPolicy.reload (T9.5 / D22)", () => {
+  it("atomically swaps from the old policy snapshot to the new snapshot", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+
+    policy.reload(RELOAD_CONFIG);
+
+    expect(
+      policy.checkUserAndChat({ platform: "telegram", chatId: "-2002" }, { userId: "456" }),
+    ).toEqual({ kind: "allow" });
+    expect(
+      policy.checkUserAndChat({ platform: "telegram", chatId: "-1001" }, { userId: "123" }),
+    ).toEqual({ kind: "deny", reason: "chat_not_allowed" });
+    expect(
+      policy.checkUserAndChat({ platform: "telegram", chatId: "-1001" }, { userId: "456" }),
+    ).toEqual({ kind: "deny", reason: "chat_not_allowed" });
+  });
+
+  it("keeps the old snapshot active when reload validation fails", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+    const invalid = {
+      ...RELOAD_CONFIG,
+      allowedChats: "telegram:-2002",
+    } as unknown as SecurityPolicyConfig;
+
+    expect(() => policy.reload(invalid)).toThrow(/SecurityPolicy config/);
+    expect(
+      policy.checkUserAndChat({ platform: "telegram", chatId: "-1001" }, { userId: "123" }),
+    ).toEqual({ kind: "allow" });
+    expect(
+      policy.checkUserAndChat({ platform: "telegram", chatId: "-2002" }, { userId: "456" }),
+    ).toEqual({ kind: "deny", reason: "chat_not_allowed" });
   });
 });

@@ -62,6 +62,13 @@ export type SecurityPolicyDecision =
 
 const POLICY_NOT_CONFIGURED = "policy_not_configured";
 
+export class SecurityPolicyConfigError extends Error {
+  constructor(message: string) {
+    super(`SecurityPolicy config invalid: ${message}`);
+    this.name = "SecurityPolicyConfigError";
+  }
+}
+
 export class SecurityPolicy {
   readonly version = "phase3";
 
@@ -117,6 +124,25 @@ export class SecurityPolicy {
 }
 
 function snapshotFromConfig(config: SecurityPolicyConfig): SecurityPolicySnapshot {
+  if (!isRecord(config)) {
+    throw new SecurityPolicyConfigError("config must be an object");
+  }
+  if (!isRecord(config.commands)) {
+    throw new SecurityPolicyConfigError("commands must be an object");
+  }
+  assertStringArray(config.allowedUsers, "allowedUsers");
+  assertStringArray(config.allowedChats, "allowedChats");
+  assertStringArray(config.commands.denyPatterns, "commands.denyPatterns");
+  assertStringArray(config.commands.requireAdminPatterns, "commands.requireAdminPatterns");
+  for (const [index, project] of (config.projects ?? []).entries()) {
+    if (typeof project.projectId !== "string" || project.projectId.length === 0) {
+      throw new SecurityPolicyConfigError(
+        `projects[${index}].projectId must be a non-empty string`,
+      );
+    }
+    assertStringArray(project.allowedUsers, `projects[${index}].allowedUsers`);
+    assertStringArray(project.allowedChats, `projects[${index}].allowedChats`);
+  }
   return Object.freeze({
     version: "phase3" as const,
     allowedUsers: freezeStrings(config.allowedUsers),
@@ -141,10 +167,25 @@ function freezeStrings(values: readonly string[]): readonly string[] {
   return Object.freeze([...values]);
 }
 
+function assertStringArray(values: readonly string[], field: string): void {
+  if (!Array.isArray(values)) {
+    throw new SecurityPolicyConfigError(`${field} must be an array`);
+  }
+  for (const [index, value] of values.entries()) {
+    if (typeof value !== "string") {
+      throw new SecurityPolicyConfigError(`${field}[${index}] must be a string`);
+    }
+  }
+}
+
 function platformScoped(platform: string, id: string): string {
   return `${platform}:${id}`;
 }
 
 function matchesAny(command: string, patterns: readonly string[]): boolean {
   return patterns.some((pattern) => pattern.length > 0 && command.includes(pattern));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
