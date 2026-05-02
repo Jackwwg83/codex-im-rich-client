@@ -1,7 +1,7 @@
 # Phase 5 Live Status
 
 > Single source of truth for Phase 5 while DingTalk adapter work is active.
-> **Last updated:** 2026-05-02 - JAC-86 reconnect behavior green.
+> **Last updated:** 2026-05-02 - JAC-87 adapter contract suite green.
 
 ---
 
@@ -10,12 +10,12 @@
 - **Phase:** Phase 5 - DingTalk adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
 - **Parent Linear issue:** JAC-10 - Phase 5 backlog / DingTalk adapter.
-- **Current Linear issue:** JAC-86 - reconnect behavior.
+- **Current Linear issue:** JAC-87 - adapter contract suite.
 - **Branch:** `codex/phase-5-dingtalk`.
 - **Base:** `phase-4-lark-adapter-complete` (`7281e28`).
 - **Version:** `0.1.0-phase4`; do not bump until Phase 5 tag gate.
-- **Next exact action:** update Linear for JAC-86, then start JAC-87 adapter
-  contract suite.
+- **Next exact action:** update Linear for JAC-87, then start JAC-88 fake
+  DingTalk smoke.
 
 ## 2. Current decision state
 
@@ -54,6 +54,10 @@
 - Stream reconnect now uses lifecycle generation guards so stale callback
   registrations after stop/start cannot duplicate message/action emissions.
   Duplicate Stream deliveries carry stable robot/card idempotency keys.
+- Adapter contract coverage now pins the `ChannelAdapter` public surface, fake
+  message/card/action/ack round-trip, unsupported attachment fail-closed path,
+  no public listener/logging sink, fixture secret-key guard, and DingTalk raw
+  wire details confined to `@codex-im/im-dingtalk`.
 - Current DingTalk capabilities are intentionally conservative:
   `supportsButtons=true`, `canEditMessage=true`, `supportsAttachments=false`,
   `maxCallbackDataBytes=64`.
@@ -100,22 +104,22 @@
 | JAC-83 | T5 callback codec/parser only; no `InboundAction` before JAC-84 | done |
 | JAC-84 | T6 messageRef validation + action emission gate | done |
 | JAC-85 | T7 approval round-trip fake test | done |
-| JAC-86 | T8 reconnect behavior | green; Linear update pending |
-| JAC-87 | T9 adapter contract suite | next |
-| JAC-88 | T10 fake DingTalk smoke | blocked |
+| JAC-86 | T8 reconnect behavior | done |
+| JAC-87 | T9 adapter contract suite | green; Linear update pending |
+| JAC-88 | T10 fake DingTalk smoke | next |
 | JAC-89 | T11 env-gated live DingTalk smoke | blocked / OPERATOR_GATE + env-gated |
 | JAC-90 | T12 review/handoff/tag | blocked |
 
 ## 6. Gate status
 
-Latest JAC-86 verification:
+Latest JAC-87 verification:
 
 | Gate | Result |
 |---|---|
 | `pnpm typecheck` | green: 14 of 15 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 122 files, 1175 passing, 1 skipped |
-| `pnpm lint` | green: 283 files checked |
+| `pnpm test` | green: 123 files, 1181 passing, 1 skipped |
+| `pnpm lint` | green: 284 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 
 `protocol:check` must run serially because it regenerates protocol files before
