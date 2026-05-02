@@ -12,7 +12,8 @@
     "@codex-im/app-server-client": "workspace:*",
     "@codex-im/codex-runtime": "workspace:*",
     "@codex-im/core": "workspace:*",
-    "@codex-im/protocol": "workspace:*"
+    "@codex-im/protocol": "workspace:*",
+    "@codex-im/storage-sqlite": "workspace:*"
   },
   "devDependencies": {
     "@codex-im/testkit": "workspace:*",

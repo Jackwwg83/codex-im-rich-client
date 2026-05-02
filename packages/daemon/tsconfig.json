@@ -10,6 +10,7 @@
     { "path": "../app-server-client" },
     { "path": "../codex-protocol" },
     { "path": "../codex-runtime" },
-    { "path": "../core" }
+    { "path": "../core" },
+    { "path": "../storage-sqlite" }
   ]
 }

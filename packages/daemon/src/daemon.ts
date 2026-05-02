@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   type ActorPolicy,
   type BindResult,
@@ -10,11 +10,18 @@ import {
   type SecurityPolicyApprovalDestinationDecision,
   type Target,
 } from "@codex-im/core";
+import {
+  type CallbackTokenAction,
+  type CallbackTokenInsert,
+  type CallbackTokenRecord,
+  hashCallbackToken,
+} from "@codex-im/storage-sqlite";
 
 type MaybePromise<T> = T | Promise<T>;
 type Unsubscribe = () => void;
 type CleanupMethod = () => MaybePromise<void>;
 export type DaemonSignal = "SIGINT" | "SIGTERM";
+const CALLBACK_TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 export interface DaemonBroker {
   attach(): void;
@@ -59,6 +66,10 @@ export interface DaemonApprovalDestinationPolicy {
   ): SecurityPolicyApprovalDestinationDecision;
 }
 
+export interface DaemonCallbackTokenRepository {
+  insert(input: CallbackTokenInsert): CallbackTokenRecord | unknown;
+}
+
 export interface DaemonOptions {
   readonly loadConfig?: () => MaybePromise<unknown>;
   readonly openStorage?: (config: unknown) => MaybePromise<unknown>;
@@ -71,7 +82,13 @@ export interface DaemonOptions {
   readonly resolveApprovalTarget?: (
     snapshot: PendingApprovalSnapshot,
   ) => MaybePromise<Target | null | undefined>;
+  readonly resolveApprovalActions?: (
+    snapshot: PendingApprovalSnapshot,
+  ) => MaybePromise<readonly CallbackTokenAction[]>;
+  readonly callbackTokenRepository?: DaemonCallbackTokenRepository;
   readonly generateCallbackNonce?: () => string;
+  readonly generateRawCallbackToken?: () => string;
+  readonly now?: () => Date;
 }
 
 export class Daemon {
@@ -221,6 +238,9 @@ export class Daemon {
       const policy = this.#approvalDestinationPolicy(this.#securityPolicy);
       const decision = policy?.checkApprovalDestination(snapshot, target);
       if (decision?.kind !== "auto_decline") {
+        if (decision?.kind === "allow") {
+          await this.#issueCallbackTokens(snapshot, target);
+        }
         return;
       }
 
@@ -247,6 +267,32 @@ export class Daemon {
     }
   }
 
+  async #issueCallbackTokens(snapshot: PendingApprovalSnapshot, target: Target): Promise<void> {
+    const repository = this.options.callbackTokenRepository;
+    const actions = await this.options.resolveApprovalActions?.(snapshot);
+    if (repository === undefined || actions === undefined || actions.length === 0) {
+      return;
+    }
+
+    const callbackNonce = this.options.generateCallbackNonce?.() ?? randomUUID();
+    const createdAt = (this.options.now?.() ?? new Date()).toISOString();
+    const expiresAt = snapshot.expiresAt.toISOString();
+    for (const action of actions) {
+      const rawToken = this.options.generateRawCallbackToken?.() ?? generateRawCallbackToken();
+      repository.insert({
+        tokenHash: hashCallbackToken(rawToken),
+        approvalId: snapshot.id,
+        action,
+        callbackNonce,
+        target,
+        actor: { kind: "im" },
+        status: "issued",
+        createdAt,
+        expiresAt,
+      });
+    }
+  }
+
   #handleAction(_action: unknown): void {}
 
   #handleMessage(_message: unknown): void {}
@@ -267,4 +313,20 @@ export class Daemon {
     }
     return value as DaemonApprovalDestinationPolicy;
   }
+}
+
+function generateRawCallbackToken(): string {
+  const bytes = randomBytes(10);
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += CALLBACK_TOKEN_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  return out.slice(0, 16);
 }

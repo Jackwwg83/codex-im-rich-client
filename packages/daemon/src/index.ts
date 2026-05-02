@@ -17,6 +17,7 @@ export type {
   DaemonApprovalDestinationPolicy,
   DaemonBroker,
   DaemonBrokerContext,
+  DaemonCallbackTokenRepository,
   DaemonDependencyContext,
   DaemonOptions,
   DaemonSignal,

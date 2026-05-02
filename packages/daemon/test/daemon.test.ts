@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { IM_ROUTABLE_APPROVAL_METHODS, type PendingApprovalSnapshot } from "@codex-im/core";
+import { type CallbackTokenInsert, hashCallbackToken } from "@codex-im/storage-sqlite";
 import { describe, expect, it, vi } from "vitest";
 import { Daemon, type DaemonOptions, type DaemonSignal } from "../src/index.js";
 
@@ -550,6 +551,101 @@ describe("Daemon skeleton (T14)", () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(securityPolicy.checkApprovalDestination).toHaveBeenCalledWith(snapshot, target);
+    expect(broker.bindActorPolicy).not.toHaveBeenCalled();
+    expect(broker.resolve).not.toHaveBeenCalled();
+  });
+
+  it("issues hash-only callback token rows for allowed approval actions before remote send", async () => {
+    const order: string[] = [];
+    const inserted: CallbackTokenInsert[] = [];
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const rawTokens = ["ABCDEFGHIJKLMNOP", "QRSTUVWXYZ234567"];
+    const snapshot: PendingApprovalSnapshot = {
+      id: "approval-tokenized",
+      appServerRequestId: 9003,
+      method: "item/fileChange/requestApproval",
+      params: {},
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-02T00:30:00.000Z"),
+    };
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(),
+      resolve: vi.fn(),
+    };
+    const securityPolicy = {
+      checkApprovalDestination: vi.fn(() => ({ kind: "allow" as const })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      start: vi.fn(),
+      sendCard: vi.fn(() => {
+        order.push("sendCard");
+      }),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn((input: CallbackTokenInsert) => {
+        order.push(`insert:${input.action}`);
+        inserted.push(input);
+        return { ...input, status: input.status ?? "issued" };
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => securityPolicy,
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      resolveApprovalActions: vi.fn(() => ["allow_once", "decline"] as const),
+      callbackTokenRepository,
+      generateCallbackNonce: () => "nonce-issued",
+      generateRawCallbackToken: () => rawTokens.shift() as string,
+      now: () => new Date("2026-05-02T00:00:02.000Z"),
+    });
+
+    await daemon.start();
+    pendingHandler?.(snapshot);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(order).toEqual(["insert:allow_once", "insert:decline"]);
+    expect(inserted).toEqual([
+      {
+        tokenHash: hashCallbackToken("ABCDEFGHIJKLMNOP"),
+        approvalId: snapshot.id,
+        action: "allow_once",
+        callbackNonce: "nonce-issued",
+        target,
+        actor: { kind: "im" },
+        status: "issued",
+        createdAt: "2026-05-02T00:00:02.000Z",
+        expiresAt: "2026-05-02T00:30:00.000Z",
+      },
+      {
+        tokenHash: hashCallbackToken("QRSTUVWXYZ234567"),
+        approvalId: snapshot.id,
+        action: "decline",
+        callbackNonce: "nonce-issued",
+        target,
+        actor: { kind: "im" },
+        status: "issued",
+        createdAt: "2026-05-02T00:00:02.000Z",
+        expiresAt: "2026-05-02T00:30:00.000Z",
+      },
+    ]);
+    expect(JSON.stringify(inserted)).not.toContain("ABCDEFGHIJKLMNOP");
+    expect(JSON.stringify(inserted)).not.toContain("QRSTUVWXYZ234567");
+    expect(adapter.sendCard).not.toHaveBeenCalled();
     expect(broker.bindActorPolicy).not.toHaveBeenCalled();
     expect(broker.resolve).not.toHaveBeenCalled();
   });

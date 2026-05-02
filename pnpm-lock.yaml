@@ -134,6 +134,9 @@ importers:
       '@codex-im/protocol':
         specifier: workspace:*
         version: link:../codex-protocol
+      '@codex-im/storage-sqlite':
+        specifier: workspace:*
+        version: link:../storage-sqlite
     devDependencies:
       '@codex-im/testkit':
         specifier: workspace:*
