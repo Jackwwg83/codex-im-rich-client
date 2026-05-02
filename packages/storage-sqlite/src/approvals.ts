@@ -51,6 +51,10 @@ export interface ApprovalRecord {
   rawJson?: string;
 }
 
+export interface ApprovalRepositoryOptions {
+  redact?: (text: string) => string;
+}
+
 interface ApprovalRow {
   id: string;
   app_server_request_id: string;
@@ -104,7 +108,14 @@ function hydrate(row: ApprovalRow): ApprovalRecord {
 }
 
 export class ApprovalRepository {
-  constructor(private readonly db: DatabaseHandle) {}
+  readonly #redact: (text: string) => string;
+
+  constructor(
+    private readonly db: DatabaseHandle,
+    opts: ApprovalRepositoryOptions = {},
+  ) {
+    this.#redact = opts.redact ?? ((text) => text);
+  }
 
   upsert(input: ApprovalUpsert): ApprovalRecord {
     this.db
@@ -188,17 +199,17 @@ export class ApprovalRepository {
         targetTopicId: input.target.topicId ?? null,
         codexThreadId: input.codexThreadId ?? null,
         codexTurnId: input.codexTurnId ?? null,
-        title: input.title,
-        body: input.body,
+        title: this.#redact(input.title),
+        body: this.#redact(input.body),
         riskLevel: input.riskLevel,
-        requestedByUserId: input.requestedByUserId ?? null,
-        decidedByUserId: input.decidedByUserId ?? null,
-        decision: input.decision ?? null,
+        requestedByUserId: this.#redactOptional(input.requestedByUserId),
+        decidedByUserId: this.#redactOptional(input.decidedByUserId),
+        decision: this.#redactOptional(input.decision),
         expiresAt: input.expiresAt,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt,
         decidedAt: input.decidedAt ?? null,
-        rawJson: input.rawJson ?? null,
+        rawJson: this.#redactOptional(input.rawJson),
       });
 
     return this.findById(input.id) as ApprovalRecord;
@@ -236,5 +247,9 @@ export class ApprovalRepository {
       .get(id) as ApprovalRow | undefined;
 
     return row === undefined ? undefined : hydrate(row);
+  }
+
+  #redactOptional(value: string | undefined): string | null {
+    return value === undefined ? null : this.#redact(value);
   }
 }

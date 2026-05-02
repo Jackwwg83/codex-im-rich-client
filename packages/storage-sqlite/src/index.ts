@@ -66,6 +66,7 @@ export {
 export {
   ApprovalRepository,
   type ApprovalRecord,
+  type ApprovalRepositoryOptions,
   type ApprovalStatus,
   type ApprovalTarget,
   type ApprovalUpsert,
