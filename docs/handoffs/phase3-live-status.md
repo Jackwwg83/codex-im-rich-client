@@ -1,7 +1,8 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + first migration landed (T1.1 → T3a).
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + first migration landed (T1.1 → T3a) + docs convergence (`f4e1b69`).
+> **Handoff status:** as of HEAD `f4e1b69`, work is paused at a clean checkpoint and handed off to Codex for subsequent T-task implementation. All gates green; no uncommitted code; origin is synced 0/0.
 
 ---
 
@@ -15,8 +16,9 @@
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **HEAD:** `c06813e` (T3a)
-- **Origin:** `origin/phase-3-implementation` synced to HEAD
+- **HEAD:** `f4e1b69` (docs convergence; last code commit `c06813e` at T3a)
+- **Tag distance:** `phase-2-codex-reviewed-14-gf4e1b69`
+- **Origin:** `origin/phase-3-implementation` synced 0/0 to HEAD
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
 
@@ -30,6 +32,7 @@
 | `d891960` | T2c | Idempotency test (corrupt-file-between-runs trick) |
 | `04a92fe` | codex P1+P2 fix | Boundary tightening + atomic-rollback test + BEGIN/COMMIT JSDoc |
 | `c06813e` | T3a | `001-init.sql` owns schema_version DDL + real-dir runner test + PRAGMA shape pin |
+| `f4e1b69` | docs convergence | Phase 3 live-status doc + README/ROADMAP/TODOS/phase2-live-status banners (no source code) |
 
 ## 3. Versions / pins
 
@@ -105,3 +108,39 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. STOP and output a Context Recovery Report. Do NOT modify code until the user approves the recovery.
+
+## 10. Handoff to Codex (2026-05-02)
+
+Active developer at this checkpoint: previous session was Claude Code; subsequent T-task implementation is being handed to Codex CLI. **No work in flight.** No uncommitted code. Origin synced.
+
+For the Codex agent picking this up:
+
+1. **Verify clean state:**
+   - `git status --short --untracked-files=all` — only the standard untracked artifacts (`.claude/scheduled_tasks.lock`, `AGENTS.md`, six `*.stderr` review logs) should appear; anything else means uncommitted work was left behind.
+   - `git log --oneline -1` — must show `f4e1b69 docs(phase3): converge live status docs`.
+   - `git rev-list --left-right --count origin/phase-3-implementation...HEAD` — must be `0	0`.
+2. **Verify gates green at the checkpoint:**
+   - `pnpm test` → 65 files, 739 pass + 1 skip.
+   - `pnpm typecheck` + `pnpm typecheck:tests` → both clean.
+   - `pnpm lint` → 151 files clean.
+   - `pnpm protocol:check` → codex 0.128.0, schema unchanged.
+3. **Out-of-scope, do NOT touch in normal T-task work:**
+   - `AGENTS.md` (untracked duplicate of CLAUDE.md) — flagged in convergence audit; deferred until intentional cleanup pass.
+   - `docs/{phase-2,phase-3}/*.stderr` — leftover codex review-run stderr; deferred until intentional cleanup or `.gitignore` decision.
+   - `.claude/scheduled_tasks.lock` — runtime artifact, never committed.
+4. **Read order on first session:**
+   1. This file (you are here).
+   2. `CLAUDE.md` — generic redlines + compact-recovery rules.
+   3. `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.2 (T4a body) + §17 (dep graph) + §6 (Phase 3 redlines) + §7 (decisions D22+).
+   4. `packages/storage-sqlite/src/database.ts` (current implementation surface).
+   5. `packages/storage-sqlite/test/migrations.test.ts` (existing test pattern to extend for T4a).
+5. **Cadence expectations carried forward from prior sessions:**
+   - One T-task per commit. Don't bundle T4a + T4b + T4c into one commit.
+   - Run all 5 gates (typecheck / typecheck:tests / test / lint / protocol:check) before each commit.
+   - Stop after every T-task and output a completion report. Wait for "ok 开始 T<next>" before proceeding to the next T-task. (User explicitly preferred per-task pacing throughout T1.1 → T3a.)
+   - Codex outside-voice impl review cadence is at-discretion, not per-task. Past pattern: review after a coherent batch (e.g. T1.1 → T2c was reviewed together). Suggest a review batch around T4a–T6c (storage repositories) when those land.
+   - When the user says "做一次 codex review", produce a prompt under `docs/phase-3/impl-<scope>-codex-review-prompt.md`, invoke `cat <prompt> | codex exec --sandbox read-only -c model_reasoning_effort=xhigh > <output>.md 2> <output>.stderr` in the background.
+   - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
+   - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
+
+The very next code commit on this branch should be **T4a** per plan §16.2, landing `packages/storage-sqlite/src/migrations/002-thread-bindings.sql` + `packages/storage-sqlite/src/bindings.ts` (`BindingRepository.upsert`) + a single `upsert + findByTarget` round-trip test. Plan §17 dep graph confirms T4a only depends on T3a (already landed).
