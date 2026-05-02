@@ -275,6 +275,60 @@ export class CallbackTokenRepository {
     return row === undefined ? undefined : hydrate(row);
   }
 
+  forceMarkUsed(
+    tokenHash: string,
+    fields: CallbackTokenCasFields = {},
+  ): CallbackTokenRecord | undefined {
+    const actor = fields.actor === undefined ? null : actorParams(fields.actor);
+    const row = this.db
+      .prepare(
+        `
+          UPDATE callback_tokens
+             SET status = 'used',
+                 actor_kind = CASE WHEN @hasActor = 1 THEN @actorKind ELSE actor_kind END,
+                 actor_user_id = CASE WHEN @hasActor = 1 THEN @actorUserId ELSE actor_user_id END,
+                 actor_platform = CASE WHEN @hasActor = 1 THEN @actorPlatform ELSE actor_platform END,
+                 actor_reason = CASE WHEN @hasActor = 1 THEN @actorReason ELSE actor_reason END,
+                 msg_chat_id = CASE WHEN @hasMessageRef = 1 THEN @msgChatId ELSE msg_chat_id END,
+                 msg_message_id = CASE WHEN @hasMessageRef = 1 THEN @msgMessageId ELSE msg_message_id END,
+                 expires_at = CASE WHEN @expiresAt IS NOT NULL THEN @expiresAt ELSE expires_at END
+           WHERE token_hash = @tokenHash
+       RETURNING ${SELECT_COLUMNS}
+        `,
+      )
+      .get({
+        tokenHash,
+        hasActor: fields.actor === undefined ? 0 : 1,
+        actorKind: actor?.actorKind ?? null,
+        actorUserId: actor?.actorUserId ?? null,
+        actorPlatform: actor?.actorPlatform ?? null,
+        actorReason: actor?.actorReason ?? null,
+        hasMessageRef: fields.messageRef === undefined ? 0 : 1,
+        msgChatId: fields.messageRef?.chatId ?? null,
+        msgMessageId: fields.messageRef?.messageId ?? null,
+        expiresAt: fields.expiresAt ?? null,
+      }) as CallbackTokenRow | undefined;
+
+    return row === undefined ? undefined : hydrate(row);
+  }
+
+  revokeBoundSiblings(approvalId: string, exceptTokenHash: string): CallbackTokenRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+          UPDATE callback_tokens
+             SET status = 'revoked'
+           WHERE approval_id = @approvalId
+             AND token_hash != @exceptTokenHash
+             AND status = 'bound'
+       RETURNING ${SELECT_COLUMNS}
+        `,
+      )
+      .all({ approvalId, exceptTokenHash }) as CallbackTokenRow[];
+
+    return rows.map(hydrate);
+  }
+
   pruneExpired(now: string): CallbackTokenRecord[] {
     const rows = this.db
       .prepare(

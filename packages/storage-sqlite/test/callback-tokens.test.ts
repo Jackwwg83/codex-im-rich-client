@@ -151,4 +151,53 @@ describe("CallbackTokenRepository (T6d)", () => {
       db.close();
     }
   });
+
+  it("force-marks a token used and revokes bound siblings for the same approval", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new CallbackTokenRepository(db);
+      const usedHash = hashCallbackToken("force-used-token");
+      const siblingHash = hashCallbackToken("sibling-token");
+      const issuedHash = hashCallbackToken("issued-sibling-token");
+      for (const [tokenHash, action] of [
+        [usedHash, "allow_once"],
+        [siblingHash, "decline"],
+        [issuedHash, "abort"],
+      ] as const) {
+        repo.insert({
+          tokenHash,
+          approvalId: "approval-siblings",
+          action,
+          callbackNonce: "nonce-siblings",
+          target: { platform: "telegram", chatId: "-100123456" },
+          actor: { kind: "im" },
+          createdAt: "2026-05-02T18:00:00.000Z",
+          expiresAt: "2026-05-02T18:30:00.000Z",
+        });
+      }
+      repo.casUpdate(usedHash, "issued", "bound");
+      repo.casUpdate(siblingHash, "issued", "bound");
+
+      expect(
+        repo.forceMarkUsed(usedHash, {
+          actor: { kind: "im", platform: "telegram", userId: "u-alice" },
+        }),
+      ).toMatchObject({
+        tokenHash: usedHash,
+        status: "used",
+        actor: { kind: "im", platform: "telegram", userId: "u-alice" },
+      });
+
+      expect(repo.revokeBoundSiblings("approval-siblings", usedHash)).toEqual([
+        expect.objectContaining({ tokenHash: siblingHash, status: "revoked" }),
+      ]);
+      expect(repo.findByHash(usedHash)).toMatchObject({ status: "used" });
+      expect(repo.findByHash(siblingHash)).toMatchObject({ status: "revoked" });
+      expect(repo.findByHash(issuedHash)).toMatchObject({ status: "issued" });
+    } finally {
+      db.close();
+    }
+  });
 });

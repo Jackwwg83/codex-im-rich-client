@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import {
   type ActorPolicy,
   type ApprovalActor,
+  type ApprovalUiAction,
   type BindResult,
   type IMRoutableApprovalMethod,
   IM_ROUTABLE_APPROVAL_METHODS,
@@ -9,6 +10,8 @@ import {
   type ResolveApprovalInput,
   type ResolveApprovalResult,
   type SecurityPolicyApprovalDestinationDecision,
+  type SecurityPolicySender,
+  type SecurityPolicyUserChatDecision,
   type Target,
 } from "@codex-im/core";
 import { type ApprovalCard, projectApprovalCard } from "@codex-im/render";
@@ -68,6 +71,7 @@ export interface DaemonAdapter {
   onMessage(handler: (message: unknown) => void): Unsubscribe;
   answerAction?(callbackHandle: string, ack: DaemonActionAck): MaybePromise<void>;
   sendCard?(target: Target, card: ApprovalCard): MaybePromise<DaemonSendCardResult>;
+  updateCard?(ref: DaemonMessageRef, card: ApprovalCard): MaybePromise<void>;
   start?(): MaybePromise<void>;
   stop?(): MaybePromise<void>;
 }
@@ -88,6 +92,8 @@ export interface DaemonCallbackTokenRepository {
     toStatus: CallbackTokenStatus,
     fields?: CallbackTokenCasFields,
   ): CallbackTokenRecord | unknown;
+  forceMarkUsed?(tokenHash: string, fields?: CallbackTokenCasFields): CallbackTokenRecord | unknown;
+  revokeBoundSiblings?(approvalId: string, exceptTokenHash: string): readonly CallbackTokenRecord[];
 }
 
 export interface DaemonActionAck {
@@ -116,6 +122,10 @@ export interface DaemonSendCardResult {
   readonly callbackNonce: string;
 }
 
+export interface DaemonUserChatPolicy {
+  checkUserAndChat(target: Target, sender: SecurityPolicySender): SecurityPolicyUserChatDecision;
+}
+
 export interface DaemonOptions {
   readonly loadConfig?: () => MaybePromise<unknown>;
   readonly openStorage?: (config: unknown) => MaybePromise<unknown>;
@@ -137,6 +147,7 @@ export interface DaemonOptions {
   ) => MaybePromise<readonly NonNullable<ApprovalActor>[]>;
   readonly callbackTokenRepository?: DaemonCallbackTokenRepository;
   readonly renderApprovalCard?: (snapshot: PendingApprovalSnapshot) => ApprovalCard;
+  readonly renderResolvedApprovalCard?: (record: CallbackTokenRecord) => ApprovalCard;
   readonly onApprovalCardReady?: (target: Target, card: ApprovalCard) => MaybePromise<void>;
   readonly generateCallbackNonce?: () => string;
   readonly generateRawCallbackToken?: () => string;
@@ -424,11 +435,63 @@ export class Daemon {
     const messageRefFailure = this.#messageRefFailure(record, inbound.messageRef);
     if (messageRefFailure !== undefined) {
       await this.#answerAction(inbound.callbackHandle, messageRefFailure);
+      return;
+    }
+
+    const actor = this.#inboundActor(inbound);
+    if (actor === undefined || inbound.target === undefined || inbound.sender === undefined) {
+      await this.#answerAction(inbound.callbackHandle, "unauthorized");
+      return;
+    }
+
+    const policy = this.#userChatPolicy(this.#securityPolicy);
+    if (policy?.checkUserAndChat(inbound.target, inbound.sender)?.kind !== "allow") {
+      await this.#answerAction(inbound.callbackHandle, "unauthorized");
+      return;
+    }
+
+    const resolvableRecord = this.#resolvableCallbackRecord(record);
+    if (resolvableRecord === undefined) {
+      await this.#answerAction(inbound.callbackHandle, "stale or unknown");
+      return;
+    }
+
+    const result = await this.#broker?.resolve?.({
+      approvalId: resolvableRecord.approvalId,
+      decision: { kind: resolvableRecord.action } as ApprovalUiAction,
+      actor,
+      target: resolvableRecord.target,
+      callbackNonce: resolvableRecord.callbackNonce,
+    });
+    if (result?.kind === "ok") {
+      await this.#handleAcceptedCallback(inbound.callbackHandle, resolvableRecord, actor);
     }
   }
 
-  async #answerAction(callbackHandle: string, userMessage: string): Promise<void> {
-    await this.#adapter?.answerAction?.(callbackHandle, { ok: false, userMessage });
+  async #handleAcceptedCallback(
+    callbackHandle: string,
+    record: CallbackTokenRecord,
+    actor: NonNullable<ApprovalActor>,
+  ): Promise<void> {
+    const repository = this.options.callbackTokenRepository;
+    const used = repository?.casUpdate?.(record.tokenHash, "bound", "used", { actor });
+    if (used === undefined) {
+      repository?.forceMarkUsed?.(record.tokenHash, { actor });
+    }
+
+    await this.#answerAction(callbackHandle, "decision recorded", true);
+    const terminalCard = this.options.renderResolvedApprovalCard?.(record);
+    if (terminalCard !== undefined && record.messageRef !== undefined) {
+      await this.#adapter?.updateCard?.(
+        { target: record.target, messageId: record.messageRef.messageId },
+        terminalCard,
+      );
+    }
+    repository?.revokeBoundSiblings?.(record.approvalId, record.tokenHash);
+  }
+
+  async #answerAction(callbackHandle: string, userMessage: string, ok = false): Promise<void> {
+    await this.#adapter?.answerAction?.(callbackHandle, { ok, userMessage });
   }
 
   #decodeRawCallbackToken(rawCallbackData: string): string | undefined {
@@ -484,6 +547,33 @@ export class Daemon {
     return { chatId: messageRef.chatId, messageId: messageRef.messageId };
   }
 
+  #resolvableCallbackRecord(record: unknown): CallbackTokenRecord | undefined {
+    if (typeof record !== "object" || record === null) {
+      return undefined;
+    }
+    const partial = record as Partial<CallbackTokenRecord>;
+    if (
+      typeof partial.tokenHash !== "string" ||
+      typeof partial.approvalId !== "string" ||
+      typeof partial.callbackNonce !== "string" ||
+      partial.status !== "bound" ||
+      !this.#isCallbackTokenAction(partial.action) ||
+      this.#daemonTarget(partial.target) === undefined
+    ) {
+      return undefined;
+    }
+    return partial as CallbackTokenRecord;
+  }
+
+  #isCallbackTokenAction(action: unknown): action is CallbackTokenAction {
+    return (
+      action === "allow_once" ||
+      action === "allow_session" ||
+      action === "decline" ||
+      action === "abort"
+    );
+  }
+
   async #approvalActions(
     snapshot: PendingApprovalSnapshot,
     card: ApprovalCard,
@@ -520,10 +610,24 @@ export class Daemon {
     return value as DaemonApprovalDestinationPolicy;
   }
 
-  #inboundAction(
-    action: unknown,
-  ):
-    | { rawCallbackData: string; callbackHandle: string; messageRef?: DaemonMessageRef }
+  #userChatPolicy(value: unknown): DaemonUserChatPolicy | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    if (typeof (value as Partial<DaemonUserChatPolicy>).checkUserAndChat !== "function") {
+      return undefined;
+    }
+    return value as DaemonUserChatPolicy;
+  }
+
+  #inboundAction(action: unknown):
+    | {
+        rawCallbackData: string;
+        callbackHandle: string;
+        messageRef?: DaemonMessageRef;
+        target?: Target;
+        sender?: SecurityPolicySender;
+      }
     | undefined {
     if (typeof action !== "object" || action === null) {
       return undefined;
@@ -532,15 +636,21 @@ export class Daemon {
       rawCallbackData: unknown;
       callbackHandle: unknown;
       messageRef: unknown;
+      target: unknown;
+      sender: unknown;
     }>;
     if (typeof partial.rawCallbackData !== "string" || typeof partial.callbackHandle !== "string") {
       return undefined;
     }
     const messageRef = this.#daemonMessageRef(partial.messageRef);
+    const target = this.#daemonTarget(partial.target);
+    const sender = this.#daemonSender(partial.sender);
     return {
       rawCallbackData: partial.rawCallbackData,
       callbackHandle: partial.callbackHandle,
       ...(messageRef === undefined ? {} : { messageRef }),
+      ...(target === undefined ? {} : { target }),
+      ...(sender === undefined ? {} : { sender }),
     };
   }
 
@@ -552,23 +662,53 @@ export class Daemon {
     if (typeof partial.target !== "object" || partial.target === null) {
       return undefined;
     }
-    const target = partial.target as Partial<Target>;
-    if (
-      typeof target.platform !== "string" ||
-      typeof target.chatId !== "string" ||
-      typeof partial.messageId !== "string"
-    ) {
+    const target = this.#daemonTarget(partial.target);
+    if (target === undefined || typeof partial.messageId !== "string") {
       return undefined;
     }
     return {
-      target: {
-        platform: target.platform,
-        chatId: target.chatId,
-        ...(typeof target.threadKey === "string" ? { threadKey: target.threadKey } : {}),
-        ...(typeof target.topicId === "string" ? { topicId: target.topicId } : {}),
-      },
+      target,
       messageId: partial.messageId,
     };
+  }
+
+  #daemonTarget(value: unknown): Target | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    const target = value as Partial<Target>;
+    if (typeof target.platform !== "string" || typeof target.chatId !== "string") {
+      return undefined;
+    }
+    return {
+      platform: target.platform,
+      chatId: target.chatId,
+      ...(typeof target.threadKey === "string" ? { threadKey: target.threadKey } : {}),
+      ...(typeof target.topicId === "string" ? { topicId: target.topicId } : {}),
+    };
+  }
+
+  #daemonSender(value: unknown): SecurityPolicySender | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    const sender = value as Partial<SecurityPolicySender>;
+    if (typeof sender.userId !== "string") {
+      return undefined;
+    }
+    return {
+      userId: sender.userId,
+      ...(typeof sender.displayName === "string" ? { displayName: sender.displayName } : {}),
+    };
+  }
+
+  #inboundActor(inbound: { target?: Target; sender?: SecurityPolicySender }):
+    | NonNullable<ApprovalActor>
+    | undefined {
+    if (inbound.target === undefined || inbound.sender === undefined) {
+      return undefined;
+    }
+    return { kind: "im", platform: inbound.target.platform, userId: inbound.sender.userId };
   }
 }
 

@@ -2,7 +2,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { IM_ROUTABLE_APPROVAL_METHODS, type PendingApprovalSnapshot } from "@codex-im/core";
 import type { ApprovalCard } from "@codex-im/render";
-import { type CallbackTokenInsert, hashCallbackToken } from "@codex-im/storage-sqlite";
+import {
+  type CallbackTokenInsert,
+  type CallbackTokenRecord,
+  hashCallbackToken,
+} from "@codex-im/storage-sqlite";
 import { describe, expect, it, vi } from "vitest";
 import { Daemon, type DaemonOptions, type DaemonSignal } from "../src/index.js";
 
@@ -1201,7 +1205,7 @@ describe("Daemon skeleton (T14)", () => {
     },
   );
 
-  it("continues past messageRef validation for a bound token with matching messageRef", async () => {
+  it("continues past matching messageRef to the policy gate and fails closed without sender", async () => {
     let actionHandler: ((action: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
     const adapter = {
@@ -1246,9 +1250,297 @@ describe("Daemon skeleton (T14)", () => {
     });
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(adapter.answerAction).not.toHaveBeenCalled();
+    expect(adapter.answerAction).toHaveBeenCalledWith("callback-handle-1", {
+      ok: false,
+      userMessage: "unauthorized",
+    });
     expect(callbackTokenRepository.casUpdate).not.toHaveBeenCalled();
     expect(broker.resolve).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without broker.resolve when SecurityPolicy denies an inbound action", async () => {
+    let actionHandler: ((action: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-denied" };
+    const record: CallbackTokenRecord = {
+      tokenHash: hashCallbackToken("ABCDEFGHIJKLMNOP"),
+      approvalId: "approval-policy-deny",
+      action: "allow_once",
+      callbackNonce: "nonce-policy-deny",
+      target,
+      actor: { kind: "im" },
+      status: "bound",
+      messageRef: { chatId: target.chatId, messageId: "msg-bound" },
+      createdAt: "2026-05-02T00:00:02.000Z",
+      expiresAt: "2026-05-02T00:30:00.000Z",
+    };
+    const adapter = {
+      onAction: vi.fn((handler: (action: unknown) => void) => {
+        actionHandler = handler;
+        return () => {};
+      }),
+      onMessage: vi.fn(() => () => {}),
+      answerAction: vi.fn(),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn(() => () => {}),
+      resolve: vi.fn(),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      findByHash: vi.fn(() => record),
+      casUpdate: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "deny" as const, reason: "user_not_allowed" })),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      callbackTokenRepository,
+    });
+
+    await daemon.start();
+    actionHandler?.({
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      callbackHandle: "callback-handle-1",
+      target,
+      sender,
+      messageRef: { target, messageId: "msg-bound" },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(adapter.answerAction).toHaveBeenCalledWith("callback-handle-1", {
+      ok: false,
+      userMessage: "unauthorized",
+    });
+    expect(callbackTokenRepository.casUpdate).not.toHaveBeenCalled();
+    expect(broker.resolve).not.toHaveBeenCalled();
+  });
+
+  it("resolves a valid callback, marks the token used, updates the card, and revokes siblings", async () => {
+    const order: string[] = [];
+    let actionHandler: ((action: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice", displayName: "Alice" };
+    const tokenHash = hashCallbackToken("ABCDEFGHIJKLMNOP");
+    const record: CallbackTokenRecord = {
+      tokenHash,
+      approvalId: "approval-ok",
+      action: "allow_once",
+      callbackNonce: "nonce-ok",
+      target,
+      actor: { kind: "im" },
+      status: "bound",
+      messageRef: { chatId: target.chatId, messageId: "msg-bound" },
+      createdAt: "2026-05-02T00:00:02.000Z",
+      expiresAt: "2026-05-02T00:30:00.000Z",
+    };
+    const terminalCard: ApprovalCard = {
+      schemaVersion: "approval-card.v1",
+      kind: "file_change",
+      approvalId: record.approvalId,
+      summary: "Decision recorded",
+      target: { riskLevel: "moderate" },
+      actions: [],
+      status: "resolved",
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+    };
+    const adapter = {
+      onAction: vi.fn((handler: (action: unknown) => void) => {
+        actionHandler = handler;
+        return () => {};
+      }),
+      onMessage: vi.fn(() => () => {}),
+      answerAction: vi.fn(() => {
+        order.push("answerAction");
+      }),
+      updateCard: vi.fn(() => {
+        order.push("updateCard");
+      }),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn(() => () => {}),
+      resolve: vi.fn(() => {
+        order.push("broker.resolve");
+        return { kind: "ok" as const, appliedAt: new Date("2026-05-02T00:00:03.000Z") };
+      }),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      findByHash: vi.fn(() => record),
+      casUpdate: vi.fn(() => {
+        order.push("cas:used");
+        return { ...record, status: "used" as const };
+      }),
+      forceMarkUsed: vi.fn(),
+      revokeBoundSiblings: vi.fn(() => {
+        order.push("revokeSiblings");
+        return [];
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => {
+          order.push("policy");
+          return { kind: "allow" as const };
+        }),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      callbackTokenRepository,
+      renderResolvedApprovalCard: vi.fn(() => terminalCard),
+    });
+
+    await daemon.start();
+    actionHandler?.({
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      callbackHandle: "callback-handle-1",
+      target,
+      sender,
+      messageRef: { target, messageId: "msg-bound" },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(order).toEqual([
+      "policy",
+      "broker.resolve",
+      "cas:used",
+      "answerAction",
+      "updateCard",
+      "revokeSiblings",
+    ]);
+    expect(broker.resolve).toHaveBeenCalledWith({
+      approvalId: record.approvalId,
+      decision: { kind: "allow_once" },
+      actor: { kind: "im", platform: "telegram", userId: "u-alice" },
+      target: record.target,
+      callbackNonce: record.callbackNonce,
+    });
+    expect(callbackTokenRepository.casUpdate).toHaveBeenCalledWith(tokenHash, "bound", "used", {
+      actor: { kind: "im", platform: "telegram", userId: "u-alice" },
+    });
+    expect(callbackTokenRepository.forceMarkUsed).not.toHaveBeenCalled();
+    expect(adapter.answerAction).toHaveBeenCalledWith("callback-handle-1", {
+      ok: true,
+      userMessage: "decision recorded",
+    });
+    expect(adapter.updateCard).toHaveBeenCalledWith(
+      { target, messageId: "msg-bound" },
+      terminalCard,
+    );
+    expect(callbackTokenRepository.revokeBoundSiblings).toHaveBeenCalledWith(
+      record.approvalId,
+      tokenHash,
+    );
+  });
+
+  it("still answers success and forces used when the post-resolve CAS returns no row", async () => {
+    let actionHandler: ((action: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const tokenHash = hashCallbackToken("ABCDEFGHIJKLMNOP");
+    const record: CallbackTokenRecord = {
+      tokenHash,
+      approvalId: "approval-cas-zero",
+      action: "decline",
+      callbackNonce: "nonce-cas-zero",
+      target,
+      actor: { kind: "im" },
+      status: "bound",
+      messageRef: { chatId: target.chatId, messageId: "msg-bound" },
+      createdAt: "2026-05-02T00:00:02.000Z",
+      expiresAt: "2026-05-02T00:30:00.000Z",
+    };
+    const terminalCard: ApprovalCard = {
+      schemaVersion: "approval-card.v1",
+      kind: "file_change",
+      approvalId: record.approvalId,
+      summary: "Decision recorded",
+      target: { riskLevel: "moderate" },
+      actions: [],
+      status: "resolved",
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+    };
+    const adapter = {
+      onAction: vi.fn((handler: (action: unknown) => void) => {
+        actionHandler = handler;
+        return () => {};
+      }),
+      onMessage: vi.fn(() => () => {}),
+      answerAction: vi.fn(),
+      updateCard: vi.fn(),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn(() => () => {}),
+      resolve: vi.fn(() => ({ kind: "ok" as const, appliedAt: new Date() })),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      findByHash: vi.fn(() => record),
+      casUpdate: vi.fn(() => undefined),
+      forceMarkUsed: vi.fn(() => ({ ...record, status: "used" as const })),
+      revokeBoundSiblings: vi.fn(() => []),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      callbackTokenRepository,
+      renderResolvedApprovalCard: vi.fn(() => terminalCard),
+    });
+
+    await daemon.start();
+    actionHandler?.({
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      callbackHandle: "callback-handle-1",
+      target,
+      sender,
+      messageRef: { target, messageId: "msg-bound" },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(callbackTokenRepository.casUpdate).toHaveBeenCalledWith(tokenHash, "bound", "used", {
+      actor: { kind: "im", platform: "telegram", userId: "u-alice" },
+    });
+    expect(callbackTokenRepository.forceMarkUsed).toHaveBeenCalledWith(tokenHash, {
+      actor: { kind: "im", platform: "telegram", userId: "u-alice" },
+    });
+    expect(adapter.answerAction).toHaveBeenCalledWith("callback-handle-1", {
+      ok: true,
+      userMessage: "decision recorded",
+    });
+    expect(adapter.updateCard).toHaveBeenCalledWith(
+      { target, messageId: "msg-bound" },
+      terminalCard,
+    );
+    expect(callbackTokenRepository.revokeBoundSiblings).toHaveBeenCalledWith(
+      record.approvalId,
+      tokenHash,
+    );
   });
 
   it.each([

@@ -28,6 +28,7 @@ export type {
   DaemonSignal,
   DaemonSessionRouterContext,
   DaemonSupervisorContext,
+  DaemonUserChatPolicy,
 } from "./daemon.js";
 export { Supervisor } from "./supervisor.js";
 export type { SupervisorAudit, SupervisorOptions } from "./types.js";
