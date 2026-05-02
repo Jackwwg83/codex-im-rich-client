@@ -9,6 +9,7 @@ import type {
   Target,
 } from "@codex-im/channel-core";
 import { LARK_CAPABILITIES } from "./capabilities.js";
+import { type LarkRawMessageEvent, normalizeLarkRawMessage } from "./message.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
@@ -111,6 +112,32 @@ export class LarkChannelAdapter implements ChannelAdapter {
 
   _nowForTest(): Date {
     return this.#options.now?.() ?? new Date();
+  }
+
+  _emitRawMessageForTest(raw: LarkRawMessageEvent): void {
+    this.#emitRawMessage(raw);
+  }
+
+  #emitRawMessage(raw: LarkRawMessageEvent): void {
+    if (!this.#acceptInbound()) {
+      return;
+    }
+    const msg = normalizeLarkRawMessage(raw, this.#nowMs());
+    for (const handler of this.#onMessageHandlers) {
+      try {
+        handler(msg);
+      } catch {
+        // Keep one subscriber failure from blocking other subscribers.
+      }
+    }
+  }
+
+  #acceptInbound(): boolean {
+    return this.#started && !this.#inboundPaused;
+  }
+
+  #nowMs(): number {
+    return this.#options.now?.().getTime() ?? Date.now();
   }
 
   #notImplemented(method: string, issue: string): Error {

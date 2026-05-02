@@ -1,7 +1,7 @@
 # Phase 4 Live Status
 
 > Single source of truth for Phase 4 planning/implementation. Read first on compact / resume / context loss after Phase 3 tag `phase-3-telegram-mvp-complete`.
-> **Last updated:** 2026-05-02 — JAC-151 Lark long-connection lifecycle with fake client landed.
+> **Last updated:** 2026-05-02 — JAC-152 Lark message receive fixtures landed.
 > **Handoff status:** Phase 3 is tagged and complete. Phase 4 implementation may proceed through the Linear queue; live Lark smoke remains env-gated.
 
 ---
@@ -10,11 +10,11 @@
 
 - **Phase:** Phase 4 — Feishu/Lark adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`.
-- **Active Linear issue:** JAC-152 — Phase4-T4 Lark message receive fixtures.
+- **Active Linear issue:** JAC-153 — Phase4-T5 Lark sendText/editText/reply.
 - **Parent Linear issue:** JAC-9 — Phase 4 backlog / Feishu-Lark adapter.
 - **Current branch:** `codex/phase-4-planning`.
 - **Base:** `phase-3-telegram-mvp-complete` (`83c6ef0` target commit).
-- **Next exact action:** implement JAC-152 with TDD: sanitized private/group message fixtures; no action handling yet.
+- **Next exact action:** implement JAC-153 with TDD: fake client text send/edit/reply, no cards/actions yet.
 
 ## 2. Current decision state
 
@@ -58,8 +58,8 @@
 | JAC-149 | T1 im-lark skeleton + boundary tests | done |
 | JAC-150 | T2 Lark config schema extension | done |
 | JAC-151 | T3 long connection lifecycle fake client | done |
-| JAC-152 | T4 message receive fixtures | active next |
-| JAC-153 | T5 send/edit text/reply | blocked by JAC-152 |
+| JAC-152 | T4 message receive fixtures | done |
+| JAC-153 | T5 send/edit text/reply | active next |
 | JAC-154 | T6 sendCard/card rendering | blocked by JAC-153 |
 | JAC-155 | T7 updateCard/status streaming | blocked by JAC-154 |
 | JAC-156 | T8a callback payload codec/extraction | ready after queue reaches T8a |
@@ -78,7 +78,7 @@ No Phase 4 code has landed. Last Phase 3 tag target gates:
 |---|---|
 | `pnpm typecheck` | green: 13 of 14 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 102 files, 987 passing, 1 skipped |
+| `pnpm test` | green: 103 files, 992 passing, 1 skipped |
 | `pnpm lint` | green: 229 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 

@@ -1,0 +1,29 @@
+{
+  "sender": {
+    "sender_id": {
+      "open_id": "ou_test_group_sender",
+      "user_id": "user_test_group_sender",
+      "union_id": "on_test_group_sender"
+    },
+    "sender_type": "user",
+    "tenant_key": "tenant_test"
+  },
+  "message": {
+    "message_id": "om_test_group_message",
+    "chat_id": "oc_test_group_chat",
+    "chat_type": "group",
+    "message_type": "text",
+    "content": "{\"text\":\"@codex run tests\"}",
+    "mentions": [
+      {
+        "key": "@codex",
+        "id": {
+          "open_id": "ou_test_bot"
+        },
+        "name": "Codex Bot",
+        "tenant_key": "tenant_test"
+      }
+    ],
+    "create_time": "1777750001000"
+  }
+}

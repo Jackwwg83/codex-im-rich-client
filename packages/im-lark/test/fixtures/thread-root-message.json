@@ -1,0 +1,21 @@
+{
+  "sender": {
+    "sender_id": {
+      "open_id": "ou_test_thread_sender",
+      "user_id": "user_test_thread_sender"
+    },
+    "sender_type": "user",
+    "tenant_key": "tenant_test"
+  },
+  "message": {
+    "message_id": "om_test_thread_reply",
+    "root_id": "om_test_thread_root",
+    "parent_id": "om_test_thread_parent",
+    "thread_id": "omt_test_thread",
+    "chat_id": "oc_test_thread_chat",
+    "chat_type": "group",
+    "message_type": "text",
+    "content": "{\"text\":\"thread reply\"}",
+    "create_time": "1777750002000"
+  }
+}

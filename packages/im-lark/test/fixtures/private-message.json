@@ -1,0 +1,19 @@
+{
+  "sender": {
+    "sender_id": {
+      "open_id": "ou_test_private_sender",
+      "user_id": "user_test_private_sender",
+      "union_id": "on_test_private_sender"
+    },
+    "sender_type": "user",
+    "tenant_key": "tenant_test"
+  },
+  "message": {
+    "message_id": "om_test_private_message",
+    "chat_id": "oc_test_private_chat",
+    "chat_type": "p2p",
+    "message_type": "text",
+    "content": "{\"text\":\"hello codex\"}",
+    "create_time": "1777750000000"
+  }
+}
