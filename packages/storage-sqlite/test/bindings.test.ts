@@ -125,4 +125,36 @@ describe("BindingRepository (T4a)", () => {
       db.close();
     }
   });
+
+  it("surfaces SQLite write failure without creating optimistic repository state", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+      db.exec(`
+        CREATE TRIGGER fail_thread_binding_insert
+        BEFORE INSERT ON thread_bindings
+        BEGIN
+          SELECT RAISE(ABORT, 'simulated thread_bindings write failure');
+        END;
+      `);
+
+      const repo = new BindingRepository(db);
+      const target = { platform: "telegram", chatId: "-100123456" };
+
+      expect(() =>
+        repo.upsert({
+          target,
+          projectId: "project-web",
+          codexThreadId: "thread_123",
+          cwd: "/tmp/codex-im/project-web",
+          now: "2026-05-02T14:04:00.000Z",
+        }),
+      ).toThrow(/simulated thread_bindings write failure/);
+
+      expect(repo.findByTarget(target)).toBeUndefined();
+      expect(repo.list()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
 });
