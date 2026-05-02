@@ -19,9 +19,11 @@
     "@codex-im/daemon": "workspace:*",
     "@codex-im/im-telegram": "workspace:*",
     "@codex-im/protocol": "workspace:*",
+    "better-sqlite3": "^12.9.0",
     "pino": "^9"
   },
   "devDependencies": {
-    "@codex-im/testkit": "workspace:*"
+    "@codex-im/testkit": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13"
   }
 }

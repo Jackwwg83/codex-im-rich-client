@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { defaultDbBackupPaths, parseDbBackupArgs, runDbBackupCore } from "../src/db-backup.js";
 
@@ -27,14 +28,18 @@ afterEach(() => {
 });
 
 describe("codex-im db backup (T33)", () => {
-  it("copies state.db byte-identically and prunes only old backup files in the backup directory", () => {
+  it("backs up a live WAL-mode SQLite database and prunes only old backup files", async () => {
     const root = makeTempRoot();
     const source = join(root, "state.db");
     const backupDir = join(root, "backups");
     const outsideBackupDir = join(root, "state-20260301.db");
     mkdirSync(backupDir, { recursive: true });
-    writeFileSync(source, Buffer.from([0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x00, 0xff]));
     writeFileSync(outsideBackupDir, "do not delete");
+    const db = new Database(source);
+    db.pragma("journal_mode = WAL");
+    db.exec("CREATE TABLE smoke (id INTEGER PRIMARY KEY, value TEXT NOT NULL)");
+    db.prepare("INSERT INTO smoke (value) VALUES (?)").run("committed-in-wal");
+    expect(existsSync(`${source}-wal`)).toBe(true);
 
     for (let day = 1; day <= 31; day++) {
       writeFileSync(join(backupDir, `state-202603${String(day).padStart(2, "0")}.db`), "old");
@@ -44,17 +49,28 @@ describe("codex-im db backup (T33)", () => {
 
     const stdout: string[] = [];
     const stderr: string[] = [];
-    const exitCode = runDbBackupCore({
+    const exitCode = await runDbBackupCore({
       argv: ["--source", source, "--backup-dir", backupDir],
       env: { HOME: root },
       now: new Date("2026-05-02T01:02:03.000Z"),
       output: (line) => stdout.push(line),
       errorOutput: (line) => stderr.push(line),
     });
+    db.close();
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(readFileSync(join(backupDir, "state-20260502.db"))).toEqual(readFileSync(source));
+    const backup = new Database(join(backupDir, "state-20260502.db"), {
+      readonly: true,
+      fileMustExist: true,
+    });
+    try {
+      expect(backup.prepare("SELECT value FROM smoke WHERE id = 1").pluck().get()).toBe(
+        "committed-in-wal",
+      );
+    } finally {
+      backup.close();
+    }
     expect(existsSync(join(backupDir, "state-20260301.db"))).toBe(false);
     expect(existsSync(join(backupDir, "state-20260302.db"))).toBe(false);
     expect(existsSync(outsideBackupDir)).toBe(true);
@@ -94,12 +110,12 @@ describe("codex-im db backup (T33)", () => {
     expect(() => parseDbBackupArgs(["--bogus"])).toThrow(/unknown flag.*--bogus/);
   });
 
-  it("fails closed when the source database is missing", () => {
+  it("fails closed when the source database is missing", async () => {
     const root = makeTempRoot();
     const stdout: string[] = [];
     const stderr: string[] = [];
 
-    const exitCode = runDbBackupCore({
+    const exitCode = await runDbBackupCore({
       argv: ["--source", join(root, "missing-state.db"), "--backup-dir", join(root, "backups")],
       env: { HOME: root },
       now: new Date("2026-05-02T01:02:03.000Z"),
@@ -110,6 +126,26 @@ describe("codex-im db backup (T33)", () => {
     expect(exitCode).toBe(2);
     expect(stdout).toEqual([]);
     expect(stderr.join("\n")).toContain("source database not found");
+  });
+
+  it("fails closed when the source file is not a SQLite database", async () => {
+    const root = makeTempRoot();
+    const source = join(root, "state.db");
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    writeFileSync(source, "not sqlite");
+
+    const exitCode = await runDbBackupCore({
+      argv: ["--source", source, "--backup-dir", join(root, "backups")],
+      env: { HOME: root },
+      now: new Date("2026-05-02T01:02:03.000Z"),
+      output: (line) => stdout.push(line),
+      errorOutput: (line) => stderr.push(line),
+    });
+
+    expect(exitCode).toBe(3);
+    expect(stdout).toEqual([]);
+    expect(stderr.join("\n")).toContain("failed to create SQLite backup");
   });
 
   it("ships a cron template without secrets or launchd side effects", () => {

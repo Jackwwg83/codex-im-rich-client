@@ -1,5 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import Database from "better-sqlite3";
 
 const DEFAULT_KEEP = 30;
 const BACKUP_FILE_RE = /^state-(\d{8})\.db$/;
@@ -73,7 +74,7 @@ export function defaultDbBackupPaths(
   };
 }
 
-export function runDbBackupCore(options: RunDbBackupCoreOptions = {}): number {
+export async function runDbBackupCore(options: RunDbBackupCoreOptions = {}): Promise<number> {
   const output = options.output ?? ((line: string) => process.stdout.write(`${line}\n`));
   const errorOutput = options.errorOutput ?? ((line: string) => process.stderr.write(`${line}\n`));
   const env = options.env ?? process.env;
@@ -99,7 +100,12 @@ export function runDbBackupCore(options: RunDbBackupCoreOptions = {}): number {
 
   mkdirSync(backupDir, { recursive: true });
   const backupPath = join(backupDir, `state-${formatBackupDate(options.now ?? new Date())}.db`);
-  copyFileSync(sourcePath, backupPath);
+  try {
+    await backupSqliteDatabase(sourcePath, backupPath);
+  } catch (error) {
+    errorOutput(`db backup: failed to create SQLite backup: ${errorMessage(error)}`);
+    return 3;
+  }
   const pruned = pruneOldBackups(backupDir, keep);
 
   output(`created: ${backupPath}`);
@@ -108,9 +114,18 @@ export function runDbBackupCore(options: RunDbBackupCoreOptions = {}): number {
 }
 
 export async function run(argv: readonly string[] = process.argv.slice(4)): Promise<void> {
-  const exitCode = runDbBackupCore({ argv });
+  const exitCode = await runDbBackupCore({ argv });
   if (exitCode !== 0) {
     process.exitCode = exitCode;
+  }
+}
+
+export async function backupSqliteDatabase(sourcePath: string, backupPath: string): Promise<void> {
+  const db = new Database(sourcePath, { readonly: true, fileMustExist: true });
+  try {
+    await db.backup(backupPath);
+  } finally {
+    db.close();
   }
 }
 
