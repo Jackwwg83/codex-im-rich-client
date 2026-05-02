@@ -114,6 +114,8 @@ export const METHOD_CLASS = {
   "thread/archived": "lifecycle",
   "thread/closed": "lifecycle",
   "thread/compacted": "lifecycle",
+  "thread/goal/cleared": "lifecycle",
+  "thread/goal/updated": "lifecycle",
   "thread/name/updated": "lifecycle",
   "thread/started": "lifecycle",
   "thread/status/changed": "lifecycle",
@@ -135,6 +137,9 @@ export const METHOD_CLASS = {
   "turn/diff/updated": "lifecycle",
   "turn/plan/updated": "lifecycle",
   "turn/started": "lifecycle",
+
+  // ─── Remote control (added codex 0.128) ─────────────────────────
+  "remoteControl/status/changed": "lifecycle",
 
   // ─── Windows-specific ───────────────────────────────────────────
   "windows/worldWritableWarning": "lifecycle",

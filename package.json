@@ -9,7 +9,7 @@
   },
   "packageManager": "pnpm@10.33.2",
   "codexIm": {
-    "codexVersion": "0.125.0"
+    "codexVersion": "0.128.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]

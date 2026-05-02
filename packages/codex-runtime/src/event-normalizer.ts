@@ -478,6 +478,8 @@ export class EventNormalizer {
       // thread/* — thread admin events; not turn lifecycle.
       case "thread/archived":
       case "thread/compacted":
+      case "thread/goal/cleared":
+      case "thread/goal/updated":
       case "thread/name/updated":
       case "thread/status/changed":
       case "thread/tokenUsage/updated":
@@ -494,6 +496,8 @@ export class EventNormalizer {
       // turn/* — diff and plan updates (per-turn aggregates).
       case "turn/diff/updated":
       case "turn/plan/updated":
+      // remoteControl — added codex 0.128.
+      case "remoteControl/status/changed":
       // windows-specific.
       case "windows/worldWritableWarning":
       case "windowsSandbox/setupCompleted":

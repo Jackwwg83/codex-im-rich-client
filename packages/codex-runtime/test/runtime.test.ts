@@ -85,9 +85,12 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
       } as unknown as ThreadStartResponse;
     });
 
+    // codex 0.128 removed experimentalRawEvents + persistExtendedHistory
+    // from ThreadStartParams; swap in two still-extant optional fields
+    // to keep the verbatim-forwarding identity check meaningful.
     const params: ThreadStartParams = {
-      experimentalRawEvents: false,
-      persistExtendedHistory: false,
+      cwd: "/tmp",
+      developerInstructions: "test",
     };
     const r = await h.runtime.threadStart(params);
     // toEqual would pass for a clone-but-preserve-shape transform; toBe

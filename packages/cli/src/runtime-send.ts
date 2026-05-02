@@ -193,10 +193,9 @@ export async function runRuntimeSendCore(opts: RunRuntimeSendCoreOptions): Promi
 
     const runtime = new CodexRuntime(client);
 
-    const threadResp = await runtime.threadStart({
-      experimentalRawEvents: false,
-      persistExtendedHistory: false,
-    });
+    // codex 0.128 removed experimentalRawEvents + persistExtendedHistory
+    // from ThreadStartParams; both were already the default.
+    const threadResp = await runtime.threadStart({});
     const threadId = threadResp.thread.id;
     log.info({ threadId }, "thread/start OK");
 
