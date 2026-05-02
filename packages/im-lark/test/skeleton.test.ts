@@ -33,15 +33,15 @@ describe("@codex-im/im-lark skeleton (JAC-149)", () => {
     expect(adapter._startedForTest()).toBe(false);
   });
 
-  it("keeps later slices explicitly unimplemented", async () => {
+  it("keeps later card/action slices explicitly unimplemented", async () => {
     const adapter = new LarkChannelAdapter();
     const ref = {
       target: { platform: "lark", chatId: "chat-1" },
       messageId: "message-1",
     };
 
-    await expect(adapter.editText(ref, "hello")).rejects.toThrow(
-      "LarkChannelAdapter.editText is not implemented until JAC-153",
+    await expect(adapter.updateCard(ref, {} as never)).rejects.toThrow(
+      "LarkChannelAdapter.updateCard is not implemented until JAC-155",
     );
   });
 });

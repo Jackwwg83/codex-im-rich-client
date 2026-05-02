@@ -22,9 +22,19 @@ export interface LarkWsClientLike {
   close(params?: { force?: boolean }): void | Promise<void>;
 }
 
+export interface LarkMessageClientLike {
+  sendText(input: {
+    target: Target;
+    text: string;
+    replyToMessageId?: string;
+  }): Promise<{ messageId: string }>;
+  editText(input: { messageRef: MessageRef; text: string }): Promise<void>;
+}
+
 export interface LarkChannelAdapterOptions {
   readonly now?: () => Date;
   readonly wsClient?: LarkWsClientLike;
+  readonly messageClient?: LarkMessageClientLike;
   readonly createEventDispatcher?: () => LarkEventDispatcherLike;
 }
 
@@ -91,7 +101,13 @@ export class LarkChannelAdapter implements ChannelAdapter {
   }
 
   async editText(_ref: MessageRef, _body: string): Promise<void> {
-    throw this.#notImplemented("editText", "JAC-153");
+    this.#assertStarted("editText");
+    const messageClient = this.#messageClient("editText");
+    try {
+      await messageClient.editText({ messageRef: _ref, text: _body });
+    } catch (error) {
+      throw new Error(`LarkChannelAdapter.editText failed: ${describeError(error)}`);
+    }
   }
 
   async answerAction(_callbackHandle: string, _ack: ActionAck): Promise<void> {
@@ -118,6 +134,32 @@ export class LarkChannelAdapter implements ChannelAdapter {
     this.#emitRawMessage(raw);
   }
 
+  async sendText(target: Target, text: string): Promise<MessageRef> {
+    this.#assertStarted("sendText");
+    const messageClient = this.#messageClient("sendText");
+    try {
+      const sent = await messageClient.sendText({ target, text });
+      return { target, messageId: sent.messageId };
+    } catch (error) {
+      throw new Error(`LarkChannelAdapter.sendText failed: ${describeError(error)}`);
+    }
+  }
+
+  async replyText(ref: MessageRef, text: string): Promise<MessageRef> {
+    this.#assertStarted("replyText");
+    const messageClient = this.#messageClient("replyText");
+    try {
+      const sent = await messageClient.sendText({
+        target: ref.target,
+        text,
+        replyToMessageId: ref.messageId,
+      });
+      return { target: ref.target, messageId: sent.messageId };
+    } catch (error) {
+      throw new Error(`LarkChannelAdapter.replyText failed: ${describeError(error)}`);
+    }
+  }
+
   #emitRawMessage(raw: LarkRawMessageEvent): void {
     if (!this.#acceptInbound()) {
       return;
@@ -140,7 +182,25 @@ export class LarkChannelAdapter implements ChannelAdapter {
     return this.#options.now?.().getTime() ?? Date.now();
   }
 
+  #assertStarted(method: string): void {
+    if (!this.#started) {
+      throw new Error(`LarkChannelAdapter.${method} requires start() first`);
+    }
+  }
+
+  #messageClient(method: string): LarkMessageClientLike {
+    const messageClient = this.#options.messageClient;
+    if (messageClient === undefined) {
+      throw new Error(`LarkChannelAdapter.${method} requires an injected messageClient`);
+    }
+    return messageClient;
+  }
+
   #notImplemented(method: string, issue: string): Error {
     return new Error(`LarkChannelAdapter.${method} is not implemented until ${issue}`);
   }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
