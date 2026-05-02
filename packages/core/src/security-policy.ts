@@ -101,8 +101,14 @@ export class SecurityPolicy {
     return { kind: "allow" };
   }
 
-  checkCommand(_command: string, _cwd: string): SecurityPolicyCommandDecision {
-    return { kind: "deny", reason: POLICY_NOT_CONFIGURED };
+  checkCommand(command: string, _cwd: string): SecurityPolicyCommandDecision {
+    if (matchesAny(command, this.#snapshot.commands.denyPatterns)) {
+      return { kind: "deny", reason: "command_denied" };
+    }
+    if (matchesAny(command, this.#snapshot.commands.requireAdminPatterns)) {
+      return { kind: "require_admin", reason: "admin_required" };
+    }
+    return { kind: "allow" };
   }
 
   reload(config: SecurityPolicyConfig): void {
@@ -137,4 +143,8 @@ function freezeStrings(values: readonly string[]): readonly string[] {
 
 function platformScoped(platform: string, id: string): string {
   return `${platform}:${id}`;
+}
+
+function matchesAny(command: string, patterns: readonly string[]): boolean {
+  return patterns.some((pattern) => pattern.length > 0 && command.includes(pattern));
 }

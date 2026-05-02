@@ -19,8 +19,8 @@ const ALLOW_CONFIG: SecurityPolicyConfig = {
   allowedUsers: ["telegram:123"],
   allowedChats: ["telegram:-1001"],
   commands: {
-    denyPatterns: [],
-    requireAdminPatterns: [],
+    denyPatterns: ["rm -rf /", "sudo ", "chmod -R 777"],
+    requireAdminPatterns: ["git push", "gh pr merge"],
   },
 };
 
@@ -75,10 +75,7 @@ describe("SecurityPolicy skeleton (T9.1 / D22)", () => {
       kind: "auto_decline",
       reason: "policy_not_configured",
     });
-    expect(policy.checkCommand("ls -la", "/tmp")).toEqual({
-      kind: "deny",
-      reason: "policy_not_configured",
-    });
+    expect(policy.checkCommand("ls -la", "/tmp")).toEqual({ kind: "allow" });
   });
 });
 
@@ -127,5 +124,44 @@ describe("SecurityPolicy.checkApprovalDestination (T9.3 / D36)", () => {
         chatId: "-9999",
       }),
     ).toEqual({ kind: "auto_decline", reason: "approval_destination_denied" });
+  });
+});
+
+describe("SecurityPolicy.checkCommand (T9.4 / D22)", () => {
+  it("allows benign commands", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+    expect(policy.checkCommand("ls -la", "/tmp")).toEqual({ kind: "allow" });
+  });
+
+  it("denies configured dangerous command patterns", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+    for (const command of ["rm -rf /", "sudo launchctl list", "chmod -R 777 ."]) {
+      expect(policy.checkCommand(command, "/tmp")).toEqual({
+        kind: "deny",
+        reason: "command_denied",
+      });
+    }
+  });
+
+  it("requires admin for configured admin patterns", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+    expect(policy.checkCommand("git push origin phase-3-implementation", "/repo")).toEqual({
+      kind: "require_admin",
+      reason: "admin_required",
+    });
+  });
+
+  it("deny patterns take precedence over require_admin patterns", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      commands: {
+        denyPatterns: ["git push --force"],
+        requireAdminPatterns: ["git push"],
+      },
+    });
+    expect(policy.checkCommand("git push --force origin main", "/repo")).toEqual({
+      kind: "deny",
+      reason: "command_denied",
+    });
   });
 });
