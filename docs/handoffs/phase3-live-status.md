@@ -1,23 +1,23 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, JAC-52 / T19d transport-lost turn synthesis/rendering complete, JAC-53 / T19e prune sweeps complete, JAC-62 / T37 mid-phase Codex review findings closed, JAC-54 through JAC-61 real Telegram adapter fake/contract slice complete, JAC-132 / T29 launchd plist dry-run installer complete, JAC-133 / T29a Keychain wrapper complete, JAC-134 / T29b operator-gated Keychain launchd smoke docs complete, JAC-139 gate-flake fix complete, JAC-135 / T30 launchd uninstall dry-run complete, JAC-136 / T31 daemon log rotation wiring complete, JAC-137 / T32 daemon status CLI complete, and JAC-138 / T33 database backup CLI complete.
-> **Handoff status:** JAC-138 complete: `codex-im db backup` / `pnpm db:backup` copies local SQLite `state.db` to `state-YYYYMMDD.db`, keeps the newest 30 managed backup files, deletes only matching backup files inside the backup directory, and ships a cron template without installing it. All 5 gates green. Next exact issue: JAC-23 / T34 `smoke:telegram-fake`.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, JAC-52 / T19d transport-lost turn synthesis/rendering complete, JAC-53 / T19e prune sweeps complete, JAC-62 / T37 mid-phase Codex review findings closed, JAC-54 through JAC-61 real Telegram adapter fake/contract slice complete, JAC-132 / T29 launchd plist dry-run installer complete, JAC-133 / T29a Keychain wrapper complete, JAC-134 / T29b operator-gated Keychain launchd smoke docs complete, JAC-139 gate-flake fix complete, JAC-135 / T30 launchd uninstall dry-run complete, JAC-136 / T31 daemon log rotation wiring complete, JAC-137 / T32 daemon status CLI complete, JAC-138 / T33 database backup CLI complete, and JAC-140 / T34 `smoke:telegram-fake` complete.
+> **Handoff status:** JAC-140 complete: `pnpm smoke:telegram-fake` runs the real Telegram adapter normalization through daemon inbound prompt routing with fake bot/runtime/storage only, does not require live env flags or tokens, and keeps raw Telegram wire/API details inside `@codex-im/im-telegram`. All 5 gates green. Next exact issue: JAC-141 / T35 `smoke:telegram-live` operator-gated harness.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-138 / T33** (`codex-im db backup` + nightly cron template).
-- **Next exact task:** **JAC-23 / T34** — `smoke:telegram-fake` CI-safe smoke. Must not call real Telegram or real Codex.
+- **Active task:** None at this checkpoint. Last completed: **JAC-140 / T34** (`smoke:telegram-fake` CI-safe fake smoke).
+- **Next exact task:** **JAC-141 / T35** — `smoke:telegram-live` operator-gated harness. Default gates must not call real Telegram.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **Latest code commit:** `56595fd` (`feat(cli): JAC-138 add db backup command`)
-- **Tag distance at latest code commit:** `phase-2-codex-reviewed-116-g56595fd`
+- **Latest code commit:** `3cff55c` (`feat(cli): JAC-140 add telegram fake smoke`)
+- **Tag distance at latest code commit:** `phase-2-codex-reviewed-118-g3cff55c`
 - **Origin:** synced after each pushed checkpoint; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -118,6 +118,7 @@
 | `f70754b` | T31 / JAC-136 | Daemon logger planning/creation with `pino-roll` daily rotation, 14-file retention, test/dev stdout mode, and no token serialization |
 | `aaed7a2` | T32 / JAC-137 | `codex-im daemon status` local snapshot reader/formatter with token redaction and fail-closed missing/invalid snapshot behavior |
 | `56595fd` | T33 / JAC-138 | `codex-im db backup`, root `pnpm db:backup`, retention-limited local SQLite copy, cron template, and backup README docs |
+| `3cff55c` | T34 / JAC-140 | `pnpm smoke:telegram-fake` CI-safe fake smoke through Telegram adapter normalization and daemon inbound prompt routing |
 
 ## 3. Versions / pins
 
@@ -133,8 +134,8 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (12 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **950 passing + 1 skipped** across 95 test files (Phase 2 close: 720; +230 from Phase 3 storage/config/core/channel/daemon/telegram/ops prereqs) |
-| Lint | `pnpm lint` | green (212 files, biome) |
+| Tests | `pnpm test` | **952 passing + 1 skipped** across 96 test files (Phase 2 close: 720; +232 from Phase 3 storage/config/core/channel/daemon/telegram/ops prereqs) |
+| Lint | `pnpm lint` | green (215 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
 | F13 channel-core boundary | inherited from Phase 2 | green |
@@ -191,7 +192,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.8 smokes and §17 dependency graph. The next task is **JAC-23 / T34**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.8 smokes and §17 dependency graph. The next task is **JAC-141 / T35**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -230,4 +231,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-138 / T33 database backup CLI** plus **JAC-139 gate-flake stabilization**. Continue with **JAC-23 / T34 `smoke:telegram-fake`**.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-140 / T34 `smoke:telegram-fake`** plus **JAC-139 gate-flake stabilization**. Continue with **JAC-141 / T35 `smoke:telegram-live` operator-gated harness**.
