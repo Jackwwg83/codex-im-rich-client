@@ -46,6 +46,12 @@ importers:
         specifier: workspace:*
         version: link:../testkit
 
+  packages/channel-core:
+    dependencies:
+      '@codex-im/render':
+        specifier: workspace:*
+        version: link:../render
+
   packages/cli:
     dependencies:
       '@codex-im/app-server-client':
