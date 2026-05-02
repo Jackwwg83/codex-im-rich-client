@@ -557,10 +557,10 @@ describe("Supervisor T11b — close handling (idempotence + backoff + halt)", ()
     await vi.advanceTimersByTimeAsync(600);
   });
 
-  it("calls runtime.events.endOfStream on transport close (drains EventNormalizer)", async () => {
+  it("calls runtime.events.endWithTransportLostSynthetic on transport close", async () => {
     vi.useFakeTimers();
 
-    // Use vi.spyOn to observe endOfStream — preserves all other
+    // Use vi.spyOn to observe endWithTransportLostSynthetic — preserves all other
     // EventNormalizer behavior (codex T11b review P2-2: the prior
     // Proxy-based approach would have broken events.events()'s
     // private-field access if any other test path relied on it).
@@ -573,7 +573,7 @@ describe("Supervisor T11b — close handling (idempotence + backoff + halt)", ()
     const broker = new ApprovalBroker(placeholderClient);
     broker.attach();
 
-    const endOfStreamSpies: ReturnType<typeof vi.spyOn>[] = [];
+    const endWithTransportLostSyntheticSpies: ReturnType<typeof vi.spyOn>[] = [];
 
     const opts: SupervisorOptions = {
       transportFactory: () => {
@@ -582,7 +582,9 @@ describe("Supervisor T11b — close handling (idempotence + backoff + halt)", ()
       },
       clientFactory: (_t) => lastEmission.client,
       runtimeFactory: (_c) => {
-        endOfStreamSpies.push(vi.spyOn(lastEmission.runtime.events, "endOfStream"));
+        endWithTransportLostSyntheticSpies.push(
+          vi.spyOn(lastEmission.runtime.events, "endWithTransportLostSynthetic"),
+        );
         return lastEmission.runtime;
       },
       broker,
@@ -592,10 +594,10 @@ describe("Supervisor T11b — close handling (idempotence + backoff + halt)", ()
 
     const sup = new Supervisor(opts);
     await sup.start();
-    expect(endOfStreamSpies[0]?.mock.calls.length ?? 0).toBe(0);
+    expect(endWithTransportLostSyntheticSpies[0]?.mock.calls.length ?? 0).toBe(0);
 
     sup._handleTransportCloseForTest(0);
-    expect(endOfStreamSpies[0]?.mock.calls.length ?? 0).toBe(1);
+    expect(endWithTransportLostSyntheticSpies[0]?.mock.calls.length ?? 0).toBe(1);
 
     // Tear down to cancel the pending re-spawn timer and avoid
     // recovery firing.

@@ -706,6 +706,56 @@ describe("EventNormalizer happy path (T7a)", () => {
     await teardown(h);
   });
 
+  it("endWithTransportLostSynthetic() appends turn_failed for each pending turn before done", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-pending-1", items: [], status: "inProgress" },
+    });
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-completed", items: [], status: "inProgress" },
+    });
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-2",
+      turn: { id: "turn-pending-2", items: [], status: "inProgress" },
+    });
+    h.fake.emitNotification("turn/completed", {
+      threadId: "thread-1",
+      turn: { id: "turn-completed", items: [], status: "completed" },
+    });
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-3",
+      turn: { id: "turn-pending-3", items: [], status: "inProgress" },
+    });
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    h.normalizer.endWithTransportLostSynthetic();
+
+    const out: CodexRichEvent[] = [];
+    for (let i = 0; i < 8; i++) {
+      const next = await it.next();
+      if (next.done) break;
+      out.push(next.value);
+    }
+    const done = await it.next();
+
+    const failures = out.filter(
+      (ev): ev is Extract<CodexRichEvent, { type: "turn_failed" }> => ev.type === "turn_failed",
+    );
+    expect(failures.map((ev) => [ev.threadId, ev.turnId, ev.cause])).toEqual([
+      ["thread-1", "turn-pending-1", "transport_lost"],
+      ["thread-2", "turn-pending-2", "transport_lost"],
+      ["thread-3", "turn-pending-3", "transport_lost"],
+    ]);
+    expect(failures.map((ev) => ev.turnId)).not.toContain("turn-completed");
+    expect(done.done).toBe(true);
+
+    await teardown(h);
+  });
+
   it("events() returns the SAME iterator on every call (single-consumer contract — codex T7a review #1)", async () => {
     const h = harness();
     const a = h.normalizer.events();

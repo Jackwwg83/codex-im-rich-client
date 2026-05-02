@@ -42,3 +42,8 @@ export type { ProjectApprovalOptions } from "./project-approval.js";
 // (localization is adapter scope per D17).
 export { formatPlainText } from "./plain-text.js";
 export type { ChannelCapabilities } from "./plain-text.js";
+
+// Phase 3 T19d: text projection for synthetic turn_failed events emitted on
+// codex transport loss. Structural input keeps render decoupled from runtime.
+export { formatTurnFailed } from "./turn-failed.js";
+export type { TurnFailedRenderEvent } from "./turn-failed.js";

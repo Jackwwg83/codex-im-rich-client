@@ -444,15 +444,10 @@ export class Supervisor {
    *      lifecycle guarantees this is race-free; AppServerClient.respond
    *      on a closed client is a no-op so the wire frame is harmlessly
    *      dropped.
-   *   3. `runtime.events.endOfStream()` — signals the EventNormalizer
-   *      that no more notifications will arrive on this generation.
-   *      Consumers awaiting `runtime.events.events()` see `done: true`
-   *      after the queue drains. (Plan §2108 originally specified
-   *      synthetic `turn_failed` events per pending turn; this would
-   *      require turn-tracking state on the runtime which doesn't
-   *      exist yet. Calling endOfStream is the minimum-viable
-   *      Phase 1 contract; Phase 2 IM adapter integration can extend
-   *      to per-turn synthesis if the consumer needs it.)
+   *   3. `runtime.events.endWithTransportLostSynthetic()` — signals the
+   *      EventNormalizer that no more notifications will arrive on this
+   *      generation and appends one `turn_failed` synthetic for each
+   *      in-flight turn before `{done:true}`.
    *   4. `audit.emit` — informational record of the close + cleanup.
    *   5. `#consecutiveFailures++` — bounded retry counter. Reset to 0
    *      on a successful subsequent spawn (in `#spawnFresh`).
@@ -479,9 +474,10 @@ export class Supervisor {
     // Step 2: fail pending approvals as transport-lost (D6).
     this.#opts.broker.failPendingAsTransportLost();
 
-    // Step 3: signal the EventNormalizer to drain + close iterator.
+    // Step 3: signal the EventNormalizer to synthesize transport-lost
+    // terminal turns, drain, and close the iterator.
     if (this.#currentRuntime !== null) {
-      this.#currentRuntime.events.endOfStream();
+      this.#currentRuntime.events.endWithTransportLostSynthetic();
     }
 
     // Step 4: audit.

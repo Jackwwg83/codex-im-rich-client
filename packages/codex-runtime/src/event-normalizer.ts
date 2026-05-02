@@ -112,6 +112,7 @@ function sanitizeCap(v: number | undefined, fallback: number): number {
 
 type Resolver = (ev: IteratorResult<CodexRichEvent>) => void;
 type QueueEntry = { ev: CodexRichEvent; cls: EventClass };
+type PendingTurn = { threadId: string; turnId: string };
 
 export class EventNormalizer {
   // Single FIFO queue (D5 final invariant). Each entry wraps the rich
@@ -123,6 +124,7 @@ export class EventNormalizer {
   #endOfStream = false;
   #unsub: Unsubscribe;
   #iterator: AsyncIterableIterator<CodexRichEvent> | null = null;
+  #pendingTurns = new Map<string, PendingTurn>();
 
   // Backpressure accounting (T7b-2).
   readonly #deltaSoftCap: number;
@@ -185,6 +187,25 @@ export class EventNormalizer {
     this.endOfStream();
   }
 
+  /**
+   * Transport-loss source-ended path. Synthesizes one terminal `turn_failed`
+   * event for every turn that started in this runtime generation and has not
+   * yet emitted a terminal turn event, then closes through the D42 synthetic
+   * drain contract.
+   */
+  endWithTransportLostSynthetic(): void {
+    if (this.#cancelled || this.#endOfStream) return;
+    const events = Array.from(this.#pendingTurns.values(), ({ threadId, turnId }) => ({
+      type: "turn_failed" as const,
+      threadId,
+      turnId,
+      cause: "transport_lost" as const,
+      raw: { synthetic: true, cause: "transport_lost" },
+      terminal: true as const,
+    }));
+    this.endWithSynthetic(events);
+  }
+
   // ─── Internals ───────────────────────────────────────────────────
 
   #onNotification(msg: JsonRpcNotification): void {
@@ -222,6 +243,8 @@ export class EventNormalizer {
    *      `normalizer_overflow{class:"lifecycle"}` at the front.
    */
   #enqueue(ev: CodexRichEvent, cls: EventClass): void {
+    this.#trackTurnState(ev);
+
     if (cls === "delta" && this.#deltaCount >= this.#deltaSoftCap) {
       for (let i = 0; i < this.#queue.length; i++) {
         const entry = this.#queue[i];
@@ -565,6 +588,28 @@ export class EventNormalizer {
     const entry = this.#queue.shift();
     if (entry?.cls === "delta") this.#deltaCount--;
     return entry;
+  }
+
+  #trackTurnState(ev: CodexRichEvent): void {
+    switch (ev.type) {
+      case "turn_started":
+        this.#pendingTurns.set(this.#turnKey(ev.threadId, ev.turnId), {
+          threadId: ev.threadId,
+          turnId: ev.turnId,
+        });
+        return;
+      case "turn_completed":
+      case "turn_failed":
+      case "turn_interrupted":
+        this.#pendingTurns.delete(this.#turnKey(ev.threadId, ev.turnId));
+        return;
+      default:
+        return;
+    }
+  }
+
+  #turnKey(threadId: string, turnId: string): string {
+    return `${threadId}\0${turnId}`;
   }
 
   #drain(): void {

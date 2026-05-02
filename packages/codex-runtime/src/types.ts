@@ -48,6 +48,8 @@ export type CodexRichEvent =
       type: "turn_failed";
       threadId: string;
       turnId: string;
+      /** Present on daemon-synthesized failures when codex transport is lost. */
+      cause?: "transport_lost";
       raw: unknown;
       terminal: true;
     }
