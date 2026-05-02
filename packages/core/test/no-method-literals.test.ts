@@ -60,8 +60,9 @@ const SCANNED_DIRS = [
   // Phase 2 additions:
   "packages/render/src",
   "packages/channel-core/src",
-  // packages/im-telegram/src — added when D17 Option B is approved.
-  // Phase 2 default is Option A (NOT shipped), so the dir is absent.
+  // Phase 3 T20: real Telegram adapter package. It must not carry
+  // Codex App Server method literals; it consumes ChannelAdapter only.
+  "packages/im-telegram/src",
   // Plus the broker's own package — to assert ONLY the two authorized
   // files contain literals.
   "packages/core/src",

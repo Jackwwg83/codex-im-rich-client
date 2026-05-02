@@ -148,6 +148,12 @@ importers:
         specifier: ^9
         version: 9.14.0
 
+  packages/im-telegram:
+    dependencies:
+      '@codex-im/channel-core':
+        specifier: workspace:*
+        version: link:../channel-core
+
   packages/render:
     dependencies:
       '@codex-im/core':
