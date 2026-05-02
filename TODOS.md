@@ -92,6 +92,61 @@ summary and Phase 2 hand-off.
 - [x] ~~**`AppServerClient` ONE-SHOT lifecycle JSDoc**~~ — applied in commit `2055646`. Header documents 7-step supervisor recovery protocol.
 - [x] ~~**`pnpm audit` baseline**~~ — clean run recorded in `docs/phase-0/host-environment.md` Security baseline section. 193 deps, 0 vulnerabilities.
 
+## Phase 2 implementation backlog ✅ COMPLETE 2026-05-02
+
+All T2-T22 implementation shipped. T7-T12 + T13-T17 codex outside-voice
+reviewed (verdict GO after fix arcs). T18-T22 outside-voice review
+deferred — codex CLI hung in implementer's environment when these landed.
+T24 will run integrated review across `phase-1-runtime-complete..HEAD`.
+Test count 320 → 720. See
+`docs/handoffs/2026-05-02-phase2-to-phase3.md` for full close-out summary.
+
+| Item | Commits | Review |
+|---|---|---|
+| T2 ApprovalRequestKind classifier | `89968ee` | folded into T7-T12 review |
+| T3 AuditEmitter + 12 kinds | `bd99dd1` | folded into T7-T12 review |
+| T4 redact relocated to core (14 patterns) | `782ecdb` | `codex-review-t4.md` |
+| T5 audit emit applies redact | `6530665` + `bc7de48` polish | `codex-review-t5.md` |
+| T6 Phase 2 type surface | `4e95f50` | folded into T7-T12 review |
+| T7 broker public surface (#pendingById + emitters + #settleEntry) | `9109e91` | T7-T12 combined |
+| T8 enablePendingMode (D18 three-mode dispatcher) | `a2092c7` | T7-T12 combined |
+| T9 bindActorPolicy storage | `1b16471` | T7-T12 combined |
+| T10 decision-mapper + actionToDecision | `34a3c2c` | T7-T12 combined |
+| T11 broker.resolve centerpiece (9 ResolveError + lazy expiry + actor binding) | `0a6a477` | T7-T12 combined |
+| T12 fake e2e happy path | `704ed28` | T7-T12 combined |
+| **T7-T12 Codex review fixes** (P0 toSnapshot defensive copy + 3xP1 + P2 ttl) | `231f653` | re-review GO |
+| T13 render package skeleton | `4da5842` | T13-T17 combined |
+| T14 RichBlock + ApprovalCard + ApprovalAction | `e1993dd` | T13-T17 combined |
+| T15 truncate + redact re-export | `092e8dc` | T13-T17 combined |
+| T16 project-approval per-kind | `3f04f86` | T13-T17 combined |
+| T17 plain-text capability fallback | `6e3516f` | T13-T17 combined |
+| **T13-T17 Codex review fixes** (P1 command field + P1 createdAt copy + P2 frozen arrays + P2 T-G1 expansion + P2 dropped protocol dep) | `7f6b6a1` | re-review GO |
+| T18 channel-core skeleton + types + boundary tests | `a08cc81` | deferred to T24 |
+| T19 ChannelAdapter (D14 closed) + TelegramShapeFakeChannelAdapter | `acea679` | deferred to T24 |
+| T20 method-literal grep guard scope extension | `27c3c76` | deferred to T24 |
+| T21 full e2e (14 paths + index stress + bounds) | `0a121e2` | deferred to T24 |
+| T22 supervisor pre-attached-broker invariant (D16) | `d452391` | deferred to T24 |
+
+## Phase 3 backlog candidates (not yet planned — picked by /plan-eng-review)
+
+These are the natural Phase 3 candidates surfaced during Phase 2. Phase 3
+mission picks a subset; full list maintained in
+`docs/handoffs/2026-05-02-phase2-to-phase3.md` §"Recommended Phase 3 mission".
+
+- [ ] **`@codex-im/im-telegram`** — real Telegram adapter implementing the closed `ChannelAdapter` interface (uses grammY or native Bot API; respects `TelegramShapeFakeChannelAdapter` constraints).
+- [ ] **Production daemon wire-up** — replace test-only `phase2-e2e-rig.ts` daemon-wireup function with a real `@codex-im/daemon` module subscribing broker.onPendingCreated → projectAsRichBlock → adapter.sendCard → bindActorPolicy.
+- [ ] **SecurityPolicy ACL** — Phase 2 left `SecurityPolicy` as `phase1-noop`. Phase 3 fills in: per-target/actor allowlist before bindActorPolicy; deny-app/deny-command lists.
+- [ ] **Audit log SQLite migration** — Phase 2 ring buffer is in-memory only. Phase 3 adds durable SQLite-backed audit + ring-as-cache + prune sweep for terminal records (#pendingById grows unbounded otherwise).
+- [ ] **launchd integration** — daemon as a macOS launchd service for Mac mini deployment.
+- [ ] **Synthesized turn_failed events** — when transport closes mid-turn, EventNormalizer should synthesize a `turn_failed` event for the IM layer.
+- [ ] **Computer Use approval flow** (Phase 6) — `tool_call` kind currently default-rejects.
+- [ ] **Supervisor reattach + stale request test (T21.2.12 deferred)** — full daemon-side test of "old approvalId resolve returns transport_lost across generation reattach". Phase 2 covered the broker side; Phase 3 wires the supervisor.
+- [ ] **Lazy-prune sweep for terminal records** — `#pendingById` retains terminal records for audit lookup; Phase 3 sweep prevents unbounded growth.
+- [ ] **Structured secret detector** — current `redact.ts` is regex-based. Phase 3 may add structured detection for known credential prefixes with parsed-context awareness.
+- [ ] **Per-kind risk-level computation from params** — Phase 2 KIND_TABLE has fixed risk levels; Phase 3 may derive from params content (e.g. `command_execution` with `rm -rf` in argv → critical).
+- [ ] **Localization for plain-text fallback** — Phase 2 ships English defaults; Phase 3 + adapter scope owns i18n.
+- [ ] **MaxListenersExceededWarning during stress test** — `phase2-e2e-secondary-index.test.ts` triggers 100 concurrent emitServerRequests; bump max listeners on InMemoryTransport.
+
 ## Phase 2 P2 polish backlog (round-3 deep-review deferred, 2026-05-01)
 
 5 P2 test-hardening items surfaced by the post-T3 Codex deep review (`/tmp/phase2-deep-review-output.txt`). User chose Option B+ at round-3: apply 6 P1 + 2 docs-P2 immediately; defer these 5 test-hardening items to organic future tasks. None block T4 / Phase 2 progress; pick up when the relevant task naturally touches them.

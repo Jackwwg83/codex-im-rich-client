@@ -104,13 +104,23 @@ in one place when codex bumps versions.
 **ServerRequest method literals** (e.g. `"item/fileChange/requestApproval"`,
 `"applyPatchApproval"`, `"account/chatgptAuthTokens/refresh"`):
 
-- The approved home: `packages/core/src/approval-broker.ts` —
-  `DispatchTable` typed `as const satisfies Record<ServerRequest["method"],
-  DispatcherSpec>` plus the `_ExhaustiveDispatch` type-level guard.
-- T9b Step 9b.6's `packages/core/test/no-method-literals.test.ts` runs
-  `git grep -F` over `packages/{app-server-client,codex-runtime,daemon,
-  cli}/src/**` for each of the 9 generated method names and fails on
-  any match. The guard's scope IS the boundary for production source.
+- Two approved homes (Phase 1 + Phase 2):
+  - `packages/core/src/approval-broker.ts` — `DispatchTable` typed
+    `as const satisfies Record<ServerRequest["method"], DispatcherSpec>`
+    plus the `_ExhaustiveDispatch` type-level guard.
+  - `packages/core/src/approval-request-kind.ts` (Phase 2 T2 / D18) —
+    `METHOD_TO_KIND` table used by `classifyApprovalRequest()`. This
+    is the SOLE place renderer / channel-core / wire-up code reaches
+    when classifying an approval; downstream code never reads the
+    raw method string.
+- T20 (Phase 2) replaced the Phase 1 `git grep -F` pipeline with a
+  filesystem walk over an explicit allowlist
+  (`packages/core/test/no-method-literals.test.ts` `SCANNED_DIRS` +
+  `ALLOWED_FILES`). Scope extended to `packages/render/src/**`,
+  `packages/channel-core/src/**`, plus `packages/im-*/src/**` (when
+  shipped). Plus an explicit T20.3 assertion that
+  `packages/core/src/decision-mapper.ts` contains zero method literals
+  (mapper switches on `ApprovalRequestKind`, never on raw strings).
 - Synthetic unknown-method tests must use names like `"future/unseen/
   method"` and must not pretend to be real approval protocol methods.
 
@@ -133,14 +143,59 @@ in one place when codex bumps versions.
 - `packages/cli/src/**` — raw `client.request("thread/start", ...)` etc.
   Use `CodexRuntime` wrappers.
 - `packages/daemon/src/**` — same.
-- Future `packages/im-*/src/**` (Phase 2+) — same.
+- `packages/render/src/**` (Phase 2 +) — renderer switches on
+  `ApprovalRequestKind` from `classifyApprovalRequest()`, never on
+  raw method strings. F1 boundary.
+- `packages/channel-core/src/**` (Phase 2 +) — channel adapters
+  consume `ApprovalAction` (= `ApprovalUiAction`) only; the wire
+  shape is the broker's concern.
+- Future `packages/im-*/src/**` (Phase 3+) — same.
 - `packages/codex-runtime/src/**` — except inside the `REQUEST_METHODS`
   const table itself.
-- `packages/core/src/**` — except inside the `DispatchTable` keys + the
-  9 method literals required to populate the table.
+- `packages/core/src/**` — except inside `approval-broker.ts`'s
+  `DispatchTable` keys AND `approval-request-kind.ts`'s `METHOD_TO_KIND`
+  table. `decision-mapper.ts` MUST switch on `ApprovalRequestKind`
+  (T20.3 explicit assertion).
 
 If a future audit script needs to reference a method literal in
 production source code, document it in this section before adding.
+
+## Phase 2 redlines (carry forward to Phase 3+)
+
+In addition to the project-wide redlines (start of this file):
+
+- ❌ **No first-actor-wins** — `bindActorPolicy` is the only way to grant
+  approval permission. `resolve()` validates per-card per call.
+  See `packages/core/src/approval-broker.ts` `actorAllowed` /
+  `targetEqual`. (D19 / Codex round-1 P0-5)
+- ❌ **No `expirePending()` as a security boundary** — `expirePending`
+  is a sweep utility for audit/metrics. `resolve()` MUST also
+  lazy-check `Date.now() >= expiresAt` before settle (D20 / Codex
+  missing #4 / T11.3).
+- ❌ **No `entry.settleOnce` modification** — body byte-for-byte
+  locked at Phase 1 tag. All settle paths route through
+  `#settleEntry` (D21). Byte-identical guard test exists in
+  `packages/core/test/approval-broker-t7-public-surface.test.ts`.
+- ❌ **No `"approve"` wire decision** — v2 = `"accept"`; legacy =
+  `"approved"`. Mapper switches per `ApprovalRequestKind` (D11 /
+  Codex round-1 P1-1). `packages/core/src/decision-mapper.ts`.
+- ❌ **Production = `Supervisor`; `runtime-send` = dev/operator only**
+  (Codex Q6 / D16 / T22). `Supervisor.#spawnFresh` head asserts
+  `broker.isAttached()` with a load-bearing error message naming the
+  split. Daemon production wire-up MUST attach the broker before
+  passing it to Supervisor.
+- ❌ **F13 channel-core boundary** — `packages/channel-core/src/**`
+  has NO runtime import of `@codex-im/core`, `@codex-im/codex-runtime`,
+  or `@codex-im/app-server-client`. Type-only consumption via
+  `@codex-im/render` is allowed. Boundary tests
+  `packages/channel-core/test/no-broker-import.test.ts` +
+  `no-protocol-import.test.ts` enforce.
+- ❌ **C-P1 unknown-snapshot must render decline-only** — if a
+  `PendingApprovalSnapshot` reaches the renderer with
+  `classifyApprovalRequest(method) === "unknown"`, project to a
+  decline-only `ApprovalCard` with `target.riskLevel = "critical"`,
+  `actions = [{kind: "decline"}]`. Broker's `#handle` already
+  fail-closes at `-32601`; this is defense-in-depth at the renderer.
 
 ## 结束任务前检查
 

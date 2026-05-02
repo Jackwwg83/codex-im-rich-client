@@ -9,7 +9,16 @@
 - `@codex-im/core` — `ApprovalBroker` with B-clean single-completion-promise lifecycle (race-free across handler / expirePending / failPendingAsTransportLost)
 - `@codex-im/daemon` — `Supervisor` with ONE-SHOT lifecycle, exponential-backoff recovery (500ms → 1s → 2s → 4s → 8s), halt-on-spawn-failure
 
-10 codex outside-voice review reports under `docs/phase-1/` plus a tag-gate re-review. 测试数 73 → 320 (315 at T12 close + 5 from tag-gate fix arc: Supervisor cleanup + ClientRequest grep guard). 详见 `docs/superpowers/plans/2026-04-30-phase-1-runtime.md` + `docs/handoffs/2026-05-01-phase1-to-phase2.md`. 下一步：Phase 2 (Telegram MVP).
+10 codex outside-voice review reports under `docs/phase-1/` plus a tag-gate re-review. 测试数 73 → 320 (315 at T12 close + 5 from tag-gate fix arc: Supervisor cleanup + ClientRequest grep guard). 详见 `docs/superpowers/plans/2026-04-30-phase-1-runtime.md` + `docs/handoffs/2026-05-01-phase1-to-phase2.md`.
+
+**Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
+- `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
+- `@codex-im/channel-core` — closed `ChannelAdapter` 接口 (D14) + `TelegramShapeFakeChannelAdapter` (callback_data ≤62B + 60s answerCallbackQuery deadline + parse_mode unsupported, all cited from Telegram Bot API)
+- `@codex-im/core` 扩展：`enablePendingMode<M>` (D18 三模式 dispatcher) + `bindActorPolicy` (D19 per-card actor 绑定) + `resolve()` (happy + 9 `ResolveError` 分支 + lazy expiry + actor validation) + `actionToDecision` + `mapDecisionForPending` (D11 per-kind wire 映射) + `AuditEmitter` (D13 12 个枚举 kind) + `redact` 14 patterns + `isAttached()` + `approvalTtlMs` 构造函数选项
+
+测试数 320 → 720 (+400 across approval surface + render + channel-core + e2e)。9 个包 (Phase 1 7 → +render +channel-core)。详见 `docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md` + `docs/handoffs/2026-05-02-phase2-to-phase3.md`. 下一步：Phase 3 (real Telegram adapter / production daemon wire-up / SecurityPolicy ACL — by /plan-eng-review).
+
+> ⚠️ **Production = Supervisor; runtime-send = dev/operator only.** Daemon 生产入口必须先 `broker.attach()` 再交给 `Supervisor`。`runtime-send` smoke 是 dev/operator 工具，不是产品入口。Codex Q6 / D16 / T22 invariant fires at `Supervisor.#spawnFresh` head if broker isn't pre-attached.
 
 ## Phase 0 quick start
 
@@ -27,8 +36,8 @@ pnpm check:codex-version       # OK: 0.125.0
 pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol/
 
 # 3. 全量验证
-pnpm typecheck                 # all 7 packages (Phase 1 added codex-runtime, core, daemon)
-pnpm test                      # 320 tests pass (unit + contract)
+pnpm typecheck                 # all 9 packages (Phase 2 added render + channel-core)
+pnpm test                      # 720 tests pass + 1 skipped (unit + contract)
 pnpm lint                      # biome check
 
 # 4. 操作员手动 smoke (非默认测试)
