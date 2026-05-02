@@ -15,10 +15,24 @@ export type {
   ApprovalActor,
   ApprovalDecision,
   ApprovalRecord,
-  SecurityPolicy,
 } from "./types.js";
 export { ApprovalBroker } from "./approval-broker.js";
 export type { DispatcherSpec } from "./approval-broker.js";
+export { SecurityPolicy } from "./security-policy.js";
+export type {
+  SecurityPolicyApprovalDestinationDecision,
+  SecurityPolicyAutoDeclineDecision,
+  SecurityPolicyCommandConfig,
+  SecurityPolicyCommandDecision,
+  SecurityPolicyConfig,
+  SecurityPolicyDecision,
+  SecurityPolicyDenyDecision,
+  SecurityPolicyProjectConfig,
+  SecurityPolicyRequireAdminDecision,
+  SecurityPolicySender,
+  SecurityPolicySnapshot,
+  SecurityPolicyUserChatDecision,
+} from "./security-policy.js";
 
 // Phase 2 T2 — ApprovalRequestKind classifier (the only Phase 2 production
 // source allowed to read raw approval server-request method strings; see

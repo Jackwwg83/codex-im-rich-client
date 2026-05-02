@@ -8,18 +8,14 @@
 //                        admits the system + im shapes so Phase 2 doesn't
 //                        need an audit-row migration.
 //   ApprovalRecord     — broker's pending/resolved/expired bookkeeping.
-//   SecurityPolicy     — Phase 1 noop interface (Phase 3 fills in).
+//   SecurityPolicy     — Phase 1 used a noop sentinel; Phase 3 replaces
+//                        it with a real synchronous policy surface.
 //
 // Logic-bearing tests (single-handler invariant, exhaustive method
 // dispatch, transport-loss propagation) land in T9a/T9b.
 
 import { describe, expect, it } from "vitest";
-import type {
-  ApprovalActor,
-  ApprovalDecision,
-  ApprovalRecord,
-  SecurityPolicy,
-} from "../src/index.js";
+import type { ApprovalActor, ApprovalDecision, ApprovalRecord } from "../src/index.js";
 
 describe("@codex-im/core skeleton (T5)", () => {
   it("ApprovalDecision is a discriminated union narrowable on `kind`", () => {
@@ -103,8 +99,8 @@ describe("@codex-im/core skeleton (T5)", () => {
     expect(all.length).toBe(4);
   });
 
-  it("SecurityPolicy is a Phase 1 noop interface (Phase 3 fills in)", () => {
-    const p: SecurityPolicy = { version: "phase1-noop" };
-    expect(p.version).toBe("phase1-noop");
+  it("SecurityPolicy noop sentinel has moved to the Phase 3 policy module", async () => {
+    const mod = await import("../src/security-policy.js");
+    expect(mod.SecurityPolicy).toBeDefined();
   });
 });

@@ -11,8 +11,8 @@
 //                       existing audit rows.
 //   ApprovalRecord    — broker bookkeeping for pending / resolved /
 //                       expired / transport_lost approvals.
-//   SecurityPolicy    — Phase 1 noop interface; Phase 3 fills in the
-//                       white-list / deny-pattern / Computer-Use policy.
+//   SecurityPolicy    — Phase 1 used a noop sentinel. Phase 3 moves the
+//                       real policy surface to `security-policy.ts`.
 //
 // Logic-bearing additions (single-handler invariant, exhaustive method
 // dispatch table, per-method v2 response mappers, transport-loss
@@ -179,26 +179,6 @@ export type ApprovalRecord = {
   expiresAt: Date;
   decidedAt?: Date;
   decision?: ApprovalDecision;
-};
-
-/**
- * Phase 1 noop sentinel. Phase 3 widens this into a discriminated
- * union, e.g.:
- *
- *   export type SecurityPolicy =
- *     | { readonly version: "phase1-noop" }
- *     | { readonly version: "phase3"; allowed: ...; deny: ...; ... };
- *
- * A `type` alias is used (not an `interface`) precisely so Phase 3 can
- * extend by adding a union arm without changing T5 callers — codex
- * outside-voice T5 review #2.
- *
- * Keeping the noop sentinel here in T5 lets T9a / T9b stub it out via
- * dependency injection (rather than a `null` SecurityPolicy field that
- * Phase 3 would have to reshape).
- */
-export type SecurityPolicy = {
-  readonly version: "phase1-noop";
 };
 
 // ─── Phase 2 T6 additions (D11 / D12 / D19 / D20) ──────────────────────────
