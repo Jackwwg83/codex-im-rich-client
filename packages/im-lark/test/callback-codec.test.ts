@@ -23,7 +23,7 @@ describe("Lark callback payload codec (JAC-156)", () => {
     expect(extractLarkActionWirePayload(firstButtonValue(card))).toBe(VALID_WIRE_PAYLOAD);
   });
 
-  it("also accepts an already-normalized exact wire payload string", () => {
+  it("accepts only an already-normalized exact wire payload string", () => {
     expect(extractLarkActionWirePayload(VALID_WIRE_PAYLOAD)).toBe(VALID_WIRE_PAYLOAD);
   });
 
@@ -51,6 +51,7 @@ describe("Lark callback payload codec (JAC-156)", () => {
     true,
     [],
     {},
+    { wirePayload: VALID_WIRE_PAYLOAD },
     { wirePayload: undefined },
     { wirePayload: "approval-1|decline|nonce" },
     { wirePayload: VALID_WIRE_PAYLOAD, action: "decline" },
@@ -79,15 +80,11 @@ describe("Lark callback payload codec (JAC-156)", () => {
   });
 
   it("redacts decoded and rejected payloads for future logs", () => {
-    expect(redactLarkActionPayloadForLog({ wirePayload: VALID_WIRE_PAYLOAD })).toBe(
-      "v1:[redacted]",
-    );
+    expect(redactLarkActionPayloadForLog(VALID_WIRE_PAYLOAD)).toBe("v1:[redacted]");
     expect(redactLarkActionPayloadForLog({ approvalId: "approval-must-not-log" })).toBe(
       "[invalid-lark-action-payload]",
     );
-    expect(redactLarkActionPayloadForLog({ wirePayload: VALID_WIRE_PAYLOAD })).not.toContain(
-      VALID_WIRE_PAYLOAD,
-    );
+    expect(redactLarkActionPayloadForLog(VALID_WIRE_PAYLOAD)).not.toContain(VALID_WIRE_PAYLOAD);
     expect(redactLarkActionPayloadForLog({ approvalId: "approval-must-not-log" })).not.toContain(
       "approval-must-not-log",
     );

@@ -19,11 +19,9 @@ function loadFixture(name: string): LarkRawCardActionInput {
 class FakeLarkEventDispatcher implements LarkEventDispatcherLike {
   readonly handlers: Array<(event: LarkRawCardActionInput) => void | Promise<void>> = [];
 
-  register(
-    event: "card.action.trigger",
-    handler: (event: LarkRawCardActionInput) => void | Promise<void>,
-  ) {
-    if (event === "card.action.trigger") {
+  register(handlers: Parameters<NonNullable<LarkEventDispatcherLike["register"]>>[0]) {
+    const handler = handlers["card.action.trigger"];
+    if (handler !== undefined) {
       this.handlers.push(handler);
     }
     return this;
@@ -144,7 +142,7 @@ describe("LarkChannelAdapter.onAction card.action.trigger mapping (JAC-157)", ()
     adapter.onAction(() => {});
 
     await expect(adapter.start()).rejects.toThrow(
-      'LarkChannelAdapter.onAction requires register("card.action.trigger")',
+      "LarkChannelAdapter.start requires EventDispatcher.register",
     );
   });
 });

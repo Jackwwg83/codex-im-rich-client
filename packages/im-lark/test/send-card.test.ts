@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  LARK_CARD_MAX_CONTENT_BYTES,
+  LARK_CARD_UPDATE_MAX_QPS_PER_MESSAGE,
   type LarkApprovalCardJson,
   LarkChannelAdapter,
   type LarkMessageClientLike,
@@ -56,9 +58,18 @@ describe("LarkChannelAdapter.sendCard (JAC-154)", () => {
     expect(serialized).not.toContain("decline");
 
     expect(actionButtons(card).map((button) => button.value)).toEqual([
-      { wirePayload: "v1:ABCDEFGHIJKLMNOP" },
-      { wirePayload: "v1:QRSTUVWXYZ234567" },
+      "v1:ABCDEFGHIJKLMNOP",
+      "v1:QRSTUVWXYZ234567",
     ]);
+  });
+
+  it("pins Lark card payload and update-rate assumptions", () => {
+    const card = renderLarkApprovalCard(CARD);
+    const byteLength = new TextEncoder().encode(JSON.stringify(card)).byteLength;
+
+    expect(byteLength).toBeLessThanOrEqual(LARK_CARD_MAX_CONTENT_BYTES);
+    expect(LARK_CARD_MAX_CONTENT_BYTES).toBe(30 * 1024);
+    expect(LARK_CARD_UPDATE_MAX_QPS_PER_MESSAGE).toBe(5);
   });
 
   it("sends a Lark approval card and maps returned message id into MessageRef", async () => {

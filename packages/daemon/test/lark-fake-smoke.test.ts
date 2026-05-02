@@ -4,6 +4,7 @@ import {
   type LarkActionClientLike,
   LarkChannelAdapter,
   type LarkEventDispatcherLike,
+  type LarkEventHandlerMap,
   type LarkMessageClientLike,
   type LarkRawCardActionInput,
   type LarkRawMessageEvent,
@@ -18,20 +19,25 @@ const LARK_PROMPT_TARGET = { platform: "lark", chatId: "oc_test_private_chat" };
 const LARK_CARD_TARGET = { platform: "lark", chatId: "oc_card_private" };
 
 class FakeLarkEventDispatcher implements LarkEventDispatcherLike {
-  readonly handlers: Array<(event: LarkRawCardActionInput) => void | Promise<void>> = [];
+  readonly actionHandlers: Array<(event: LarkRawCardActionInput) => void | Promise<void>> = [];
+  readonly messageHandlers: Array<(event: LarkRawMessageEvent) => void | Promise<void>> = [];
 
-  register(
-    event: "card.action.trigger",
-    handler: (event: LarkRawCardActionInput) => void | Promise<void>,
-  ) {
-    if (event === "card.action.trigger") {
-      this.handlers.push(handler);
+  register(handlers: LarkEventHandlerMap) {
+    if (handlers["card.action.trigger"] !== undefined) {
+      this.actionHandlers.push(handlers["card.action.trigger"]);
+    }
+    if (handlers["im.message.receive_v1"] !== undefined) {
+      this.messageHandlers.push(handlers["im.message.receive_v1"]);
     }
     return this;
   }
 
-  async inject(event: LarkRawCardActionInput): Promise<void> {
-    await Promise.all(this.handlers.map((handler) => handler(event)));
+  async injectAction(event: LarkRawCardActionInput): Promise<void> {
+    await Promise.all(this.actionHandlers.map((handler) => handler(event)));
+  }
+
+  async injectMessage(event: LarkRawMessageEvent): Promise<void> {
+    await Promise.all(this.messageHandlers.map((handler) => handler(event)));
   }
 }
 
@@ -138,7 +144,7 @@ describe("fake Lark smoke through daemon (JAC-160)", () => {
     });
 
     await daemon.start();
-    adapter._emitRawMessageForTest(loadMessageFixture("private-message.json"));
+    await dispatcher.injectMessage(loadMessageFixture("private-message.json"));
     await flushDaemonHandlers();
 
     expect(sessionRouter.resolve).toHaveBeenCalledWith(LARK_PROMPT_TARGET);
@@ -156,7 +162,7 @@ describe("fake Lark smoke through daemon (JAC-160)", () => {
       activeTurnId: "turn-lark-smoke",
     });
 
-    await dispatcher.inject(loadActionFixture("card-action-private.json"));
+    await dispatcher.injectAction(loadActionFixture("card-action-private.json"));
     await flushDaemonHandlers();
 
     expect(callbackTokenRepository.findByHash).toHaveBeenCalledWith(

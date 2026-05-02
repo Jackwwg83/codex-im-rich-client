@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   LarkChannelAdapter,
+  type LarkEventDispatcherLike,
+  type LarkEventHandlerMap,
   type LarkRawMessageEvent,
   type LarkWsClientLike,
   normalizeLarkRawMessage,
@@ -12,6 +14,21 @@ function fixture(name: string): LarkRawMessageEvent {
   return JSON.parse(
     readFileSync(join("packages/im-lark/test/fixtures", name), "utf8"),
   ) as LarkRawMessageEvent;
+}
+
+class FakeLarkEventDispatcher implements LarkEventDispatcherLike {
+  readonly messageHandlers: Array<(event: LarkRawMessageEvent) => void | Promise<void>> = [];
+
+  register(handlers: LarkEventHandlerMap) {
+    if (handlers["im.message.receive_v1"] !== undefined) {
+      this.messageHandlers.push(handlers["im.message.receive_v1"]);
+    }
+    return this;
+  }
+
+  async injectMessage(event: LarkRawMessageEvent): Promise<void> {
+    await Promise.all(this.messageHandlers.map((handler) => handler(event)));
+  }
 }
 
 describe("Lark message receive fixtures (JAC-152)", () => {
@@ -61,11 +78,16 @@ describe("Lark message receive fixtures (JAC-152)", () => {
   });
 
   it("emits raw message fixtures only after lifecycle start unpauses inbound", async () => {
+    const dispatcher = new FakeLarkEventDispatcher();
     const wsClient: LarkWsClientLike = {
       async start() {},
       close() {},
     };
-    const adapter = new LarkChannelAdapter({ wsClient, now: () => new Date(1777750004000) });
+    const adapter = new LarkChannelAdapter({
+      wsClient,
+      createEventDispatcher: () => dispatcher,
+      now: () => new Date(1777750004000),
+    });
     const received: string[] = [];
 
     adapter.onMessage((msg) => {
@@ -76,8 +98,29 @@ describe("Lark message receive fixtures (JAC-152)", () => {
     expect(received).toEqual([]);
 
     await adapter.start();
-    adapter._emitRawMessageForTest(fixture("private-message.json"));
+    await dispatcher.injectMessage(fixture("private-message.json"));
 
     expect(received).toEqual(["hello codex"]);
+  });
+
+  it("fails closed for malformed message events without throwing from transport handlers", async () => {
+    const dispatcher = new FakeLarkEventDispatcher();
+    const adapter = new LarkChannelAdapter({
+      wsClient: {
+        async start() {},
+        close() {},
+      },
+      createEventDispatcher: () => dispatcher,
+      now: () => new Date(1777750004000),
+    });
+    const received: string[] = [];
+    adapter.onMessage((msg) => {
+      received.push(msg.text);
+    });
+
+    await adapter.start();
+    await expect(dispatcher.injectMessage({ message: { content: "{}" } })).resolves.toBeUndefined();
+
+    expect(received).toEqual([]);
   });
 });

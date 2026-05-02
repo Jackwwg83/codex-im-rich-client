@@ -7,8 +7,10 @@ import {
   type LarkActionClientLike,
   LarkChannelAdapter,
   type LarkEventDispatcherLike,
+  type LarkEventHandlerMap,
   type LarkMessageClientLike,
   type LarkRawCardActionInput,
+  type LarkRawMessageEvent,
   type LarkWsClientLike,
   renderLarkApprovalCard,
 } from "../src/index.js";
@@ -69,20 +71,25 @@ const SENSITIVE_LARK_PATTERNS = [
 ] as const;
 
 class FakeLarkEventDispatcher implements LarkEventDispatcherLike {
-  readonly handlers: Array<(event: LarkRawCardActionInput) => void | Promise<void>> = [];
+  readonly actionHandlers: Array<(event: LarkRawCardActionInput) => void | Promise<void>> = [];
+  readonly messageHandlers: Array<(event: LarkRawMessageEvent) => void | Promise<void>> = [];
 
-  register(
-    event: "card.action.trigger",
-    handler: (event: LarkRawCardActionInput) => void | Promise<void>,
-  ) {
-    if (event === "card.action.trigger") {
-      this.handlers.push(handler);
+  register(handlers: LarkEventHandlerMap) {
+    if (handlers["card.action.trigger"] !== undefined) {
+      this.actionHandlers.push(handlers["card.action.trigger"]);
+    }
+    if (handlers["im.message.receive_v1"] !== undefined) {
+      this.messageHandlers.push(handlers["im.message.receive_v1"]);
     }
     return this;
   }
 
-  async inject(event: LarkRawCardActionInput): Promise<void> {
-    await Promise.all(this.handlers.map((handler) => handler(event)));
+  async injectAction(event: LarkRawCardActionInput): Promise<void> {
+    await Promise.all(this.actionHandlers.map((handler) => handler(event)));
+  }
+
+  async injectMessage(event: LarkRawMessageEvent): Promise<void> {
+    await Promise.all(this.messageHandlers.map((handler) => handler(event)));
   }
 }
 
@@ -138,6 +145,10 @@ function makeHarness(): ContractHarness {
 
 function loadFixture(name: string): LarkRawCardActionInput {
   return JSON.parse(readFileSync(join(FIXTURE_DIR, name), "utf8")) as LarkRawCardActionInput;
+}
+
+function loadMessageFixture(name: string): LarkRawMessageEvent {
+  return JSON.parse(readFileSync(join(FIXTURE_DIR, name), "utf8")) as LarkRawMessageEvent;
 }
 
 function listFiles(root: string, accept: (file: string) => boolean): string[] {
@@ -205,15 +216,13 @@ describe("LarkChannelAdapter contract and boundaries (JAC-159)", () => {
     adapter.onAction(seenActions);
 
     await adapter.start();
-    adapter._emitRawMessageForTest(
-      JSON.parse(readFileSync(join(FIXTURE_DIR, "private-message.json"), "utf8")) as never,
-    );
+    await dispatcher.injectMessage(loadMessageFixture("private-message.json"));
     const sentTextRef = await adapter.sendText(TARGET, "hello lark");
     const replyRef = await adapter.replyText(REF, "reply");
     await adapter.editText(REF, "edited");
     const sentCard = await adapter.sendCard(TARGET, CARD);
     await adapter.updateCard(sentCard.messageRef, { ...CARD, status: "resolved" });
-    await dispatcher.inject(loadFixture("card-action-private.json"));
+    await dispatcher.injectAction(loadFixture("card-action-private.json"));
     const inboundAction = seenActions.mock.calls[0]?.[0];
     await adapter.answerAction(inboundAction.callbackHandle, {
       ok: false,

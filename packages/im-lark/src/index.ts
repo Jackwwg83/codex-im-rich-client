@@ -1,4 +1,5 @@
 export { LarkChannelAdapter } from "./adapter.js";
+export { createLarkSdkAdapterOptions, createLarkSdkChannelAdapter } from "./client.js";
 export {
   decodeLarkCallbackHandle,
   encodeLarkCallbackHandle,
@@ -13,11 +14,18 @@ export type {
 export type {
   LarkActionClientLike,
   LarkChannelAdapterOptions,
+  LarkEventHandlerMap,
   LarkEventDispatcherLike,
   LarkMessageClientLike,
   LarkWsClientLike,
 } from "./adapter.js";
-export { renderLarkApprovalCard } from "./card.js";
+export {
+  assertLarkApprovalCardWithinLimits,
+  LARK_CARD_MAX_CONTENT_BYTES,
+  LARK_CARD_UPDATE_MAX_QPS_PER_MESSAGE,
+  renderLarkApprovalCard,
+} from "./card.js";
+export type { LarkSdkChannelAdapterConfig, LarkSdkDeps } from "./client.js";
 export type {
   LarkApprovalCardButton,
   LarkApprovalCardElement,

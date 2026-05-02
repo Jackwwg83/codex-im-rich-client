@@ -9,9 +9,7 @@
       "name": "Ada"
     },
     "action": {
-      "value": {
-        "wirePayload": "v1:ABCDEFGHIJKLMNOP"
-      }
+      "value": "v1:ABCDEFGHIJKLMNOP"
     },
     "context": {
       "open_chat_id": "oc_card_private",

@@ -1,6 +1,9 @@
 import type { ChannelAdapter } from "@codex-im/channel-core";
 import { isLarkActionWirePayload } from "./callback-codec.js";
 
+export const LARK_CARD_MAX_CONTENT_BYTES = 30 * 1024;
+export const LARK_CARD_UPDATE_MAX_QPS_PER_MESSAGE = 5;
+
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 type ApprovalActionInput = ApprovalCardInput["actions"][number];
 
@@ -30,11 +33,11 @@ export interface LarkApprovalCardButton {
   readonly tag: "button";
   readonly text: { readonly tag: "plain_text"; readonly content: string };
   readonly type: "default" | "primary" | "danger";
-  readonly value: { readonly wirePayload: string };
+  readonly value: string;
 }
 
 export function renderLarkApprovalCard(card: ApprovalCardInput): LarkApprovalCardJson {
-  return {
+  const rendered: LarkApprovalCardJson = {
     schema: "2.0",
     config: { update_multi: true },
     header: {
@@ -56,6 +59,8 @@ export function renderLarkApprovalCard(card: ApprovalCardInput): LarkApprovalCar
       },
     ],
   };
+  assertLarkApprovalCardWithinLimits(rendered);
+  return rendered;
 }
 
 function buttonForAction(action: ApprovalActionInput): LarkApprovalCardButton {
@@ -70,8 +75,15 @@ function buttonForAction(action: ApprovalActionInput): LarkApprovalCardButton {
     tag: "button",
     text: { tag: "plain_text", content: labelForAction(action.kind) },
     type: typeForAction(action.kind),
-    value: { wirePayload },
+    value: wirePayload,
   };
+}
+
+export function assertLarkApprovalCardWithinLimits(card: LarkApprovalCardJson): void {
+  const byteLength = new TextEncoder().encode(JSON.stringify(card)).byteLength;
+  if (byteLength > LARK_CARD_MAX_CONTENT_BYTES) {
+    throw new Error(`Lark approval card exceeds ${LARK_CARD_MAX_CONTENT_BYTES} byte content limit`);
+  }
 }
 
 function labelForAction(kind: ApprovalActionInput["kind"]): string {
