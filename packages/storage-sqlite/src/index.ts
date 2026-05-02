@@ -1,0 +1,49 @@
+// T1.1 (Phase 3) — @codex-im/storage-sqlite package skeleton.
+//
+// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
+//
+// Skeleton: empty exports. Implementation lands in subsequent T-tasks
+// (each enters this package's src/ as its own commit):
+//   T2a  database.ts        openDatabase + WAL pragma + foreign-keys ON
+//   T2b  migration runner   runMigrations(db, dir)
+//   T2c  migration runner idempotency
+//   T3a  001-init migration (schema_version table)
+//   T4a  002-thread_bindings migration + BindingRepository.upsert
+//   T4b  BindingRepository.list + delete
+//   T4c  BindingRepository D38 sync write-through
+//   T5a  003-approvals migration + ApprovalRepository
+//   T5b  ApprovalRepository redact roundtrip
+//   T6a  004-audit migration + AuditRepository
+//   T6b  AuditRepository redact roundtrip
+//   T6c  AuditRepository rate-limited failure (D31)
+//   T6d  007-callback_tokens migration + CallbackTokenRepository (D34)
+//   T6e  callback_tokens hash-only assertion (raw token never persisted)
+//   T6f  callback_tokens action enum round-trip (D34 'abort' not 'cancel')
+//
+// Boundary (D27 + plan §16.2 T1.1 boundary): storage-sqlite has NO
+// upward import of:
+//   @codex-im/core              broker / redact / audit (storage is below)
+//   @codex-im/codex-runtime     runtime / EventNormalizer
+//   @codex-im/app-server-client transport / client
+//   @codex-im/channel-core      adapter contract
+//   @codex-im/protocol          codex protocol types (storage stores
+//                                opaque strings, never protocol shapes)
+//   @codex-im/render            rich-block rendering
+//   @codex-im/daemon            top-level orchestration
+//   @codex-im/im-telegram       Phase 3 platform adapter
+//
+// Boundary tests in test/no-*-import.test.ts enforce. Storage is the
+// LOWEST layer in the Phase 3 stack; core consumes storage via
+// dependency injection (Daemon constructs repositories then injects
+// them into broker / SessionRouter / audit-emit subscribers).
+//
+// What this package will export at end of T6f:
+//   openDatabase                — sync better-sqlite3 wrapper with WAL
+//   runMigrations               — idempotent migration runner
+//   BindingRepository           — chat ⇄ project ⇄ thread bindings
+//   ApprovalRepository          — durable audit copy of approval lifecycle
+//   AuditRepository             — write-through audit ring (D31)
+//   CallbackTokenRepository     — D34 callback_tokens with Target hydration
+//   EventLogRepository          — codex notification log (deferred to Phase 4)
+
+export {};
