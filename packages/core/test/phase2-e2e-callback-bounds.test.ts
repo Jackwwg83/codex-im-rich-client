@@ -36,9 +36,7 @@ async function makeRig(): Promise<{
   cleanup: () => Promise<void>;
 }> {
   const fake = new FakeAppServer();
-  const client = new AppServerClientCtor(fake.clientSide, {
-    clientInfo: { name: "phase2-bounds", title: null, version: "0.0.0-t21.5" },
-  });
+  const client = new AppServerClientCtor(fake.clientSide);
   await client.start();
   const broker = new ApprovalBroker(client);
   broker.attach();

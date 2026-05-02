@@ -37,9 +37,7 @@ async function buildStressRig(): Promise<{
   cleanup: () => Promise<void>;
 }> {
   const fake = new FakeAppServer();
-  const client = new AppServerClientCtor(fake.clientSide, {
-    clientInfo: { name: "phase2-stress", title: null, version: "0.0.0-t21.4" },
-  });
+  const client = new AppServerClientCtor(fake.clientSide);
   await client.start();
   const audit = new AuditEmitter();
   const broker = new ApprovalBroker(client, { audit });

@@ -23,7 +23,6 @@ import {
   AppServerClient as AppServerClientCtor,
 } from "@codex-im/app-server-client";
 import {
-  type ChannelAdapter,
   type InboundAction,
   type SendCardResult,
   type Target,
@@ -39,7 +38,7 @@ export type E2eRig = {
   fake: FakeAppServer;
   client: AppServerClient;
   broker: ApprovalBroker;
-  adapter: ChannelAdapter;
+  adapter: TelegramShapeFakeChannelAdapter;
   audit: AuditEmitter;
   /** Static target the daemon-wireup binds approvals to. */
   target: Target;
@@ -87,9 +86,7 @@ const DEFAULT_PENDING_METHODS = [
 
 export async function buildE2eRig(opts: E2eRigOptions = {}): Promise<E2eRig> {
   const fake = new FakeAppServer();
-  const client = new AppServerClientCtor(fake.clientSide, {
-    clientInfo: { name: "phase2-e2e", title: null, version: "0.0.0-t21" },
-  });
+  const client = new AppServerClientCtor(fake.clientSide);
   await client.start();
   const audit = new AuditEmitter();
   const broker = new ApprovalBroker(client, {

@@ -63,12 +63,6 @@ type StoredCard = {
   readonly callbackData: readonly string[];
 };
 
-let _messageIdSeq = 0;
-function nextMessageId(): string {
-  _messageIdSeq += 1;
-  return `fake-msg-${_messageIdSeq}`;
-}
-
 function generateNonce(): string {
   // Hex of 16 random bytes — 32 chars, ≥16 byte entropy. Avoid
   // crypto.randomUUID() so tests on older runtimes still pass.
@@ -95,6 +89,15 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
   readonly #callbacks = new Map<string, StoredCallback>(); // keyed by callbackHandle
   readonly #edits: Array<{ messageRef: MessageRef; text: string }> = [];
   readonly #acks: Array<{ callbackHandle: string; ack: ActionAck }> = [];
+  // T24 Codex review P1 — instance-scoped messageId sequence so tests
+  // see fresh ids per adapter (was module-scoped before, leaking state
+  // across tests).
+  #messageIdSeq = 0;
+
+  #nextMessageId(): string {
+    this.#messageIdSeq += 1;
+    return `fake-msg-${this.#messageIdSeq}`;
+  }
 
   async start(): Promise<void> {
     this.#started = true;
@@ -134,7 +137,7 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
       }
       callbackData.push(data);
     }
-    const messageId = nextMessageId();
+    const messageId = this.#nextMessageId();
     const messageRef: MessageRef = { target, messageId };
     this.#cards.set(messageId, { callbackNonce, callbackData });
     return { messageRef, callbackNonce };
@@ -187,7 +190,7 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
     this.#assertRunning("sendFile");
     requireCapability(this.capabilities, "supportsAttachments");
     void file;
-    return { target, messageId: nextMessageId() };
+    return { target, messageId: this.#nextMessageId() };
   }
 
   // ─── Test-only injection + inspection ───────────────────────────────

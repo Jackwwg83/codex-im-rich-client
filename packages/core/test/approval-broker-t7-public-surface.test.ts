@@ -40,9 +40,7 @@ async function makeBroker(opts?: { audit?: AuditEmitter }): Promise<{
   cleanup: () => Promise<void>;
 }> {
   const fake = new FakeAppServer();
-  const client = new AppServerClientCtor(fake.clientSide, {
-    clientInfo: { name: "test", title: null, version: "0.0.0-t7" },
-  });
+  const client = new AppServerClientCtor(fake.clientSide);
   await client.start();
   const audit = opts?.audit ?? new AuditEmitter();
   const broker = new ApprovalBroker(client, { audit });
@@ -202,9 +200,7 @@ describe("ApprovalBroker — public read surface (T7 / D12)", () => {
 
   it("isAttached() reflects attach() state", async () => {
     const fake = new FakeAppServer();
-    const client = new AppServerClientCtor(fake.clientSide, {
-      clientInfo: { name: "test", title: null, version: "0.0.0-t7" },
-    });
+    const client = new AppServerClientCtor(fake.clientSide);
     await client.start();
     const broker = new ApprovalBroker(client);
     expect(broker.isAttached()).toBe(false);

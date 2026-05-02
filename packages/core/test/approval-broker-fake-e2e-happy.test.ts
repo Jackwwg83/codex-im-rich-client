@@ -30,9 +30,7 @@ import type { ActorPolicy } from "../src/types.js";
 describe("ApprovalBroker fake e2e happy path (T12 / proves T2-T11 wired)", () => {
   it("attach → enablePendingMode → emit → bind → resolve(allow_once) → wire accept", async () => {
     const fake = new FakeAppServer();
-    const client: AppServerClient = new AppServerClientCtor(fake.clientSide, {
-      clientInfo: { name: "test", title: null, version: "0.0.0-t12" },
-    });
+    const client: AppServerClient = new AppServerClientCtor(fake.clientSide);
     await client.start();
     const audit = new AuditEmitter();
     const broker = new ApprovalBroker(client, { audit });

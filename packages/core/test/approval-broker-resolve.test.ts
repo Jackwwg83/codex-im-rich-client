@@ -31,9 +31,7 @@ async function makeBroker(): Promise<{
   cleanup: () => Promise<void>;
 }> {
   const fake = new FakeAppServer();
-  const client = new AppServerClientCtor(fake.clientSide, {
-    clientInfo: { name: "test", title: null, version: "0.0.0-t11" },
-  });
+  const client = new AppServerClientCtor(fake.clientSide);
   await client.start();
   const audit = new AuditEmitter();
   const broker = new ApprovalBroker(client, { audit });

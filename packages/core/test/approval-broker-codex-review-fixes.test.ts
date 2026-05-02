@@ -31,9 +31,7 @@ async function makeBroker(opts?: {
   cleanup: () => Promise<void>;
 }> {
   const fake = new FakeAppServer();
-  const client = new AppServerClientCtor(fake.clientSide, {
-    clientInfo: { name: "test", title: null, version: "0.0.0-codex-review" },
-  });
+  const client = new AppServerClientCtor(fake.clientSide);
   await client.start();
   const audit = opts?.audit ?? new AuditEmitter();
   const broker = new ApprovalBroker(client, {
@@ -319,9 +317,7 @@ describe("Codex P2 — approvalTtlMs constructor option (D20 honored)", () => {
 
   it("rejects non-positive / non-finite ttl at construction time", async () => {
     const fake = new FakeAppServer();
-    const client = new AppServerClientCtor(fake.clientSide, {
-      clientInfo: { name: "test", title: null, version: "0.0.0-codex-review" },
-    });
+    const client = new AppServerClientCtor(fake.clientSide);
     await client.start();
     expect(() => new ApprovalBroker(client, { approvalTtlMs: 0 })).toThrow(/positive/);
     expect(() => new ApprovalBroker(client, { approvalTtlMs: -1 })).toThrow(/positive/);

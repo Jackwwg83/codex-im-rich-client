@@ -400,21 +400,28 @@ describe("T21.2.12 — reattach + stale request (deferred — supervisor in daem
 // ─── Path 13 — unknown approval id ───────────────────────────────────────
 
 describe("T21.2.13 — unknown_approval_id (resolve with fabricated id)", () => {
-  it("fabricated id → unknown_approval_id error + audit; no settle", async () => {
+  it("fabricated id → unknown_approval_id error + audit; no settle; bad payload in id is redacted", async () => {
     const rig = await buildE2eRig();
     try {
+      // T18-T22 codex review P1(a): even when bad payload lives in the
+      // resolve() input fields (approvalId / callbackNonce), audit
+      // redaction must strip Telegram-token / abs-path substrings.
+      // Each sensitive value is its own contiguous string so the
+      // redact regexes (anchored on the full token shape) match.
+      const badId = `approval-${BAD_PAYLOAD_FIXTURES.telegramBotToken}`;
       const result = await rig.broker.resolve({
-        approvalId: "approval-does-not-exist",
+        approvalId: badId,
         decision: { kind: "decline" },
         actor: rig.allowedActor,
         target: rig.target,
-        callbackNonce: "nonce-anything",
+        callbackNonce: BAD_PAYLOAD_FIXTURES.absPath,
       });
       expect(result.kind).toBe("error");
       if (result.kind === "error") {
         expect(result.error.kind).toBe("unknown_approval_id");
       }
       expect(auditKinds(rig)).toContain("approval.unknown_approval_id");
+      assertNoBadPayloadInAudit(rig);
     } finally {
       await rig.cleanup();
     }
