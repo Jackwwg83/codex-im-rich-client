@@ -10,7 +10,8 @@ across 4 plan revisions and 3+ review rounds → where each is fixed.
 | v1 | `b60a67d` | gstack round 1 (APPROVE_WITH_CHANGES) + codex round 1 (REJECT) | 6 P0 + 6 P1 + 3 P2 | superseded |
 | v2 | `ff1176b` | gstack round 2 (APPROVE_WITH_CHANGES) | 4 P1 + 4 P2, 0 P0 | superseded |
 | v2.1 | `4edfd81` | codex round 2 (REJECT) | 1 P0 + 5 P1 + 3 P2 | superseded |
-| **v2.2** | **(this commit)** | codex round 3 PENDING | TBD | current |
+| v2.2 | `c606039` | codex round 3 (APPROVE_WITH_CHANGES) | 0 P0 + 6 P1 + 3 P2 | superseded |
+| **v2.3** | **(this commit)** | codex round 4 PENDING | TBD | current |
 
 ## Status legend
 
@@ -72,16 +73,17 @@ across 4 plan revisions and 3+ review rounds → where each is fixed.
 
 ## Pre-implementation re-review checklist
 
-Before plan v2.2 is approved for T1:
+Before plan v2.3 is approved for T1:
 
-1. ☑ **gstack `/plan-eng-review` round 2 on plan v2** — APPROVE_WITH_CHANGES, 4 P1 + 4 P2, 0 P0. All round-2 P1s + 2 P2s integrated into v2.1; 2 P2s deferred-justified.
-2. ☑ **Codex outside-voice round 2 on plan v2.1** — REJECT, 1 P0 + 5 P1 + 3 P2. Codex confirmed round-1 P0s + round-2 P1s genuinely fixed; flagged NEW v2.1-introduced defects (boundary mismatch, CAS-pre-validation, single-approval API gap, G8 ordering, init-order test gap). All 1 P0 + 5 P1 + 3 P2 integrated into v2.2 (this revision). See `docs/phase-3/plan-v2.1-codex-round2.md`.
-3. ☐ **Codex outside-voice round 3 on plan v2.2** — verify v2.2's D40 / D41 / D42 amendments + §10.3 step reorder don't introduce new structural risks. Particular focus: D41 boundary amendment is safe under D14 escape clause; D40 single-approval API routes through `#settleEntry` correctly; D42 `endWithSynthetic` doesn't break Phase 1 supervisor's `endOfStream` invariants; §10.3 reorder doesn't create new races (especially the broker.resolve-then-CAS sequence with concurrent clicks).
-4. ☐ Cross-model agreement: Codex round 3 must return APPROVE or APPROVE_WITH_CHANGES on v2.2. Codex REJECT triggers v2.3 or v3 (whichever the user picks).
-5. ☐ (Optional) gstack round 3 on v2.2 — gstack round 2 was on v2; round 3 not strictly required since v2.1 + v2.2 only address codex round-2 findings, but a sanity pass is cheap.
-6. ☐ Verify `pnpm protocol:check` either passes (rebase onto `chore/codex-upgrade-0.128`) or is documented as deferred (T0.5 / R6).
+1. ☑ **gstack `/plan-eng-review` round 2 on plan v2** — APPROVE_WITH_CHANGES, 4 P1 + 4 P2, 0 P0. v2.1 absorbed.
+2. ☑ **Codex outside-voice round 2 on plan v2.1** — REJECT, 1 P0 + 5 P1 + 3 P2. v2.2 absorbed.
+3. ☑ **Codex outside-voice round 3 on plan v2.2** — APPROVE_WITH_CHANGES, 0 P0 + 6 P1 + 3 P2. v2.3 (this revision) absorbed.
+4. ☐ **Codex outside-voice round 4 on plan v2.3** — verify all round-3 P1s + P2s genuinely fixed; verify v2.3 integration edits didn't introduce new defects. Convergence trajectory: REJECT → REJECT → APPROVE_WITH_CHANGES → expected APPROVE or APPROVE_WITH_CHANGES with at most P2 nits.
+5. ☐ Verify `pnpm protocol:check` either passes (rebase onto `chore/codex-upgrade-0.128`) or is documented as deferred (T0.7 / R6).
 
-If Codex round 3 surfaces a new P0, plan v2.2 → v2.3 BEFORE T1.
+If Codex round 4 surfaces a new P0, plan v2.3 → v2.4 (or v3) BEFORE T1.
+If Codex round 4 is APPROVE or APPROVE_WITH_CHANGES with only P2 nits,
+T1 is unlocked (after T0.7 codex-upgrade rebase).
 
 ## v2 → v2.1 round-2 fix matrix
 
@@ -114,3 +116,22 @@ new v2.1-introduced defects.
 | Codex-R2-P2-1 | P2 | T19e.1 test "concurrent click on a non-expired token" doesn't prove the same-row sweep-vs-click race | T19e.1 test reworded to stage same-row race (sweep vs click on same expired bound token); assertion "exactly one path wins, never both" | §16 T19e.1 | fixed |
 | Codex-R2-P2-2 | P2 | §9 says `actor_kind='system'` for D36 auto-decline at INSERT, but D36 issues no token | §9 §10.5 narrowed: actor_kind='system' is schema headroom, NOT used by Phase 3 code paths (D36 issues no callback_token row at all) | §9 | fixed |
 | Codex-R2-P2-3 | P2 | §19/T0 still says "Codex round 2 on v2" in a v2.1 plan | All v2/v2.1 references throughout plan updated to v2.2; §19 exit criteria updated | header + §19 + footer | fixed |
+
+## v2.2 → v2.3 codex round-3 fix matrix
+
+Codex outside-voice round 3 on v2.2 (`c606039`) returned **APPROVE_WITH_CHANGES**
+with 0 P0 + 6 P1 + 3 P2. See `docs/phase-3/plan-v2.2-codex-round3.md`.
+0 P0 confirmed structural design is sound; all findings are
+integration / consistency / refinement.
+
+| Round-3 codex ID | Severity | Finding | v2.3 fix | v2.3 location | Status |
+|---|---|---|---|---|---|
+| Codex-R3-P1-1 | P1 | D41 names T18.1-T18.4 but §16 doesn't define them; existing T18 conflicts | Renamed to T-D41a-d; new §16.4b sub-block defines all 4 tasks before T16/T17 | §16.4b (new) + D41 refs throughout | fixed |
+| Codex-R3-P1-2 | P1 | `SendCardResult.callbackNonce` + `InboundAction.callbackNonce` JSDoc still describes them as broker-bound nonce (stale post-D33) | T-D41b JSDoc amends both fields as "legacy fallback when wirePayload absent"; explicit text in §7 D41 | §7 D41 + T-D41b + T-D41c (JSDoc-stale assertion test) | fixed |
+| Codex-R3-P1-3 | P1 | `duplicate_decision` does not exist on Phase 2 broker; actual error kind is `already_resolved` (with priorDecision field) | Bulk rename throughout plan; T17.12 amended to surface priorDecision | global rename + T17.12 | fixed |
+| Codex-R3-P1-4 | P1 | CAS rowsAffected=0 unsafe semantics — broker has already mutated state; can't truthfully say "already resolved" to user | Codex option-b: rowsAffected=0 unreachable defense-in-depth; on hit emit `audit.cas_unreachable_after_resolve` + force non-CAS UPDATE + answerAction(ok:true) since broker accepted | §10.3 step 5 | fixed |
+| Codex-R3-P1-5 | P1 | §6 redline + D29 step 10 still describe v1's CAS-before-broker order; contradicts §10.3 v2.2 reorder | §6 redline rewritten to mirror §10.3 (validation BEFORE broker.resolve; CAS only on ok); D29 step 10 rewritten with explicit step ordering | §6 + §7 D29 step 10 | fixed |
+| Codex-R3-P1-6 | P1 | D42 `endWithSynthetic` enqueue→endOfStream sequence misses `#drain()`; consumers blocked on `.next()` would hang | D42 sequence updated: `#enqueue(...)` → `#drain()` → `endOfStream()`. New test (e) waiter-already-blocked | §7 D42 + T6.7 test (e) | fixed |
+| Codex-R3-P2-1 | P2 | T0 + §19 still say "Plan v2" / "round 2" / "Exit criteria (v2)" | T0.1-T0.8 rewritten with v2.3 round-4 sequencing; §19 heading updated | §16.1 T0 + §19 heading | fixed |
+| Codex-R3-P2-2 | P2 | §10.2 sketch shows `actor: null` in INSERT record but §9 says `actor_kind='im'` at INSERT | §10.2 sketch aligned: `actor_kind: 'im'`, `actor_user_id: NULL`, `actor_platform: NULL`, `msg_*: NULL` | §10.2 step 1 sketch | fixed |
+| Codex-R3-P2-3 | P2 | T29a Keychain wrapper `--dry-run` could leak token; no fail-closed for missing/empty Keychain output | T29a hardened: `set -euo pipefail`; nonempty-token check before exec; `--dry-run` prints `length=N` not value; new tests for empty-keychain + pipefail behavior | §16.7 T29a | fixed |
