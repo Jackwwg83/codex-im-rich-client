@@ -204,3 +204,25 @@ mission picks a subset; full list maintained in
   - **Where to start**: `packages/app-server-client/src/client.ts` — extend `respond` / `reject` methods, add a small unit test in `packages/app-server-client/test/`. Mirrors the Pre-3 modification pattern.
   - **Source**: T9b blocker fix decision 2026-05-01 (user message). `docs/phase-1/codex-review-t9b.md` finding #1 + plan §"Task 9b blocker-fix" → "Future defensive guardrail".
   - **Not scheduled**: ship only when there's a concrete second case where the wire-layer guard would catch a real bug. As of 2026-05-01 the `ApprovalBroker` is the only producer of server-request responses, and its B-clean lifecycle prevents duplicates by construction.
+
+## Phase 3 implementation progress (in progress, 2026-05-02 →)
+
+Active branch: `phase-3-implementation`. Plan-of-record:
+`docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4. Live status:
+`docs/handoffs/phase3-live-status.md` (always the canonical reference for
+current state — this index is just a checkpoint).
+
+| Item | Commits | Review |
+|---|---|---|
+| T0.7 rebase planning branch onto chore/codex-upgrade-0.128 | (planning, no impl commit) | — |
+| T1.0 storage preflight (Node 25.6.1, better-sqlite3 source build) | (preflight only, no impl commit) | inline |
+| T1.1 `@codex-im/storage-sqlite` skeleton + boundary tests | `3ada728` | folded into impl-t1-t2c review |
+| T2a `openDatabase` + WAL + foreign_keys pragmas | `826fdfc` | folded into impl-t1-t2c review |
+| T2b `runMigrations` + `schema_version` bootstrap | `f6972de` | folded into impl-t1-t2c review |
+| T2c idempotency test (no source change) | `d891960` | folded into impl-t1-t2c review |
+| **impl-t1-t2c codex P1+P2 fix arc** (boundary tightening + atomic-rollback test + BEGIN/COMMIT JSDoc) | `04a92fe` | re-review GO; `docs/phase-3/impl-t1-t2c-codex-review.md` |
+| T3a `001-init.sql` owns schema_version DDL + real-dir runner test | `c06813e` | folded into next impl review |
+
+### Phase 3 next exact task
+
+- [ ] **T4a** — Migration `002-thread-bindings.sql` + `BindingRepository.upsert` + one `upsert + findByTarget` round-trip test. First **repository** task; adds `packages/storage-sqlite/src/bindings.ts`. See plan §16.2 T4a.

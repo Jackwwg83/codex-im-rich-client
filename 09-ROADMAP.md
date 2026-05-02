@@ -1,5 +1,18 @@
 # 项目进度与里程碑
 
+> ⚠️ **Historical roadmap.** 本文件中 Phase 编号（Phase 2 = Telegram MVP / Phase 3 = 安全与审计 / Phase 4 = Lark / …）是 v0 计划的 **历史快照**，已被各 phase 单独的 plan-of-record **superseded**。
+>
+> 实际执行后 Phase 编号已合并/位移：actual Phase 2 = "Approval & IM Surface"（broker 公开面 + 渲染 + fake e2e），actual Phase 3 = 本文 v0 Phase 2 + Phase 3 的合并体（Telegram MVP + production daemon + SecurityPolicy ACL + 持久化 SessionRouter + launchd）。后续 Phase 4+ 也会以实际 plan 为准而非本文。
+>
+> 当前 phase 状态请看：
+>
+> - **Per-phase 实施计划：** `docs/superpowers/plans/`（最新 `2026-05-02-phase-3-plan.md` v2.4）
+> - **当前 live status：** `docs/handoffs/phase3-live-status.md`
+> - **历史 phase live status：** `docs/handoffs/phase{1,2}-live-status.md`（FROZEN）
+> - **Phase 间 handoff：** `docs/handoffs/<date>-phase{N}-to-phase{N+1}.md`
+>
+> 本文以下 Phase 0 / Phase 1 章节由后续 plan 实时回填为最终事实；Phase 2+ 章节保留作为 v0 历史 backlog 而非可执行 roadmap。
+
 ## 总体策略
 
 先完成 App Server rich client 内核，再接 IM；先 Telegram 跑通端到端，再做飞书/钉钉；Computer Use 放在基础审批稳定之后。

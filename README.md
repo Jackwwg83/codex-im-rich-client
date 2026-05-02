@@ -11,6 +11,8 @@
 
 10 codex outside-voice review reports under `docs/phase-1/` plus a tag-gate re-review. 测试数 73 → 320 (315 at T12 close + 5 from tag-gate fix arc: Supervisor cleanup + ClientRequest grep guard). 详见 `docs/superpowers/plans/2026-04-30-phase-1-runtime.md` + `docs/handoffs/2026-05-01-phase1-to-phase2.md`.
 
+**Phase 3 状态**：🟡 实现进行中（2026-05-02 起）。Storage-sqlite skeleton + database lifecycle + 第一个迁移已落地（T1.1 → T3a）。**当前 single source of truth：[`docs/handoffs/phase3-live-status.md`](docs/handoffs/phase3-live-status.md)。** 计划见 `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4（4 轮 codex outside-voice + 2 轮 gstack `/plan-eng-review` 后 APPROVE_WITH_CHANGES）。
+
 **Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
 - `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
 - `@codex-im/channel-core` — closed `ChannelAdapter` 接口 (D14) + `TelegramShapeFakeChannelAdapter` (callback_data ≤62B + 60s answerCallbackQuery deadline + parse_mode unsupported, all cited from Telegram Bot API)
@@ -26,11 +28,11 @@
 # 0. 装运行时（一次性，不在 repo 范围）
 node --version    # need >=24 (Node 20 EOL 2026-04-30; bumped in chore/node-24-bump)
 pnpm --version    # need >=10
-codex --version   # need 0.125.0 (pinned in CODEX_VERSION)
+codex --version   # need 0.128.0 (pinned in CODEX_VERSION)
 
 # 1. 安装依赖 + 验证版本闸
 pnpm install
-pnpm check:codex-version       # OK: 0.125.0
+pnpm check:codex-version       # OK: 0.128.0
 
 # 2. 重新生成协议（已经 commit 过；只在 codex 升级时跑）
 pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol/
@@ -59,7 +61,7 @@ CODEX_REAL_SMOKE=1 pnpm runtime:send -- --prompt 'Reply OK'   # Phase 1 runtime 
 
 ```
 packages/
-  codex-protocol/      generated TS + JSON schema (codex 0.125 stable, no --experimental)
+  codex-protocol/      generated TS + JSON schema (codex 0.128 stable, no --experimental)
   app-server-client/   JSONL + JSON-RPC lite + Transport iface + StdioTransport + handshake + AppServerClient
   testkit/             InMemoryTransport + FakeAppServer + replayFixture + codex-0.125 wire fixtures
   cli/                 codex-im smoke (app-server | real-turn)

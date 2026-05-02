@@ -1,5 +1,13 @@
 # Phase 2 Live Status
 
+> 🧊 **FROZEN — historical record.** Phase 2 closed at tag `phase-2-codex-reviewed` (annotated, at `0d4dfc3`). Codex backfill review fix arc (T18-T22 + T24) returned GO and version was promoted from `0.1.0-phase2-draft` → `0.1.0-phase2`. Phase 3 implementation began on branch `phase-3-implementation` (T1.1 → T3a landed as of 2026-05-02).
+>
+> **For current live state see [`docs/handoffs/phase3-live-status.md`](phase3-live-status.md).** Do not update this file further; the "Phase 3 IMPLEMENTATION BLOCKED" line below is preserved as the original 2026-05-02 close-out sentiment but is **no longer accurate**.
+
+---
+
+# Phase 2 Live Status (frozen content below)
+
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
 > **Last updated:** 2026-05-02 — **PHASE 2 TAGGED COMPLETE. Codex backfill review pending. Phase 3 planning allowed; implementation BLOCKED until backfill GO or explicit human approval.**
 
