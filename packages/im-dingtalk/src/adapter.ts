@@ -54,6 +54,7 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   #streamClient: DingTalkStreamClientLike | undefined;
   #started = false;
   #inboundPaused = true;
+  #generation = 0;
   readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
   readonly #onActionHandlers = new Set<(action: InboundAction) => void>();
 
@@ -70,7 +71,8 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     if (streamClient === undefined) {
       throw new Error("DingTalkChannelAdapter.start requires an injected streamClient");
     }
-    this.#installStreamCallbacks(streamClient);
+    const generation = ++this.#generation;
+    this.#installStreamCallbacks(streamClient, generation);
     try {
       await streamClient.connect();
     } catch (error) {
@@ -89,6 +91,7 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     }
     this.#inboundPaused = true;
     this.#started = false;
+    this.#generation += 1;
     await this.#streamClient?.disconnect();
     this.#streamClient = undefined;
   }
@@ -197,17 +200,17 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     return cardClient;
   }
 
-  #installStreamCallbacks(streamClient: DingTalkStreamClientLike): void {
+  #installStreamCallbacks(streamClient: DingTalkStreamClientLike, generation: number): void {
     streamClient.registerCallbackListener(DINGTALK_TOPIC_ROBOT, (event) => {
-      this.#handleRobotCallback(event);
+      this.#handleRobotCallback(event, generation);
     });
     streamClient.registerCallbackListener(DINGTALK_TOPIC_CARD, (event) => {
-      this.#handleCardCallback(event);
+      this.#handleCardCallback(event, generation);
     });
   }
 
-  #handleRobotCallback(_event: DingTalkStreamEventLike): void {
-    if (!this.#acceptInbound()) {
+  #handleRobotCallback(_event: DingTalkStreamEventLike, generation: number): void {
+    if (!this.#acceptInbound(generation)) {
       return;
     }
     let msg: InboundMessage;
@@ -225,8 +228,8 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     }
   }
 
-  #handleCardCallback(_event: DingTalkStreamEventLike): void {
-    if (!this.#acceptInbound()) {
+  #handleCardCallback(_event: DingTalkStreamEventLike, generation: number): void {
+    if (!this.#acceptInbound(generation)) {
       return;
     }
     extractDingTalkCardCallbackWirePayload(_event);
@@ -243,8 +246,8 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     }
   }
 
-  #acceptInbound(): boolean {
-    return this.#started && !this.#inboundPaused;
+  #acceptInbound(generation: number): boolean {
+    return generation === this.#generation && this.#started && !this.#inboundPaused;
   }
 
   #nowMs(): number {

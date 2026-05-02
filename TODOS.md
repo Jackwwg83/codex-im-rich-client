@@ -248,5 +248,6 @@ Active branch: `codex/phase-4-planning`. Plan-of-record:
 - [x] **JAC-83 / T5** — callback codec/parser only; do not emit `InboundAction` before JAC-84 proves messageRef validation.
 - [x] **JAC-84 / T6** — messageRef validation + gated `InboundAction` emission.
 - [x] **JAC-85 / T7** — fake approval round-trip through DingTalk adapter action surface; no live network.
-- [ ] **JAC-86 / T8** — reconnect behavior and duplicate callback/message idempotency tests.
-- [ ] **JAC-87..JAC-90** — contract/fake/live smokes, final review/handoff/tag per Phase 5 plan.
+- [x] **JAC-86 / T8** — reconnect behavior and duplicate callback/message idempotency tests.
+- [ ] **JAC-87 / T9** — DingTalk adapter contract suite and boundary/secret guard coverage.
+- [ ] **JAC-88..JAC-90** — fake/live smokes, final review/handoff/tag per Phase 5 plan.
