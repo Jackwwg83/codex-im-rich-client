@@ -1,16 +1,16 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, JAC-52 / T19d transport-lost turn synthesis/rendering complete, JAC-53 / T19e prune sweeps complete, JAC-62 / T37 mid-phase Codex review findings closed, JAC-54 through JAC-61 real Telegram adapter fake/contract slice complete, JAC-132 / T29 launchd plist dry-run installer complete, JAC-133 / T29a Keychain wrapper complete, JAC-134 / T29b operator-gated Keychain launchd smoke docs complete, JAC-139 gate-flake fix complete, JAC-135 / T30 launchd uninstall dry-run complete, JAC-136 / T31 daemon log rotation wiring complete, JAC-137 / T32 daemon status CLI complete, JAC-138 / T33 database backup CLI complete, JAC-140 / T34 `smoke:telegram-fake` complete, JAC-141 / T35 `smoke:telegram-live` operator-gated harness complete, JAC-142 / T36 `smoke:telegram-real` operator-gated harness complete, and JAC-63 / T38 final Codex review findings closed.
-> **Handoff status:** JAC-63 / T38 final Codex outside-voice review returned APPROVE_WITH_CHANGES with 0 P0, 2 P1, and 3 P2 findings. All five findings are closed by `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, and `eb05753`. All 5 gates green at `eb05753`. Next exact issue: JAC-64 / T39-T40 Phase 3 handoff and tag gate.
+> **Last updated:** 2026-05-02 — Phase 3 complete through JAC-64 / T39-T40 tag gate. Storage-sqlite, config, broker/render/runtime prerequisites, core policy/router, channel callback payload boundary, daemon wire-up, approval callback flow, Telegram adapter, launchd/ops, smoke harnesses, T37/T38 review fixes, T40 tag-gate review, Phase 3 -> Phase 4 handoff, and `0.1.0-phase3` version bump are complete.
+> **Handoff status:** JAC-64 tag gate passed: Codex tag-gate review returned GO_WITH_LOW_NITS with no P0/P1 blockers, full final gates are green, and the tag target is `phase-3-telegram-mvp-complete`. Next exact issue: JAC-65 / Phase 4 plan review gate for Feishu/Lark.
 
 ---
 
 ## 1. Current phase / task
 
-- **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-63 / T38** final Codex outside-voice review plus review-fix child issues JAC-143 through JAC-147.
-- **Next exact task:** **JAC-64 / T39-T40** — Phase 3 handoff and tag gate.
+- **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4. **Status:** complete at JAC-64 / T39-T40.
+- **Active task:** None at this checkpoint. Last completed: **JAC-64 / T39-T40** Phase 3 handoff and tag gate.
+- **Next exact task:** **JAC-65** — Phase 4 plan review gate for Feishu/Lark adapter.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
@@ -127,10 +127,11 @@
 | `938a917` | T38-F3 / JAC-145 | launchd non-dry-run runtime path validation before plist write/load |
 | `0b0eb98` | T38-F4 / JAC-146 | Expire stale `issued` callback tokens left behind by send-card failures |
 | `eb05753` | T38-F5 / JAC-147 | Daemon-side local status snapshot producer with atomic write and token redaction |
+| `JAC-64` | T39-T40 | Phase 3 handoff, tag-gate review, version bump, and final gates |
 
 ## 3. Versions / pins
 
-- **Root `package.json` `version`:** `0.1.0-phase2` — **correct as-is**. Per plan §19 item 28, version bumps to `0.1.0-phase3-draft` at Phase 3 tag time, NOT during implementation.
+- **Root `package.json` `version`:** `0.1.0-phase3` — bumped at JAC-64 tag gate after Codex tag-gate review returned GO_WITH_LOW_NITS and recommended `0.1.0-phase3`.
 - **`codexIm.codexVersion`:** `0.128.0`
 - **`CODEX_VERSION` file:** `0.128.0`
 - **Local `codex --version`:** `codex-cli 0.128.0`
@@ -155,7 +156,8 @@
 - **Implementation T1.1+T2a+T2b+T2c review (impl-t1-t2c):** APPROVE_WITH_CHANGES, 0 P0 + 1 P1 + 2 P2. All findings cleared by commit `04a92fe`. Per-task scope verdict: clean across all 4 commits. Record at `docs/phase-3/impl-t1-t2c-codex-review.md`.
 - **Implementation T1-T19 mid-phase review (JAC-62 / T37):** APPROVE_WITH_CHANGES, 0 P0 + 4 P1 + 2 P2. All findings cleared by commit `b5c4441`. Records at `docs/phase-3/impl-t1-t19-midphase-codex-review-prompt.md` and `docs/phase-3/impl-t1-t19-midphase-codex-review.md`.
 - **Implementation T1-T36 final review (JAC-63 / T38):** APPROVE_WITH_CHANGES, 0 P0 + 2 P1 + 3 P2. All findings cleared by commits `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, and `eb05753`. Records at `docs/phase-3/impl-t1-t36-final-codex-review-prompt.md` and `docs/phase-3/impl-t1-t36-final-codex-review.md`.
-- **Next planned codex review:** Phase 3 tag gate only if a tag-time check requests it; otherwise proceed with JAC-64 / T39-T40.
+- **Implementation T40 tag-gate review (JAC-64):** GO_WITH_LOW_NITS, no P0/P1 blockers. Record at `docs/phase-3/impl-t1-t40-tag-gate-codex-review.md`. Recommendation: version `0.1.0-phase3`; annotated tag `phase-3-telegram-mvp-complete`.
+- **Next planned codex review:** Phase 4 plan review after JAC-65 draft plan exists.
 
 ## 6. Active redlines (carry forward into all future Phase 3 tasks)
 
@@ -201,7 +203,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.9 reviews/tag-gate, §17 dependency graph, and §19 exit criteria. The next task is **JAC-64 / T39-T40**.
+3. Read `docs/handoffs/2026-05-02-phase3-to-phase4.md` and then start **JAC-65** planning-only Phase 4 work.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -237,7 +239,7 @@ For the Codex agent picking this up:
    - Current autonomous-loop directive: keep one focused issue per commit, update Linear/docs, push regularly, and continue through technical decisions without waiting for routine human approval. Escalate only for actions the tooling cannot perform safely.
    - Codex outside-voice impl review cadence is at-discretion, not per-task. Past pattern: review after a coherent batch (e.g. T1.1 → T2c was reviewed together). Next good review gate is after T16/T17 approval callback flow or at the T19 daemon mid-review gate.
    - When the user says "做一次 codex review", produce a prompt under `docs/phase-3/impl-<scope>-codex-review-prompt.md`, invoke `cat <prompt> | codex exec --sandbox read-only -c model_reasoning_effort=xhigh > <output>.md 2> <output>.stderr` in the background.
-   - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
+   - Phase 3 tag-gate bumped `package.json` `version` to `0.1.0-phase3` after GO_WITH_LOW_NITS review.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-63 / T38 final Codex outside-voice review and all review-fix child issues**. Continue with **JAC-64 / T39-T40 Phase 3 handoff and tag gate**.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-64 / T39-T40 Phase 3 handoff and tag gate**. Continue with **JAC-65 Phase 4 plan review gate**.

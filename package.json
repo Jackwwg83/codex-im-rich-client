@@ -1,6 +1,6 @@
 {
   "name": "codex-im-rich-client",
-  "version": "0.1.0-phase2",
+  "version": "0.1.0-phase3",
   "private": true,
   "type": "module",
   "engines": {

@@ -205,24 +205,24 @@ mission picks a subset; full list maintained in
   - **Source**: T9b blocker fix decision 2026-05-01 (user message). `docs/phase-1/codex-review-t9b.md` finding #1 + plan §"Task 9b blocker-fix" → "Future defensive guardrail".
   - **Not scheduled**: ship only when there's a concrete second case where the wire-layer guard would catch a real bug. As of 2026-05-01 the `ApprovalBroker` is the only producer of server-request responses, and its B-clean lifecycle prevents duplicates by construction.
 
-## Phase 3 implementation progress (in progress, 2026-05-02 →)
+## Phase 3 implementation progress (closed at JAC-64 tag gate, 2026-05-02)
 
 Active branch: `phase-3-implementation`. Plan-of-record:
 `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4. Live status:
 `docs/handoffs/phase3-live-status.md` (always the canonical reference for
-current state — this index is just a checkpoint).
+current state — this index is just a checkpoint). Phase 3 -> Phase 4 handoff:
+`docs/handoffs/2026-05-02-phase3-to-phase4.md`.
 
 | Item | Commits | Review |
 |---|---|---|
-| T0.7 rebase planning branch onto chore/codex-upgrade-0.128 | (planning, no impl commit) | — |
-| T1.0 storage preflight (Node 25.6.1, better-sqlite3 source build) | (preflight only, no impl commit) | inline |
-| T1.1 `@codex-im/storage-sqlite` skeleton + boundary tests | `3ada728` | folded into impl-t1-t2c review |
-| T2a `openDatabase` + WAL + foreign_keys pragmas | `826fdfc` | folded into impl-t1-t2c review |
-| T2b `runMigrations` + `schema_version` bootstrap | `f6972de` | folded into impl-t1-t2c review |
-| T2c idempotency test (no source change) | `d891960` | folded into impl-t1-t2c review |
-| **impl-t1-t2c codex P1+P2 fix arc** (boundary tightening + atomic-rollback test + BEGIN/COMMIT JSDoc) | `04a92fe` | re-review GO; `docs/phase-3/impl-t1-t2c-codex-review.md` |
-| T3a `001-init.sql` owns schema_version DDL + real-dir runner test | `c06813e` | folded into next impl review |
+| T1-T8 storage/config foundation | `3ada728` → `d549e92` | impl-t1-t2c review closed by `04a92fe` |
+| T9-T13 policy/router/core foundation | `ec68bc7` → `ad44918` | live-status checkpoint |
+| D41 channel boundary amendment | `10e898e`, `c2648f3` | live-status checkpoint |
+| T14-T19 daemon production wire-up | `6d1b4ae` → `83015c0` | mid-phase review closed by `b5c4441` |
+| T20-T28 real Telegram adapter fake/contract slice | `d073ce1` → `fa5909f` | final review scope |
+| T29-T36 ops + launchd + smoke harnesses | `b707f28` → `36d8903` | final review scope |
+| T38 final review fixes | `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, `eb05753` | response recorded in `docs/phase-3/impl-t1-t36-final-review-response.md` |
 
-### Phase 3 next exact task
+### Phase 4 next exact task
 
-- [ ] **T4a** — Migration `002-thread-bindings.sql` + `BindingRepository.upsert` + one `upsert + findByTarget` round-trip test. First **repository** task; adds `packages/storage-sqlite/src/bindings.ts`. See plan §16.2 T4a.
+- [ ] **JAC-65** — Phase 4 plan review gate for Feishu/Lark adapter. Planning-only: create Phase 4 plan-of-record, review with Codex/GPT Pro, then confirm Linear child execution order before implementing `@codex-im/im-lark`.

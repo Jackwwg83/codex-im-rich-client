@@ -11,14 +11,14 @@
 
 10 codex outside-voice review reports under `docs/phase-1/` plus a tag-gate re-review. 测试数 73 → 320 (315 at T12 close + 5 from tag-gate fix arc: Supervisor cleanup + ClientRequest grep guard). 详见 `docs/superpowers/plans/2026-04-30-phase-1-runtime.md` + `docs/handoffs/2026-05-01-phase1-to-phase2.md`.
 
-**Phase 3 状态**：🟡 实现进行中（2026-05-02 起）。Storage-sqlite skeleton + database lifecycle + 第一个迁移已落地（T1.1 → T3a）。**当前 single source of truth：[`docs/handoffs/phase3-live-status.md`](docs/handoffs/phase3-live-status.md)。** 计划见 `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4（4 轮 codex outside-voice + 2 轮 gstack `/plan-eng-review` 后 APPROVE_WITH_CHANGES）。
+**Phase 3 状态**：✅ 完成（2026-05-02）。Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter + launchd/ops/smoke slice 已通过 JAC-64 / T39-T40 tag gate。**当前 single source of truth：[`docs/handoffs/phase3-live-status.md`](docs/handoffs/phase3-live-status.md)，Phase 3 → Phase 4 交接见 [`docs/handoffs/2026-05-02-phase3-to-phase4.md`](docs/handoffs/2026-05-02-phase3-to-phase4.md)。**
 
 **Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
 - `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
 - `@codex-im/channel-core` — closed `ChannelAdapter` 接口 (D14) + `TelegramShapeFakeChannelAdapter` (callback_data ≤62B + 60s answerCallbackQuery deadline + parse_mode unsupported, all cited from Telegram Bot API)
 - `@codex-im/core` 扩展：`enablePendingMode<M>` (D18 三模式 dispatcher) + `bindActorPolicy` (D19 per-card actor 绑定) + `resolve()` (happy + 9 `ResolveError` 分支 + lazy expiry + actor validation) + `actionToDecision` + `mapDecisionForPending` (D11 per-kind wire 映射) + `AuditEmitter` (D13 12 个枚举 kind) + `redact` 14 patterns + `isAttached()` + `approvalTtlMs` 构造函数选项
 
-测试数 320 → 720 (+400 across approval surface + render + channel-core + e2e)。9 个包 (Phase 1 7 → +render +channel-core)。详见 `docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md` + `docs/handoffs/2026-05-02-phase2-to-phase3.md`. 下一步：Phase 3 (real Telegram adapter / production daemon wire-up / SecurityPolicy ACL — by /plan-eng-review).
+测试数 320 → 720 (+400 across approval surface + render + channel-core + e2e)。9 个包 (Phase 1 7 → +render +channel-core)。详见 `docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md` + `docs/handoffs/2026-05-02-phase2-to-phase3.md`. 后续实际 Phase 3 已合并 Telegram MVP + production daemon + SecurityPolicy ACL 并进入 tag gate。
 
 > ⚠️ **Production = Supervisor; runtime-send = dev/operator only.** Daemon 生产入口必须先 `broker.attach()` 再交给 `Supervisor`。`runtime-send` smoke 是 dev/operator 工具，不是产品入口。Codex Q6 / D16 / T22 invariant fires at `Supervisor.#spawnFresh` head if broker isn't pre-attached.
 
@@ -38,8 +38,8 @@ pnpm check:codex-version       # OK: 0.128.0
 pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol/
 
 # 3. 全量验证
-pnpm typecheck                 # all 9 packages (Phase 2 added render + channel-core)
-pnpm test                      # 720 tests pass + 1 skipped (unit + contract)
+pnpm typecheck                 # all 12 packages
+pnpm test                      # 970 tests pass + 1 skipped (unit + contract)
 pnpm lint                      # biome check
 
 # 4. 操作员手动 smoke (非默认测试)
@@ -64,10 +64,17 @@ packages/
   codex-protocol/      generated TS + JSON schema (codex 0.128 stable, no --experimental)
   app-server-client/   JSONL + JSON-RPC lite + Transport iface + StdioTransport + handshake + AppServerClient
   testkit/             InMemoryTransport + FakeAppServer + replayFixture + codex-0.125 wire fixtures
-  cli/                 codex-im smoke (app-server | real-turn)
+  cli/                 codex-im smoke / runtime / ops commands
+  storage-sqlite/      SQLite migrations + repositories
+  config/              TOML/zod config + env secret resolver
+  render/              IM-rich projection and plain-text fallback
+  channel-core/        platform-neutral ChannelAdapter contract
+  im-telegram/         real Telegram adapter package
+  daemon/              production-shaped daemon / supervisor / status
 docs/
-  phase-0/             host-environment + codex-gen-diff (decision evidence)
-  superpowers/plans/   the Phase 0 plan (v2, post-/plan-eng-review + Codex outside-voice)
+  handoffs/            phase live-status + phase-to-phase handoffs
+  phase-*/             review evidence and implementation reports
+  superpowers/plans/   phase plans-of-record
 scripts/
   check-codex-version.mjs  3-way version gate
   canonicalize-schema.mjs  deterministic JSON schema sort
