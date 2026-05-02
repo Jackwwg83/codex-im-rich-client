@@ -90,9 +90,15 @@ export class SecurityPolicy {
 
   checkApprovalDestination(
     _snapshot: PendingApprovalSnapshot,
-    _target: Target,
+    target: Target,
   ): SecurityPolicyApprovalDestinationDecision {
-    return { kind: "auto_decline", reason: POLICY_NOT_CONFIGURED };
+    if (this.#snapshot.allowedChats.length === 0) {
+      return { kind: "auto_decline", reason: POLICY_NOT_CONFIGURED };
+    }
+    if (!this.#snapshot.allowedChats.includes(platformScoped(target.platform, target.chatId))) {
+      return { kind: "auto_decline", reason: "approval_destination_denied" };
+    }
+    return { kind: "allow" };
   }
 
   checkCommand(_command: string, _cwd: string): SecurityPolicyCommandDecision {

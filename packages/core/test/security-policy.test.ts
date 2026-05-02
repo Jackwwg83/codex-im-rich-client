@@ -24,6 +24,17 @@ const ALLOW_CONFIG: SecurityPolicyConfig = {
   },
 };
 
+function approvalSnapshot() {
+  return {
+    id: "approval-1",
+    appServerRequestId: 1,
+    method: "item/fileChange/requestApproval",
+    params: {},
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 30_000),
+  };
+}
+
 describe("SecurityPolicy skeleton (T9.1 / D22)", () => {
   it("constructs a Phase 3 synchronous fail-closed policy from immutable config", () => {
     const policy = new SecurityPolicy(EMPTY_CONFIG);
@@ -56,17 +67,10 @@ describe("SecurityPolicy skeleton (T9.1 / D22)", () => {
       ),
     ).toEqual({ kind: "deny", reason: "policy_not_configured" });
     expect(
-      policy.checkApprovalDestination(
-        {
-          id: "approval-1",
-          appServerRequestId: 1,
-          method: "item/fileChange/requestApproval",
-          params: {},
-          createdAt: new Date(),
-          expiresAt: new Date(Date.now() + 30_000),
-        },
-        { platform: "telegram", chatId: "-1001" },
-      ),
+      policy.checkApprovalDestination(approvalSnapshot(), {
+        platform: "telegram",
+        chatId: "-1001",
+      }),
     ).toEqual({
       kind: "auto_decline",
       reason: "policy_not_configured",
@@ -101,5 +105,27 @@ describe("SecurityPolicy.checkUserAndChat (T9.2 / D22)", () => {
     expect(
       policy.checkUserAndChat({ platform: "telegram", chatId: "-1001" }, { userId: "999" }),
     ).toEqual({ kind: "deny", reason: "user_not_allowed" });
+  });
+});
+
+describe("SecurityPolicy.checkApprovalDestination (T9.3 / D36)", () => {
+  it("allows approval rendering to an allowlisted destination", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+    expect(
+      policy.checkApprovalDestination(approvalSnapshot(), {
+        platform: "telegram",
+        chatId: "-1001",
+      }),
+    ).toEqual({ kind: "allow" });
+  });
+
+  it("auto-declines approval rendering to a disallowed destination", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+    expect(
+      policy.checkApprovalDestination(approvalSnapshot(), {
+        platform: "telegram",
+        chatId: "-9999",
+      }),
+    ).toEqual({ kind: "auto_decline", reason: "approval_destination_denied" });
   });
 });
