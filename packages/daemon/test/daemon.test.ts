@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { IM_ROUTABLE_APPROVAL_METHODS, type PendingApprovalSnapshot } from "@codex-im/core";
+import type { ApprovalCard } from "@codex-im/render";
 import { type CallbackTokenInsert, hashCallbackToken } from "@codex-im/storage-sqlite";
 import { describe, expect, it, vi } from "vitest";
 import { Daemon, type DaemonOptions, type DaemonSignal } from "../src/index.js";
@@ -559,7 +560,12 @@ describe("Daemon skeleton (T14)", () => {
     const order: string[] = [];
     const inserted: CallbackTokenInsert[] = [];
     const target = { platform: "telegram", chatId: "-allowed" };
-    const rawTokens = ["ABCDEFGHIJKLMNOP", "QRSTUVWXYZ234567"];
+    const rawTokens = [
+      "ABCDEFGHIJKLMNOP",
+      "QRSTUVWXYZ234567",
+      "ABCDEFGH234567AA",
+      "QRSTUVWXABCDEFGH",
+    ];
     const snapshot: PendingApprovalSnapshot = {
       id: "approval-tokenized",
       appServerRequestId: 9003,
@@ -723,6 +729,113 @@ describe("Daemon skeleton (T14)", () => {
     });
     expect(adapter.sendCard).not.toHaveBeenCalled();
     expect(broker.resolve).not.toHaveBeenCalled();
+  });
+
+  it("renders approval card actions with v1 wirePayload values from issued raw tokens", async () => {
+    const order: string[] = [];
+    const readyCards: Array<{ target: { platform: string; chatId: string }; card: ApprovalCard }> =
+      [];
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const actor = { kind: "im" as const, platform: "telegram", userId: "u-alice" };
+    const rawTokens = [
+      "ABCDEFGHIJKLMNOP",
+      "QRSTUVWXYZ234567",
+      "ABCDEFGH234567AA",
+      "QRSTUVWXABCDEFGH",
+    ];
+    const inserted: CallbackTokenInsert[] = [];
+    const snapshot: PendingApprovalSnapshot = {
+      id: "approval-wire-payload",
+      appServerRequestId: 9005,
+      method: "item/fileChange/requestApproval",
+      params: { changes: [{ path: "src/app.ts" }] },
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-02T00:30:00.000Z"),
+    };
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      start: vi.fn(),
+      sendCard: vi.fn(() => {
+        order.push("sendCard");
+      }),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(() => {
+        order.push("bindActorPolicy");
+        return { kind: "ok" as const };
+      }),
+      resolve: vi.fn(),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn((input: CallbackTokenInsert) => {
+        order.push(`insert:${input.action}`);
+        inserted.push(input);
+        return { ...input, status: input.status ?? "issued" };
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkApprovalDestination: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      resolveApprovalAllowedActors: vi.fn(() => [actor]),
+      callbackTokenRepository,
+      generateCallbackNonce: () => "nonce-wire-payload",
+      generateRawCallbackToken: () => rawTokens.shift() as string,
+      now: () => new Date("2026-05-02T00:00:02.000Z"),
+      onApprovalCardReady: vi.fn((cardTarget, card) => {
+        order.push("cardReady");
+        expect(adapter.sendCard).not.toHaveBeenCalled();
+        readyCards.push({ target: cardTarget, card });
+      }),
+    });
+
+    await daemon.start();
+    pendingHandler?.(snapshot);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(order).toEqual([
+      "insert:allow_once",
+      "insert:allow_session",
+      "insert:decline",
+      "insert:abort",
+      "bindActorPolicy",
+      "cardReady",
+    ]);
+    expect(readyCards).toHaveLength(1);
+    expect(readyCards[0]?.target).toEqual(target);
+    expect(readyCards[0]?.card.actions).toEqual([
+      { kind: "allow_once", wirePayload: "v1:ABCDEFGHIJKLMNOP" },
+      { kind: "allow_session", wirePayload: "v1:QRSTUVWXYZ234567" },
+      { kind: "decline", wirePayload: "v1:ABCDEFGH234567AA" },
+      { kind: "abort", wirePayload: "v1:QRSTUVWXABCDEFGH" },
+    ]);
+    expect(inserted.map((row) => row.tokenHash)).toEqual([
+      hashCallbackToken("ABCDEFGHIJKLMNOP"),
+      hashCallbackToken("QRSTUVWXYZ234567"),
+      hashCallbackToken("ABCDEFGH234567AA"),
+      hashCallbackToken("QRSTUVWXABCDEFGH"),
+    ]);
+    expect(JSON.stringify(inserted)).not.toContain("ABCDEFGHIJKLMNOP");
+    expect(JSON.stringify(inserted)).not.toContain("QRSTUVWXYZ234567");
+    expect(JSON.stringify(inserted)).not.toContain("ABCDEFGH234567AA");
+    expect(JSON.stringify(inserted)).not.toContain("QRSTUVWXABCDEFGH");
+    expect(adapter.sendCard).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -11,6 +11,7 @@
     { "path": "../codex-protocol" },
     { "path": "../codex-runtime" },
     { "path": "../core" },
+    { "path": "../render" },
     { "path": "../storage-sqlite" }
   ]
 }

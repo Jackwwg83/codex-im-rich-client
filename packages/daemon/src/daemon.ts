@@ -11,6 +11,7 @@ import {
   type SecurityPolicyApprovalDestinationDecision,
   type Target,
 } from "@codex-im/core";
+import { type ApprovalCard, projectApprovalCard } from "@codex-im/render";
 import {
   type CallbackTokenAction,
   type CallbackTokenInsert,
@@ -71,6 +72,17 @@ export interface DaemonCallbackTokenRepository {
   insert(input: CallbackTokenInsert): CallbackTokenRecord | unknown;
 }
 
+export interface DaemonIssuedCallbackToken {
+  readonly action: CallbackTokenAction;
+  readonly rawToken: string;
+  readonly tokenHash: string;
+}
+
+export interface DaemonIssuedCallbackTokenBatch {
+  readonly callbackNonce: string;
+  readonly tokens: readonly DaemonIssuedCallbackToken[];
+}
+
 export interface DaemonOptions {
   readonly loadConfig?: () => MaybePromise<unknown>;
   readonly openStorage?: (config: unknown) => MaybePromise<unknown>;
@@ -91,6 +103,8 @@ export interface DaemonOptions {
     target: Target,
   ) => MaybePromise<readonly NonNullable<ApprovalActor>[]>;
   readonly callbackTokenRepository?: DaemonCallbackTokenRepository;
+  readonly renderApprovalCard?: (snapshot: PendingApprovalSnapshot) => ApprovalCard;
+  readonly onApprovalCardReady?: (target: Target, card: ApprovalCard) => MaybePromise<void>;
   readonly generateCallbackNonce?: () => string;
   readonly generateRawCallbackToken?: () => string;
   readonly now?: () => Date;
@@ -244,8 +258,11 @@ export class Daemon {
       const decision = policy?.checkApprovalDestination(snapshot, target);
       if (decision?.kind !== "auto_decline") {
         if (decision?.kind === "allow") {
-          const callbackNonce = await this.#issueCallbackTokens(snapshot, target);
-          if (callbackNonce === undefined) {
+          const baseCard =
+            this.options.renderApprovalCard?.(snapshot) ?? projectApprovalCard(snapshot);
+          const actions = await this.#approvalActions(snapshot, baseCard);
+          const issued = await this.#issueCallbackTokens(snapshot, target, actions);
+          if (issued === undefined) {
             return;
           }
           const allowedActors = await this.options.resolveApprovalAllowedActors?.(snapshot, target);
@@ -255,8 +272,12 @@ export class Daemon {
           this.#broker?.bindActorPolicy?.(snapshot.id, {
             allowedActors,
             target,
-            callbackNonce,
+            callbackNonce: issued.callbackNonce,
           });
+          await this.options.onApprovalCardReady?.(
+            target,
+            this.#withWirePayloadTokens(baseCard, issued.tokens),
+          );
         }
         return;
       }
@@ -287,20 +308,22 @@ export class Daemon {
   async #issueCallbackTokens(
     snapshot: PendingApprovalSnapshot,
     target: Target,
-  ): Promise<string | undefined> {
+    actions: readonly CallbackTokenAction[],
+  ): Promise<DaemonIssuedCallbackTokenBatch | undefined> {
     const repository = this.options.callbackTokenRepository;
-    const actions = await this.options.resolveApprovalActions?.(snapshot);
-    if (repository === undefined || actions === undefined || actions.length === 0) {
+    if (repository === undefined || actions.length === 0) {
       return undefined;
     }
 
     const callbackNonce = this.options.generateCallbackNonce?.() ?? randomUUID();
     const createdAt = (this.options.now?.() ?? new Date()).toISOString();
     const expiresAt = snapshot.expiresAt.toISOString();
+    const issued: DaemonIssuedCallbackToken[] = [];
     for (const action of actions) {
       const rawToken = this.options.generateRawCallbackToken?.() ?? generateRawCallbackToken();
+      const tokenHash = hashCallbackToken(rawToken);
       repository.insert({
-        tokenHash: hashCallbackToken(rawToken),
+        tokenHash,
         approvalId: snapshot.id,
         action,
         callbackNonce,
@@ -310,8 +333,9 @@ export class Daemon {
         createdAt,
         expiresAt,
       });
+      issued.push({ action, rawToken, tokenHash });
     }
-    return callbackNonce;
+    return { callbackNonce, tokens: issued };
   }
 
   #handleAction(_action: unknown): void {}
@@ -320,6 +344,29 @@ export class Daemon {
 
   #handleSignal(): void {
     void this.stop();
+  }
+
+  async #approvalActions(
+    snapshot: PendingApprovalSnapshot,
+    card: ApprovalCard,
+  ): Promise<readonly CallbackTokenAction[]> {
+    return (
+      this.options.resolveApprovalActions?.(snapshot) ?? card.actions.map((action) => action.kind)
+    );
+  }
+
+  #withWirePayloadTokens(
+    card: ApprovalCard,
+    issuedTokens: readonly DaemonIssuedCallbackToken[],
+  ): ApprovalCard {
+    const tokenByAction = new Map(issuedTokens.map((token) => [token.action, token.rawToken]));
+    return {
+      ...card,
+      actions: card.actions.map((action) => {
+        const rawToken = tokenByAction.get(action.kind);
+        return rawToken === undefined ? action : { ...action, wirePayload: `v1:${rawToken}` };
+      }),
+    };
   }
 
   #approvalDestinationPolicy(value: unknown): DaemonApprovalDestinationPolicy | undefined {

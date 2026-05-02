@@ -19,6 +19,8 @@ export type {
   DaemonBrokerContext,
   DaemonCallbackTokenRepository,
   DaemonDependencyContext,
+  DaemonIssuedCallbackToken,
+  DaemonIssuedCallbackTokenBatch,
   DaemonOptions,
   DaemonSignal,
   DaemonSessionRouterContext,
