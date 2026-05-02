@@ -1,23 +1,23 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, and JAC-40 through JAC-46 daemon approval callback flow complete.
-> **Handoff status:** JAC-46 complete: bound callback tokens validate inbound `MessageRef` before any `broker.resolve`; `<unknown>` and stale message refs fail closed with no token mutation. All 5 gates green. Next exact issue: JAC-47 / T17.3-T17.5 policy gate, broker.resolve ok path, bound→used CAS, terminal answer/update, and sibling revoke.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, and JAC-40 through JAC-47 daemon approval callback flow complete.
+> **Handoff status:** JAC-47 complete: valid bound callbacks pass `SecurityPolicy.checkUserAndChat`, call `broker.resolve`, mark accepted tokens `used`, answer success, update the card through adapter hook, and revoke bound sibling tokens. The CAS rowsAffected=0 defense path force-marks used after broker ok. All 5 gates green. Next exact issue: JAC-48 / T17.6-T17.14 broker.resolve error branches.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-46 / T17.2** (validate callback token `messageRef` against inbound action `messageRef` before `broker.resolve`; mismatch and unknown message fail closed with no token mutation).
-- **Next exact task:** **JAC-47 / T17.3-T17.5** — apply `SecurityPolicy.checkUserAndChat` before resolve, call `broker.resolve` on valid actions, then mark accepted token `used`, answer success, update card, and revoke siblings.
+- **Active task:** None at this checkpoint. Last completed: **JAC-47 / T17.3-T17.5** (policy gate before resolve, broker ok path, `bound -> used` CAS, success ack, update-card hook, sibling revoke, and rowsAffected=0 force-used fallback).
+- **Next exact task:** **JAC-48 / T17.6-T17.14** — handle `broker.resolve` error branches with the correct token mutation / no-mutation semantics.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **Latest code commit:** `2f065b9` (`feat(daemon): T17.2 validate callback message refs`)
-- **Tag distance at latest code commit:** `phase-2-codex-reviewed-68-g2f065b9`
+- **Latest code commit:** `3895e1e` (`feat(daemon): T17.3-T17.5 resolve valid callbacks`)
+- **Tag distance at latest code commit:** `phase-2-codex-reviewed-70-g3895e1e`
 - **Origin:** synced after each pushed checkpoint; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -85,6 +85,8 @@
 | `a448ecc` | T17.1 / JAC-45 | Decode `rawCallbackData`, look up callback token records, and fail closed for invalid statuses |
 | `fcbaaeb` | docs checkpoint | Refresh live-status for JAC-45 completion |
 | `2f065b9` | T17.2 / JAC-46 | Validate callback `MessageRef` before `broker.resolve`; fail closed for unknown/stale refs |
+| `b0c0c71` | docs checkpoint | Refresh live-status for JAC-46 completion |
+| `3895e1e` | T17.3-T17.5 / JAC-47 | Policy gate, broker ok path, token `used` CAS/fallback, success ack, updateCard, sibling revoke |
 
 ## 3. Versions / pins
 
@@ -100,7 +102,7 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **833 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +113 from Phase 3 storage/config/core/channel/daemon prereqs) |
+| Tests | `pnpm test` | **837 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +117 from Phase 3 storage/config/core/channel/daemon prereqs) |
 | Lint | `pnpm lint` | green (173 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
@@ -156,7 +158,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-47 / T17.3-T17.5**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-48 / T17.6-T17.14**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -195,4 +197,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-46 / T17.2**. Continue with **JAC-47 / T17.3-T17.5**, then the rest of **JAC-20** dependency order.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-47 / T17.3-T17.5**. Continue with **JAC-48 / T17.6-T17.14**, then the rest of **JAC-20** dependency order.
