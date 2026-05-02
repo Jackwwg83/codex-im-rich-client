@@ -246,5 +246,6 @@ Active branch: `codex/phase-4-planning`. Plan-of-record:
 - [x] **JAC-81 / T3** — DingTalk message receive fixtures and normalization; no card send/update or callback action mapping.
 - [x] **JAC-82 / T4** — card send/update through injectable DingTalk card client; no callback action mapping.
 - [x] **JAC-83 / T5** — callback codec/parser only; do not emit `InboundAction` before JAC-84 proves messageRef validation.
-- [ ] **JAC-84 / T6** — messageRef validation + gated `InboundAction` emission.
-- [ ] **JAC-85..JAC-90** — approval round-trip, reconnect, contract/fake/live smokes, final review/handoff/tag per Phase 5 plan.
+- [x] **JAC-84 / T6** — messageRef validation + gated `InboundAction` emission.
+- [ ] **JAC-85 / T7** — fake approval round-trip through DingTalk adapter action surface; no live network.
+- [ ] **JAC-86..JAC-90** — reconnect, contract/fake/live smokes, final review/handoff/tag per Phase 5 plan.

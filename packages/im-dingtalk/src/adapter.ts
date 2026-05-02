@@ -8,6 +8,7 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
+import { normalizeDingTalkRawCardAction } from "./action.js";
 import { extractDingTalkCardCallbackWirePayload } from "./callback-codec.js";
 import { DINGTALK_CAPABILITIES } from "./capabilities.js";
 import { type DingTalkApprovalCardJson, renderDingTalkApprovalCard } from "./card.js";
@@ -199,6 +200,17 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
       return;
     }
     extractDingTalkCardCallbackWirePayload(_event);
+    const action = normalizeDingTalkRawCardAction(_event, this.#nowMs());
+    if (action === undefined) {
+      return;
+    }
+    for (const handler of this.#onActionHandlers) {
+      try {
+        handler(action);
+      } catch {
+        // Keep one subscriber failure from blocking other subscribers.
+      }
+    }
   }
 
   #acceptInbound(): boolean {

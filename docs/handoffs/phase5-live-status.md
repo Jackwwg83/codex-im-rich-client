@@ -1,7 +1,7 @@
 # Phase 5 Live Status
 
 > Single source of truth for Phase 5 while DingTalk adapter work is active.
-> **Last updated:** 2026-05-02 - JAC-83 callback codec/parser green.
+> **Last updated:** 2026-05-02 - JAC-84 messageRef validation green.
 
 ---
 
@@ -10,12 +10,12 @@
 - **Phase:** Phase 5 - DingTalk adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
 - **Parent Linear issue:** JAC-10 - Phase 5 backlog / DingTalk adapter.
-- **Current Linear issue:** JAC-83 - callback codec/parser only.
+- **Current Linear issue:** JAC-84 - messageRef validation + gated action emission.
 - **Branch:** `codex/phase-5-dingtalk`.
 - **Base:** `phase-4-lark-adapter-complete` (`7281e28`).
 - **Version:** `0.1.0-phase4`; do not bump until Phase 5 tag gate.
-- **Next exact action:** update Linear for JAC-83, then start JAC-84 messageRef
-  validation before `InboundAction` emission.
+- **Next exact action:** update Linear for JAC-84, then start JAC-85 approval
+  round-trip fake test.
 
 ## 2. Current decision state
 
@@ -45,6 +45,9 @@
   raw approval/action/tuple/object shapes, redacts invalid/valid values for
   future logs, and intentionally does not emit `InboundAction` before JAC-84
   proves original-card `messageRef`.
+- Card action mapping now emits `InboundAction` only after Stream card callback
+  `outTrackId`, `spaceId`, single `actionId`, exact `v1:` payload, and operator
+  `userId` are all present and unambiguous. Missing/unsafe fields fail closed.
 - Current DingTalk capabilities are intentionally conservative:
   `supportsButtons=true`, `canEditMessage=true`, `supportsAttachments=false`,
   `maxCallbackDataBytes=64`.
@@ -88,9 +91,9 @@
 | JAC-80 | T2 Stream lifecycle fake test | done |
 | JAC-81 | T3 message receive fixtures | done |
 | JAC-82 | T4 card send/update | done |
-| JAC-83 | T5 callback codec/parser only; no `InboundAction` before JAC-84 | green; Linear update pending |
-| JAC-84 | T6 messageRef validation + action emission gate | next / review-sensitive |
-| JAC-85 | T7 approval round-trip fake test | blocked |
+| JAC-83 | T5 callback codec/parser only; no `InboundAction` before JAC-84 | done |
+| JAC-84 | T6 messageRef validation + action emission gate | green; Linear update pending |
+| JAC-85 | T7 approval round-trip fake test | next |
 | JAC-86 | T8 reconnect behavior | blocked |
 | JAC-87 | T9 adapter contract suite | blocked |
 | JAC-88 | T10 fake DingTalk smoke | blocked |
@@ -99,14 +102,14 @@
 
 ## 6. Gate status
 
-Latest JAC-83 verification:
+Latest JAC-84 verification:
 
 | Gate | Result |
 |---|---|
 | `pnpm typecheck` | green: 14 of 15 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 119 files, 1154 passing, 1 skipped |
-| `pnpm lint` | green: 274 files checked |
+| `pnpm test` | green: 120 files, 1170 passing, 1 skipped |
+| `pnpm lint` | green: 281 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 
 `protocol:check` must run serially because it regenerates protocol files before

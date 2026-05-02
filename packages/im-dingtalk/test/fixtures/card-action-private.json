@@ -1,0 +1,7 @@
+{
+  "headers": {
+    "messageId": "stream_card_private_001",
+    "topic": "/v1.0/card/instances/callback"
+  },
+  "data": "{\"content\":\"{\\\"cardPrivateData\\\":{\\\"actionIds\\\":[\\\"btn_decline\\\"],\\\"params\\\":{\\\"wirePayload\\\":\\\"v1:QRSTUVWXYZ234567\\\"}}}\",\"corpId\":\"corp_test\",\"outTrackId\":\"ding_card_private_001\",\"spaceId\":\"dtv1.card//IM_ROBOT.staff_private_target\",\"spaceType\":\"IM_ROBOT\",\"type\":\"cardCallback\",\"userId\":\"staff_action_user\",\"userIdType\":1}"
+}

@@ -1,0 +1,7 @@
+{
+  "headers": {
+    "messageId": "stream_card_ambiguous_action",
+    "topic": "/v1.0/card/instances/callback"
+  },
+  "data": "{\"content\":\"{\\\"cardPrivateData\\\":{\\\"actionIds\\\":[\\\"btn_a\\\",\\\"btn_b\\\"],\\\"params\\\":{\\\"wirePayload\\\":\\\"v1:ABCDEFGHIJKLMNOP\\\"}}}\",\"corpId\":\"corp_test\",\"outTrackId\":\"ding_card_group_001\",\"spaceId\":\"dtv1.card//IM_GROUP.cid_card_group\",\"spaceType\":\"IM_GROUP\",\"type\":\"cardCallback\",\"userId\":\"staff_action_user\",\"userIdType\":1}"
+}

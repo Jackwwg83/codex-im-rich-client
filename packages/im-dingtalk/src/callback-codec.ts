@@ -20,7 +20,10 @@ export function extractDingTalkCardCallbackWirePayload(
   if (data === undefined || containsUnsafeCompanionPayload(data)) {
     return undefined;
   }
-  return extractDingTalkActionWirePayload(data.value);
+  return singlePayload(
+    extractDingTalkActionWirePayload(data.value),
+    extractContentWirePayload(data.content),
+  );
 }
 
 export function redactDingTalkActionPayloadForLog(value: unknown): string {
@@ -42,8 +45,32 @@ function parseCallbackData(data: string | undefined): Record<string, unknown> | 
   return isRecord(parsed) ? parsed : undefined;
 }
 
+function extractContentWirePayload(content: unknown): string | undefined {
+  if (typeof content !== "string") {
+    return undefined;
+  }
+  const contentRecord = parseCallbackData(content);
+  const cardPrivateData = asRecord(contentRecord?.cardPrivateData);
+  const params = asRecord(cardPrivateData?.params);
+  if (params === undefined || containsUnsafeCompanionPayload(params)) {
+    return undefined;
+  }
+  return extractDingTalkActionWirePayload(params.wirePayload ?? params.value);
+}
+
+function singlePayload(left: string | undefined, right: string | undefined): string | undefined {
+  if (left !== undefined && right !== undefined && left !== right) {
+    return undefined;
+  }
+  return left ?? right;
+}
+
 function containsUnsafeCompanionPayload(data: Record<string, unknown>): boolean {
   return "approvalId" in data || "action" in data || "rawCallbackData" in data;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
