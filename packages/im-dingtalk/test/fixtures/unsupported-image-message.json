@@ -1,0 +1,13 @@
+{
+  "specVersion": "1.0",
+  "type": "CALLBACK",
+  "headers": {
+    "appId": "ding_test_app",
+    "connectionId": "conn_test_image",
+    "contentType": "application/json",
+    "messageId": "stream_msg_image_001",
+    "time": "1777751002000",
+    "topic": "/v1.0/im/bot/messages/get"
+  },
+  "data": "{\"conversationId\":\"cid_test_image\",\"chatbotCorpId\":\"corp_test\",\"chatbotUserId\":\"bot_test\",\"msgId\":\"msg_test_image\",\"senderNick\":\"Linus\",\"isAdmin\":false,\"senderStaffId\":\"staff_test_image\",\"sessionWebhookExpiredTime\":1777754602000,\"createAt\":1777751002000,\"senderCorpId\":\"corp_test\",\"conversationType\":\"2\",\"senderId\":\"sender_test_image\",\"robotCode\":\"robot_code_test\",\"msgtype\":\"image\"}"
+}

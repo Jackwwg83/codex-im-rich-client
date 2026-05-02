@@ -15,6 +15,7 @@ import {
   type DingTalkStreamClientLike,
   type DingTalkStreamEventLike,
 } from "./client.js";
+import { normalizeDingTalkRawRobotMessage } from "./message.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
@@ -129,14 +130,35 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   }
 
   #handleRobotCallback(_event: DingTalkStreamEventLike): void {
-    if (this.#inboundPaused) {
+    if (!this.#acceptInbound()) {
       return;
+    }
+    let msg: InboundMessage;
+    try {
+      msg = normalizeDingTalkRawRobotMessage(_event, this.#nowMs());
+    } catch {
+      return;
+    }
+    for (const handler of this.#onMessageHandlers) {
+      try {
+        handler(msg);
+      } catch {
+        // Keep one subscriber failure from blocking other subscribers.
+      }
     }
   }
 
   #handleCardCallback(_event: DingTalkStreamEventLike): void {
-    if (this.#inboundPaused) {
+    if (!this.#acceptInbound()) {
       return;
     }
+  }
+
+  #acceptInbound(): boolean {
+    return this.#started && !this.#inboundPaused;
+  }
+
+  #nowMs(): number {
+    return this.#options.now?.().getTime() ?? Date.now();
   }
 }

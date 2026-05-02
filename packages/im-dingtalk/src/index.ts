@@ -7,3 +7,12 @@ export type {
   DingTalkStreamEventHandler,
   DingTalkStreamEventLike,
 } from "./client.js";
+export {
+  dingtalkRobotIdempotencyKey,
+  normalizeDingTalkRawRobotMessage,
+} from "./message.js";
+export type {
+  DingTalkInboundMessage,
+  DingTalkRawRobotMessage,
+  DingTalkSanitizedRobotRaw,
+} from "./message.js";

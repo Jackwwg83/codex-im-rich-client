@@ -1,0 +1,13 @@
+{
+  "specVersion": "1.0",
+  "type": "CALLBACK",
+  "headers": {
+    "appId": "ding_test_app",
+    "connectionId": "conn_test_private",
+    "contentType": "application/json",
+    "messageId": "stream_msg_private_001",
+    "time": "1777751000000",
+    "topic": "/v1.0/im/bot/messages/get"
+  },
+  "data": "{\"conversationId\":\"cid_test_private\",\"chatbotCorpId\":\"corp_test\",\"chatbotUserId\":\"bot_test\",\"msgId\":\"msg_test_private\",\"senderNick\":\"Ada\",\"isAdmin\":false,\"senderStaffId\":\"staff_test_private\",\"sessionWebhookExpiredTime\":1777754600000,\"createAt\":1777751000000,\"senderCorpId\":\"corp_test\",\"conversationType\":\"1\",\"senderId\":\"sender_test_private\",\"robotCode\":\"robot_code_test\",\"msgtype\":\"text\",\"text\":{\"content\":\"hello from dingtalk\"}}"
+}

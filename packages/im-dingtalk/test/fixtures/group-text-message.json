@@ -1,0 +1,13 @@
+{
+  "specVersion": "1.0",
+  "type": "CALLBACK",
+  "headers": {
+    "appId": "ding_test_app",
+    "connectionId": "conn_test_group",
+    "contentType": "application/json",
+    "messageId": "stream_msg_group_001",
+    "time": "1777751001000",
+    "topic": "/v1.0/im/bot/messages/get"
+  },
+  "data": "{\"conversationId\":\"cid_test_group\",\"chatbotCorpId\":\"corp_test\",\"chatbotUserId\":\"bot_test\",\"msgId\":\"msg_test_group\",\"senderNick\":\"Grace\",\"isAdmin\":false,\"senderStaffId\":\"staff_test_group\",\"sessionWebhookExpiredTime\":1777754601000,\"createAt\":1777751001000,\"senderCorpId\":\"corp_test\",\"conversationType\":\"2\",\"senderId\":\"sender_test_group\",\"robotCode\":\"robot_code_test\",\"msgtype\":\"text\",\"text\":{\"content\":\"@Codex run tests\"}}"
+}

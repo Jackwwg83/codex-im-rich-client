@@ -243,5 +243,6 @@ Active branch: `codex/phase-4-planning`. Plan-of-record:
 - [x] **JAC-78 / Phase 5 DingTalk plan gate** — write/review the DingTalk Stream-mode plan-of-record before implementing `@codex-im/im-dingtalk`. Review result: v1 APPROVE_WITH_CHANGES, v1.1 GO. Current docs: `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`, `docs/phase-5/dingtalk-target-verification.md`, and `docs/handoffs/phase5-live-status.md`.
 - [x] **JAC-79 / T1** — `@codex-im/im-dingtalk` skeleton + boundary tests after JAC-78 review gate.
 - [x] **JAC-80 / T2** — Stream lifecycle fake test and injected `DWClient` wrapper; no live network or credentials.
-- [ ] **JAC-81 / T3** — DingTalk message receive fixtures and normalization; no card send/update or callback action mapping.
-- [ ] **JAC-82..JAC-90** — card send/update, callback mapping, messageRef validation, fake/live smokes, final review/handoff/tag per Phase 5 plan.
+- [x] **JAC-81 / T3** — DingTalk message receive fixtures and normalization; no card send/update or callback action mapping.
+- [ ] **JAC-82 / T4** — card send/update through injectable DingTalk card client; no callback action mapping.
+- [ ] **JAC-83..JAC-90** — callback mapping, messageRef validation, fake/live smokes, final review/handoff/tag per Phase 5 plan.
