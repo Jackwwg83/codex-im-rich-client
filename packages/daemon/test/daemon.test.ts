@@ -258,6 +258,134 @@ describe("Daemon skeleton (T14)", () => {
     expect(adapter.start).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["loadConfig", []],
+    ["openStorage", []],
+    ["createBroker", ["storage.close"]],
+    ["broker.attach", ["storage.close"]],
+    ["enablePendingMode", ["storage.close"]],
+    ["createSecurityPolicy", ["storage.close"]],
+    ["createSessionRouter", ["storage.close"]],
+    ["createSupervisor", ["storage.close"]],
+    ["createAdapter", ["supervisor.stop", "storage.close"]],
+    ["broker.onPendingCreated", ["adapter.stop", "supervisor.stop", "storage.close"]],
+    [
+      "adapter.onAction",
+      ["pending.unsubscribe", "adapter.stop", "supervisor.stop", "storage.close"],
+    ],
+    [
+      "adapter.onMessage",
+      [
+        "action.unsubscribe",
+        "pending.unsubscribe",
+        "adapter.stop",
+        "supervisor.stop",
+        "storage.close",
+      ],
+    ],
+  ] as const)(
+    "cleans partial startup state when %s fails",
+    async (failureStep, expectedCleanupTail) => {
+      const expectedCleanup = expectedCleanupTail as readonly string[];
+      const order: string[] = [];
+      const failure = new Error(`${failureStep} failed`);
+      const failAt = (step: string): void => {
+        order.push(step);
+        if (step === failureStep) {
+          throw failure;
+        }
+      };
+      const storage = {
+        close: vi.fn(() => {
+          order.push("storage.close");
+        }),
+      };
+      const supervisor = {
+        stop: vi.fn(() => {
+          order.push("supervisor.stop");
+        }),
+      };
+      const broker = {
+        attach: vi.fn(() => {
+          failAt("broker.attach");
+        }),
+        enablePendingMode: vi.fn(() => {
+          failAt("enablePendingMode");
+        }),
+        onPendingCreated: vi.fn(() => {
+          failAt("broker.onPendingCreated");
+          return () => {
+            order.push("pending.unsubscribe");
+          };
+        }),
+      };
+      const adapter = {
+        onAction: vi.fn(() => {
+          failAt("adapter.onAction");
+          return () => {
+            order.push("action.unsubscribe");
+          };
+        }),
+        onMessage: vi.fn(() => {
+          failAt("adapter.onMessage");
+          return () => {
+            order.push("message.unsubscribe");
+          };
+        }),
+        stop: vi.fn(() => {
+          order.push("adapter.stop");
+        }),
+      };
+
+      const daemon = new Daemon({
+        loadConfig: () => {
+          failAt("loadConfig");
+          return {};
+        },
+        openStorage: () => {
+          failAt("openStorage");
+          return storage;
+        },
+        createBroker: () => {
+          failAt("createBroker");
+          return broker;
+        },
+        createSecurityPolicy: () => {
+          failAt("createSecurityPolicy");
+          return {};
+        },
+        createSessionRouter: () => {
+          failAt("createSessionRouter");
+          return {};
+        },
+        createSupervisor: () => {
+          failAt("createSupervisor");
+          return supervisor;
+        },
+        createAdapter: () => {
+          failAt("createAdapter");
+          return adapter;
+        },
+      });
+
+      await expect(daemon.start()).rejects.toBe(failure);
+
+      expect(daemon.isStarted()).toBe(false);
+      if (expectedCleanup.length > 0) {
+        expect(order.slice(-expectedCleanup.length)).toEqual(expectedCleanup);
+      }
+      if (!expectedCleanup.includes("storage.close")) {
+        expect(storage.close).not.toHaveBeenCalled();
+      }
+      if (!expectedCleanup.includes("supervisor.stop")) {
+        expect(supervisor.stop).not.toHaveBeenCalled();
+      }
+      if (!expectedCleanup.includes("adapter.stop")) {
+        expect(adapter.stop).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it("does not introduce a public listener surface", () => {
     const source = readSourceFiles(SRC_DIR)
       .map((path) => readFileSync(path, "utf8"))
