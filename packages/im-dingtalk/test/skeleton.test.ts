@@ -31,7 +31,7 @@ describe("@codex-im/im-dingtalk skeleton (JAC-79)", () => {
     expect(adapter._startedForTest()).toBe(false);
   });
 
-  it("keeps later action/file slices explicitly unimplemented", async () => {
+  it("keeps file slice unimplemented and gated methods fail closed before start", async () => {
     const adapter = new DingTalkChannelAdapter();
     const target = { platform: "dingtalk", chatId: "cid_phase5_fake_group" };
 
@@ -40,9 +40,7 @@ describe("@codex-im/im-dingtalk skeleton (JAC-79)", () => {
     );
     await expect(
       adapter.answerAction("dtcb:v1:fake", { ok: true, userMessage: "ok" }),
-    ).rejects.toThrow(
-      "DingTalkChannelAdapter.answerAction is not implemented until JAC-85 approval round-trip",
-    );
+    ).rejects.toThrow("DingTalkChannelAdapter.answerAction requires start() first");
     await expect(adapter.sendFile(target, {} as never)).rejects.toThrow(
       "DingTalkChannelAdapter.sendFile is not implemented until future attachment slice",
     );

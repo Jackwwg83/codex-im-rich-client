@@ -1,5 +1,9 @@
 export { DingTalkChannelAdapter } from "./adapter.js";
-export type { DingTalkCardClientLike, DingTalkChannelAdapterOptions } from "./adapter.js";
+export type {
+  DingTalkActionClientLike,
+  DingTalkCardClientLike,
+  DingTalkChannelAdapterOptions,
+} from "./adapter.js";
 export {
   decodeDingTalkCallbackHandle,
   dingtalkCardActionIdempotencyKey,

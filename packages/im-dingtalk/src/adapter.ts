@@ -8,7 +8,7 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
-import { normalizeDingTalkRawCardAction } from "./action.js";
+import { decodeDingTalkCallbackHandle, normalizeDingTalkRawCardAction } from "./action.js";
 import { extractDingTalkCardCallbackWirePayload } from "./callback-codec.js";
 import { DINGTALK_CAPABILITIES } from "./capabilities.js";
 import { type DingTalkApprovalCardJson, renderDingTalkApprovalCard } from "./card.js";
@@ -26,6 +26,7 @@ export interface DingTalkChannelAdapterOptions {
   readonly now?: () => Date;
   readonly streamClient?: DingTalkStreamClientLike;
   readonly cardClient?: DingTalkCardClientLike;
+  readonly actionClient?: DingTalkActionClientLike;
 }
 
 export interface DingTalkCardClientLike {
@@ -34,6 +35,16 @@ export interface DingTalkCardClientLike {
   }>;
   updateCard(input: { messageRef: MessageRef; card: DingTalkApprovalCardJson }): Promise<void>;
   editText(input: { messageRef: MessageRef; text: string }): Promise<void>;
+}
+
+export interface DingTalkActionClientLike {
+  answerAction(input: {
+    callbackHandle: string;
+    streamMessageId: string;
+    outTrackId: string;
+    receivedAt: Date;
+    ack: ActionAck;
+  }): Promise<void>;
 }
 
 export class DingTalkChannelAdapter implements ChannelAdapter {
@@ -130,7 +141,26 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   }
 
   async answerAction(_callbackHandle: string, _ack: ActionAck): Promise<void> {
-    throw this.#notImplemented("answerAction", "JAC-85 approval round-trip");
+    this.#assertStarted("answerAction");
+    const decoded = decodeDingTalkCallbackHandle(_callbackHandle);
+    if (decoded === undefined) {
+      throw new Error("DingTalkChannelAdapter.answerAction invalid callback handle");
+    }
+    const actionClient = this.#options.actionClient;
+    if (actionClient === undefined) {
+      throw new Error("DingTalkChannelAdapter.answerAction requires an injected actionClient");
+    }
+    try {
+      await actionClient.answerAction({
+        callbackHandle: _callbackHandle,
+        streamMessageId: decoded.streamMessageId,
+        outTrackId: decoded.outTrackId,
+        receivedAt: new Date(decoded.receivedAtMs),
+        ack: _ack,
+      });
+    } catch (error) {
+      throw new Error(`DingTalkChannelAdapter.answerAction failed: ${describeError(error)}`);
+    }
   }
 
   async sendFile(_target: Target, _file: OutboundFile): Promise<MessageRef> {
