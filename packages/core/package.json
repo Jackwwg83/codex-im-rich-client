@@ -13,6 +13,8 @@
     "@codex-im/app-server-client": "workspace:*"
   },
   "devDependencies": {
-    "@codex-im/testkit": "workspace:*"
+    "@codex-im/testkit": "workspace:*",
+    "@codex-im/render": "workspace:*",
+    "@codex-im/channel-core": "workspace:*"
   }
 }

@@ -101,6 +101,12 @@ importers:
         specifier: workspace:*
         version: link:../codex-protocol
     devDependencies:
+      '@codex-im/channel-core':
+        specifier: workspace:*
+        version: link:../channel-core
+      '@codex-im/render':
+        specifier: workspace:*
+        version: link:../render
       '@codex-im/testkit':
         specifier: workspace:*
         version: link:../testkit
