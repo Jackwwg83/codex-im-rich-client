@@ -8,6 +8,7 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
+import { type LarkRawCardActionInput, normalizeLarkRawCardAction } from "./action.js";
 import { LARK_CAPABILITIES } from "./capabilities.js";
 import { type LarkApprovalCardJson, renderLarkApprovalCard } from "./card.js";
 import { type LarkRawMessageEvent, normalizeLarkRawMessage } from "./message.js";
@@ -16,6 +17,10 @@ type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
 export interface LarkEventDispatcherLike {
   readonly kind?: string;
+  register?(
+    event: "card.action.trigger",
+    handler: (event: LarkRawCardActionInput) => void | Promise<void>,
+  ): LarkEventDispatcherLike | undefined;
 }
 
 export interface LarkWsClientLike {
@@ -48,6 +53,7 @@ export class LarkChannelAdapter implements ChannelAdapter {
   #wsClient: LarkWsClientLike | undefined;
   #started = false;
   #inboundPaused = true;
+  #actionHandlerInstalled = false;
   readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
   readonly #onActionHandlers = new Set<(action: InboundAction) => void>();
 
@@ -65,6 +71,7 @@ export class LarkChannelAdapter implements ChannelAdapter {
       throw new Error("LarkChannelAdapter.start requires an injected wsClient");
     }
     const eventDispatcher = this.#options.createEventDispatcher?.() ?? {};
+    this.#installActionHandler(eventDispatcher);
     await wsClient.start({ eventDispatcher });
     this.#wsClient = wsClient;
     this.#started = true;
@@ -79,6 +86,7 @@ export class LarkChannelAdapter implements ChannelAdapter {
     this.#started = false;
     await this.#wsClient?.close();
     this.#wsClient = undefined;
+    this.#actionHandlerInstalled = false;
   }
 
   onMessage(handler: (msg: InboundMessage) => void): () => void {
@@ -158,6 +166,10 @@ export class LarkChannelAdapter implements ChannelAdapter {
     this.#emitRawMessage(raw);
   }
 
+  _emitRawActionForTest(raw: LarkRawCardActionInput): void {
+    this.#emitRawAction(raw);
+  }
+
   async sendText(target: Target, text: string): Promise<MessageRef> {
     this.#assertStarted("sendText");
     const messageClient = this.#messageClient("sendText");
@@ -198,6 +210,23 @@ export class LarkChannelAdapter implements ChannelAdapter {
     }
   }
 
+  #emitRawAction(raw: LarkRawCardActionInput): void {
+    if (!this.#acceptInbound()) {
+      return;
+    }
+    const action = normalizeLarkRawCardAction(raw, this.#nowMs());
+    if (action === undefined) {
+      return;
+    }
+    for (const handler of this.#onActionHandlers) {
+      try {
+        handler(action);
+      } catch {
+        // Keep one subscriber failure from blocking other subscribers.
+      }
+    }
+  }
+
   #acceptInbound(): boolean {
     return this.#started && !this.#inboundPaused;
   }
@@ -222,6 +251,19 @@ export class LarkChannelAdapter implements ChannelAdapter {
 
   #notImplemented(method: string, issue: string): Error {
     return new Error(`LarkChannelAdapter.${method} is not implemented until ${issue}`);
+  }
+
+  #installActionHandler(eventDispatcher: LarkEventDispatcherLike): void {
+    if (this.#actionHandlerInstalled || this.#onActionHandlers.size === 0) {
+      return;
+    }
+    if (eventDispatcher.register === undefined) {
+      throw new Error('LarkChannelAdapter.onAction requires register("card.action.trigger")');
+    }
+    eventDispatcher.register("card.action.trigger", (event) => {
+      this.#emitRawAction(event);
+    });
+    this.#actionHandlerInstalled = true;
   }
 }
 

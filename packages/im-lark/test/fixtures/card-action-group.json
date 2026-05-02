@@ -1,0 +1,11 @@
+{
+  "event_id": "ev_group_card_action",
+  "operator": {
+    "user_id": "ou_group_user"
+  },
+  "action": {
+    "value": "v1:QRSTUVWXYZ234567"
+  },
+  "open_chat_id": "oc_card_group",
+  "open_message_id": "om_card_group"
+}

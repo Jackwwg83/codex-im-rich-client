@@ -1,0 +1,21 @@
+{
+  "schema": "2.0",
+  "header": {
+    "event_id": "ev_private_card_action"
+  },
+  "event": {
+    "operator": {
+      "open_id": "ou_action_user",
+      "name": "Ada"
+    },
+    "action": {
+      "value": {
+        "wirePayload": "v1:ABCDEFGHIJKLMNOP"
+      }
+    },
+    "context": {
+      "open_chat_id": "oc_card_private",
+      "open_message_id": "om_card_private"
+    }
+  }
+}

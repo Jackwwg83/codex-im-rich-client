@@ -1,7 +1,7 @@
 # Phase 4 Live Status
 
 > Single source of truth for Phase 4 planning/implementation. Read first on compact / resume / context loss after Phase 3 tag `phase-3-telegram-mvp-complete`.
-> **Last updated:** 2026-05-02 — JAC-156 Lark callback payload codec/extraction landed.
+> **Last updated:** 2026-05-02 — JAC-157 Lark card action to InboundAction mapping landed.
 > **Handoff status:** Phase 3 is tagged and complete. Phase 4 implementation may proceed through the Linear queue; live Lark smoke remains env-gated.
 
 ---
@@ -10,11 +10,11 @@
 
 - **Phase:** Phase 4 — Feishu/Lark adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`.
-- **Active Linear issue:** JAC-157 — Phase4-T8b action to InboundAction mapping.
+- **Active Linear issue:** JAC-158 — Phase4-T8c ack/fail-closed action behavior.
 - **Parent Linear issue:** JAC-9 — Phase 4 backlog / Feishu-Lark adapter.
 - **Current branch:** `codex/phase-4-planning`.
 - **Base:** `phase-3-telegram-mvp-complete` (`83c6ef0` target commit).
-- **Next exact action:** implement JAC-157 with TDD: map Lark card action events into `InboundAction` with original messageRef; no ack behavior yet.
+- **Next exact action:** implement JAC-158 with TDD: ack Lark card actions as platform receipt only; no approval-success shortcut.
 
 ## 2. Current decision state
 
@@ -63,8 +63,8 @@
 | JAC-154 | T6 sendCard/card rendering | done |
 | JAC-155 | T7 updateCard/status streaming | done |
 | JAC-156 | T8a callback payload codec/extraction | done |
-| JAC-157 | T8b action to InboundAction mapping | active next |
-| JAC-158 | T8c ack/fail-closed behavior | blocked by JAC-156/JAC-157 |
+| JAC-157 | T8b action to InboundAction mapping | done |
+| JAC-158 | T8c ack/fail-closed behavior | active next |
 | JAC-159 | T9 adapter contract suite | blocked by JAC-155/JAC-158 |
 | JAC-160 | T10 fake Lark smoke | blocked by JAC-159 |
 | JAC-161 | T11 env-gated live Lark smoke | blocked by JAC-160; not default CI |
@@ -78,8 +78,8 @@ Latest Phase 4 implementation gates:
 |---|---|
 | `pnpm typecheck` | green: 13 of 14 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 107 files, 1036 passing, 1 skipped |
-| `pnpm lint` | green: 242 files checked |
+| `pnpm test` | green: 108 files, 1043 passing, 1 skipped |
+| `pnpm lint` | green: 249 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 
 ## 7. Compact / resume

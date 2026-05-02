@@ -1,0 +1,18 @@
+{
+  "header": {
+    "event_id": "ev_missing_message_ref"
+  },
+  "event": {
+    "operator": {
+      "open_id": "ou_action_user"
+    },
+    "action": {
+      "value": {
+        "wirePayload": "v1:ABCDEFGHIJKLMNOP"
+      }
+    },
+    "context": {
+      "open_chat_id": "oc_card_private"
+    }
+  }
+}
