@@ -45,4 +45,51 @@ describe("AuditRepository (T6a)", () => {
       db.close();
     }
   });
+
+  it("stores and reads redacted audit text through an injected redactor", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const fakeSensitiveValue = "FAKE_AUDIT_SECRET_FOR_STORAGE_REDACTION_TEST";
+      const repo = new AuditRepository(db, {
+        redact: (text) => text.replaceAll(fakeSensitiveValue, "***REDACTED:audit-secret***"),
+      });
+
+      repo.insert({
+        id: "audit-redact",
+        actorUserId: `user-${fakeSensitiveValue}`,
+        action: "approval.created",
+        targetKey: `telegram:${fakeSensitiveValue}`,
+        approvalId: `approval-${fakeSensitiveValue}`,
+        result: "pending",
+        metadataJson: JSON.stringify({ token: fakeSensitiveValue }),
+        createdAt: "2026-05-02T14:45:00.000Z",
+      });
+
+      const stored = db
+        .prepare(
+          "SELECT actor_user_id, target_key, approval_id, metadata_json FROM audit_log WHERE id = ?",
+        )
+        .get("audit-redact") as {
+        actor_user_id: string;
+        target_key: string;
+        approval_id: string;
+        metadata_json: string;
+      };
+
+      expect(stored.actor_user_id).not.toContain(fakeSensitiveValue);
+      expect(stored.target_key).not.toContain(fakeSensitiveValue);
+      expect(stored.approval_id).not.toContain(fakeSensitiveValue);
+      expect(stored.metadata_json).not.toContain(fakeSensitiveValue);
+      expect(repo.findById("audit-redact")).toMatchObject({
+        actorUserId: "user-***REDACTED:audit-secret***",
+        targetKey: "telegram:***REDACTED:audit-secret***",
+        approvalId: "approval-***REDACTED:audit-secret***",
+        metadataJson: '{"token":"***REDACTED:audit-secret***"}',
+      });
+    } finally {
+      db.close();
+    }
+  });
 });

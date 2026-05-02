@@ -28,6 +28,10 @@ export interface AuditRecord {
   createdAt: string;
 }
 
+export interface AuditRepositoryOptions {
+  redact?: (text: string) => string;
+}
+
 interface AuditRow {
   id: string;
   actor_user_id: string | null;
@@ -59,7 +63,14 @@ function hydrate(row: AuditRow): AuditRecord {
 }
 
 export class AuditRepository {
-  constructor(private readonly db: DatabaseHandle) {}
+  readonly #redact: (text: string) => string;
+
+  constructor(
+    private readonly db: DatabaseHandle,
+    opts: AuditRepositoryOptions = {},
+  ) {
+    this.#redact = opts.redact ?? ((text) => text);
+  }
 
   insert(input: AuditInsert): AuditRecord {
     this.db
@@ -94,15 +105,15 @@ export class AuditRepository {
       )
       .run({
         id: input.id,
-        actorUserId: input.actorUserId ?? null,
-        action: input.action,
-        targetKey: input.targetKey ?? null,
-        projectId: input.projectId ?? null,
-        codexThreadId: input.codexThreadId ?? null,
-        codexTurnId: input.codexTurnId ?? null,
-        approvalId: input.approvalId ?? null,
-        result: input.result ?? null,
-        metadataJson: input.metadataJson ?? null,
+        actorUserId: this.#redactOptional(input.actorUserId),
+        action: this.#redact(input.action),
+        targetKey: this.#redactOptional(input.targetKey),
+        projectId: this.#redactOptional(input.projectId),
+        codexThreadId: this.#redactOptional(input.codexThreadId),
+        codexTurnId: this.#redactOptional(input.codexTurnId),
+        approvalId: this.#redactOptional(input.approvalId),
+        result: this.#redactOptional(input.result),
+        metadataJson: this.#redactOptional(input.metadataJson),
         createdAt: input.createdAt,
       });
 
@@ -131,5 +142,9 @@ export class AuditRepository {
       .get(id) as AuditRow | undefined;
 
     return row === undefined ? undefined : hydrate(row);
+  }
+
+  #redactOptional(value: string | undefined): string | null {
+    return value === undefined ? null : this.#redact(value);
   }
 }

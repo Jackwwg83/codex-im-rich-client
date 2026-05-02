@@ -73,4 +73,9 @@ export {
 } from "./approvals.js";
 
 // T6a (Phase 3) — audit_log repository exports.
-export { AuditRepository, type AuditInsert, type AuditRecord } from "./audit.js";
+export {
+  AuditRepository,
+  type AuditInsert,
+  type AuditRecord,
+  type AuditRepositoryOptions,
+} from "./audit.js";
