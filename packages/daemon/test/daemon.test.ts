@@ -36,7 +36,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(daemon.isStarted()).toBe(false);
   });
 
-  it("runs startup steps 1-3 in strict order and leaves future dependencies untouched", async () => {
+  it("runs startup steps 1-3 in strict order", async () => {
     const order: string[] = [];
     const config = { dataDir: "/tmp/codex-im" };
     const storage = { path: "/tmp/codex-im/state.db" };
@@ -60,18 +60,10 @@ describe("Daemon skeleton (T14)", () => {
       expect(ctx).toEqual({ config, storage });
       return broker;
     });
-    const createSecurityPolicy = vi.fn();
-    const createSessionRouter = vi.fn();
-    const createSupervisor = vi.fn();
-    const createAdapter = vi.fn();
     const options: DaemonOptions = {
       loadConfig,
       openStorage,
       createBroker,
-      createSecurityPolicy,
-      createSessionRouter,
-      createSupervisor,
-      createAdapter,
     };
 
     const daemon = new Daemon(options);
@@ -88,10 +80,6 @@ describe("Daemon skeleton (T14)", () => {
     expect(openStorage).toHaveBeenCalledTimes(1);
     expect(createBroker).toHaveBeenCalledTimes(1);
     expect(broker.attach).toHaveBeenCalledTimes(1);
-    expect(createSecurityPolicy).not.toHaveBeenCalled();
-    expect(createSessionRouter).not.toHaveBeenCalled();
-    expect(createSupervisor).not.toHaveBeenCalled();
-    expect(createAdapter).not.toHaveBeenCalled();
   });
 
   it("enables pending mode for the core IM-routable approval registry after broker attach", async () => {
@@ -106,11 +94,6 @@ describe("Daemon skeleton (T14)", () => {
         broker.enabled.push(method);
       }),
     };
-    const createSecurityPolicy = vi.fn();
-    const createSessionRouter = vi.fn();
-    const createSupervisor = vi.fn();
-    const createAdapter = vi.fn();
-
     const daemon = new Daemon({
       loadConfig: () => {
         order.push("loadConfig");
@@ -124,10 +107,6 @@ describe("Daemon skeleton (T14)", () => {
         order.push("createBroker");
         return broker;
       },
-      createSecurityPolicy,
-      createSessionRouter,
-      createSupervisor,
-      createAdapter,
     });
 
     await daemon.start();
@@ -142,9 +121,67 @@ describe("Daemon skeleton (T14)", () => {
     expect(order.indexOf("broker.attach")).toBeLessThan(
       order.indexOf(`pending:${broker.enabled[0]}`),
     );
-    expect(createSecurityPolicy).not.toHaveBeenCalled();
-    expect(createSessionRouter).not.toHaveBeenCalled();
-    expect(createSupervisor).not.toHaveBeenCalled();
+  });
+
+  it("constructs SecurityPolicy, SessionRouter, and Supervisor after pending-mode setup", async () => {
+    const order: string[] = [];
+    const config = { dataDir: "/tmp/codex-im" };
+    const storage = { path: "/tmp/codex-im/state.db" };
+    const broker = {
+      attach: vi.fn(() => {
+        order.push("broker.attach");
+      }),
+      enablePendingMode: vi.fn((method: string) => {
+        order.push(`pending:${method}`);
+      }),
+    };
+    const securityPolicy = { kind: "policy" };
+    const sessionRouter = { kind: "sessions" };
+    const supervisor = { kind: "supervisor" };
+    const createAdapter = vi.fn();
+
+    const daemon = new Daemon({
+      loadConfig: () => {
+        order.push("loadConfig");
+        return config;
+      },
+      openStorage: () => {
+        order.push("openStorage");
+        return storage;
+      },
+      createBroker: () => {
+        order.push("createBroker");
+        return broker;
+      },
+      createSecurityPolicy: vi.fn((ctx: unknown) => {
+        order.push("createSecurityPolicy");
+        expect(ctx).toMatchObject({ config, storage, broker });
+        return securityPolicy;
+      }),
+      createSessionRouter: vi.fn((ctx: unknown) => {
+        order.push("createSessionRouter");
+        expect(ctx).toMatchObject({ config, storage, broker, securityPolicy });
+        return sessionRouter;
+      }),
+      createSupervisor: vi.fn((ctx: unknown) => {
+        order.push("createSupervisor");
+        expect(ctx).toMatchObject({ config, storage, broker, securityPolicy, sessionRouter });
+        return supervisor;
+      }),
+      createAdapter,
+    });
+
+    await daemon.start();
+
+    const lastPending = order.lastIndexOf(
+      `pending:${IM_ROUTABLE_APPROVAL_METHODS[IM_ROUTABLE_APPROVAL_METHODS.length - 1]}`,
+    );
+    expect(lastPending).toBeGreaterThan(order.indexOf("broker.attach"));
+    expect(order.slice(lastPending + 1)).toEqual([
+      "createSecurityPolicy",
+      "createSessionRouter",
+      "createSupervisor",
+    ]);
     expect(createAdapter).not.toHaveBeenCalled();
   });
 
