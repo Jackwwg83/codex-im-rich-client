@@ -208,29 +208,31 @@ describe("runMigrations against the real src/migrations/ directory (T3a)", () =>
   // root, but the path math here would be wrong for any other cwd.
   const HERE = dirname(fileURLToPath(import.meta.url));
   const REAL_MIGRATIONS_DIR = join(HERE, "../src/migrations");
+  const CURRENT_MIGRATIONS = ["001-init.sql", "002-thread-bindings.sql"];
 
-  it("applies 001-init.sql and records it in schema_version", () => {
+  it("applies the current real migrations and records them in schema_version", () => {
     const db = openDatabase(":memory:");
     try {
       const before = Date.now();
       const result = runMigrations(db, REAL_MIGRATIONS_DIR);
       const after = Date.now();
 
-      // Plan §16.2 T3a: "test that runner records the new row".
-      expect(result.applied).toEqual(["001-init.sql"]);
+      // Plan §16.2 T3a/T4a: the real migrations dir is append-only,
+      // and every migration applied from it must be recorded.
+      expect(result.applied).toEqual(CURRENT_MIGRATIONS);
 
       const rows = db
         .prepare("SELECT version, applied_at FROM schema_version ORDER BY version")
         .all() as { version: string; applied_at: number }[];
-      expect(rows.length).toBe(1);
-      expect(rows[0]?.version).toBe("001-init.sql");
+      expect(rows.map((row) => row.version)).toEqual(CURRENT_MIGRATIONS);
 
       // applied_at is Date.now() at apply time; sanity-check it sits
       // inside the test's wall-clock window so a future implementer
       // who switches to seconds-since-epoch would break this.
-      const ts = rows[0]?.applied_at ?? 0;
-      expect(ts).toBeGreaterThanOrEqual(before);
-      expect(ts).toBeLessThanOrEqual(after);
+      for (const row of rows) {
+        expect(row.applied_at).toBeGreaterThanOrEqual(before);
+        expect(row.applied_at).toBeLessThanOrEqual(after);
+      }
 
       // schema_version's column shape from 001-init.sql must match the
       // runner's bootstrap DDL (database.ts SCHEMA_VERSION_DDL). If
@@ -257,14 +259,14 @@ describe("runMigrations against the real src/migrations/ directory (T3a)", () =>
     const db = openDatabase(":memory:");
     try {
       const first = runMigrations(db, REAL_MIGRATIONS_DIR);
-      expect(first.applied).toEqual(["001-init.sql"]);
+      expect(first.applied).toEqual(CURRENT_MIGRATIONS);
 
       const second = runMigrations(db, REAL_MIGRATIONS_DIR);
       expect(second.applied).toEqual([]);
 
-      // Single audit row, no duplicates.
+      // One audit row per migration, no duplicates.
       const count = db.prepare("SELECT COUNT(*) AS c FROM schema_version").get() as { c: number };
-      expect(count.c).toBe(1);
+      expect(count.c).toBe(CURRENT_MIGRATIONS.length);
     } finally {
       db.close();
     }
