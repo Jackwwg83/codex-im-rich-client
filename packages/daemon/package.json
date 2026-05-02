@@ -21,6 +21,7 @@
     "pino-roll": "^4.0.0"
   },
   "devDependencies": {
+    "@codex-im/im-lark": "workspace:*",
     "@codex-im/testkit": "workspace:*"
   }
 }
