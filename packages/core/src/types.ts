@@ -92,10 +92,10 @@ export type ApprovalActor =
  * preserved (channel-core T18 also imports type-only).
  */
 export type ApprovalUiAction =
-  | { kind: "allow_once" }
-  | { kind: "allow_session" }
-  | { kind: "decline" }
-  | { kind: "abort" };
+  | { kind: "allow_once"; wirePayload?: string }
+  | { kind: "allow_session"; wirePayload?: string }
+  | { kind: "decline"; wirePayload?: string }
+  | { kind: "abort"; wirePayload?: string };
 
 /**
  * IM platform addressing — identifies which chat / thread / topic

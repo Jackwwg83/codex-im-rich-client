@@ -125,4 +125,21 @@ describe("ApprovalAction is structurally identical to ApprovalUiAction (T14)", (
     const back: ApprovalAction = ui;
     expect(back.kind).toBe("allow_once");
   });
+
+  it("preserves optional wirePayload through the renderer action type", () => {
+    const action: ApprovalAction = { kind: "allow_once", wirePayload: "v1:abc123" };
+    const ui: ApprovalUiAction = action;
+    const card: ApprovalCard = {
+      schemaVersion: "approval-card.v1",
+      kind: "file_change",
+      approvalId: "approval-41",
+      summary: "Apply file change",
+      target: { riskLevel: "moderate" },
+      actions: [ui],
+      status: "pending",
+      createdAt: new Date(),
+    };
+    const block: RichBlock = { type: "approval", card };
+    expect(block.card.actions[0]?.wirePayload).toBe("v1:abc123");
+  });
 });
