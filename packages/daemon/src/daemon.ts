@@ -1,4 +1,15 @@
-import { type IMRoutableApprovalMethod, IM_ROUTABLE_APPROVAL_METHODS } from "@codex-im/core";
+import { randomUUID } from "node:crypto";
+import {
+  type ActorPolicy,
+  type BindResult,
+  type IMRoutableApprovalMethod,
+  IM_ROUTABLE_APPROVAL_METHODS,
+  type PendingApprovalSnapshot,
+  type ResolveApprovalInput,
+  type ResolveApprovalResult,
+  type SecurityPolicyApprovalDestinationDecision,
+  type Target,
+} from "@codex-im/core";
 
 type MaybePromise<T> = T | Promise<T>;
 type Unsubscribe = () => void;
@@ -8,7 +19,9 @@ export type DaemonSignal = "SIGINT" | "SIGTERM";
 export interface DaemonBroker {
   attach(): void;
   enablePendingMode(method: IMRoutableApprovalMethod): void;
-  onPendingCreated?(handler: (snapshot: unknown) => void): Unsubscribe;
+  bindActorPolicy?(approvalId: string, policy: ActorPolicy): BindResult;
+  resolve?(input: ResolveApprovalInput): MaybePromise<ResolveApprovalResult>;
+  onPendingCreated?(handler: (snapshot: PendingApprovalSnapshot) => void): Unsubscribe;
 }
 
 export interface DaemonBrokerContext {
@@ -39,6 +52,13 @@ export interface DaemonAdapter {
   stop?(): MaybePromise<void>;
 }
 
+export interface DaemonApprovalDestinationPolicy {
+  checkApprovalDestination(
+    snapshot: PendingApprovalSnapshot,
+    target: Target,
+  ): SecurityPolicyApprovalDestinationDecision;
+}
+
 export interface DaemonOptions {
   readonly loadConfig?: () => MaybePromise<unknown>;
   readonly openStorage?: (config: unknown) => MaybePromise<unknown>;
@@ -48,6 +68,10 @@ export interface DaemonOptions {
   readonly createSupervisor?: (ctx: DaemonSupervisorContext) => MaybePromise<unknown>;
   readonly createAdapter?: (ctx: DaemonAdapterContext) => MaybePromise<DaemonAdapter>;
   readonly registerSignalHandler?: (signal: DaemonSignal, handler: () => void) => Unsubscribe;
+  readonly resolveApprovalTarget?: (
+    snapshot: PendingApprovalSnapshot,
+  ) => MaybePromise<Target | null | undefined>;
+  readonly generateCallbackNonce?: () => string;
 }
 
 export class Daemon {
@@ -105,7 +129,9 @@ export class Daemon {
       };
       this.#adapter = await this.options.createAdapter?.(adapterContext);
       this.#subscribe(
-        this.#broker?.onPendingCreated?.((snapshot) => this.#handlePendingCreated(snapshot)),
+        this.#broker?.onPendingCreated?.((snapshot) => {
+          void this.#handlePendingCreated(snapshot);
+        }),
       );
       this.#subscribe(this.#adapter?.onAction((action) => this.#handleAction(action)));
       this.#subscribe(this.#adapter?.onMessage((message) => this.#handleMessage(message)));
@@ -185,7 +211,41 @@ export class Daemon {
     return () => (method as CleanupMethod).call(value);
   }
 
-  #handlePendingCreated(_snapshot: unknown): void {}
+  async #handlePendingCreated(snapshot: PendingApprovalSnapshot): Promise<void> {
+    try {
+      const target = await this.options.resolveApprovalTarget?.(snapshot);
+      if (target === undefined || target === null) {
+        return;
+      }
+
+      const policy = this.#approvalDestinationPolicy(this.#securityPolicy);
+      const decision = policy?.checkApprovalDestination(snapshot, target);
+      if (decision?.kind !== "auto_decline") {
+        return;
+      }
+
+      const actor = { kind: "system", reason: "policy_auto_decline" } as const;
+      const callbackNonce = this.options.generateCallbackNonce?.() ?? randomUUID();
+      const bindResult = this.#broker?.bindActorPolicy?.(snapshot.id, {
+        allowedActors: [actor],
+        target,
+        callbackNonce,
+      });
+      if (bindResult?.kind !== "ok") {
+        return;
+      }
+
+      await this.#broker?.resolve?.({
+        approvalId: snapshot.id,
+        decision: { kind: "decline" },
+        actor,
+        target,
+        callbackNonce,
+      });
+    } catch {
+      // Pending-created subscribers must not destabilize the broker.
+    }
+  }
 
   #handleAction(_action: unknown): void {}
 
@@ -193,5 +253,18 @@ export class Daemon {
 
   #handleSignal(): void {
     void this.stop();
+  }
+
+  #approvalDestinationPolicy(value: unknown): DaemonApprovalDestinationPolicy | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    if (
+      typeof (value as Partial<DaemonApprovalDestinationPolicy>).checkApprovalDestination !==
+      "function"
+    ) {
+      return undefined;
+    }
+    return value as DaemonApprovalDestinationPolicy;
   }
 }

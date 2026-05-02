@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { IM_ROUTABLE_APPROVAL_METHODS } from "@codex-im/core";
+import { IM_ROUTABLE_APPROVAL_METHODS, type PendingApprovalSnapshot } from "@codex-im/core";
 import { describe, expect, it, vi } from "vitest";
 import { Daemon, type DaemonOptions, type DaemonSignal } from "../src/index.js";
 
@@ -429,6 +429,129 @@ describe("Daemon skeleton (T14)", () => {
     signalHandlers.get("SIGTERM")?.();
 
     expect(daemon.isStarted()).toBe(false);
+  });
+
+  it("auto-declines policy-denied pending approvals through broker.resolve after binding", async () => {
+    const order: string[] = [];
+    const target = { platform: "telegram", chatId: "-denied" };
+    const snapshot: PendingApprovalSnapshot = {
+      id: "approval-denied",
+      appServerRequestId: 9001,
+      method: "item/fileChange/requestApproval",
+      params: {},
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-02T00:30:00.000Z"),
+    };
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    let bound = false;
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(() => {
+        order.push("bindActorPolicy");
+        bound = true;
+        return { kind: "ok" as const };
+      }),
+      resolve: vi.fn(async () => {
+        order.push(bound ? "resolve.bound" : "resolve.binding_required");
+        return { kind: "ok" as const, appliedAt: new Date("2026-05-02T00:00:01.000Z") };
+      }),
+    };
+    const securityPolicy = {
+      checkApprovalDestination: vi.fn(() => ({
+        kind: "auto_decline" as const,
+        reason: "approval_destination_denied",
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      start: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => securityPolicy,
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      generateCallbackNonce: () => "nonce-policy-decline",
+    });
+
+    await daemon.start();
+    pendingHandler?.(snapshot);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(securityPolicy.checkApprovalDestination).toHaveBeenCalledWith(snapshot, target);
+    expect(broker.bindActorPolicy).toHaveBeenCalledWith(snapshot.id, {
+      allowedActors: [{ kind: "system", reason: "policy_auto_decline" }],
+      target,
+      callbackNonce: "nonce-policy-decline",
+    });
+    expect(broker.resolve).toHaveBeenCalledWith({
+      approvalId: snapshot.id,
+      decision: { kind: "decline" },
+      actor: { kind: "system", reason: "policy_auto_decline" },
+      target,
+      callbackNonce: "nonce-policy-decline",
+    });
+    expect(order).toEqual(["bindActorPolicy", "resolve.bound"]);
+  });
+
+  it("leaves allowed pending approvals for the later tokenized send-card flow", async () => {
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const snapshot: PendingApprovalSnapshot = {
+      id: "approval-allowed",
+      appServerRequestId: 9002,
+      method: "item/fileChange/requestApproval",
+      params: {},
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-02T00:30:00.000Z"),
+    };
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(),
+      resolve: vi.fn(),
+    };
+    const securityPolicy = {
+      checkApprovalDestination: vi.fn(() => ({ kind: "allow" as const })),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => securityPolicy,
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => ({
+        onAction: () => () => {},
+        onMessage: () => () => {},
+      }),
+      resolveApprovalTarget: vi.fn(() => target),
+      generateCallbackNonce: () => "unused-for-allow",
+    });
+
+    await daemon.start();
+    pendingHandler?.(snapshot);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(securityPolicy.checkApprovalDestination).toHaveBeenCalledWith(snapshot, target);
+    expect(broker.bindActorPolicy).not.toHaveBeenCalled();
+    expect(broker.resolve).not.toHaveBeenCalled();
   });
 
   it.each([
