@@ -78,6 +78,18 @@ export type {
   RouteInboundCommandOptions,
 } from "./command-router.js";
 
+// Phase 3 T13 — platform-neutral session routing between an IM target,
+// project config, and the persistent Codex thread binding. Storage is
+// injected structurally so @codex-im/core does not depend on SQLite.
+export { SessionRouter } from "./session-router.js";
+export type {
+  SessionBindingInput,
+  SessionBindingRepository,
+  SessionRoute,
+  SessionRouterOptions,
+  SessionThreadBindingRecord,
+} from "./session-router.js";
+
 // Phase 2 T4 / T15 — pure secret-redaction primitive. Audit emit applies
 // it internally; @codex-im/render re-exports for project-approval text
 // fields per F10 (renderer applies redact + truncate before card lands
