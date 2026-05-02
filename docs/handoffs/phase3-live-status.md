@@ -1,23 +1,23 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, and JAC-38 / T14 daemon skeleton complete.
-> **Handoff status:** JAC-38 complete: `Daemon` class skeleton and `DaemonOptions` injection bag are exported; start/stop are no-op/idempotent and no public listener surface was introduced. All 5 gates green. Next exact issue: JAC-39 / T15 daemon strict start order and pending-mode registry.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, and JAC-39 / T15 daemon strict start order complete.
+> **Handoff status:** JAC-39 complete: `Daemon.start()` now runs load/config/storage/broker/pending-mode/policy/session/supervisor/adapter wiring in strict order, cleans partial startup failures, wires pending/action/message before adapter start, registers injected signal handlers, and starts the adapter last. All 5 gates green. Next exact issue: JAC-40 / T16.1 policy-denied approval auto-decline via system actor.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-38 / T14** (daemon class skeleton and options; no real startup wiring).
-- **Next exact task:** **JAC-39 / T15** — daemon strict start order and pending-mode registry. Keep each T15.1-T15.8 slice focused.
+- **Active task:** None at this checkpoint. Last completed: **JAC-39 / T15** (daemon strict start order, pending-mode registry, startup cleanup, pre-start subscriptions, signal handler injection, adapter start last).
+- **Next exact task:** **JAC-40 / T16.1** — policy-denied approval auto-decline via synthetic system actor. This begins the high-risk daemon approval flow; keep the scope to the `auto_decline` branch only.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **HEAD:** `6d1b4ae` (`feat(daemon): T14 class skeleton`)
-- **Tag distance:** `phase-2-codex-reviewed` plus current Phase 3 implementation commits (run `git describe --tags` for exact count)
+- **HEAD:** `82c1967` (`feat(daemon): T15.8 register signal handlers`)
+- **Tag distance:** `phase-2-codex-reviewed-57-g82c1967`
 - **Origin:** synced at this checkpoint (`git rev-list --left-right --count origin/phase-3-implementation...HEAD` → `0 0`)
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -66,6 +66,14 @@
 | `10e898e` | T-D41a-d / JAC-19 | `InboundAction.rawCallbackData`, `wirePayload` passthrough/fallback, fake adapter update, JSDoc guard |
 | `c2648f3` | docs checkpoint | Refresh live-status for JAC-19 completion |
 | `6d1b4ae` | T14 / JAC-38 | `Daemon` skeleton + `DaemonOptions` injection bag + no-public-listener boundary test |
+| `cb67afd` | T15.1 / JAC-124 | `Daemon.start()` strict steps 1-3: load config, open storage, construct + attach broker |
+| `ccbeab6` | T15.2 / JAC-125 | Enable pending mode for all IM-routable approval methods after broker attach |
+| `e7b7dc7` | T15.3 / JAC-126 | Construct SecurityPolicy, SessionRouter, and Supervisor after pending-mode setup |
+| `608cb5c` | T15.4 / JAC-127 | Create adapter and subscribe pending/action/message wires before adapter start |
+| `db86a9e` | T15.5 / JAC-128 | Best-effort partial-start cleanup: unsubscribe wires, stop adapter/supervisor, close storage |
+| `97e1b00` | T15.6 / JAC-129 | Start adapter only after action subscription; immediate action callback reachable |
+| `202df6d` | T15.7 / JAC-130 | Prove message subscription is registered before adapter start |
+| `82c1967` | T15.8 / JAC-131 | Inject SIGTERM/SIGINT handlers before adapter start; adapter start remains last |
 
 ## 3. Versions / pins
 
@@ -81,7 +89,7 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **797 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +77 from Phase 3 storage/config/core/channel/daemon prereqs) |
+| Tests | `pnpm test` | **816 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +96 from Phase 3 storage/config/core/channel/daemon prereqs) |
 | Lint | `pnpm lint` | green (173 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
@@ -92,7 +100,7 @@
 
 - **Phase 3 plan v2.4:** APPROVE_WITH_CHANGES at codex round 4 (4 P1 + 2 P2, all absorbed). Plan-of-record under `docs/superpowers/plans/2026-05-02-phase-3-plan.md`. Round-by-round records under `docs/phase-3/plan-v{1,2.1,2.2,2.3}-codex-{review,round2,round3,round4}.md`.
 - **Implementation T1.1+T2a+T2b+T2c review (impl-t1-t2c):** APPROVE_WITH_CHANGES, 0 P0 + 1 P1 + 2 P2. All findings cleared by commit `04a92fe`. Per-task scope verdict: clean across all 4 commits. Record at `docs/phase-3/impl-t1-t2c-codex-review.md`.
-- **Next planned codex review:** mid-Phase-3 implementation review after the storage repository tasks (T4a-T6f) land, OR end-of-Phase-3 integrated review at tag time. Cadence is at-discretion, not per-task.
+- **Next planned codex review:** after the daemon approval callback flow (T16/T17) lands, or at the T19 daemon mid-review gate before real Telegram adapter work. Cadence is at-discretion, not per-task.
 
 ## 6. Active redlines (carry forward into all future Phase 3 tasks)
 
@@ -137,10 +145,10 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-39 / T15**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-40 / T16.1**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
-6. STOP and output a Context Recovery Report. Do NOT modify code until the user approves the recovery.
+6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
 
 ## 10. Handoff to Codex (2026-05-02)
 
@@ -153,7 +161,7 @@ For the Codex agent picking this up:
    - Historical checkpoint: `git log --oneline -1` showed `f493360 docs(phase3): handoff checkpoint — bump live-status to f4e1b69 + add §10 codex handoff section`. Current HEAD is documented in §2.
    - Use `git rev-list --left-right --count origin/phase-3-implementation...HEAD` to verify local-vs-origin sync.
 2. **Verify gates green at the checkpoint:**
-   - Current checkpoint: `pnpm test` → 76 files, 797 pass + 1 skip.
+   - Current checkpoint: `pnpm test` → 76 files, 816 pass + 1 skip.
    - `pnpm typecheck` + `pnpm typecheck:tests` → both clean.
    - `pnpm lint` → 151 files clean.
    - `pnpm protocol:check` → codex 0.128.0, schema unchanged.
@@ -164,16 +172,16 @@ For the Codex agent picking this up:
 4. **Read order on first session:**
    1. This file (you are here).
    2. `CLAUDE.md` — generic redlines + compact-recovery rules.
-   3. `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.2 (T4a body) + §17 (dep graph) + §6 (Phase 3 redlines) + §7 (decisions D22+).
-   4. `packages/storage-sqlite/src/database.ts` (current implementation surface).
-   5. `packages/storage-sqlite/test/migrations.test.ts` (existing test pattern to extend for T4a).
+   3. `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 (T16.1 body) + §17 (dep graph) + §6 (Phase 3 redlines) + §7 (decisions D22+).
+   4. `packages/daemon/src/daemon.ts` (current implementation surface).
+   5. `packages/daemon/test/daemon.test.ts` (current daemon wire-up test pattern).
 5. **Cadence expectations carried forward from prior sessions:**
-   - One T-task per commit. Don't bundle T4a + T4b + T4c into one commit.
+   - One T-task per commit. Don't bundle T16.1 + T16.2 + T16.3 into one commit.
    - Run all 5 gates (typecheck / typecheck:tests / test / lint / protocol:check) before each commit.
    - Current autonomous-loop directive: keep one focused issue per commit, update Linear/docs, push regularly, and continue through technical decisions without waiting for routine human approval. Escalate only for actions the tooling cannot perform safely.
-   - Codex outside-voice impl review cadence is at-discretion, not per-task. Past pattern: review after a coherent batch (e.g. T1.1 → T2c was reviewed together). Suggest a review batch around T4a–T6c (storage repositories) when those land.
+   - Codex outside-voice impl review cadence is at-discretion, not per-task. Past pattern: review after a coherent batch (e.g. T1.1 → T2c was reviewed together). Next good review gate is after T16/T17 approval callback flow or at the T19 daemon mid-review gate.
    - When the user says "做一次 codex review", produce a prompt under `docs/phase-3/impl-<scope>-codex-review-prompt.md`, invoke `cat <prompt> | codex exec --sandbox read-only -c model_reasoning_effort=xhigh > <output>.md 2> <output>.stderr` in the background.
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-38 / T14**. Continue with **JAC-39 / T15** daemon strict start order and pending-mode registry, then the rest of **JAC-20** dependency order.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-39 / T15**. Continue with **JAC-40 / T16.1** policy-denied approval auto-decline via synthetic system actor, then the rest of **JAC-20** dependency order.
