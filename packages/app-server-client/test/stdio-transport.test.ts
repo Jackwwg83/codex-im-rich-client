@@ -10,6 +10,22 @@ const echoFixture = join(here, "fixtures", "echo-stdio.mjs");
 const argvFixture = join(here, "fixtures", "argv-print.mjs");
 const sigtermFixture = join(here, "fixtures", "sigterm-ignore.mjs");
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor<T>(read: () => T | undefined, label: string, timeoutMs = 1_000): Promise<T> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const value = read();
+    if (value !== undefined) {
+      return value;
+    }
+    await delay(10);
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
 describe("StdioTransport — round-trip (Task 6.1)", () => {
   it("sends a JSON-RPC request and receives a JSONL response", async () => {
     const t = new StdioTransport({
@@ -21,9 +37,9 @@ describe("StdioTransport — round-trip (Task 6.1)", () => {
     t.onMessage((m) => got.push(m));
 
     t.send({ id: 1, method: "ping" });
-    await new Promise((r) => setTimeout(r, 80));
+    const first = await waitFor(() => got[0], "echo response");
 
-    expect(got).toEqual([{ id: 1, result: { echoed: "ping" } }]);
+    expect(first).toEqual({ id: 1, result: { echoed: "ping" } });
 
     await t.stop();
   });
@@ -39,8 +55,7 @@ describe("StdioTransport — round-trip (Task 6.1)", () => {
       closeCode = c;
     });
     await t.stop();
-    // Wait a tick for child exit propagation.
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() => (closeCode !== undefined ? closeCode : undefined), "child close event");
     expect(closeCode).toBe(0);
   });
 });
@@ -60,10 +75,9 @@ describe("StdioTransport — configOverrides translation (Task 6.2)", () => {
     await t.start();
     const got: unknown[] = [];
     t.onMessage((m) => got.push(m));
-    await new Promise((r) => setTimeout(r, 100));
+    const first = await waitFor(() => got[0], "argv response");
 
-    expect(got).toHaveLength(1);
-    const out = got[0] as { argv: string[] };
+    const out = first as { argv: string[] };
     // argv-print emits process.argv.slice(2), so it starts with the fixture path
     // followed by our injected -c args.
     const cArgs = out.argv.filter((_, i, arr) => i > 0 && arr[i - 1] === "-c");
@@ -98,11 +112,11 @@ describe("StdioTransport — stderr routing (Task 6.3)", () => {
       logger: fakeLogger,
     });
     await t.start();
-    await new Promise((r) => setTimeout(r, 80));
+    const firstCall = await waitFor(() => warnSpy.mock.calls[0], "stderr warn call");
 
     // echo-stdio writes "echo-stdio booted\n" to stderr on boot.
     expect(warnSpy).toHaveBeenCalled();
-    const callArg = warnSpy.mock.calls[0]?.[1] as string | undefined;
+    const callArg = firstCall[1] as string | undefined;
     expect(callArg).toContain("echo-stdio booted");
 
     await t.stop();
@@ -124,7 +138,13 @@ describe("StdioTransport — spawn ENOENT (Task 6.4)", () => {
 
     await t.start();
     // Allow child error event to fire async.
-    await new Promise((r) => setTimeout(r, 100));
+    await waitFor(
+      () =>
+        errors.some((e) => e instanceof TransportProtocolError) || closeCode === null
+          ? true
+          : undefined,
+      "spawn error",
+    );
 
     // Either onError fires with TransportProtocolError, or onClose fires
     // with null exit code — both are acceptable error paths.
@@ -147,7 +167,7 @@ describe("StdioTransport — SIGKILL grace period (Task 6.5)", () => {
       closed = true;
     });
     await t.start();
-    await new Promise((r) => setTimeout(r, 80)); // Let child boot.
+    await delay(80); // Let child boot.
 
     const stopStart = Date.now();
     await t.stop();
@@ -157,7 +177,7 @@ describe("StdioTransport — SIGKILL grace period (Task 6.5)", () => {
     expect(stopElapsed).toBeLessThan(300);
 
     // Wait for close event to propagate.
-    await new Promise((r) => setTimeout(r, 100));
+    await waitFor(() => (closed ? true : undefined), "forced close event");
     expect(closed).toBe(true);
   }, 5_000);
 });
