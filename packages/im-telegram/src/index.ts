@@ -1,9 +1,13 @@
 export { decodeCallbackData, encodeCallbackData } from "./callback-codec.js";
-export { TelegramChannelAdapter } from "./adapter.js";
+export { encodeTelegramCallbackHandle, TelegramChannelAdapter } from "./adapter.js";
 export type {
+  TelegramAnswerCallbackQueryOptions,
   TelegramBotApiLike,
   TelegramBotLike,
+  TelegramEditMessageReplyMarkupOptions,
+  TelegramEditMessageTextOptions,
   TelegramInlineKeyboardButton,
+  TelegramReplyMarkup,
   TelegramSendMessageOptions,
   TelegramSentMessageLike,
 } from "./adapter.js";

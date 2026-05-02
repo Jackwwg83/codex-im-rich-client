@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { randomBytes } from "node:crypto";
 import type {
   ActionAck,
@@ -15,12 +16,31 @@ import { TELEGRAM_CAPABILITIES } from "./capabilities.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 type ApprovalActionInput = ApprovalCardInput["actions"][number];
+const ANSWER_CALLBACK_DEADLINE_MS = 60_000;
+const CALLBACK_HANDLE_PREFIX = "tgcb:v1:";
+
+export interface TelegramReplyMarkup {
+  inline_keyboard: TelegramInlineKeyboardButton[][];
+}
 
 export interface TelegramSendMessageOptions {
   message_thread_id?: number;
   reply_markup: {
     inline_keyboard: TelegramInlineKeyboardButton[][];
   };
+}
+
+export interface TelegramEditMessageReplyMarkupOptions {
+  reply_markup: TelegramReplyMarkup;
+}
+
+export interface TelegramEditMessageTextOptions {
+  reply_markup?: TelegramReplyMarkup;
+}
+
+export interface TelegramAnswerCallbackQueryOptions {
+  text: string;
+  show_alert: boolean;
 }
 
 export interface TelegramInlineKeyboardButton {
@@ -38,6 +58,21 @@ export interface TelegramBotApiLike {
     text: string,
     options: TelegramSendMessageOptions,
   ): Promise<TelegramSentMessageLike>;
+  editMessageReplyMarkup(
+    chatId: string,
+    messageId: number,
+    options: TelegramEditMessageReplyMarkupOptions,
+  ): Promise<unknown>;
+  editMessageText(
+    chatId: string,
+    messageId: number,
+    text: string,
+    options: TelegramEditMessageTextOptions,
+  ): Promise<unknown>;
+  answerCallbackQuery(
+    callbackQueryId: string,
+    options: TelegramAnswerCallbackQueryOptions,
+  ): Promise<unknown>;
 }
 
 export interface TelegramBotLike {
@@ -50,6 +85,7 @@ export interface TelegramChannelAdapterOptions {
   readonly botToken?: string;
   readonly bot?: TelegramBotLike;
   readonly createBot?: (botToken: string) => TelegramBotLike;
+  readonly now?: () => Date;
 }
 
 export class TelegramChannelAdapter implements ChannelAdapter {
@@ -105,16 +141,55 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     }
   }
 
-  async updateCard(_ref: MessageRef, _card: ApprovalCardInput): Promise<void> {
-    throw notImplemented("updateCard");
+  async updateCard(ref: MessageRef, card: ApprovalCardInput): Promise<void> {
+    this.#assertStarted("updateCard");
+    const api = this.#api("updateCard");
+    const messageId = parseTelegramMessageId(ref.messageId);
+    const replyMarkup = sendMessageOptions(ref.target, card).reply_markup;
+    try {
+      await api.editMessageReplyMarkup(ref.target.chatId, messageId, { reply_markup: replyMarkup });
+      await api.editMessageText(ref.target.chatId, messageId, formatApprovalCard(card), {
+        reply_markup: replyMarkup,
+      });
+    } catch (error) {
+      throw new Error(`TelegramChannelAdapter.updateCard failed: ${describeTelegramError(error)}`);
+    }
   }
 
-  async editText(_ref: MessageRef, _body: string): Promise<void> {
-    throw notImplemented("editText");
+  async editText(ref: MessageRef, body: string): Promise<void> {
+    this.#assertStarted("editText");
+    const api = this.#api("editText");
+    const messageId = parseTelegramMessageId(ref.messageId);
+    try {
+      await api.editMessageText(ref.target.chatId, messageId, body, {});
+    } catch (error) {
+      throw new Error(`TelegramChannelAdapter.editText failed: ${describeTelegramError(error)}`);
+    }
   }
 
-  async answerAction(_callbackHandle: string, _ack: ActionAck): Promise<void> {
-    throw notImplemented("answerAction");
+  async answerAction(callbackHandle: string, ack: ActionAck): Promise<void> {
+    this.#assertStarted("answerAction");
+    const api = this.#api("answerAction");
+    const decoded = decodeTelegramCallbackHandle(callbackHandle);
+    if (decoded === undefined) {
+      throw new Error("TelegramChannelAdapter.answerAction invalid callback handle");
+    }
+    const elapsed = this.#nowMs() - decoded.receivedAtMs;
+    if (elapsed > ANSWER_CALLBACK_DEADLINE_MS) {
+      throw new Error(
+        `TelegramChannelAdapter.answerAction deadline exceeded (${elapsed}ms > ${ANSWER_CALLBACK_DEADLINE_MS}ms)`,
+      );
+    }
+    try {
+      await api.answerCallbackQuery(decoded.callbackQueryId, {
+        text: ack.userMessage,
+        show_alert: !ack.ok,
+      });
+    } catch (error) {
+      throw new Error(
+        `TelegramChannelAdapter.answerAction failed: ${describeTelegramError(error)}`,
+      );
+    }
   }
 
   async sendFile(_target: Target, _file: OutboundFile): Promise<MessageRef> {
@@ -143,6 +218,10 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       throw new Error(`TelegramChannelAdapter.${method} requires a bot API`);
     }
     return api;
+  }
+
+  #nowMs(): number {
+    return (this.#options.now?.() ?? new Date()).getTime();
   }
 }
 
@@ -212,6 +291,14 @@ function parseTelegramTopicId(topicId: string | undefined): number | undefined {
   throw new Error("TelegramChannelAdapter.sendCard requires numeric Telegram topicId");
 }
 
+function parseTelegramMessageId(messageId: string): number {
+  const parsed = Number.parseInt(messageId, 10);
+  if (Number.isSafeInteger(parsed) && String(parsed) === messageId) {
+    return parsed;
+  }
+  throw new Error("TelegramChannelAdapter requires numeric Telegram messageId");
+}
+
 function generateCallbackNonce(): string {
   return randomBytes(16).toString("hex");
 }
@@ -241,4 +328,35 @@ function isTelegramApiError(error: unknown): error is {
     typeof (error as { error_code?: unknown }).error_code === "number" &&
     typeof (error as { description?: unknown }).description === "string"
   );
+}
+
+export function encodeTelegramCallbackHandle(callbackQueryId: string, receivedAt: Date): string {
+  if (callbackQueryId.length === 0) {
+    throw new Error("Telegram callback handle requires callback query id");
+  }
+  const encodedId = Buffer.from(callbackQueryId, "utf8").toString("base64url");
+  return `${CALLBACK_HANDLE_PREFIX}${receivedAt.getTime()}:${encodedId}`;
+}
+
+function decodeTelegramCallbackHandle(
+  callbackHandle: string,
+): { callbackQueryId: string; receivedAtMs: number } | undefined {
+  if (!callbackHandle.startsWith(CALLBACK_HANDLE_PREFIX)) {
+    return undefined;
+  }
+  const body = callbackHandle.slice(CALLBACK_HANDLE_PREFIX.length);
+  const colon = body.indexOf(":");
+  if (colon <= 0) {
+    return undefined;
+  }
+  const receivedAtMs = Number.parseInt(body.slice(0, colon), 10);
+  if (!Number.isSafeInteger(receivedAtMs)) {
+    return undefined;
+  }
+  const encodedId = body.slice(colon + 1);
+  if (encodedId.length === 0) {
+    return undefined;
+  }
+  const callbackQueryId = Buffer.from(encodedId, "base64url").toString("utf8");
+  return callbackQueryId.length > 0 ? { callbackQueryId, receivedAtMs } : undefined;
 }

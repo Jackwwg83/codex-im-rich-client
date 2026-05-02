@@ -32,7 +32,12 @@ function makeBot(sendMessage: SendMessageMock = makeSendMessage()): TelegramBotL
   return {
     start: vi.fn(async () => undefined),
     stop: vi.fn(() => undefined),
-    api: { sendMessage },
+    api: {
+      sendMessage,
+      editMessageReplyMarkup: vi.fn<TelegramBotApiLike["editMessageReplyMarkup"]>(async () => true),
+      editMessageText: vi.fn<TelegramBotApiLike["editMessageText"]>(async () => true),
+      answerCallbackQuery: vi.fn<TelegramBotApiLike["answerCallbackQuery"]>(async () => true),
+    },
   };
 }
 
