@@ -9,6 +9,7 @@ import type {
   Target,
 } from "@codex-im/channel-core";
 import { DINGTALK_CAPABILITIES } from "./capabilities.js";
+import { type DingTalkApprovalCardJson, renderDingTalkApprovalCard } from "./card.js";
 import {
   DINGTALK_TOPIC_CARD,
   DINGTALK_TOPIC_ROBOT,
@@ -22,6 +23,15 @@ type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 export interface DingTalkChannelAdapterOptions {
   readonly now?: () => Date;
   readonly streamClient?: DingTalkStreamClientLike;
+  readonly cardClient?: DingTalkCardClientLike;
+}
+
+export interface DingTalkCardClientLike {
+  sendCard(input: { target: Target; card: DingTalkApprovalCardJson }): Promise<{
+    messageId: string;
+  }>;
+  updateCard(input: { messageRef: MessageRef; card: DingTalkApprovalCardJson }): Promise<void>;
+  editText(input: { messageRef: MessageRef; text: string }): Promise<void>;
 }
 
 export class DingTalkChannelAdapter implements ChannelAdapter {
@@ -85,15 +95,36 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   }
 
   async sendCard(_target: Target, _card: ApprovalCardInput): Promise<SendCardResult> {
-    throw this.#notImplemented("sendCard", "JAC-82 card send/update");
+    this.#assertStarted("sendCard");
+    const cardClient = this.#cardClient("sendCard");
+    const card = renderDingTalkApprovalCard(_card);
+    try {
+      const sent = await cardClient.sendCard({ target: _target, card });
+      return { messageRef: { target: _target, messageId: sent.messageId }, callbackNonce: "" };
+    } catch (error) {
+      throw new Error(`DingTalkChannelAdapter.sendCard failed: ${describeError(error)}`);
+    }
   }
 
   async updateCard(_ref: MessageRef, _card: ApprovalCardInput): Promise<void> {
-    throw this.#notImplemented("updateCard", "JAC-82 card send/update");
+    this.#assertStarted("updateCard");
+    const cardClient = this.#cardClient("updateCard");
+    const card = renderDingTalkApprovalCard(_card);
+    try {
+      await cardClient.updateCard({ messageRef: _ref, card });
+    } catch (error) {
+      throw new Error(`DingTalkChannelAdapter.updateCard failed: ${describeError(error)}`);
+    }
   }
 
   async editText(_ref: MessageRef, _body: string): Promise<void> {
-    throw this.#notImplemented("editText", "JAC-82 card send/update");
+    this.#assertStarted("editText");
+    const cardClient = this.#cardClient("editText");
+    try {
+      await cardClient.editText({ messageRef: _ref, text: _body });
+    } catch (error) {
+      throw new Error(`DingTalkChannelAdapter.editText failed: ${describeError(error)}`);
+    }
   }
 
   async answerAction(_callbackHandle: string, _ack: ActionAck): Promise<void> {
@@ -118,6 +149,20 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
 
   #notImplemented(method: string, issue: string): Error {
     return new Error(`DingTalkChannelAdapter.${method} is not implemented until ${issue}`);
+  }
+
+  #assertStarted(method: string): void {
+    if (!this.#started) {
+      throw new Error(`DingTalkChannelAdapter.${method} requires start() first`);
+    }
+  }
+
+  #cardClient(method: string): DingTalkCardClientLike {
+    const cardClient = this.#options.cardClient;
+    if (cardClient === undefined) {
+      throw new Error(`DingTalkChannelAdapter.${method} requires an injected cardClient`);
+    }
+    return cardClient;
   }
 
   #installStreamCallbacks(streamClient: DingTalkStreamClientLike): void {
@@ -161,4 +206,8 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   #nowMs(): number {
     return this.#options.now?.().getTime() ?? Date.now();
   }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

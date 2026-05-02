@@ -31,16 +31,12 @@ describe("@codex-im/im-dingtalk skeleton (JAC-79)", () => {
     expect(adapter._startedForTest()).toBe(false);
   });
 
-  it("keeps later card/action/file slices explicitly unimplemented", async () => {
+  it("keeps later action/file slices explicitly unimplemented", async () => {
     const adapter = new DingTalkChannelAdapter();
     const target = { platform: "dingtalk", chatId: "cid_phase5_fake_group" };
-    const ref = { target, messageId: "msg_phase5_fake_prompt" };
 
     await expect(adapter.sendCard(target, {} as never)).rejects.toThrow(
-      "DingTalkChannelAdapter.sendCard is not implemented until JAC-82 card send/update",
-    );
-    await expect(adapter.updateCard(ref, {} as never)).rejects.toThrow(
-      "DingTalkChannelAdapter.updateCard is not implemented until JAC-82 card send/update",
+      "DingTalkChannelAdapter.sendCard requires start() first",
     );
     await expect(
       adapter.answerAction("dtcb:v1:fake", { ok: true, userMessage: "ok" }),

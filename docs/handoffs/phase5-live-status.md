@@ -1,7 +1,7 @@
 # Phase 5 Live Status
 
 > Single source of truth for Phase 5 while DingTalk adapter work is active.
-> **Last updated:** 2026-05-02 - JAC-81 message receive fixtures green.
+> **Last updated:** 2026-05-02 - JAC-82 card send/update green.
 
 ---
 
@@ -10,12 +10,12 @@
 - **Phase:** Phase 5 - DingTalk adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
 - **Parent Linear issue:** JAC-10 - Phase 5 backlog / DingTalk adapter.
-- **Current Linear issue:** JAC-81 - message receive fixtures.
+- **Current Linear issue:** JAC-82 - card send/update.
 - **Branch:** `codex/phase-5-dingtalk`.
 - **Base:** `phase-4-lark-adapter-complete` (`7281e28`).
 - **Version:** `0.1.0-phase4`; do not bump until Phase 5 tag gate.
-- **Next exact action:** update Linear for JAC-81, then start JAC-82 card
-  send/update.
+- **Next exact action:** update Linear for JAC-82, then start JAC-83 callback
+  codec/parser only.
 
 ## 2. Current decision state
 
@@ -37,6 +37,10 @@
   into `InboundMessage`, emits only after lifecycle unpauses inbound, preserves
   sanitized debug raw fields, and pins idempotency as `robot:<msgId>` while
   retaining Stream `headers.messageId` for diagnostics.
+- Card send/update uses an injected `DingTalkCardClientLike`, renders only
+  opaque `v1:` `wirePayload` values into DingTalk actions, sets
+  `callbackType: "STREAM"`, and surfaces send/update/edit failures without
+  optimistic `MessageRef` success.
 - Current DingTalk capabilities are intentionally conservative:
   `supportsButtons=true`, `canEditMessage=true`, `supportsAttachments=false`,
   `maxCallbackDataBytes=64`.
@@ -78,9 +82,9 @@
 | JAC-78 | T0 plan review gate | done |
 | JAC-79 | T1 im-dingtalk skeleton + boundary tests | done |
 | JAC-80 | T2 Stream lifecycle fake test | done |
-| JAC-81 | T3 message receive fixtures | green; Linear update pending |
-| JAC-82 | T4 card send/update | next |
-| JAC-83 | T5 callback codec/parser only; no `InboundAction` before JAC-84 | blocked |
+| JAC-81 | T3 message receive fixtures | done |
+| JAC-82 | T4 card send/update | green; Linear update pending |
+| JAC-83 | T5 callback codec/parser only; no `InboundAction` before JAC-84 | next |
 | JAC-84 | T6 messageRef validation + action emission gate | blocked / review-sensitive |
 | JAC-85 | T7 approval round-trip fake test | blocked |
 | JAC-86 | T8 reconnect behavior | blocked |
@@ -91,14 +95,14 @@
 
 ## 6. Gate status
 
-Latest JAC-81 verification:
+Latest JAC-82 verification:
 
 | Gate | Result |
 |---|---|
 | `pnpm typecheck` | green: 14 of 15 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 117 files, 1107 passing, 1 skipped |
-| `pnpm lint` | green: 270 files checked |
+| `pnpm test` | green: 118 files, 1115 passing, 1 skipped |
+| `pnpm lint` | green: 272 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 
 `protocol:check` must run serially because it regenerates protocol files before
