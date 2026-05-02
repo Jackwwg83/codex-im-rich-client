@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   type ActorPolicy,
+  type ApprovalActor,
   type BindResult,
   type IMRoutableApprovalMethod,
   IM_ROUTABLE_APPROVAL_METHODS,
@@ -85,6 +86,10 @@ export interface DaemonOptions {
   readonly resolveApprovalActions?: (
     snapshot: PendingApprovalSnapshot,
   ) => MaybePromise<readonly CallbackTokenAction[]>;
+  readonly resolveApprovalAllowedActors?: (
+    snapshot: PendingApprovalSnapshot,
+    target: Target,
+  ) => MaybePromise<readonly NonNullable<ApprovalActor>[]>;
   readonly callbackTokenRepository?: DaemonCallbackTokenRepository;
   readonly generateCallbackNonce?: () => string;
   readonly generateRawCallbackToken?: () => string;
@@ -239,7 +244,19 @@ export class Daemon {
       const decision = policy?.checkApprovalDestination(snapshot, target);
       if (decision?.kind !== "auto_decline") {
         if (decision?.kind === "allow") {
-          await this.#issueCallbackTokens(snapshot, target);
+          const callbackNonce = await this.#issueCallbackTokens(snapshot, target);
+          if (callbackNonce === undefined) {
+            return;
+          }
+          const allowedActors = await this.options.resolveApprovalAllowedActors?.(snapshot, target);
+          if (allowedActors === undefined || allowedActors.length === 0) {
+            return;
+          }
+          this.#broker?.bindActorPolicy?.(snapshot.id, {
+            allowedActors,
+            target,
+            callbackNonce,
+          });
         }
         return;
       }
@@ -267,11 +284,14 @@ export class Daemon {
     }
   }
 
-  async #issueCallbackTokens(snapshot: PendingApprovalSnapshot, target: Target): Promise<void> {
+  async #issueCallbackTokens(
+    snapshot: PendingApprovalSnapshot,
+    target: Target,
+  ): Promise<string | undefined> {
     const repository = this.options.callbackTokenRepository;
     const actions = await this.options.resolveApprovalActions?.(snapshot);
     if (repository === undefined || actions === undefined || actions.length === 0) {
-      return;
+      return undefined;
     }
 
     const callbackNonce = this.options.generateCallbackNonce?.() ?? randomUUID();
@@ -291,6 +311,7 @@ export class Daemon {
         expiresAt,
       });
     }
+    return callbackNonce;
   }
 
   #handleAction(_action: unknown): void {}
