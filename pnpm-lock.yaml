@@ -163,6 +163,12 @@ importers:
         specifier: workspace:*
         version: link:../testkit
 
+  packages/im-lark:
+    dependencies:
+      '@codex-im/channel-core':
+        specifier: workspace:*
+        version: link:../channel-core
+
   packages/im-telegram:
     dependencies:
       '@codex-im/channel-core':

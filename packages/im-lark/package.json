@@ -1,0 +1,16 @@
+{
+  "name": "@codex-im/im-lark",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run --project unit"
+  },
+  "dependencies": {
+    "@codex-im/channel-core": "workspace:*"
+  }
+}
