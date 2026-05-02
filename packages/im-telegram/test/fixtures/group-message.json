@@ -1,0 +1,19 @@
+{
+  "update_id": 1002,
+  "message": {
+    "message_id": 22,
+    "date": 1710000060,
+    "chat": {
+      "id": -1009876543210,
+      "type": "supergroup",
+      "title": "Codex Operators"
+    },
+    "from": {
+      "id": 222333444,
+      "is_bot": false,
+      "first_name": "Grace",
+      "last_name": "Hopper"
+    },
+    "text": "run tests"
+  }
+}

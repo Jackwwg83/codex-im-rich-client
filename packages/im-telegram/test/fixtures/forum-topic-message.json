@@ -1,0 +1,22 @@
+{
+  "update_id": 1003,
+  "message": {
+    "message_id": 33,
+    "message_thread_id": 42,
+    "date": 1710000120,
+    "chat": {
+      "id": -1009876543210,
+      "type": "supergroup",
+      "title": "Codex Operators",
+      "is_forum": true
+    },
+    "from": {
+      "id": 555666777,
+      "is_bot": false,
+      "first_name": "Katherine",
+      "last_name": "Johnson",
+      "username": "kj"
+    },
+    "text": "status"
+  }
+}

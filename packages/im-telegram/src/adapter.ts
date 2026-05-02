@@ -19,6 +19,34 @@ type ApprovalActionInput = ApprovalCardInput["actions"][number];
 const ANSWER_CALLBACK_DEADLINE_MS = 60_000;
 const CALLBACK_HANDLE_PREFIX = "tgcb:v1:";
 
+export interface TelegramUserLike {
+  readonly id: number | string;
+  readonly username?: string;
+  readonly first_name?: string;
+  readonly last_name?: string;
+}
+
+export interface TelegramChatLike {
+  readonly id: number | string;
+  readonly type?: string;
+  readonly title?: string;
+}
+
+export interface TelegramTextMessageLike {
+  readonly message_id: number | string;
+  readonly message_thread_id?: number | string;
+  readonly date?: number;
+  readonly chat: TelegramChatLike;
+  readonly from?: TelegramUserLike;
+  readonly text: string;
+}
+
+export interface TelegramMessageContextLike {
+  readonly message?: TelegramTextMessageLike;
+  readonly chat?: TelegramChatLike;
+  readonly from?: TelegramUserLike;
+}
+
 export interface TelegramReplyMarkup {
   inline_keyboard: TelegramInlineKeyboardButton[][];
 }
@@ -75,10 +103,13 @@ export interface TelegramBotApiLike {
   ): Promise<unknown>;
 }
 
+export type TelegramMessageHandlerLike = (ctx: TelegramMessageContextLike) => void | Promise<void>;
+
 export interface TelegramBotLike {
   start(): Promise<void>;
   stop(): void | Promise<void>;
   readonly api?: TelegramBotApiLike;
+  on?(filter: "message:text", handler: TelegramMessageHandlerLike): unknown;
 }
 
 export interface TelegramChannelAdapterOptions {
@@ -94,6 +125,8 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   readonly #options: TelegramChannelAdapterOptions;
   #bot: TelegramBotLike | undefined;
   #started = false;
+  #messageHandlerInstalled = false;
+  readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
 
   constructor(options: TelegramChannelAdapterOptions = {}) {
     this.#options = options;
@@ -105,6 +138,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       return;
     }
     const bot = this.#bot ?? this.#createBot();
+    this.#installMessageHandler(bot);
     await bot.start();
     this.#bot = bot;
     this.#started = true;
@@ -118,8 +152,12 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     await this.#bot?.stop();
   }
 
-  onMessage(_handler: (msg: InboundMessage) => void): () => void {
-    throw notImplemented("onMessage");
+  onMessage(handler: (msg: InboundMessage) => void): () => void {
+    this.#onMessageHandlers.add(handler);
+    this.#installMessageHandler(this.#bot);
+    return () => {
+      this.#onMessageHandlers.delete(handler);
+    };
   }
 
   onAction(_handler: (action: InboundAction) => void): () => void {
@@ -223,6 +261,30 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   #nowMs(): number {
     return (this.#options.now?.() ?? new Date()).getTime();
   }
+
+  #installMessageHandler(bot: TelegramBotLike | undefined): void {
+    if (bot === undefined || this.#messageHandlerInstalled || this.#onMessageHandlers.size === 0) {
+      return;
+    }
+    if (bot.on === undefined) {
+      throw new Error('TelegramChannelAdapter.onMessage requires bot.on("message:text")');
+    }
+    bot.on("message:text", (ctx) => {
+      this.#emitTelegramTextMessage(ctx);
+    });
+    this.#messageHandlerInstalled = true;
+  }
+
+  #emitTelegramTextMessage(ctx: TelegramMessageContextLike): void {
+    const msg = normalizeTelegramTextMessage(ctx, this.#nowMs());
+    for (const handler of this.#onMessageHandlers) {
+      try {
+        handler(msg);
+      } catch {
+        // Keep one subscriber failure from blocking other subscribers.
+      }
+    }
+  }
 }
 
 function notImplemented(method: string): Error {
@@ -278,6 +340,49 @@ function formatApprovalCard(card: ApprovalCardInput): string {
     `Risk: ${card.target.riskLevel}`,
     `Status: ${card.status}`,
   ].join("\n");
+}
+
+function normalizeTelegramTextMessage(
+  ctx: TelegramMessageContextLike,
+  nowMs: number,
+): InboundMessage {
+  const message = ctx.message;
+  const chat = message?.chat ?? ctx.chat;
+  const from = message?.from ?? ctx.from;
+  if (message === undefined || chat === undefined || from === undefined) {
+    throw new Error("TelegramChannelAdapter.onMessage received incomplete message:text context");
+  }
+
+  const target = telegramTarget(chat, message.message_thread_id);
+  return {
+    target,
+    sender: {
+      userId: String(from.id),
+      ...optionalDisplayName(from),
+    },
+    text: message.text,
+    receivedAt: message.date !== undefined ? new Date(message.date * 1000) : new Date(nowMs),
+    messageRef: { target, messageId: String(message.message_id) },
+  };
+}
+
+function telegramTarget(
+  chat: TelegramChatLike,
+  messageThreadId: number | string | undefined,
+): Target {
+  const topicId = messageThreadId !== undefined ? String(messageThreadId) : undefined;
+  return {
+    platform: "telegram",
+    chatId: String(chat.id),
+    ...(topicId !== undefined ? { topicId } : {}),
+  };
+}
+
+function optionalDisplayName(user: TelegramUserLike): { displayName?: string } {
+  const displayName =
+    user.username ??
+    [user.first_name, user.last_name].filter((part): part is string => Boolean(part)).join(" ");
+  return displayName.length > 0 ? { displayName } : {};
 }
 
 function parseTelegramTopicId(topicId: string | undefined): number | undefined {
