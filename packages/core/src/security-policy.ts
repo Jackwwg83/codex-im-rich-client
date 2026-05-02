@@ -75,8 +75,17 @@ export class SecurityPolicy {
     return this.#snapshot;
   }
 
-  checkUserAndChat(_target: Target, _sender: SecurityPolicySender): SecurityPolicyUserChatDecision {
-    return { kind: "deny", reason: POLICY_NOT_CONFIGURED };
+  checkUserAndChat(target: Target, sender: SecurityPolicySender): SecurityPolicyUserChatDecision {
+    if (this.#snapshot.allowedUsers.length === 0 || this.#snapshot.allowedChats.length === 0) {
+      return { kind: "deny", reason: POLICY_NOT_CONFIGURED };
+    }
+    if (!this.#snapshot.allowedChats.includes(platformScoped(target.platform, target.chatId))) {
+      return { kind: "deny", reason: "chat_not_allowed" };
+    }
+    if (!this.#snapshot.allowedUsers.includes(platformScoped(target.platform, sender.userId))) {
+      return { kind: "deny", reason: "user_not_allowed" };
+    }
+    return { kind: "allow" };
   }
 
   checkApprovalDestination(
@@ -118,4 +127,8 @@ function snapshotFromConfig(config: SecurityPolicyConfig): SecurityPolicySnapsho
 
 function freezeStrings(values: readonly string[]): readonly string[] {
   return Object.freeze([...values]);
+}
+
+function platformScoped(platform: string, id: string): string {
+  return `${platform}:${id}`;
 }
