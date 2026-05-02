@@ -52,6 +52,16 @@ IM 平台只通过 ChannelAdapter 接入。
 6. 每个 phase 结束调用 Codex CLI 做独立 review。
 7. Autonomous loop sessions must follow `docs/automation/codex-app-autonomous-loop-runbook.md`.
 
+### Autonomous loop operator directive (2026-05-02)
+
+When the human explicitly starts an unattended autonomous loop, do not stop for
+routine technical approvals after a clean recovery report. Reconstruct context,
+verify the branch/HEAD/working tree/gates, then continue the next safe Linear
+issue. For technical ambiguity, consult GPT Pro using the runbook template
+instead of asking the human product owner to decide. Preserve hard safety
+boundaries by using reversible commits, private branches, tests, docs, and
+sanitized consultation packets.
+
 ## 常用命令
 
 ```bash

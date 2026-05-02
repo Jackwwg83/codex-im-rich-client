@@ -148,6 +148,12 @@ without waiting for the human operator.
 If it is not clearly safe, consult GPT Pro using the consultation protocol below
 unless the issue requires operator authorization.
 
+If context recovery or auto-compaction occurs during a human-authorized
+unattended loop, output the recovery report to the log and continue when the
+state is clearly safe. Do not wait for a non-technical product approval after a
+clean recovery. Use GPT Pro for technical uncertainty and use reversible
+commits/branches/tests to contain risk.
+
 ## Implementation Protocol
 
 For each executable issue:
