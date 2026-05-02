@@ -26,3 +26,10 @@ export type {
 } from "./types.js";
 export { requireCapability } from "./capabilities.js";
 export type { ChannelCapabilities } from "./capabilities.js";
+
+// T19: ChannelAdapter interface (closed; D14 escape clause in JSDoc)
+// + TelegramShapeFakeChannelAdapter (canonical reference adapter
+// enforcing Telegram Bot API hardest constraints — callback_data
+// ≤62B, 60s answerCallbackQuery deadline, parse_mode unsupported).
+export type { ActionAck, ChannelAdapter, SendCardResult } from "./adapter.js";
+export { TelegramShapeFakeChannelAdapter } from "./fake.js";
