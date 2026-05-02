@@ -9,6 +9,7 @@ import {
   type PendingApprovalSnapshot,
   type ResolveApprovalInput,
   type ResolveApprovalResult,
+  type ResolveError,
   type SecurityPolicyApprovalDestinationDecision,
   type SecurityPolicySender,
   type SecurityPolicyUserChatDecision,
@@ -465,6 +466,10 @@ export class Daemon {
     });
     if (result?.kind === "ok") {
       await this.#handleAcceptedCallback(inbound.callbackHandle, resolvableRecord, actor);
+      return;
+    }
+    if (result?.kind === "error") {
+      await this.#answerAction(inbound.callbackHandle, this.#resolveErrorMessage(result.error));
     }
   }
 
@@ -492,6 +497,29 @@ export class Daemon {
 
   async #answerAction(callbackHandle: string, userMessage: string, ok = false): Promise<void> {
     await this.#adapter?.answerAction?.(callbackHandle, { ok, userMessage });
+  }
+
+  #resolveErrorMessage(error: ResolveError): string {
+    switch (error.kind) {
+      case "wrong_actor":
+        return "wrong actor";
+      case "stale_callback":
+        return "stale nonce";
+      case "wrong_target":
+        return "wrong target";
+      case "expired":
+        return "expired";
+      case "transport_lost":
+        return "codex restarted, retry";
+      case "binding_required":
+        return "internal: missing bind";
+      case "already_resolved":
+        return `already resolved (decision: ${error.priorDecision.kind})`;
+      case "unsupported_decision":
+        return "invalid action";
+      case "unknown_approval_id":
+        return "approval not found";
+    }
   }
 
   #decodeRawCallbackToken(rawCallbackData: string): string | undefined {

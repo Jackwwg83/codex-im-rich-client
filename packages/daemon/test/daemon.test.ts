@@ -1544,6 +1544,105 @@ describe("Daemon skeleton (T14)", () => {
   });
 
   it.each([
+    [{ kind: "wrong_actor" }, "wrong actor"],
+    [{ kind: "stale_callback" }, "stale nonce"],
+    [{ kind: "wrong_target" }, "wrong target"],
+    [
+      {
+        kind: "expired",
+        createdAt: new Date("2026-05-02T00:00:00.000Z"),
+        expiredAt: new Date("2026-05-02T00:30:00.000Z"),
+      },
+      "expired",
+    ],
+    [
+      { kind: "transport_lost", lostAt: new Date("2026-05-02T00:05:00.000Z") },
+      "codex restarted, retry",
+    ],
+    [{ kind: "binding_required" }, "internal: missing bind"],
+    [
+      { kind: "already_resolved", priorDecision: { kind: "approved" as const } },
+      "already resolved (decision: approved)",
+    ],
+    [
+      { kind: "unsupported_decision", method: "synthetic", reason: "not supported" },
+      "invalid action",
+    ],
+    [{ kind: "unknown_approval_id" }, "approval not found"],
+  ] as const)("answers %s without mutating token state", async (error, expectedMessage) => {
+    let actionHandler: ((action: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const tokenHash = hashCallbackToken("ABCDEFGHIJKLMNOP");
+    const record: CallbackTokenRecord = {
+      tokenHash,
+      approvalId: "approval-error",
+      action: "allow_once",
+      callbackNonce: "nonce-error",
+      target,
+      actor: { kind: "im" },
+      status: "bound",
+      messageRef: { chatId: target.chatId, messageId: "msg-bound" },
+      createdAt: "2026-05-02T00:00:02.000Z",
+      expiresAt: "2026-05-02T00:30:00.000Z",
+    };
+    const adapter = {
+      onAction: vi.fn((handler: (action: unknown) => void) => {
+        actionHandler = handler;
+        return () => {};
+      }),
+      onMessage: vi.fn(() => () => {}),
+      answerAction: vi.fn(),
+      updateCard: vi.fn(),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn(() => () => {}),
+      resolve: vi.fn(() => ({ kind: "error" as const, error })),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      findByHash: vi.fn(() => record),
+      casUpdate: vi.fn(),
+      forceMarkUsed: vi.fn(),
+      revokeBoundSiblings: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      callbackTokenRepository,
+    });
+
+    await daemon.start();
+    actionHandler?.({
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      callbackHandle: "callback-handle-1",
+      target,
+      sender,
+      messageRef: { target, messageId: "msg-bound" },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(adapter.answerAction).toHaveBeenCalledWith("callback-handle-1", {
+      ok: false,
+      userMessage: expectedMessage,
+    });
+    expect(callbackTokenRepository.casUpdate).not.toHaveBeenCalled();
+    expect(callbackTokenRepository.forceMarkUsed).not.toHaveBeenCalled();
+    expect(callbackTokenRepository.revokeBoundSiblings).not.toHaveBeenCalled();
+    expect(adapter.updateCard).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ["loadConfig", []],
     ["openStorage", []],
     ["createBroker", ["storage.close"]],
