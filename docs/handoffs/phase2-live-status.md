@@ -1,17 +1,20 @@
 # Phase 2 Live Status
 
 > Minimum context for compact / resume. Updated at task boundaries and before context exceeds 70%.
-> **Last updated:** 2026-05-02 — **T2 → T22 LANDED. T23 in flight (this commit). T24 tag-gate next.**
+> **Last updated:** 2026-05-02 — **PHASE 2 TAGGED COMPLETE. Codex backfill review pending. Phase 3 planning allowed; implementation BLOCKED until backfill GO or explicit human approval.**
 
 ---
 
 ## 1. Current phase / task
 
-- **Phase:** Phase 2 — Approval & IM Surface (close-out)
-- **Active task:** T23 — close-out documentation (handoff + live-status + README + TODOS + CLAUDE.md + version bump). All implementation tasks (T2-T22) complete.
-- **Tag candidate:** `phase-2-approval-im-surface-complete` — applied AFTER T24 Codex outside-voice integrated review returns GO.
-- **Next task:** **T24 — tag gate.** Run integrated Codex review across `phase-1-runtime-complete..HEAD`. If GO, apply tag.
-- **Last completed implementation milestone:** T22 supervisor pre-attached-broker invariant (commit `d452391`).
+- **Phase:** Phase 2 — Approval & IM Surface (✅ tagged complete; Codex backfill review pending)
+- **Active task:** None. Implementation chain complete through T24 tag-gate.
+- **Tag applied:** `phase-2-approval-im-surface-complete` at commit `3154f54` (annotated; deferral note in tag body). See `docs/phase-2/codex-review-deferred.md`.
+- **Version:** `0.1.0-phase2-draft` (will promote to `0.1.0-phase2` ONLY after deferred Codex backfill review returns GO).
+- **Last completed implementation milestone:** T24 tag-gate with deferral docs (commit `3154f54`).
+- **Phase 3 status:** PLANNING ALLOWED (start with `/plan-eng-review` against the candidates in `docs/handoffs/2026-05-02-phase2-to-phase3.md` §"Recommended Phase 3 mission"). **IMPLEMENTATION BLOCKED** until either:
+  1. Deferred Codex backfill review returns GO, OR
+  2. Human explicitly authorizes Phase 3 planning-only-then-implementation work.
 
 ## 2. Branch / HEAD
 
