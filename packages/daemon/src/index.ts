@@ -12,6 +12,8 @@
 
 export { Daemon } from "./daemon.js";
 export type {
+  DaemonAdapter,
+  DaemonAdapterContext,
   DaemonBroker,
   DaemonBrokerContext,
   DaemonDependencyContext,

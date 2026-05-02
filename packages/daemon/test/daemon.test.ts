@@ -138,7 +138,6 @@ describe("Daemon skeleton (T14)", () => {
     const securityPolicy = { kind: "policy" };
     const sessionRouter = { kind: "sessions" };
     const supervisor = { kind: "supervisor" };
-    const createAdapter = vi.fn();
 
     const daemon = new Daemon({
       loadConfig: () => {
@@ -168,7 +167,6 @@ describe("Daemon skeleton (T14)", () => {
         expect(ctx).toMatchObject({ config, storage, broker, securityPolicy, sessionRouter });
         return supervisor;
       }),
-      createAdapter,
     });
 
     await daemon.start();
@@ -182,7 +180,82 @@ describe("Daemon skeleton (T14)", () => {
       "createSessionRouter",
       "createSupervisor",
     ]);
-    expect(createAdapter).not.toHaveBeenCalled();
+  });
+
+  it("creates the adapter and subscribes pending/action/message wires without starting it", async () => {
+    const order: string[] = [];
+    const unsubscribers = {
+      pending: vi.fn(),
+      action: vi.fn(),
+      message: vi.fn(),
+    };
+    const broker = {
+      attach: vi.fn(() => {
+        order.push("broker.attach");
+      }),
+      enablePendingMode: vi.fn((method: string) => {
+        order.push(`pending:${method}`);
+      }),
+      onPendingCreated: vi.fn(() => {
+        order.push("broker.onPendingCreated");
+        return unsubscribers.pending;
+      }),
+    };
+    const adapter = {
+      onAction: vi.fn(() => {
+        order.push("adapter.onAction");
+        return unsubscribers.action;
+      }),
+      onMessage: vi.fn(() => {
+        order.push("adapter.onMessage");
+        return unsubscribers.message;
+      }),
+      start: vi.fn(() => {
+        order.push("adapter.start");
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => {
+        order.push("loadConfig");
+        return {};
+      },
+      openStorage: () => {
+        order.push("openStorage");
+        return {};
+      },
+      createBroker: () => {
+        order.push("createBroker");
+        return broker;
+      },
+      createSecurityPolicy: () => {
+        order.push("createSecurityPolicy");
+        return {};
+      },
+      createSessionRouter: () => {
+        order.push("createSessionRouter");
+        return {};
+      },
+      createSupervisor: () => {
+        order.push("createSupervisor");
+        return {};
+      },
+      createAdapter: vi.fn((ctx: unknown) => {
+        order.push("createAdapter");
+        expect(ctx).toMatchObject({ broker });
+        return adapter;
+      }),
+    });
+
+    await daemon.start();
+
+    expect(order.slice(-4)).toEqual([
+      "createAdapter",
+      "broker.onPendingCreated",
+      "adapter.onAction",
+      "adapter.onMessage",
+    ]);
+    expect(adapter.start).not.toHaveBeenCalled();
   });
 
   it("does not introduce a public listener surface", () => {

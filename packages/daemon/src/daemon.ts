@@ -1,10 +1,12 @@
 import { type IMRoutableApprovalMethod, IM_ROUTABLE_APPROVAL_METHODS } from "@codex-im/core";
 
 type MaybePromise<T> = T | Promise<T>;
+type Unsubscribe = () => void;
 
 export interface DaemonBroker {
   attach(): void;
   enablePendingMode(method: IMRoutableApprovalMethod): void;
+  onPendingCreated?(handler: (snapshot: unknown) => void): Unsubscribe;
 }
 
 export interface DaemonBrokerContext {
@@ -24,6 +26,17 @@ export interface DaemonSupervisorContext extends DaemonSessionRouterContext {
   readonly sessionRouter: unknown;
 }
 
+export interface DaemonAdapterContext extends DaemonSupervisorContext {
+  readonly supervisor: unknown;
+}
+
+export interface DaemonAdapter {
+  onAction(handler: (action: unknown) => void): Unsubscribe;
+  onMessage(handler: (message: unknown) => void): Unsubscribe;
+  start?(): MaybePromise<void>;
+  stop?(): MaybePromise<void>;
+}
+
 export interface DaemonOptions {
   readonly loadConfig?: () => MaybePromise<unknown>;
   readonly openStorage?: (config: unknown) => MaybePromise<unknown>;
@@ -31,7 +44,7 @@ export interface DaemonOptions {
   readonly createSecurityPolicy?: (ctx: DaemonDependencyContext) => MaybePromise<unknown>;
   readonly createSessionRouter?: (ctx: DaemonSessionRouterContext) => MaybePromise<unknown>;
   readonly createSupervisor?: (ctx: DaemonSupervisorContext) => MaybePromise<unknown>;
-  readonly createAdapter?: () => unknown;
+  readonly createAdapter?: (ctx: DaemonAdapterContext) => MaybePromise<DaemonAdapter>;
 }
 
 export class Daemon {
@@ -43,6 +56,8 @@ export class Daemon {
   #securityPolicy: unknown;
   #sessionRouter: unknown;
   #supervisor: unknown;
+  #adapter: DaemonAdapter | undefined;
+  readonly #unsubscribers: Unsubscribe[] = [];
 
   constructor(options: DaemonOptions = {}) {
     this.options = options;
@@ -78,6 +93,18 @@ export class Daemon {
       securityPolicy: this.#securityPolicy,
       sessionRouter: this.#sessionRouter,
     });
+    const adapterContext: DaemonAdapterContext = {
+      ...dependencyContext,
+      securityPolicy: this.#securityPolicy,
+      sessionRouter: this.#sessionRouter,
+      supervisor: this.#supervisor,
+    };
+    this.#adapter = await this.options.createAdapter?.(adapterContext);
+    this.#subscribe(
+      this.#broker?.onPendingCreated?.((snapshot) => this.#handlePendingCreated(snapshot)),
+    );
+    this.#subscribe(this.#adapter?.onAction((action) => this.#handleAction(action)));
+    this.#subscribe(this.#adapter?.onMessage((message) => this.#handleMessage(message)));
     this.#started = true;
   }
 
@@ -88,4 +115,16 @@ export class Daemon {
   isStarted(): boolean {
     return this.#started;
   }
+
+  #subscribe(unsubscribe: Unsubscribe | undefined): void {
+    if (unsubscribe !== undefined) {
+      this.#unsubscribers.push(unsubscribe);
+    }
+  }
+
+  #handlePendingCreated(_snapshot: unknown): void {}
+
+  #handleAction(_action: unknown): void {}
+
+  #handleMessage(_message: unknown): void {}
 }
