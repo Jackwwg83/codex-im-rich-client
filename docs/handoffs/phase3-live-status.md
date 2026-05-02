@@ -1,23 +1,23 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, and JAC-40 through JAC-43 daemon approval-card flow complete.
-> **Handoff status:** JAC-43 complete: policy-denied approvals auto-decline through the broker, allowed approvals issue hash-only callback token rows, `bindActorPolicy` lands before any remote send, and rendered approval card actions now carry per-action `wirePayload = "v1:" + rawToken` while raw tokens stay out of SQLite. All 5 gates green. Next exact issue: JAC-44 / T16.5-T16.7 send card, bind token rows to returned `MessageRef`, and pin send-failure rollback behavior.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, and JAC-40 through JAC-44 daemon approval-card flow complete.
+> **Handoff status:** JAC-44 complete: allowed approvals now send rendered cards, bind returned `MessageRef` onto issued callback token rows with `issued -> bound` CAS calls, and leave rows in `issued` state when `sendCard` throws. All 5 gates green. Next exact issue: JAC-45 / T17.1 callback token lookup and fail-closed status branches.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-43 / T16.4** (approval card render step sets per-action D41 `wirePayload` values from issued raw callback tokens; no remote `sendCard` yet).
-- **Next exact task:** **JAC-44 / T16.5-T16.7** — call adapter `sendCard`, attach returned `MessageRef` to token rows, and prove send-failure rollback leaves tokens in `issued` state for TTL expiry.
+- **Active task:** None at this checkpoint. Last completed: **JAC-44 / T16.5-T16.7** (call adapter `sendCard`, attach returned `MessageRef` to callback token rows with `issued -> bound`, and leave tokens untouched when `sendCard` fails).
+- **Next exact task:** **JAC-45 / T17.1** — decode `action.rawCallbackData`, hash lookup callback token record, and fail closed for no record / expired / revoked / used / issued without calling `broker.resolve`.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **Latest code commit:** `ed1f7fb` (`feat(daemon): T16.4 render wire payload tokens`)
-- **Tag distance at latest code commit:** `phase-2-codex-reviewed-62-ged1f7fb`
+- **Latest code commit:** `602e68f` (`feat(daemon): T16.5-T16.7 send and bind cards`)
+- **Tag distance at latest code commit:** `phase-2-codex-reviewed-64-g602e68f`
 - **Origin:** synced after each pushed checkpoint; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -79,6 +79,8 @@
 | `5906541` | T16.2 / JAC-41 | Allowed approvals issue hash-only callback token rows before any remote send |
 | `2145c57` | T16.3 / JAC-42 | `bindActorPolicy` lands after token issue and before any remote send |
 | `ed1f7fb` | T16.4 / JAC-43 | Rendered approval card actions receive per-action D41 `wirePayload = "v1:" + rawToken` |
+| `a2df6bb` | docs checkpoint | Refresh live-status for JAC-43 completion |
+| `602e68f` | T16.5-T16.7 / JAC-44 | Send card, attach returned `MessageRef` to token rows, and preserve issued rows on send failure |
 
 ## 3. Versions / pins
 
@@ -94,7 +96,7 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **821 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +101 from Phase 3 storage/config/core/channel/daemon prereqs) |
+| Tests | `pnpm test` | **823 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +103 from Phase 3 storage/config/core/channel/daemon prereqs) |
 | Lint | `pnpm lint` | green (173 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
@@ -150,7 +152,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-44 / T16.5-T16.7**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-45 / T17.1**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -189,4 +191,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-43 / T16.4**. Continue with **JAC-44 / T16.5-T16.7**, then the rest of **JAC-20** dependency order.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-44 / T16.5-T16.7**. Continue with **JAC-45 / T17.1**, then the rest of **JAC-20** dependency order.
