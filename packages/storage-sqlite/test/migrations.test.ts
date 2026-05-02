@@ -208,7 +208,12 @@ describe("runMigrations against the real src/migrations/ directory (T3a)", () =>
   // root, but the path math here would be wrong for any other cwd.
   const HERE = dirname(fileURLToPath(import.meta.url));
   const REAL_MIGRATIONS_DIR = join(HERE, "../src/migrations");
-  const CURRENT_MIGRATIONS = ["001-init.sql", "002-thread-bindings.sql", "003-approvals.sql"];
+  const CURRENT_MIGRATIONS = [
+    "001-init.sql",
+    "002-thread-bindings.sql",
+    "003-approvals.sql",
+    "004-audit-log.sql",
+  ];
 
   it("applies the current real migrations and records them in schema_version", () => {
     const db = openDatabase(":memory:");

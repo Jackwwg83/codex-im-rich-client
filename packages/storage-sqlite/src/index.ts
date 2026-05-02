@@ -71,3 +71,6 @@ export {
   type ApprovalTarget,
   type ApprovalUpsert,
 } from "./approvals.js";
+
+// T6a (Phase 3) — audit_log repository exports.
+export { AuditRepository, type AuditInsert, type AuditRecord } from "./audit.js";
