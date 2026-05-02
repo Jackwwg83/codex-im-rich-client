@@ -38,12 +38,13 @@
 // them into broker / SessionRouter / audit-emit subscribers).
 //
 // What this package will export at end of T6f:
-//   openDatabase                — sync better-sqlite3 wrapper with WAL
-//   runMigrations               — idempotent migration runner
-//   BindingRepository           — chat ⇄ project ⇄ thread bindings
-//   ApprovalRepository          — durable audit copy of approval lifecycle
-//   AuditRepository             — write-through audit ring (D31)
-//   CallbackTokenRepository     — D34 callback_tokens with Target hydration
+//   openDatabase                — sync better-sqlite3 wrapper with WAL  (T2a — landed)
+//   runMigrations               — idempotent migration runner            (T2b)
+//   BindingRepository           — chat ⇄ project ⇄ thread bindings       (T4a-c)
+//   ApprovalRepository          — durable audit copy of approval lifecycle (T5a-b)
+//   AuditRepository             — write-through audit ring (D31)         (T6a-c)
+//   CallbackTokenRepository     — D34 callback_tokens with Target hydration (T6d-f)
 //   EventLogRepository          — codex notification log (deferred to Phase 4)
 
-export {};
+// T2a (Phase 3) — first real export.
+export { openDatabase, type DatabaseHandle } from "./database.js";
