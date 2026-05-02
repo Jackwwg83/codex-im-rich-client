@@ -1,8 +1,8 @@
 # Phase 4 Live Status
 
 > Single source of truth for Phase 4 planning/implementation. Read first on compact / resume / context loss after Phase 3 tag `phase-3-telegram-mvp-complete`.
-> **Last updated:** 2026-05-02 — Phase 4 plan review passed Codex v1.2 (`GO_WITH_LOW_NITS`); Linear execution children JAC-148 through JAC-162 created.
-> **Handoff status:** Phase 3 is tagged and complete. Phase 4 implementation may begin for T1-T5 after JAC-65 closeout; T6/T8 remain gated by JAC-148 target verification.
+> **Last updated:** 2026-05-02 — JAC-148 target verification completed for default Feishu enterprise custom app long-connection `card.action.trigger` path.
+> **Handoff status:** Phase 3 is tagged and complete. Phase 4 implementation may proceed through the Linear queue; live Lark smoke remains env-gated.
 
 ---
 
@@ -10,18 +10,21 @@
 
 - **Phase:** Phase 4 — Feishu/Lark adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`.
-- **Active Linear issue:** JAC-65 — Phase 4 plan review gate for Feishu/Lark adapter.
+- **Active Linear issue:** JAC-149 — Phase4-T1 im-lark skeleton + boundary tests.
 - **Parent Linear issue:** JAC-9 — Phase 4 backlog / Feishu-Lark adapter.
 - **Current branch:** `codex/phase-4-planning`.
 - **Base:** `phase-3-telegram-mvp-complete` (`83c6ef0` target commit).
-- **Next exact action:** close JAC-65, then start JAC-148 target verification or JAC-149 skeleton if choosing to parallelize safe implementation.
+- **Next exact action:** implement JAC-149 with TDD: package skeleton, boundary tests, no upper-layer imports.
 
 ## 2. Current decision state
 
 - Phase 4 uses native `@larksuiteoapi/node-sdk`, not Vercel Chat SDK, Koishi/Satori, or a generic chat abstraction.
 - Default connection mode is Lark/Feishu long connection (`WSClient`) so the Mac mini does not need a public webhook.
 - Decision record: `docs/phase-4/lark-action-transport-decision.md`.
+- Target verification: `docs/phase-4/lark-target-verification.md`.
 - Current action-transport decision: use newer `card.action.trigger` over long connection; do not use legacy message-card callbacks; do not add public webhook by default.
+- Default target: `feishu`, enterprise custom app, long connection subscription, `card.action.trigger`.
+- MessageRef source: `context.open_message_id` / `open_message_id` plus `context.open_chat_id` / `open_chat_id`; missing or ambiguous references fail closed.
 
 ## 3. Active redlines
 
@@ -50,17 +53,17 @@
 
 | Issue | Scope | Status / gate |
 |---|---|---|
-| JAC-65 | T0 plan review gate | closing after docs commit |
-| JAC-148 | T0a Lark `card.action.trigger` target verification | next docs/spike issue |
-| JAC-149 | T1 im-lark skeleton + boundary tests | safe after JAC-65 |
+| JAC-65 | T0 plan review gate | done |
+| JAC-148 | T0a Lark `card.action.trigger` target verification | done |
+| JAC-149 | T1 im-lark skeleton + boundary tests | active next |
 | JAC-150 | T2 Lark config schema extension | blocked by JAC-149 |
 | JAC-151 | T3 long connection lifecycle fake client | blocked by JAC-149/JAC-150 |
 | JAC-152 | T4 message receive fixtures | blocked by JAC-151 |
 | JAC-153 | T5 send/edit text/reply | blocked by JAC-152 |
-| JAC-154 | T6 sendCard/card rendering | blocked by JAC-148/JAC-153 |
+| JAC-154 | T6 sendCard/card rendering | blocked by JAC-153 |
 | JAC-155 | T7 updateCard/status streaming | blocked by JAC-154 |
-| JAC-156 | T8a callback payload codec/extraction | blocked by JAC-148 |
-| JAC-157 | T8b action to InboundAction mapping | blocked by JAC-148/JAC-156 |
+| JAC-156 | T8a callback payload codec/extraction | ready after queue reaches T8a |
+| JAC-157 | T8b action to InboundAction mapping | blocked by JAC-156 |
 | JAC-158 | T8c ack/fail-closed behavior | blocked by JAC-156/JAC-157 |
 | JAC-159 | T9 adapter contract suite | blocked by JAC-155/JAC-158 |
 | JAC-160 | T10 fake Lark smoke | blocked by JAC-159 |

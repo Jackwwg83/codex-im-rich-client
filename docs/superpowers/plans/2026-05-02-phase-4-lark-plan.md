@@ -21,6 +21,8 @@ Phase 4 does not implement DingTalk, Computer Use production flow, Web Console, 
 
 - Phase 3 close: `docs/handoffs/2026-05-02-phase3-to-phase4.md`
 - Phase 3 live status: `docs/handoffs/phase3-live-status.md`
+- Phase 4 live status: `docs/handoffs/phase4-live-status.md`
+- Lark target verification: `docs/phase-4/lark-target-verification.md`
 - IM adapter design: `06-IM-ADAPTERS.md` §4 and §8
 - Security: `07-SECURITY-AND-COMPUTER-USE.md`
 - Data model: `08-DATA-MODEL.md`

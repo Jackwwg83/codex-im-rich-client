@@ -5,7 +5,9 @@ Plan: `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
 
 ## Decision
 
-Use Feishu/Lark long connection mode with the newer `card.action.trigger` callback for Phase 4 approval actions, pending T0 target verification for the actual app/domain.
+Use Feishu/Lark long connection mode with the newer `card.action.trigger` callback for Phase 4 approval actions.
+
+JAC-148 T0a records the default implementation target as Feishu enterprise custom app, long connection subscription, `card.action.trigger`, and original message references from the Lark card action event. See `docs/phase-4/lark-target-verification.md`.
 
 Do not use the legacy "message card interaction" callback. Do not add a public webhook listener by default.
 
@@ -27,9 +29,9 @@ Source:
 
 ## Consequences
 
-- Phase 4 T0 must pin `card.action.trigger` as the only supported card-action callback type.
-- T0 must record the exact domain (`feishu` or `lark`), app type, developer-console callback subscription setting, and whether `card.action.trigger` is enabled over long connection for that target.
-- T6/T8 card/action implementation stays blocked until T0 verifies that the SDK event payload exposes the original card/message reference needed by Phase 3 messageRef validation.
+- Phase 4 pins `card.action.trigger` as the only supported card-action callback type.
+- The default Phase 4 implementation target is `feishu`, enterprise custom app, long connection subscription.
+- T6/T8 fake/unit/contract implementation may proceed after JAC-148, because the SDK event shape exposes the original card/message reference needed by Phase 3 messageRef validation.
 - `@codex-im/im-lark` should test this with injected fake `WSClient`/`EventDispatcher` equivalents; no real Lark credentials are needed for unit/contract tests.
 - Live validation remains operator-gated with `LARK_LIVE=1`.
 - If the target app type/region cannot enable `card.action.trigger` over long connection, implementation must stop and a plan amendment must choose between a reviewed private callback endpoint or a secure text-command fallback.
