@@ -27,6 +27,7 @@ function usage(): void {
       "  smoke app-server     — initialize-only smoke (requires CODEX_SMOKE=1)",
       "  smoke telegram-fake  — CI-safe fake Telegram daemon smoke",
       "  smoke telegram-live  — live Telegram adapter smoke (requires TELEGRAM_LIVE=1)",
+      "  smoke telegram-real  — live Telegram + real Codex smoke (requires both gates)",
       "  smoke real-turn      — full lifecycle smoke (requires CODEX_REAL_SMOKE=1)",
       "  runtime send         — runtime kernel smoke (requires CODEX_REAL_SMOKE=1)",
       "  daemon status        — local daemon status snapshot",
@@ -45,6 +46,9 @@ if (cmd === "smoke" && sub === "app-server") {
   await run();
 } else if (cmd === "smoke" && sub === "telegram-live") {
   const { run } = await import("./smoke-telegram-live.js");
+  await run();
+} else if (cmd === "smoke" && sub === "telegram-real") {
+  const { run } = await import("./smoke-telegram-real.js");
   await run();
 } else if (cmd === "smoke" && sub === "real-turn") {
   const { run } = await import("./smoke-real-turn.js");

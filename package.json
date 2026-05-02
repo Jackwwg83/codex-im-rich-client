@@ -35,6 +35,7 @@
     "smoke:app-server": "tsx packages/cli/src/index.ts smoke app-server",
     "smoke:telegram-fake": "tsx packages/cli/src/index.ts smoke telegram-fake",
     "smoke:telegram-live": "tsx packages/cli/src/index.ts smoke telegram-live",
+    "smoke:telegram-real": "tsx packages/cli/src/index.ts smoke telegram-real",
     "smoke:real-turn": "tsx packages/cli/src/index.ts smoke real-turn",
     "runtime:send": "tsx packages/cli/src/index.ts runtime send"
   },
