@@ -31,6 +31,7 @@ export interface LarkMessageClientLike {
   }): Promise<{ messageId: string }>;
   editText(input: { messageRef: MessageRef; text: string }): Promise<void>;
   sendCard?(input: { target: Target; card: LarkApprovalCardJson }): Promise<{ messageId: string }>;
+  updateCard?(input: { messageRef: MessageRef; card: LarkApprovalCardJson }): Promise<void>;
 }
 
 export interface LarkChannelAdapterOptions {
@@ -110,7 +111,17 @@ export class LarkChannelAdapter implements ChannelAdapter {
   }
 
   async updateCard(_ref: MessageRef, _card: ApprovalCardInput): Promise<void> {
-    throw this.#notImplemented("updateCard", "JAC-155");
+    this.#assertStarted("updateCard");
+    const messageClient = this.#messageClient("updateCard");
+    if (messageClient.updateCard === undefined) {
+      throw new Error("LarkChannelAdapter.updateCard requires messageClient.updateCard");
+    }
+    const card = renderLarkApprovalCard(_card);
+    try {
+      await messageClient.updateCard({ messageRef: _ref, card });
+    } catch (error) {
+      throw new Error(`LarkChannelAdapter.updateCard failed: ${describeError(error)}`);
+    }
   }
 
   async editText(_ref: MessageRef, _body: string): Promise<void> {

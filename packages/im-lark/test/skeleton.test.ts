@@ -40,8 +40,8 @@ describe("@codex-im/im-lark skeleton (JAC-149)", () => {
       messageId: "message-1",
     };
 
-    await expect(adapter.updateCard(ref, {} as never)).rejects.toThrow(
-      "LarkChannelAdapter.updateCard is not implemented until JAC-155",
-    );
+    await expect(
+      adapter.answerAction("callback-handle", { ok: true, userMessage: "ok" }),
+    ).rejects.toThrow("LarkChannelAdapter.answerAction is not implemented until JAC-158");
   });
 });
