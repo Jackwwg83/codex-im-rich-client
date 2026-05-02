@@ -375,7 +375,14 @@ describe("Supervisor skeleton (T11a Step 11a.4)", () => {
     };
 
     const sup = new Supervisor(opts);
-    await expect(sup.start()).rejects.toThrow(/has not been attached yet/);
+    // T22 (Phase 2): Supervisor's #spawnFresh head asserts the
+    // pre-attached invariant BEFORE reaching broker.reattach, with a
+    // load-bearing message that names the production = Supervisor /
+    // dev = runtime-send split (Codex Q6). The Phase 1 prior wording
+    // ("has not been attached yet") came from broker.reattach itself
+    // — that's still the same underlying state, just surfaced earlier
+    // and more loudly.
+    await expect(sup.start()).rejects.toThrow(/MUST be pre-attached/);
 
     await fakeServer.stop();
   });
@@ -1016,24 +1023,23 @@ describe("Supervisor spawn-failure cleanup (Phase 1 integrated review blocker 2)
     expect(sup.currentTransportForTest()).toBeNull();
   });
 
-  it("initial start() with broker.reattach throwing — cleanup runs even though throw is from a sync step", async () => {
-    // Broker that's never been attached → reattach throws "has not
-    // been attached yet". This exercises the cleanup on a synchronous
-    // throw inside the try block.
+  it("initial start() with unattached broker — T22 invariant fires BEFORE transportFactory (no side effects)", async () => {
+    // T22 (Phase 2): pre-attached-broker invariant moved the check to
+    // #spawnFresh head, BEFORE transportFactory runs. Phase 1 used to
+    // rely on broker.reattach throwing inside the try-block to trigger
+    // cleanup. Now the invariant fail-fasts: no transport is ever
+    // constructed, so there's nothing to clean up.
     const placeholderFake = new FakeAppServer();
     const placeholderClient = new AppServerClient(placeholderFake.clientSide);
     const unattachedBroker = new ApprovalBroker(placeholderClient);
     // NOTE: NOT calling broker.attach()
     const audit = recordingAudit();
 
-    let transportStopped = false;
+    let transportFactoryCalled = false;
     const fake = new FakeAppServer();
     const trackedTransport: Transport = {
       start: () => fake.clientSide.start(),
-      stop: async () => {
-        transportStopped = true;
-        await fake.clientSide.stop();
-      },
+      stop: () => fake.clientSide.stop(),
       send: (m) => fake.clientSide.send(m),
       onMessage: (h) => fake.clientSide.onMessage(h),
       onError: (h) => fake.clientSide.onError(h),
@@ -1041,7 +1047,10 @@ describe("Supervisor spawn-failure cleanup (Phase 1 integrated review blocker 2)
     };
 
     const opts: SupervisorOptions = {
-      transportFactory: () => trackedTransport,
+      transportFactory: () => {
+        transportFactoryCalled = true;
+        return trackedTransport;
+      },
       clientFactory: (t) => new AppServerClient(t),
       runtimeFactory: (c) => new CodexRuntime(c),
       broker: unattachedBroker,
@@ -1050,13 +1059,12 @@ describe("Supervisor spawn-failure cleanup (Phase 1 integrated review blocker 2)
     };
 
     const sup = new Supervisor(opts);
-    await expect(sup.start()).rejects.toThrow(/has not been attached yet/);
+    await expect(sup.start()).rejects.toThrow(/MUST be pre-attached/);
     expect(sup.currentClientForTest()).toBeNull();
     expect(sup.currentTransportForTest()).toBeNull();
-    // Transport was stopped during cleanup (AppServerClient.stop()
-    // propagates through to InMemoryTransport's stop, which calls
-    // our wrapper's stop()).
-    expect(transportStopped).toBe(true);
+    // T22: transportFactory was never called — invariant fired before
+    // any transport syscall could happen.
+    expect(transportFactoryCalled).toBe(false);
     await fake.stop();
   });
 

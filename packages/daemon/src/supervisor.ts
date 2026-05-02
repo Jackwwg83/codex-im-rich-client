@@ -230,6 +230,24 @@ export class Supervisor {
    * the supervisor has moved past.
    */
   async #spawnFresh(): Promise<void> {
+    // T22 (Phase 2 / D16 / Codex Q6): pre-attached-broker invariant.
+    // The Supervisor is the production owner of the broker lifecycle —
+    // dev/operator entry points like `runtime:send` construct + attach
+    // the broker themselves; production daemon wire-up MUST attach the
+    // broker BEFORE handing it to Supervisor. Without this guard, a
+    // misuse pattern (forgetting attach()) would surface as a confusing
+    // broker.reattach error a few lines down. This check makes the
+    // contract violation explicit at the boundary.
+    if (!this.#opts.broker.isAttached()) {
+      throw new Error(
+        "Supervisor.#spawnFresh: broker MUST be pre-attached before passing to Supervisor. " +
+          "Production callers (daemon wire-up) construct the broker, call broker.attach(client), " +
+          "then construct Supervisor. The broker.reattach(newClient) call inside #spawnFresh swaps " +
+          "the client reference; it does NOT replace the missing initial attach. " +
+          "Note: production = Supervisor; runtime-send = dev/operator only (Codex Q6).",
+      );
+    }
+
     // Detach prior generation's onClose subscription first.
     // For the first generation #currentCloseUnsub is null; no-op.
     if (this.#currentCloseUnsub !== null) {
