@@ -1,7 +1,7 @@
 # Phase 4 Live Status
 
 > Single source of truth for Phase 4 planning/implementation. Read first on compact / resume / context loss after Phase 3 tag `phase-3-telegram-mvp-complete`.
-> **Last updated:** 2026-05-02 — JAC-149 `@codex-im/im-lark` skeleton and boundary tests landed.
+> **Last updated:** 2026-05-02 — JAC-150 Lark config schema extension landed.
 > **Handoff status:** Phase 3 is tagged and complete. Phase 4 implementation may proceed through the Linear queue; live Lark smoke remains env-gated.
 
 ---
@@ -10,11 +10,11 @@
 
 - **Phase:** Phase 4 — Feishu/Lark adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`.
-- **Active Linear issue:** JAC-150 — Phase4-T2 Lark config schema extension.
+- **Active Linear issue:** JAC-151 — Phase4-T3 Lark long-connection lifecycle with fake client.
 - **Parent Linear issue:** JAC-9 — Phase 4 backlog / Feishu-Lark adapter.
 - **Current branch:** `codex/phase-4-planning`.
 - **Base:** `phase-3-telegram-mvp-complete` (`83c6ef0` target commit).
-- **Next exact action:** implement JAC-150 with TDD: config schema extension, no secret leakage, no live calls.
+- **Next exact action:** implement JAC-151 with TDD: injectable fake WS client lifecycle; no real network or credentials.
 
 ## 2. Current decision state
 
@@ -56,8 +56,8 @@
 | JAC-65 | T0 plan review gate | done |
 | JAC-148 | T0a Lark `card.action.trigger` target verification | done |
 | JAC-149 | T1 im-lark skeleton + boundary tests | done |
-| JAC-150 | T2 Lark config schema extension | active next |
-| JAC-151 | T3 long connection lifecycle fake client | blocked by JAC-149/JAC-150 |
+| JAC-150 | T2 Lark config schema extension | done |
+| JAC-151 | T3 long connection lifecycle fake client | active next |
 | JAC-152 | T4 message receive fixtures | blocked by JAC-151 |
 | JAC-153 | T5 send/edit text/reply | blocked by JAC-152 |
 | JAC-154 | T6 sendCard/card rendering | blocked by JAC-153 |
@@ -78,7 +78,7 @@ No Phase 4 code has landed. Last Phase 3 tag target gates:
 |---|---|
 | `pnpm typecheck` | green: 13 of 14 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 101 files, 983 passing, 1 skipped |
+| `pnpm test` | green: 101 files, 984 passing, 1 skipped |
 | `pnpm lint` | green: 229 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 

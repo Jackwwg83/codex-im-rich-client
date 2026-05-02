@@ -27,6 +27,15 @@ require_admin_patterns = ["git push", "gh pr merge"]
 enabled       = true
 bot_token_env = "IM_TELEGRAM_BOT_TOKEN"
 
+[adapters.lark]
+enabled                = true
+app_id                 = "cli_test_app_id"
+app_secret_env         = "LARK_APP_SECRET"
+domain                 = "feishu"
+encrypt_key_env        = "LARK_ENCRYPT_KEY"
+verification_token_env = "LARK_VERIFICATION_TOKEN"
+allowed_chat_ids       = ["oc_test_chat"]
+
 [projects.web]
 cwd            = "/Users/mini/code/web"
 allowed_users  = ["telegram:123456789"]
@@ -41,6 +50,15 @@ describe("@codex-im/config (T7-T8)", () => {
     expect(config.adapters.telegram).toEqual({
       enabled: true,
       botTokenEnv: "IM_TELEGRAM_BOT_TOKEN",
+    });
+    expect(config.adapters.lark).toEqual({
+      enabled: true,
+      appId: "cli_test_app_id",
+      appSecretEnv: "LARK_APP_SECRET",
+      domain: "feishu",
+      encryptKeyEnv: "LARK_ENCRYPT_KEY",
+      verificationTokenEnv: "LARK_VERIFICATION_TOKEN",
+      allowedChatIds: ["oc_test_chat"],
     });
     expect(config.storage.autoMigrate).toBe(false);
     expect(config.projects.web).toMatchObject({
@@ -75,8 +93,41 @@ describe("@codex-im/config (T7-T8)", () => {
         enabled = true
         bot_token_env = "IM_TELEGRAM_BOT_TOKEN"
         bot_token = "literal-token-must-not-be-accepted"
+
+        [adapters.lark]
+        enabled = false
+        app_id = "cli_test_app_id"
+        app_secret_env = "LARK_APP_SECRET"
+        domain = "feishu"
+        allowed_chat_ids = []
+
+        [projects.web]
+        cwd = "/tmp/project"
+        allowed_users = []
+        allowed_chats = []
+        writable_roots = ["/tmp/project"]
       `),
     ).toThrow(/bot_token/);
+  });
+
+  it("rejects invalid Lark domains and literal-looking Lark secret fields", () => {
+    expect(() =>
+      parseConfigToml(
+        EXAMPLE_CONFIG.replace(
+          'domain                 = "feishu"',
+          'domain                 = "mars"',
+        ),
+      ),
+    ).toThrow(/domain/);
+
+    expect(() =>
+      parseConfigToml(
+        EXAMPLE_CONFIG.replace(
+          'app_secret_env         = "LARK_APP_SECRET"',
+          'app_secret_env         = "literal-secret-value"',
+        ),
+      ),
+    ).toThrow(/environment variable name/);
   });
 
   it("resolves ${ENV.NAME} references and fails closed when env is missing", () => {
@@ -102,20 +153,35 @@ describe("@codex-im/config (T7-T8)", () => {
     );
   });
 
-  it("returns resolved Telegram token without logging the secret value", () => {
+  it("returns resolved adapter secrets without logging secret values", () => {
     const config = parseConfigToml(EXAMPLE_CONFIG);
     const syntheticToken = "TEST_TELEGRAM_TOKEN_NEVER_LOGGED";
+    const syntheticLarkSecret = "TEST_LARK_SECRET_NEVER_LOGGED";
+    const syntheticLarkEncryptKey = "TEST_LARK_ENCRYPT_KEY_NEVER_LOGGED";
+    const syntheticLarkVerificationToken = "TEST_LARK_VERIFY_NEVER_LOGGED";
     const logLines: string[] = [];
 
     const secrets = resolveConfigSecrets(config, {
-      env: { IM_TELEGRAM_BOT_TOKEN: syntheticToken },
+      env: {
+        IM_TELEGRAM_BOT_TOKEN: syntheticToken,
+        LARK_APP_SECRET: syntheticLarkSecret,
+        LARK_ENCRYPT_KEY: syntheticLarkEncryptKey,
+        LARK_VERIFICATION_TOKEN: syntheticLarkVerificationToken,
+      },
       logger: { info: (...args) => logLines.push(JSON.stringify(args)) },
     });
 
     expect(secrets.telegramBotToken).toBe(syntheticToken);
+    expect(secrets.larkAppSecret).toBe(syntheticLarkSecret);
+    expect(secrets.larkEncryptKey).toBe(syntheticLarkEncryptKey);
+    expect(secrets.larkVerificationToken).toBe(syntheticLarkVerificationToken);
     expect(logLines.length).toBeGreaterThan(0);
     expect(logLines.join("\n")).not.toContain(syntheticToken);
+    expect(logLines.join("\n")).not.toContain(syntheticLarkSecret);
+    expect(logLines.join("\n")).not.toContain(syntheticLarkEncryptKey);
+    expect(logLines.join("\n")).not.toContain(syntheticLarkVerificationToken);
     expect(logLines.join("\n")).toContain("IM_TELEGRAM_BOT_TOKEN");
+    expect(logLines.join("\n")).toContain("LARK_APP_SECRET");
     expect(() => resolveConfigSecrets(config, { env: {} })).toThrow(/IM_TELEGRAM_BOT_TOKEN/);
   });
 });

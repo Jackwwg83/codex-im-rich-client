@@ -109,6 +109,8 @@ enabled = true
 app_id = "cli_xxx"
 app_secret_env = "LARK_APP_SECRET"
 domain = "feishu" # or "lark"
+encrypt_key_env = "LARK_ENCRYPT_KEY"                 # optional env var name
+verification_token_env = "LARK_VERIFICATION_TOKEN"   # optional env var name
 allowed_chat_ids = ["oc_xxx"]
 ```
 

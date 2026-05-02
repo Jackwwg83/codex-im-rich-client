@@ -28,6 +28,15 @@ export interface CodexImConfig {
       enabled: boolean;
       botTokenEnv: string;
     };
+    lark: {
+      enabled: boolean;
+      appId: string;
+      appSecretEnv: string;
+      domain: "feishu" | "lark";
+      encryptKeyEnv?: string;
+      verificationTokenEnv?: string;
+      allowedChatIds: string[];
+    };
   };
   projects: Record<
     string,
@@ -54,7 +63,14 @@ export interface ConfigSecretResolverOptions extends EnvResolverOptions {
 
 export interface ResolvedConfigSecrets {
   telegramBotToken?: string;
+  larkAppSecret?: string;
+  larkEncryptKey?: string;
+  larkVerificationToken?: string;
 }
+
+const envNameSchema = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, {
+  message: "must be an environment variable name",
+});
 
 const rawConfigSchema = z
   .object({
@@ -95,6 +111,17 @@ const rawConfigSchema = z
           .object({
             enabled: z.boolean(),
             bot_token_env: z.string().min(1),
+          })
+          .strict(),
+        lark: z
+          .object({
+            enabled: z.boolean(),
+            app_id: z.string().min(1),
+            app_secret_env: envNameSchema,
+            domain: z.enum(["feishu", "lark"]),
+            encrypt_key_env: envNameSchema.optional(),
+            verification_token_env: envNameSchema.optional(),
+            allowed_chat_ids: z.array(z.string()),
           })
           .strict(),
       })
@@ -142,6 +169,19 @@ export function parseConfigToml(source: string): CodexImConfig {
         enabled: parsed.adapters.telegram.enabled,
         botTokenEnv: parsed.adapters.telegram.bot_token_env,
       },
+      lark: {
+        enabled: parsed.adapters.lark.enabled,
+        appId: parsed.adapters.lark.app_id,
+        appSecretEnv: parsed.adapters.lark.app_secret_env,
+        domain: parsed.adapters.lark.domain,
+        allowedChatIds: parsed.adapters.lark.allowed_chat_ids,
+        ...(parsed.adapters.lark.encrypt_key_env === undefined
+          ? {}
+          : { encryptKeyEnv: parsed.adapters.lark.encrypt_key_env }),
+        ...(parsed.adapters.lark.verification_token_env === undefined
+          ? {}
+          : { verificationTokenEnv: parsed.adapters.lark.verification_token_env }),
+      },
     },
     projects: Object.fromEntries(
       Object.entries(parsed.projects).map(([name, project]) => [
@@ -187,23 +227,50 @@ export function resolveConfigSecrets(
   config: CodexImConfig,
   opts: ConfigSecretResolverOptions,
 ): ResolvedConfigSecrets {
-  if (!config.adapters.telegram.enabled) {
-    return {};
+  const secrets: ResolvedConfigSecrets = {};
+
+  if (config.adapters.telegram.enabled) {
+    secrets.telegramBotToken = resolveSecretEnv(
+      "telegram",
+      config.adapters.telegram.botTokenEnv,
+      opts,
+    );
   }
 
-  const envName = config.adapters.telegram.botTokenEnv;
-  const telegramBotToken = opts.env[envName];
-  if (telegramBotToken === undefined) {
+  if (config.adapters.lark.enabled) {
+    secrets.larkAppSecret = resolveSecretEnv("lark", config.adapters.lark.appSecretEnv, opts);
+    if (config.adapters.lark.encryptKeyEnv !== undefined) {
+      secrets.larkEncryptKey = resolveSecretEnv("lark", config.adapters.lark.encryptKeyEnv, opts);
+    }
+    if (config.adapters.lark.verificationTokenEnv !== undefined) {
+      secrets.larkVerificationToken = resolveSecretEnv(
+        "lark",
+        config.adapters.lark.verificationTokenEnv,
+        opts,
+      );
+    }
+  }
+
+  return secrets;
+}
+
+function resolveSecretEnv(
+  adapter: "telegram" | "lark",
+  envName: string,
+  opts: ConfigSecretResolverOptions,
+): string {
+  const value = opts.env[envName];
+  if (value === undefined) {
     throw new Error(`Missing environment variable ${envName}`);
   }
 
   opts.logger?.info({
     event: "config.secret_resolved",
-    adapter: "telegram",
+    adapter,
     envVar: envName,
     value: "***REDACTED***",
-    length: telegramBotToken.length,
+    length: value.length,
   });
 
-  return { telegramBotToken };
+  return value;
 }
