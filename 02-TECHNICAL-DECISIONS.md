@@ -151,7 +151,9 @@ Logger: pino
 Config: zod + TOML/YAML
 Telegram: grammY
 Lark/Feishu: @larksuiteoapi/node-sdk
-DingTalk: dingtalk-stream-sdk-nodejs
+DingTalk: dingtalk-stream (Phase 5 plan pins stable `^2.1.5`; older
+`dingtalk-stream-sdk-nodejs` references describe the upstream SDK repository
+lineage, not the preferred npm package name)
 Testing: vitest + tsx + nock/mock server
 Process: launchd on macOS
 ```

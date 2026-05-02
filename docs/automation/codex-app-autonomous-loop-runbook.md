@@ -14,8 +14,10 @@ If there is a conflict, the stricter rule wins.
 
 - Linear project: `Codex IM Rich Client`
 - Current parent issue: `JAC-8`
-- Current live status: `docs/handoffs/phase3-live-status.md`
-- Current Phase 3 plan: `docs/superpowers/plans/2026-05-02-phase-3-plan.md`
+- Current live status: read the latest active `docs/handoffs/phaseN-live-status.md`
+  file before each issue.
+- Current phase plan: read the matching active phase plan under
+  `docs/superpowers/plans/` before each issue.
 - Project rules: `AGENTS.md` and `CLAUDE.md`
 - Data model: `08-DATA-MODEL.md`
 - Historical roadmap: `09-ROADMAP.md`
@@ -50,14 +52,21 @@ Default objective for an overnight autonomous session:
 3. Keep each issue to one focused behavior, one focused commit, and one
    completion report.
 4. Keep the working tree clean between issues.
-5. Update Linear and `docs/handoffs/phase3-live-status.md` at task boundaries.
+5. Update Linear and the active `docs/handoffs/phaseN-live-status.md` at task
+   boundaries.
 6. Consult GPT Pro automatically for technical ambiguity instead of asking the
    human operator for technical advice.
 
 The human operator is not expected to make routine technical decisions.
 The human operator is still required for operator-gated actions listed below.
 
-## Default Phase 3 Queue
+## Phase Queues
+
+The active queue is the current Linear parent/child chain plus the active phase
+live-status file. Historical Phase 3 queue is retained below only for recovery
+from old logs.
+
+### Historical Phase 3 Queue
 
 Start with the next exact issue:
 

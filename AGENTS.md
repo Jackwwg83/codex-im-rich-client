@@ -40,7 +40,8 @@ IM 平台只通过 ChannelAdapter 接入。
 - Vitest
 - Telegram: grammY/native API
 - Feishu/Lark: @larksuiteoapi/node-sdk
-- DingTalk: dingtalk-stream-sdk-nodejs
+- DingTalk: dingtalk-stream (Phase 5 plan pins stable `^2.1.5`; older docs may
+  mention the repository/package scaffold name `dingtalk-stream-sdk-nodejs`)
 
 ## 开发流程
 
@@ -245,9 +246,15 @@ First enter Context Recovery Mode:
    - next exact action
    - applicable redlines
 
-4. Stop and output a Context Recovery Report.
+4. Output a Context Recovery Report.
 
-Do not modify code after compaction until the user approves the recovery report.
+In a human-authorized unattended loop, a clean recovery report is a checkpoint,
+not a product-owner approval gate. Continue only when branch, HEAD, working tree,
+current Linear issue, changed files, and gates/scope are clearly safe. If state
+is ambiguous, consult GPT Pro/Codex outside-voice or contain the work on a
+private branch; do not wait for routine non-technical approval. Still stop before
+destructive git operations, live secrets, public listeners, Computer Use, or
+unreviewed external side effects.
 
 Persistent project redlines:
 - This project is a Codex App Server native IM Rich Client.
