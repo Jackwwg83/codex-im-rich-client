@@ -13,6 +13,8 @@ const FORBIDDEN_CODEX_IMPORTS = [
   "@codex-im/storage-sqlite",
   "@codex-im/daemon",
   "@codex-im/config",
+  "@codex-im/im-lark",
+  "@codex-im/im-dingtalk",
 ] as const;
 
 function listTsFiles(root: string): string[] {

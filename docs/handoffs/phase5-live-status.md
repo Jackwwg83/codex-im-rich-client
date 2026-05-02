@@ -1,7 +1,7 @@
 # Phase 5 Live Status
 
 > Single source of truth for Phase 5 while DingTalk adapter work is active.
-> **Last updated:** 2026-05-02 - JAC-78 plan review gate green.
+> **Last updated:** 2026-05-02 - JAC-79 package skeleton green.
 
 ---
 
@@ -10,12 +10,12 @@
 - **Phase:** Phase 5 - DingTalk adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
 - **Parent Linear issue:** JAC-10 - Phase 5 backlog / DingTalk adapter.
-- **Current Linear issue:** JAC-78 - Phase 5 plan review gate.
+- **Current Linear issue:** JAC-79 - package skeleton + boundary tests.
 - **Branch:** `codex/phase-5-dingtalk`.
 - **Base:** `phase-4-lark-adapter-complete` (`7281e28`).
 - **Version:** `0.1.0-phase4`; do not bump until Phase 5 tag gate.
-- **Next exact action:** update Linear for JAC-78, then start JAC-79 package
-  skeleton + boundary tests.
+- **Next exact action:** update Linear for JAC-79, then start JAC-80 Stream
+  lifecycle fake test.
 
 ## 2. Current decision state
 
@@ -30,6 +30,11 @@
   resolution path.
 - Live DingTalk smoke is `OPERATOR_GATE + env-gated`; default runs skip without
   network and the unattended loop must not set `DINGTALK_LIVE=1` itself.
+- `@codex-im/im-dingtalk` package skeleton exists with no external DingTalk SDK
+  dependency yet; JAC-80 owns Stream lifecycle and SDK wrapper introduction.
+- Current DingTalk capabilities are intentionally conservative:
+  `supportsButtons=true`, `canEditMessage=true`, `supportsAttachments=false`,
+  `maxCallbackDataBytes=64`.
 
 ## 3. Active redlines carried forward
 
@@ -65,9 +70,9 @@
 
 | Issue | Scope | Status / gate |
 |---|---|---|
-| JAC-78 | T0 plan review gate | green; Linear update pending |
-| JAC-79 | T1 im-dingtalk skeleton + boundary tests | next |
-| JAC-80 | T2 Stream lifecycle fake test | blocked |
+| JAC-78 | T0 plan review gate | done |
+| JAC-79 | T1 im-dingtalk skeleton + boundary tests | green; Linear update pending |
+| JAC-80 | T2 Stream lifecycle fake test | next |
 | JAC-81 | T3 message receive fixtures | blocked |
 | JAC-82 | T4 card send/update | blocked |
 | JAC-83 | T5 callback codec/parser only; no `InboundAction` before JAC-84 | blocked |
@@ -85,10 +90,10 @@ Latest JAC-78 verification:
 
 | Gate | Result |
 |---|---|
-| `pnpm typecheck` | green: 13 of 14 workspace projects |
+| `pnpm typecheck` | green: 14 of 15 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 113 files, 1078 passing, 1 skipped |
-| `pnpm lint` | green: 256 files checked |
+| `pnpm test` | green: 115 files, 1097 passing, 1 skipped |
+| `pnpm lint` | green: 263 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 
 `protocol:check` must run serially because it regenerates protocol files before

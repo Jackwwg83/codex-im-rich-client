@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const SRC_DIR = "packages/im-lark/src";
+const SRC_DIR = "packages/im-dingtalk/src";
 
 const FORBIDDEN_CODEX_IMPORTS = [
   "@codex-im/core",
@@ -14,7 +14,7 @@ const FORBIDDEN_CODEX_IMPORTS = [
   "@codex-im/daemon",
   "@codex-im/config",
   "@codex-im/im-telegram",
-  "@codex-im/im-dingtalk",
+  "@codex-im/im-lark",
 ] as const;
 
 function listTsFiles(root: string): string[] {
@@ -52,7 +52,7 @@ function findImports(file: string, content: string, needle: string): string[] {
   return matches;
 }
 
-describe("im-lark boundary (JAC-149)", () => {
+describe("im-dingtalk boundary (JAC-79)", () => {
   for (const needle of FORBIDDEN_CODEX_IMPORTS) {
     it(`src has no import/export referencing ${needle}`, () => {
       const matches: string[] = [];

@@ -23,7 +23,9 @@
 //   @codex-im/protocol           generated codex protocol types
 //   @codex-im/render             rich-block rendering
 //   @codex-im/daemon             top-level orchestration
-//   @codex-im/im-telegram        Phase 3 platform adapter (when added)
+//   @codex-im/im-telegram        Phase 3 platform adapter
+//   @codex-im/im-lark            Phase 4 platform adapter
+//   @codex-im/im-dingtalk        Phase 5 platform adapter
 //
 // Storage stores OPAQUE strings — every column is a primitive (TEXT /
 // INTEGER / BLOB) that the writer redacts before insert and the
@@ -45,6 +47,8 @@ const FORBIDDEN_ALL = [
   "@codex-im/render",
   "@codex-im/daemon",
   "@codex-im/im-telegram",
+  "@codex-im/im-lark",
+  "@codex-im/im-dingtalk",
 ];
 
 function listTsFiles(root: string): string[] {

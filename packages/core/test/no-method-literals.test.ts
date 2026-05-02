@@ -60,9 +60,11 @@ const SCANNED_DIRS = [
   // Phase 2 additions:
   "packages/render/src",
   "packages/channel-core/src",
-  // Phase 3 T20: real Telegram adapter package. It must not carry
-  // Codex App Server method literals; it consumes ChannelAdapter only.
+  // Real IM adapter packages. They must not carry Codex App Server
+  // method literals; they consume ChannelAdapter only.
   "packages/im-telegram/src",
+  "packages/im-lark/src",
+  "packages/im-dingtalk/src",
   // Plus the broker's own package — to assert ONLY the two authorized
   // files contain literals.
   "packages/core/src",
