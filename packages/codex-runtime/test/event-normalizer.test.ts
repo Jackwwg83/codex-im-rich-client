@@ -48,6 +48,16 @@ async function teardown(h: Harness): Promise<void> {
   await h.fake.stop();
 }
 
+function syntheticTurnFailed(turnId: string): CodexRichEvent {
+  return {
+    type: "turn_failed",
+    threadId: "thread-1",
+    turnId,
+    raw: { synthetic: true, turnId },
+    terminal: true,
+  };
+}
+
 describe("EventNormalizer happy path (T7a)", () => {
   it("yields turn/started as turn_started", async () => {
     const h = harness();
@@ -611,6 +621,88 @@ describe("EventNormalizer happy path (T7a)", () => {
     const it = h.normalizer.events()[Symbol.asyncIterator]();
     const result = await it.next();
     expect(result.done).toBe(true);
+    await teardown(h);
+  });
+
+  it("endWithSynthetic() appends synthetic events FIFO before done", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.fake.emitNotification("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-real", items: [], status: "inProgress" },
+    });
+    await new Promise<void>((r) => queueMicrotask(r));
+
+    h.normalizer.endWithSynthetic([
+      syntheticTurnFailed("turn-synth-1"),
+      syntheticTurnFailed("turn-synth-2"),
+    ]);
+
+    const a = await it.next();
+    const b = await it.next();
+    const c = await it.next();
+    const done = await it.next();
+
+    expect(a.done).toBe(false);
+    expect((a.value as CodexRichEvent).type).toBe("turn_started");
+    expect(b.done).toBe(false);
+    expect((b.value as CodexRichEvent).type).toBe("turn_failed");
+    expect((b.value as Extract<CodexRichEvent, { type: "turn_failed" }>).turnId).toBe(
+      "turn-synth-1",
+    );
+    expect(c.done).toBe(false);
+    expect((c.value as Extract<CodexRichEvent, { type: "turn_failed" }>).turnId).toBe(
+      "turn-synth-2",
+    );
+    expect(done.done).toBe(true);
+
+    await teardown(h);
+  });
+
+  it("endWithSynthetic() is idempotent and a later bare endOfStream() is a no-op", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    h.normalizer.endWithSynthetic([syntheticTurnFailed("turn-first")]);
+    h.normalizer.endWithSynthetic([syntheticTurnFailed("turn-second")]);
+    h.normalizer.endOfStream();
+
+    const first = await it.next();
+    const done = await it.next();
+    expect(first.done).toBe(false);
+    expect((first.value as Extract<CodexRichEvent, { type: "turn_failed" }>).turnId).toBe(
+      "turn-first",
+    );
+    expect(done.done).toBe(true);
+
+    await teardown(h);
+  });
+
+  it("endWithSynthetic() drains a waiter already blocked on next()", async () => {
+    const h = harness();
+    const it = h.normalizer.events()[Symbol.asyncIterator]();
+
+    const pending = it.next();
+    h.normalizer.endWithSynthetic([
+      syntheticTurnFailed("turn-waiter-1"),
+      syntheticTurnFailed("turn-waiter-2"),
+    ]);
+
+    const first = await pending;
+    const second = await it.next();
+    const done = await it.next();
+
+    expect(first.done).toBe(false);
+    expect((first.value as Extract<CodexRichEvent, { type: "turn_failed" }>).turnId).toBe(
+      "turn-waiter-1",
+    );
+    expect(second.done).toBe(false);
+    expect((second.value as Extract<CodexRichEvent, { type: "turn_failed" }>).turnId).toBe(
+      "turn-waiter-2",
+    );
+    expect(done.done).toBe(true);
+
     await teardown(h);
   });
 

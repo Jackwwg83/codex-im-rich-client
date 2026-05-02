@@ -170,6 +170,21 @@ export class EventNormalizer {
     }
   }
 
+  /**
+   * Enqueue daemon-synthesized terminal events and then end the stream. This
+   * preserves the normal iterator contract: buffered events drain first, the
+   * synthetic events follow in caller order, and only then does `.next()` yield
+   * `{done:true}`. Calling after cancellation or a prior stream end is a no-op.
+   */
+  endWithSynthetic(events: readonly CodexRichEvent[]): void {
+    if (this.#cancelled || this.#endOfStream) return;
+    for (const ev of events) {
+      this.#enqueue(ev, "lifecycle");
+    }
+    this.#drain();
+    this.endOfStream();
+  }
+
   // ─── Internals ───────────────────────────────────────────────────
 
   #onNotification(msg: JsonRpcNotification): void {
