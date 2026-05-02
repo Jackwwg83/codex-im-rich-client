@@ -37,8 +37,8 @@ export type {
 // Phase 2 T2 — ApprovalRequestKind classifier (the only Phase 2 production
 // source allowed to read raw approval server-request method strings; see
 // `approval-request-kind.ts` header for the boundary rationale).
-export { classifyApprovalRequest } from "./approval-request-kind.js";
-export type { ApprovalRequestKind } from "./approval-request-kind.js";
+export { classifyApprovalRequest, IM_ROUTABLE_APPROVAL_METHODS } from "./approval-request-kind.js";
+export type { ApprovalRequestKind, IMRoutableApprovalMethod } from "./approval-request-kind.js";
 
 // Phase 2 T6 — resolve / binding / snapshot / target type surface (D11 /
 // D12 / D19 / D20). Public contracts T7 (broker emitters), T9

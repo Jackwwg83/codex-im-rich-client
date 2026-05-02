@@ -1,7 +1,10 @@
+import { type IMRoutableApprovalMethod, IM_ROUTABLE_APPROVAL_METHODS } from "@codex-im/core";
+
 type MaybePromise<T> = T | Promise<T>;
 
 export interface DaemonBroker {
   attach(): void;
+  enablePendingMode(method: IMRoutableApprovalMethod): void;
 }
 
 export interface DaemonBrokerContext {
@@ -42,6 +45,9 @@ export class Daemon {
       storage: this.#storage,
     });
     this.#broker?.attach();
+    for (const method of IM_ROUTABLE_APPROVAL_METHODS) {
+      this.#broker?.enablePendingMode(method);
+    }
     this.#started = true;
   }
 

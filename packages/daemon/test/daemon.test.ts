@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { IM_ROUTABLE_APPROVAL_METHODS } from "@codex-im/core";
 import { describe, expect, it, vi } from "vitest";
 import { Daemon, type DaemonOptions } from "../src/index.js";
 
@@ -43,6 +44,7 @@ describe("Daemon skeleton (T14)", () => {
       attach: vi.fn(() => {
         order.push("broker.attach");
       }),
+      enablePendingMode: vi.fn(),
     };
     const loadConfig = vi.fn(() => {
       order.push("loadConfig");
@@ -76,11 +78,70 @@ describe("Daemon skeleton (T14)", () => {
     expect(daemon.options).toBe(options);
     await daemon.start();
 
-    expect(order).toEqual(["loadConfig", "openStorage", "createBroker", "broker.attach"]);
+    expect(order.slice(0, 4)).toEqual([
+      "loadConfig",
+      "openStorage",
+      "createBroker",
+      "broker.attach",
+    ]);
     expect(loadConfig).toHaveBeenCalledTimes(1);
     expect(openStorage).toHaveBeenCalledTimes(1);
     expect(createBroker).toHaveBeenCalledTimes(1);
     expect(broker.attach).toHaveBeenCalledTimes(1);
+    expect(createSecurityPolicy).not.toHaveBeenCalled();
+    expect(createSessionRouter).not.toHaveBeenCalled();
+    expect(createSupervisor).not.toHaveBeenCalled();
+    expect(createAdapter).not.toHaveBeenCalled();
+  });
+
+  it("enables pending mode for the core IM-routable approval registry after broker attach", async () => {
+    const order: string[] = [];
+    const broker = {
+      enabled: [] as string[],
+      attach: vi.fn(() => {
+        order.push("broker.attach");
+      }),
+      enablePendingMode: vi.fn((method: string) => {
+        order.push(`pending:${method}`);
+        broker.enabled.push(method);
+      }),
+    };
+    const createSecurityPolicy = vi.fn();
+    const createSessionRouter = vi.fn();
+    const createSupervisor = vi.fn();
+    const createAdapter = vi.fn();
+
+    const daemon = new Daemon({
+      loadConfig: () => {
+        order.push("loadConfig");
+        return {};
+      },
+      openStorage: () => {
+        order.push("openStorage");
+        return {};
+      },
+      createBroker: () => {
+        order.push("createBroker");
+        return broker;
+      },
+      createSecurityPolicy,
+      createSessionRouter,
+      createSupervisor,
+      createAdapter,
+    });
+
+    await daemon.start();
+
+    expect(order.slice(0, 4)).toEqual([
+      "loadConfig",
+      "openStorage",
+      "createBroker",
+      "broker.attach",
+    ]);
+    expect(broker.enabled).toEqual([...IM_ROUTABLE_APPROVAL_METHODS]);
+    expect(order.indexOf("broker.attach")).toBeLessThan(
+      order.indexOf(`pending:${broker.enabled[0]}`),
+    );
     expect(createSecurityPolicy).not.toHaveBeenCalled();
     expect(createSessionRouter).not.toHaveBeenCalled();
     expect(createSupervisor).not.toHaveBeenCalled();

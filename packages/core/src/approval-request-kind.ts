@@ -86,6 +86,12 @@ const METHOD_TO_KIND = {
   "account/chatgptAuthTokens/refresh": "auth_token_refresh",
 } as const satisfies Record<ServerRequest["method"], Exclude<ApprovalRequestKind, "unknown">>;
 
+export type IMRoutableApprovalMethod = keyof typeof METHOD_TO_KIND;
+
+export const IM_ROUTABLE_APPROVAL_METHODS = Object.freeze(
+  Object.keys(METHOD_TO_KIND) as IMRoutableApprovalMethod[],
+);
+
 /**
  * Classify a raw ServerRequest method string into an `ApprovalRequestKind`.
  *
