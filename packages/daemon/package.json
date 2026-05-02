@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc -b",
     "test": "vitest run --project unit"
@@ -14,10 +16,11 @@
     "@codex-im/core": "workspace:*",
     "@codex-im/protocol": "workspace:*",
     "@codex-im/render": "workspace:*",
-    "@codex-im/storage-sqlite": "workspace:*"
+    "@codex-im/storage-sqlite": "workspace:*",
+    "pino": "^9",
+    "pino-roll": "^4.0.0"
   },
   "devDependencies": {
-    "@codex-im/testkit": "workspace:*",
-    "pino": "^9"
+    "@codex-im/testkit": "workspace:*"
   }
 }

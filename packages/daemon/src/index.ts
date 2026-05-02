@@ -11,6 +11,7 @@
 // facade rule from @codex-im/protocol.
 
 export { Daemon } from "./daemon.js";
+export { createDaemonLogger, planDaemonLogger } from "./logger.js";
 export type {
   DaemonActionAck,
   DaemonAdapter,
@@ -30,5 +31,16 @@ export type {
   DaemonSupervisorContext,
   DaemonUserChatPolicy,
 } from "./daemon.js";
+export type {
+  DaemonLoggerOptions,
+  DaemonLoggerPlan,
+  DaemonLoggerPlanOptions,
+  DaemonPinoFactory,
+  DaemonPinoLoggerOptions,
+  DaemonPinoRollTransportConfig,
+  DaemonRotatingFileLoggerPlan,
+  DaemonStdoutLoggerPlan,
+  DaemonTransportFactory,
+} from "./logger.js";
 export { Supervisor } from "./supervisor.js";
 export type { SupervisorAudit, SupervisorOptions } from "./types.js";
