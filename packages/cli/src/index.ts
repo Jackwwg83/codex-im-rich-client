@@ -27,6 +27,7 @@ function usage(): void {
       "  smoke app-server     — initialize-only smoke (requires CODEX_SMOKE=1)",
       "  smoke real-turn      — full lifecycle smoke (requires CODEX_REAL_SMOKE=1)",
       "  runtime send         — runtime kernel smoke (requires CODEX_REAL_SMOKE=1)",
+      "  daemon status        — local daemon status snapshot",
       "",
       "see packages/cli/README.md for safety boundaries.",
     ].join("\n"),
@@ -48,6 +49,10 @@ if (cmd === "smoke" && sub === "app-server") {
   // Same passthrough convention: argv[0]="runtime", argv[1]="send",
   // argv[2..] = flag passthrough; strip a stray "--" forwarded by
   // pnpm/npm.
+  const passthrough = argv.slice(2).filter((a) => a !== "--");
+  await run(passthrough);
+} else if (cmd === "daemon" && sub === "status") {
+  const { run } = await import("./daemon-status.js");
   const passthrough = argv.slice(2).filter((a) => a !== "--");
   await run(passthrough);
 } else {
