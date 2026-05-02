@@ -1063,26 +1063,19 @@ export class ApprovalBroker {
     const decidedAt = new Date();
     for (const entry of this.#pending.values()) {
       if (entry.record.status !== "pending") continue;
-      entry.record.status = "transport_lost";
-      entry.record.actor = { kind: "system", reason: "transport_lost" };
-      entry.record.decision = { kind: "denied", reason: "transport_lost" };
-      entry.record.decidedAt = decidedAt;
-      // T7: route settle through #settleEntry so audit emit
-      // (`approval.transport_lost`) + onPendingResolved observer fire
-      // at the boundary. settleOnce body itself unchanged.
-      const audit: AuditEventInput = {
-        kind: "approval.transport_lost",
-        approvalId: entry.record.id,
-        appServerRequestId: entry.record.appServerRequestId,
-      };
-      const resolved: ResolvedOutcome = { kind: "system", reason: "transport_lost" };
-      try {
-        const value = entry.spec.defaultReject();
-        this.#settleEntry(entry, { type: "resolve", value }, audit, resolved);
-      } catch (err) {
-        this.#settleEntry(entry, { type: "reject", error: err }, audit, resolved);
-      }
+      this.#settleTransportLostEntry(entry, decidedAt);
     }
+  }
+
+  /**
+   * Mark one pending approval as transport-lost. Daemon cleanup paths use this
+   * when a remote card/message disappears while sibling approvals remain
+   * actionable. Unknown or already-terminal ids are intentionally no-ops.
+   */
+  failPendingApprovalAsTransportLost(approvalId: string): void {
+    const entry = this.#pendingById.get(approvalId);
+    if (entry === undefined || entry.record.status !== "pending") return;
+    this.#settleTransportLostEntry(entry, new Date());
   }
 
   /**
@@ -1284,6 +1277,28 @@ export class ApprovalBroker {
       } catch {
         // Subscribers must not break broker. Swallow.
       }
+    }
+  }
+
+  #settleTransportLostEntry(entry: PendingEntry, decidedAt: Date): void {
+    entry.record.status = "transport_lost";
+    entry.record.actor = { kind: "system", reason: "transport_lost" };
+    entry.record.decision = { kind: "denied", reason: "transport_lost" };
+    entry.record.decidedAt = decidedAt;
+    // T7/T6.5: route settle through #settleEntry so audit emit
+    // (`approval.transport_lost`) + onPendingResolved observer fire
+    // at the boundary. settleOnce body itself unchanged.
+    const audit: AuditEventInput = {
+      kind: "approval.transport_lost",
+      approvalId: entry.record.id,
+      appServerRequestId: entry.record.appServerRequestId,
+    };
+    const resolved: ResolvedOutcome = { kind: "system", reason: "transport_lost" };
+    try {
+      const value = entry.spec.defaultReject();
+      this.#settleEntry(entry, { type: "resolve", value }, audit, resolved);
+    } catch (err) {
+      this.#settleEntry(entry, { type: "reject", error: err }, audit, resolved);
     }
   }
 
