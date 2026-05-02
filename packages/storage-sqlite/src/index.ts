@@ -85,6 +85,7 @@ export {
 // T6d (Phase 3) — callback_tokens repository exports.
 export {
   CallbackTokenRepository,
+  hashCallbackToken,
   type CallbackMessageRef,
   type CallbackTokenAction,
   type CallbackTokenActor,

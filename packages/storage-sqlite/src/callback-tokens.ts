@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { DatabaseHandle } from "./database.js";
 
 export type CallbackTokenAction = "allow_once" | "allow_session" | "decline" | "abort";
@@ -49,6 +50,10 @@ export interface CallbackTokenRecord {
   messageRef?: CallbackMessageRef;
   createdAt: string;
   expiresAt: string;
+}
+
+export function hashCallbackToken(rawToken: string): string {
+  return createHash("sha256").update(rawToken, "utf8").digest("hex").slice(0, 32);
 }
 
 interface CallbackTokenRow {
