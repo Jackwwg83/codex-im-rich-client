@@ -1,22 +1,22 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + migrations + binding repository + approval repository + audit repository + callback token action guard landed (T1.1 → T6f) + docs convergence (`f4e1b69`) + handoff checkpoint (`f493360`) + autonomous-loop runbook (`084aab8`).
-> **Handoff status:** T6f complete locally in the current implementation commit: callback token action enum round-trip guard for `allow_once`, `allow_session`, `decline`, `abort`; `cancel` excluded. All 5 gates green. Next exact issue: JAC-17 / T7-T8.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete and config package + env secret resolver landed (T1.1 → T8b) + docs convergence (`f4e1b69`) + handoff checkpoint (`f493360`) + autonomous-loop runbook (`084aab8`).
+> **Handoff status:** T7-T8 complete locally in the current implementation commit: `@codex-im/config` package, strict TOML/zod schema, `${ENV.NAME}` resolver, Telegram env-name secret resolver, and log redaction tests. All 5 gates green. Next exact issue: JAC-16 / T6.5-T6.7.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **T6f / JAC-37** (callback token action enum round-trip; `cancel` excluded).
-- **Next exact task:** **T7-T8 / JAC-17** — config package and env secret resolver. Token config must be env-var name only; resolved secret values must never appear in logs.
+- **Active task:** None at this checkpoint. Last completed: **T7-T8 / JAC-17** (`@codex-im/config` + TOML/zod schema + env resolver + secret-log redaction test).
+- **Next exact task:** **T6.5-T6.7 / JAC-16** — broker transport-loss single-approval extension, `ApprovalUiAction.wirePayload`, and `EventNormalizer.endWithSynthetic`.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **HEAD:** current T6f implementation commit (run `git log --oneline -1`); prior checkpoint `084aab8` added the autonomous-loop runbook.
+- **HEAD:** current T7-T8 implementation commit (run `git log --oneline -1`); prior checkpoint `084aab8` added the autonomous-loop runbook.
 - **Tag distance:** `phase-2-codex-reviewed` plus current Phase 3 implementation commits (run `git describe --tags`)
 - **Origin:** local branch may be ahead until the operator/agent pushes; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
@@ -45,7 +45,8 @@
 | `d6620f8` | T6c | `AuditRepository.insertBestEffort` + rate-limited SQLite failure marker + dropped counter |
 | `2891a9f` | T6d | `007-callback-tokens.sql` + `CallbackTokenRepository.insert/findByHash/casUpdate/pruneExpired` |
 | `3d9d30c` | T6e | `hashCallbackToken()` + raw-token absence assertion across SQLite row columns |
-| current T6f commit | T6f | Callback token action enum round-trip guard; `cancel` excluded |
+| `6ae48d6` | T6f | Callback token action enum round-trip guard; `cancel` excluded |
+| current T7-T8 commit | T7-T8 | `@codex-im/config` package + TOML/zod schema + env secret resolver |
 
 ## 3. Versions / pins
 
@@ -59,9 +60,9 @@
 
 | Gate | Command | Result |
 |---|---|---|
-| TypeScript | `pnpm typecheck` | green (10 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
+| TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **751 passing + 1 skipped** across 69 test files (Phase 2 close: 720; +31 from storage-sqlite) |
+| Tests | `pnpm test` | **754 passing + 1 skipped** across 70 test files (Phase 2 close: 720; +34 from Phase 3 storage/config) |
 | Lint | `pnpm lint` | green (155 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
@@ -117,7 +118,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.3 for the next T-task body. The next task is **T7-T8** (config package and env secret resolver).
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.4b / §16.5 prereq notes for the next T-task body. The next task is **T6.5-T6.7** (broker transport-loss extension, `wirePayload`, synthetic end events).
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. STOP and output a Context Recovery Report. Do NOT modify code until the user approves the recovery.
@@ -156,4 +157,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced: **T4a, T4b, T4c, T5a, T5b, T6a, T6b, T6c, T6d, T6e, and T6f are complete**. Continue with **T7-T8 / JAC-17** only (config package and env secret resolver).
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **T7-T8 / JAC-17**. Continue with **T6.5-T6.7 / JAC-16** only (broker transport-loss extension, `wirePayload`, synthetic end events).
