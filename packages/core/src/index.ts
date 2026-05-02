@@ -17,7 +17,7 @@ export type {
   ApprovalRecord,
 } from "./types.js";
 export { ApprovalBroker } from "./approval-broker.js";
-export type { DispatcherSpec } from "./approval-broker.js";
+export type { DispatcherSpec, PruneTerminalRecordsOptions } from "./approval-broker.js";
 export { SecurityPolicy } from "./security-policy.js";
 export type {
   SecurityPolicyApprovalDestinationDecision,

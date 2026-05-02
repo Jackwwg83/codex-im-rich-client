@@ -200,4 +200,86 @@ describe("CallbackTokenRepository (T6d)", () => {
       db.close();
     }
   });
+
+  it("serializes expire-vs-click by status CAS on the same callback token row", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new CallbackTokenRepository(db);
+      const sweepWinsHash = hashCallbackToken("sweep-wins-token");
+      const clickWinsHash = hashCallbackToken("click-wins-token");
+      for (const tokenHash of [sweepWinsHash, clickWinsHash]) {
+        repo.insert({
+          tokenHash,
+          approvalId: `approval-${tokenHash}`,
+          action: "allow_once",
+          callbackNonce: "nonce-race",
+          target: { platform: "telegram", chatId: "-100123456" },
+          actor: { kind: "im" },
+          createdAt: "2026-05-02T18:00:00.000Z",
+          expiresAt: "2026-05-02T18:00:05.000Z",
+        });
+        repo.casUpdate(tokenHash, "issued", "bound", {
+          messageRef: { chatId: "-100123456", messageId: tokenHash },
+        });
+      }
+
+      expect(repo.pruneExpired("2026-05-02T18:00:06.000Z", 1)).toEqual([
+        expect.objectContaining({ tokenHash: sweepWinsHash, status: "expired" }),
+      ]);
+      expect(repo.casUpdate(sweepWinsHash, "bound", "used")).toBeUndefined();
+
+      expect(repo.casUpdate(clickWinsHash, "bound", "used")).toMatchObject({
+        tokenHash: clickWinsHash,
+        status: "used",
+      });
+      expect(repo.pruneExpired("2026-05-02T18:00:06.000Z")).toEqual([]);
+      expect(repo.findByHash(sweepWinsHash)).toMatchObject({ status: "expired" });
+      expect(repo.findByHash(clickWinsHash)).toMatchObject({ status: "used" });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("revokes only flagged old issued tokens for stuck step-5 bind failures", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new CallbackTokenRepository(db);
+      const flaggedOld = hashCallbackToken("flagged-old-issued");
+      const flaggedRecent = hashCallbackToken("flagged-recent-issued");
+      const unflaggedOld = hashCallbackToken("unflagged-old-issued");
+      const flaggedBound = hashCallbackToken("flagged-bound-token");
+      for (const [tokenHash, approvalId, createdAt] of [
+        [flaggedOld, "approval-flagged", "2026-05-02T18:00:00.000Z"],
+        [flaggedRecent, "approval-flagged", "2026-05-02T18:00:10.000Z"],
+        [unflaggedOld, "approval-unflagged", "2026-05-02T18:00:00.000Z"],
+        [flaggedBound, "approval-flagged", "2026-05-02T18:00:00.000Z"],
+      ] as const) {
+        repo.insert({
+          tokenHash,
+          approvalId,
+          action: "decline",
+          callbackNonce: "nonce-stuck",
+          target: { platform: "telegram", chatId: "-100123456" },
+          actor: { kind: "im" },
+          createdAt,
+          expiresAt: "2026-05-02T18:30:00.000Z",
+        });
+      }
+      repo.casUpdate(flaggedBound, "issued", "bound");
+
+      expect(repo.revokeStuckIssued("2026-05-02T18:00:05.000Z", ["approval-flagged"])).toEqual([
+        expect.objectContaining({ tokenHash: flaggedOld, status: "revoked" }),
+      ]);
+      expect(repo.findByHash(flaggedOld)).toMatchObject({ status: "revoked" });
+      expect(repo.findByHash(flaggedRecent)).toMatchObject({ status: "issued" });
+      expect(repo.findByHash(unflaggedOld)).toMatchObject({ status: "issued" });
+      expect(repo.findByHash(flaggedBound)).toMatchObject({ status: "bound" });
+    } finally {
+      db.close();
+    }
+  });
 });

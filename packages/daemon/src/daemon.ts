@@ -44,6 +44,13 @@ const CALLBACK_TOKEN_FAIL_MESSAGES: Partial<Record<CallbackTokenStatus, string>>
   used: "already resolved",
   issued: "binding not ready",
 };
+const DEFAULT_PRUNE_INTERVAL_MS = 60_000;
+const DEFAULT_TERMINAL_RECORD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_TERMINAL_RECORD_MAX_COUNT = 10_000;
+const DEFAULT_PRUNE_BATCH_SIZE = 100;
+const DEFAULT_STUCK_ISSUED_GRACE_MS = 5_000;
+const DEFAULT_BIND_RETRY_DELAYS_MS = [50, 150, 350] as const;
+const EAGER_PRUNE_RATIO = 0.8;
 
 export interface DaemonBroker {
   attach(): void;
@@ -52,6 +59,10 @@ export interface DaemonBroker {
   resolve?(input: ResolveApprovalInput): MaybePromise<ResolveApprovalResult>;
   onPendingCreated?(handler: (snapshot: PendingApprovalSnapshot) => void): Unsubscribe;
   failPendingAsTransportLost?(): void;
+  failPendingApprovalAsTransportLost?(approvalId: string): void;
+  expirePending?(maxAgeMs?: number): number;
+  pruneTerminalRecords?(options: DaemonPruneTerminalRecordsOptions): number;
+  approvalRecordCount?(): number;
 }
 
 export interface DaemonBrokerContext {
@@ -105,6 +116,19 @@ export interface DaemonCallbackTokenRepository {
   ): CallbackTokenRecord | unknown;
   forceMarkUsed?(tokenHash: string, fields?: CallbackTokenCasFields): CallbackTokenRecord | unknown;
   revokeBoundSiblings?(approvalId: string, exceptTokenHash: string): readonly CallbackTokenRecord[];
+  pruneExpired?(now: string, limit?: number): readonly CallbackTokenRecord[];
+  revokeStuckIssued?(
+    cutoff: string,
+    approvalIds: readonly string[],
+    limit?: number,
+  ): readonly CallbackTokenRecord[];
+}
+
+export interface DaemonPruneTerminalRecordsOptions {
+  readonly maxAgeMs: number;
+  readonly maxCount: number;
+  readonly batchSize: number;
+  readonly now: Date;
 }
 
 export interface DaemonActionAck {
@@ -222,6 +246,13 @@ export interface DaemonOptions {
   readonly onApprovalCardReady?: (target: Target, card: ApprovalCard) => MaybePromise<void>;
   readonly generateCallbackNonce?: () => string;
   readonly generateRawCallbackToken?: () => string;
+  readonly schedulePrune?: (handler: () => void, intervalMs: number) => Unsubscribe | undefined;
+  readonly pruneIntervalMs?: number;
+  readonly terminalRecordMaxAgeMs?: number;
+  readonly terminalRecordMaxCount?: number;
+  readonly pruneBatchSize?: number;
+  readonly stuckIssuedGraceMs?: number;
+  readonly bindIssuedRetryDelaysMs?: readonly number[];
   readonly now?: () => Date;
 }
 
@@ -236,6 +267,8 @@ export class Daemon {
   #supervisor: unknown;
   #adapter: DaemonAdapter | undefined;
   #stopPromise: Promise<void> | undefined;
+  #pruneInFlight = false;
+  readonly #stuckIssuedApprovalIds = new Set<string>();
   readonly #unsubscribers: Unsubscribe[] = [];
 
   constructor(options: DaemonOptions = {}) {
@@ -283,6 +316,7 @@ export class Daemon {
       this.#adapter = await this.options.createAdapter?.(adapterContext);
       this.#subscribe(
         this.#broker?.onPendingCreated?.((snapshot) => {
+          this.#maybeTriggerEagerPrune();
           void this.#handlePendingCreated(snapshot);
         }),
       );
@@ -290,6 +324,7 @@ export class Daemon {
       this.#subscribe(this.#adapter?.onMessage((message) => this.#handleMessage(message)));
       this.#subscribe(this.options.registerSignalHandler?.("SIGTERM", () => this.#handleSignal()));
       this.#subscribe(this.options.registerSignalHandler?.("SIGINT", () => this.#handleSignal()));
+      this.#subscribe(this.#schedulePruneSweep());
       await this.#adapter?.start?.();
       this.#started = true;
     } catch (error) {
@@ -434,7 +469,7 @@ export class Daemon {
           await this.options.onApprovalCardReady?.(target, card);
           const sendResult = await this.#adapter?.sendCard?.(target, card);
           if (sendResult !== undefined) {
-            this.#bindIssuedCallbackTokens(issued.tokens, sendResult.messageRef);
+            await this.#bindIssuedCallbackTokens(snapshot.id, issued.tokens, sendResult.messageRef);
           }
         }
         return;
@@ -534,16 +569,39 @@ export class Daemon {
     void this.stop();
   }
 
-  #bindIssuedCallbackTokens(
+  async #bindIssuedCallbackTokens(
+    approvalId: string,
     issuedTokens: readonly DaemonIssuedCallbackToken[],
     messageRef: DaemonMessageRef,
-  ): void {
-    const repository = this.options.callbackTokenRepository;
+  ): Promise<void> {
+    let failed = false;
     for (const token of issuedTokens) {
-      repository?.casUpdate?.(token.tokenHash, "issued", "bound", {
-        messageRef: { chatId: messageRef.target.chatId, messageId: messageRef.messageId },
-      });
+      const bound = await this.#bindIssuedCallbackToken(token.tokenHash, messageRef);
+      failed ||= !bound;
     }
+    if (failed) {
+      this.#stuckIssuedApprovalIds.add(approvalId);
+    }
+  }
+
+  async #bindIssuedCallbackToken(
+    tokenHash: string,
+    messageRef: DaemonMessageRef,
+  ): Promise<boolean> {
+    const repository = this.options.callbackTokenRepository;
+    const fields = {
+      messageRef: { chatId: messageRef.target.chatId, messageId: messageRef.messageId },
+    };
+    if (repository?.casUpdate?.(tokenHash, "issued", "bound", fields) !== undefined) {
+      return true;
+    }
+    for (const delayMs of this.#bindIssuedRetryDelaysMs()) {
+      await sleep(delayMs);
+      if (repository?.casUpdate?.(tokenHash, "issued", "bound", fields) !== undefined) {
+        return true;
+      }
+    }
+    return false;
   }
 
   async #handleInboundAction(action: unknown): Promise<void> {
@@ -916,6 +974,86 @@ export class Daemon {
     await this.#adapter?.editText?.(messageRef, body);
   }
 
+  #schedulePruneSweep(): Unsubscribe | undefined {
+    const intervalMs = this.#positiveInteger(
+      this.options.pruneIntervalMs,
+      DEFAULT_PRUNE_INTERVAL_MS,
+    );
+    const handler = () => this.#runPruneSweep();
+    const scheduled = this.options.schedulePrune?.(handler, intervalMs);
+    if (scheduled !== undefined) {
+      return scheduled;
+    }
+
+    const timer = setInterval(handler, intervalMs);
+    timer.unref?.();
+    return () => clearInterval(timer);
+  }
+
+  #maybeTriggerEagerPrune(): void {
+    const maxCount = this.#nonNegativeInteger(
+      this.options.terminalRecordMaxCount,
+      DEFAULT_TERMINAL_RECORD_MAX_COUNT,
+    );
+    if (maxCount === 0) {
+      this.#runPruneSweep();
+      return;
+    }
+    const count = this.#broker?.approvalRecordCount?.();
+    if (count !== undefined && count >= Math.floor(maxCount * EAGER_PRUNE_RATIO)) {
+      this.#runPruneSweep();
+    }
+  }
+
+  #runPruneSweep(): void {
+    if (this.#pruneInFlight) {
+      return;
+    }
+    this.#pruneInFlight = true;
+    try {
+      const now = this.options.now?.() ?? new Date();
+      const batchSize = this.#positiveInteger(
+        this.options.pruneBatchSize,
+        DEFAULT_PRUNE_BATCH_SIZE,
+      );
+
+      this.options.callbackTokenRepository?.pruneExpired?.(now.toISOString(), batchSize);
+      const flaggedApprovalIds = Array.from(this.#stuckIssuedApprovalIds);
+      if (flaggedApprovalIds.length > 0) {
+        const cutoff = new Date(
+          now.getTime() -
+            this.#positiveInteger(this.options.stuckIssuedGraceMs, DEFAULT_STUCK_ISSUED_GRACE_MS),
+        ).toISOString();
+        const revoked =
+          this.options.callbackTokenRepository?.revokeStuckIssued?.(
+            cutoff,
+            flaggedApprovalIds,
+            batchSize,
+          ) ?? [];
+        for (const record of revoked) {
+          this.#broker?.failPendingApprovalAsTransportLost?.(record.approvalId);
+          this.#stuckIssuedApprovalIds.delete(record.approvalId);
+        }
+      }
+
+      this.#broker?.expirePending?.();
+      this.#broker?.pruneTerminalRecords?.({
+        maxAgeMs: this.#positiveInteger(
+          this.options.terminalRecordMaxAgeMs,
+          DEFAULT_TERMINAL_RECORD_MAX_AGE_MS,
+        ),
+        maxCount: this.#nonNegativeInteger(
+          this.options.terminalRecordMaxCount,
+          DEFAULT_TERMINAL_RECORD_MAX_COUNT,
+        ),
+        batchSize,
+        now,
+      });
+    } finally {
+      this.#pruneInFlight = false;
+    }
+  }
+
   #threadStartParams(route: Extract<SessionRoute, { kind: "bound" }>): DaemonThreadStartParams {
     return {
       cwd: route.cwd,
@@ -955,6 +1093,22 @@ export class Daemon {
   #currentRuntime(): DaemonCodexRuntime | undefined {
     const provider = this.#runtimeProvider(this.#supervisor);
     return provider?.currentRuntime() ?? undefined;
+  }
+
+  #bindIssuedRetryDelaysMs(): readonly number[] {
+    return this.options.bindIssuedRetryDelaysMs ?? DEFAULT_BIND_RETRY_DELAYS_MS;
+  }
+
+  #positiveInteger(value: number | undefined, fallback: number): number {
+    if (value === undefined) return fallback;
+    if (!Number.isInteger(value) || value < 1) return fallback;
+    return value;
+  }
+
+  #nonNegativeInteger(value: number | undefined, fallback: number): number {
+    if (value === undefined) return fallback;
+    if (!Number.isInteger(value) || value < 0) return fallback;
+    return value;
   }
 
   #runtimeProvider(value: unknown): DaemonRuntimeProvider | undefined {
@@ -1160,4 +1314,12 @@ function textInput(text: string): DaemonTextInput[] {
 
 async function drainShutdown(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
+}
+
+async function sleep(delayMs: number): Promise<void> {
+  if (delayMs <= 0) {
+    await Promise.resolve();
+    return;
+  }
+  await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 }

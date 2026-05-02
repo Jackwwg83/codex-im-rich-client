@@ -108,6 +108,16 @@ export type ResolvedOutcome =
 // lands; this constant is the placeholder used by Phase 1's #handle
 // PendingEntry creation so the type compiles after T6.
 const DEFAULT_APPROVAL_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_TERMINAL_RECORD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_TERMINAL_RECORD_MAX_COUNT = 10_000;
+const DEFAULT_TERMINAL_PRUNE_BATCH_SIZE = 100;
+
+export type PruneTerminalRecordsOptions = {
+  maxAgeMs?: number;
+  maxCount?: number;
+  batchSize?: number;
+  now?: Date;
+};
 
 // Module-level guard against two brokers claiming the same client.
 // AppServerClient.setServerRequestHandler is a single slot — calling it
@@ -339,6 +349,22 @@ function targetEqual(a: Target, b: Target): boolean {
     a.threadKey === b.threadKey &&
     a.topicId === b.topicId
   );
+}
+
+function sanitizePositiveInteger(value: number | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || value < 1) return fallback;
+  return value;
+}
+
+function sanitizeNonNegativeInteger(value: number | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || value < 0) return fallback;
+  return value;
+}
+
+function terminalRecordTime(entry: PendingEntry): number {
+  return (entry.record.decidedAt ?? entry.record.createdAt).getTime();
 }
 
 /**
@@ -1144,6 +1170,48 @@ export class ApprovalBroker {
       }
     }
     return count;
+  }
+
+  pruneTerminalRecords(options: PruneTerminalRecordsOptions = {}): number {
+    const now = options.now ?? new Date();
+    const maxAgeMs = sanitizePositiveInteger(options.maxAgeMs, DEFAULT_TERMINAL_RECORD_MAX_AGE_MS);
+    const maxCount = sanitizeNonNegativeInteger(
+      options.maxCount,
+      DEFAULT_TERMINAL_RECORD_MAX_COUNT,
+    );
+    const batchSize = sanitizePositiveInteger(options.batchSize, DEFAULT_TERMINAL_PRUNE_BATCH_SIZE);
+    const terminalEntries = Array.from(this.#pending.entries())
+      .filter(([, entry]) => entry.record.status !== "pending")
+      .sort(([, a], [, b]) => terminalRecordTime(a) - terminalRecordTime(b));
+    const overCount = Math.max(0, terminalEntries.length - maxCount);
+    const toDelete = new Set<string | number>();
+    const nowMs = now.getTime();
+
+    for (const [id, entry] of terminalEntries) {
+      if (toDelete.size >= batchSize) break;
+      if (nowMs - terminalRecordTime(entry) >= maxAgeMs) {
+        toDelete.add(id);
+      }
+    }
+
+    for (const [id] of terminalEntries) {
+      if (toDelete.size >= batchSize || toDelete.size >= overCount) break;
+      toDelete.add(id);
+    }
+
+    for (const id of toDelete) {
+      const entry = this.#pending.get(id);
+      if (entry === undefined || entry.record.status === "pending") continue;
+      this.#pending.delete(id);
+      this.#pendingById.delete(entry.record.id);
+      this.#actorPolicies.delete(entry.record.id);
+    }
+
+    return toDelete.size;
+  }
+
+  approvalRecordCount(): number {
+    return this.#pendingById.size;
   }
 
   // ── T7: Phase 2 public surface ─────────────────────────────────────

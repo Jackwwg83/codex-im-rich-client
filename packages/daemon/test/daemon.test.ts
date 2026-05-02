@@ -2237,6 +2237,175 @@ describe("Daemon skeleton (T14)", () => {
     expect(adapter.updateCard).not.toHaveBeenCalled();
   });
 
+  it("runs prune sweeps on the interval trigger and eager high-water trigger", async () => {
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    let scheduled: { handler: () => void; intervalMs: number } | undefined;
+    const now = new Date("2026-05-02T19:00:00.000Z");
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      pruneExpired: vi.fn(),
+      revokeStuckIssued: vi.fn(() => []),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      expirePending: vi.fn(),
+      pruneTerminalRecords: vi.fn(),
+      approvalRecordCount: vi.fn(() => 8),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({}),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => ({
+        onAction: vi.fn(() => () => {}),
+        onMessage: vi.fn(() => () => {}),
+        start: vi.fn(),
+      }),
+      callbackTokenRepository,
+      schedulePrune: (handler, intervalMs) => {
+        scheduled = { handler, intervalMs };
+        return () => {};
+      },
+      terminalRecordMaxCount: 10,
+      terminalRecordMaxAgeMs: 123_000,
+      pruneBatchSize: 7,
+      now: () => now,
+    });
+
+    await daemon.start();
+    expect(scheduled?.intervalMs).toBe(60_000);
+
+    scheduled?.handler();
+    expect(callbackTokenRepository.pruneExpired).toHaveBeenCalledWith(now.toISOString(), 7);
+    expect(broker.expirePending).toHaveBeenCalledTimes(1);
+    expect(broker.pruneTerminalRecords).toHaveBeenCalledWith({
+      maxAgeMs: 123_000,
+      maxCount: 10,
+      batchSize: 7,
+      now,
+    });
+
+    vi.clearAllMocks();
+    pendingHandler?.({
+      id: "approval-eager-prune",
+      appServerRequestId: 9901,
+      method: "item/fileChange/requestApproval",
+      params: {},
+      createdAt: now,
+      expiresAt: new Date("2026-05-02T19:30:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(broker.approvalRecordCount).toHaveBeenCalled();
+    expect(callbackTokenRepository.pruneExpired).toHaveBeenCalledWith(now.toISOString(), 7);
+    expect(broker.pruneTerminalRecords).toHaveBeenCalledTimes(1);
+  });
+
+  it("revokes stuck issued callback tokens and fails only the flagged approval as transport_lost", async () => {
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    let scheduled: { handler: () => void; intervalMs: number } | undefined;
+    let currentNow = new Date("2026-05-02T19:10:02.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const actor = { kind: "im" as const, platform: "telegram", userId: "u-alice" };
+    const tokenHash = hashCallbackToken("ABCDEFGHIJKLMNOP");
+    const revokedRecord: CallbackTokenRecord = {
+      tokenHash,
+      approvalId: "approval-stuck-issued",
+      action: "allow_once",
+      callbackNonce: "nonce-stuck-issued",
+      target,
+      actor: { kind: "im" },
+      status: "revoked",
+      createdAt: "2026-05-02T19:10:02.000Z",
+      expiresAt: "2026-05-02T19:40:00.000Z",
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn((input: CallbackTokenInsert) => ({ ...input, status: input.status })),
+      casUpdate: vi.fn(() => undefined),
+      pruneExpired: vi.fn(),
+      revokeStuckIssued: vi.fn(() => [revokedRecord]),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      sendCard: vi.fn(() => ({
+        messageRef: { target, messageId: "msg-stuck-issued" },
+        callbackNonce: "legacy",
+      })),
+      start: vi.fn(),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(() => ({ kind: "ok" as const })),
+      failPendingApprovalAsTransportLost: vi.fn(),
+      expirePending: vi.fn(),
+      pruneTerminalRecords: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkApprovalDestination: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      resolveApprovalActions: vi.fn(() => ["allow_once"] as const),
+      resolveApprovalAllowedActors: vi.fn(() => [actor]),
+      callbackTokenRepository,
+      generateCallbackNonce: () => "nonce-stuck-issued",
+      generateRawCallbackToken: () => "ABCDEFGHIJKLMNOP",
+      schedulePrune: (handler, intervalMs) => {
+        scheduled = { handler, intervalMs };
+        return () => {};
+      },
+      bindIssuedRetryDelaysMs: [],
+      now: () => currentNow,
+    });
+
+    await daemon.start();
+    pendingHandler?.({
+      id: "approval-stuck-issued",
+      appServerRequestId: 9902,
+      method: "item/fileChange/requestApproval",
+      params: {},
+      createdAt: currentNow,
+      expiresAt: new Date("2026-05-02T19:40:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(callbackTokenRepository.casUpdate).toHaveBeenCalledWith(tokenHash, "issued", "bound", {
+      messageRef: { chatId: target.chatId, messageId: "msg-stuck-issued" },
+    });
+
+    currentNow = new Date("2026-05-02T19:10:08.000Z");
+    scheduled?.handler();
+
+    expect(callbackTokenRepository.revokeStuckIssued).toHaveBeenCalledWith(
+      "2026-05-02T19:10:03.000Z",
+      ["approval-stuck-issued"],
+      100,
+    );
+    expect(broker.failPendingApprovalAsTransportLost).toHaveBeenCalledWith("approval-stuck-issued");
+  });
+
   it.each([
     ["loadConfig", []],
     ["openStorage", []],

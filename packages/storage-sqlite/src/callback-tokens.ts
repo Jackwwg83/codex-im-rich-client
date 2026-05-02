@@ -96,6 +96,14 @@ const SELECT_COLUMNS = `
   expires_at
 `;
 
+const DEFAULT_PRUNE_LIMIT = 100;
+
+function sanitizeLimit(limit: number | undefined): number {
+  if (limit === undefined) return DEFAULT_PRUNE_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1) return DEFAULT_PRUNE_LIMIT;
+  return Math.min(limit, DEFAULT_PRUNE_LIMIT);
+}
+
 function actorParams(actor: CallbackTokenActor): {
   actorKind: "im" | "system";
   actorUserId: string | null;
@@ -329,18 +337,63 @@ export class CallbackTokenRepository {
     return rows.map(hydrate);
   }
 
-  pruneExpired(now: string): CallbackTokenRecord[] {
+  pruneExpired(now: string, limit?: number): CallbackTokenRecord[] {
+    const batchLimit = sanitizeLimit(limit);
     const rows = this.db
       .prepare(
         `
+          WITH selected(token_hash) AS (
+            SELECT token_hash
+              FROM callback_tokens
+             WHERE status = 'bound'
+               AND expires_at < @now
+             ORDER BY expires_at ASC, token_hash ASC
+             LIMIT @limit
+          )
           UPDATE callback_tokens
              SET status = 'expired'
-           WHERE status = 'bound'
-             AND expires_at < @now
+           WHERE token_hash IN (SELECT token_hash FROM selected)
        RETURNING ${SELECT_COLUMNS}
         `,
       )
-      .all({ now }) as CallbackTokenRow[];
+      .all({ now, limit: batchLimit }) as CallbackTokenRow[];
+
+    return rows.map(hydrate);
+  }
+
+  revokeStuckIssued(
+    cutoff: string,
+    approvalIds: readonly string[],
+    limit?: number,
+  ): CallbackTokenRecord[] {
+    if (approvalIds.length === 0) return [];
+    const batchLimit = sanitizeLimit(limit);
+    const params: Record<string, string | number> = { cutoff, limit: batchLimit };
+    const placeholders = approvalIds.map((approvalId, idx) => {
+      const key = `approvalId${idx}`;
+      params[key] = approvalId;
+      return `@${key}`;
+    });
+
+    const rows = this.db
+      .prepare(
+        `
+          WITH selected(token_hash) AS (
+            SELECT token_hash
+              FROM callback_tokens
+             WHERE status = 'issued'
+               AND created_at < @cutoff
+               AND approval_id IN (${placeholders.join(", ")})
+             ORDER BY created_at ASC, token_hash ASC
+             LIMIT @limit
+          )
+          UPDATE callback_tokens
+             SET status = 'revoked'
+           WHERE token_hash IN (SELECT token_hash FROM selected)
+       RETURNING ${SELECT_COLUMNS}
+        `,
+      )
+      .all(params) as CallbackTokenRow[];
 
     return rows.map(hydrate);
   }
