@@ -1,24 +1,24 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, and JAC-39 / T15 daemon strict start order complete.
-> **Handoff status:** JAC-39 complete: `Daemon.start()` now runs load/config/storage/broker/pending-mode/policy/session/supervisor/adapter wiring in strict order, cleans partial startup failures, wires pending/action/message before adapter start, registers injected signal handlers, and starts the adapter last. All 5 gates green. Next exact issue: JAC-40 / T16.1 policy-denied approval auto-decline via system actor.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, and JAC-40 through JAC-43 daemon approval-card flow complete.
+> **Handoff status:** JAC-43 complete: policy-denied approvals auto-decline through the broker, allowed approvals issue hash-only callback token rows, `bindActorPolicy` lands before any remote send, and rendered approval card actions now carry per-action `wirePayload = "v1:" + rawToken` while raw tokens stay out of SQLite. All 5 gates green. Next exact issue: JAC-44 / T16.5-T16.7 send card, bind token rows to returned `MessageRef`, and pin send-failure rollback behavior.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-39 / T15** (daemon strict start order, pending-mode registry, startup cleanup, pre-start subscriptions, signal handler injection, adapter start last).
-- **Next exact task:** **JAC-40 / T16.1** — policy-denied approval auto-decline via synthetic system actor. This begins the high-risk daemon approval flow; keep the scope to the `auto_decline` branch only.
+- **Active task:** None at this checkpoint. Last completed: **JAC-43 / T16.4** (approval card render step sets per-action D41 `wirePayload` values from issued raw callback tokens; no remote `sendCard` yet).
+- **Next exact task:** **JAC-44 / T16.5-T16.7** — call adapter `sendCard`, attach returned `MessageRef` to token rows, and prove send-failure rollback leaves tokens in `issued` state for TTL expiry.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **HEAD:** `82c1967` (`feat(daemon): T15.8 register signal handlers`)
-- **Tag distance:** `phase-2-codex-reviewed-57-g82c1967`
-- **Origin:** synced at this checkpoint (`git rev-list --left-right --count origin/phase-3-implementation...HEAD` → `0 0`)
+- **Latest code commit:** `ed1f7fb` (`feat(daemon): T16.4 render wire payload tokens`)
+- **Tag distance at latest code commit:** `phase-2-codex-reviewed-62-ged1f7fb`
+- **Origin:** synced after each pushed checkpoint; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
 
@@ -74,6 +74,11 @@
 | `97e1b00` | T15.6 / JAC-129 | Start adapter only after action subscription; immediate action callback reachable |
 | `202df6d` | T15.7 / JAC-130 | Prove message subscription is registered before adapter start |
 | `82c1967` | T15.8 / JAC-131 | Inject SIGTERM/SIGINT handlers before adapter start; adapter start remains last |
+| `404f71c` | docs checkpoint | Refresh live-status for JAC-39 completion |
+| `cca958a` | T16.1 / JAC-40 | Policy-denied approvals resolve through `ApprovalBroker.resolve()` as system-actor decline |
+| `5906541` | T16.2 / JAC-41 | Allowed approvals issue hash-only callback token rows before any remote send |
+| `2145c57` | T16.3 / JAC-42 | `bindActorPolicy` lands after token issue and before any remote send |
+| `ed1f7fb` | T16.4 / JAC-43 | Rendered approval card actions receive per-action D41 `wirePayload = "v1:" + rawToken` |
 
 ## 3. Versions / pins
 
@@ -89,7 +94,7 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **816 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +96 from Phase 3 storage/config/core/channel/daemon prereqs) |
+| Tests | `pnpm test` | **821 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +101 from Phase 3 storage/config/core/channel/daemon prereqs) |
 | Lint | `pnpm lint` | green (173 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
@@ -145,7 +150,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-40 / T16.1**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-44 / T16.5-T16.7**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -161,7 +166,7 @@ For the Codex agent picking this up:
    - Historical checkpoint: `git log --oneline -1` showed `f493360 docs(phase3): handoff checkpoint — bump live-status to f4e1b69 + add §10 codex handoff section`. Current HEAD is documented in §2.
    - Use `git rev-list --left-right --count origin/phase-3-implementation...HEAD` to verify local-vs-origin sync.
 2. **Verify gates green at the checkpoint:**
-   - Current checkpoint: `pnpm test` → 76 files, 816 pass + 1 skip.
+   - Historical JAC-39 checkpoint: `pnpm test` → 76 files, 816 pass + 1 skip. Current gate count is in §4.
    - `pnpm typecheck` + `pnpm typecheck:tests` → both clean.
    - `pnpm lint` → 151 files clean.
    - `pnpm protocol:check` → codex 0.128.0, schema unchanged.
@@ -184,4 +189,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-39 / T15**. Continue with **JAC-40 / T16.1** policy-denied approval auto-decline via synthetic system actor, then the rest of **JAC-20** dependency order.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-43 / T16.4**. Continue with **JAC-44 / T16.5-T16.7**, then the rest of **JAC-20** dependency order.
