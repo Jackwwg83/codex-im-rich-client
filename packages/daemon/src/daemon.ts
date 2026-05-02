@@ -51,6 +51,7 @@ export interface DaemonBroker {
   bindActorPolicy?(approvalId: string, policy: ActorPolicy): BindResult;
   resolve?(input: ResolveApprovalInput): MaybePromise<ResolveApprovalResult>;
   onPendingCreated?(handler: (snapshot: PendingApprovalSnapshot) => void): Unsubscribe;
+  failPendingAsTransportLost?(): void;
 }
 
 export interface DaemonBrokerContext {
@@ -77,6 +78,7 @@ export interface DaemonAdapterContext extends DaemonSupervisorContext {
 export interface DaemonAdapter {
   onAction(handler: (action: unknown) => void): Unsubscribe;
   onMessage(handler: (message: unknown) => void): Unsubscribe;
+  pauseInbound?(): MaybePromise<void>;
   answerAction?(callbackHandle: string, ack: DaemonActionAck): MaybePromise<void>;
   sendCard?(target: Target, card: ApprovalCard): MaybePromise<DaemonSendCardResult>;
   updateCard?(ref: DaemonMessageRef, card: ApprovalCard): MaybePromise<void>;
@@ -233,6 +235,7 @@ export class Daemon {
   #sessionRouter: unknown;
   #supervisor: unknown;
   #adapter: DaemonAdapter | undefined;
+  #stopPromise: Promise<void> | undefined;
   readonly #unsubscribers: Unsubscribe[] = [];
 
   constructor(options: DaemonOptions = {}) {
@@ -297,6 +300,35 @@ export class Daemon {
 
   async stop(): Promise<void> {
     this.#started = false;
+    if (this.#stopPromise !== undefined) {
+      return this.#stopPromise;
+    }
+
+    this.#stopPromise = this.#stopOnce();
+    try {
+      await this.#stopPromise;
+    } finally {
+      this.#stopPromise = undefined;
+    }
+  }
+
+  async #stopOnce(): Promise<void> {
+    this.#started = false;
+    await this.#runAsyncCleanup(this.#cleanupMethod(this.#adapter, "pauseInbound"));
+    this.#runSyncCleanup(() => this.#broker?.failPendingAsTransportLost?.());
+    await drainShutdown();
+    await this.#runAsyncCleanup(this.#cleanupMethod(this.#supervisor, "stop"));
+    await this.#runAsyncCleanup(this.#cleanupMethod(this.#adapter, "stop"));
+    this.#unsubscribeAll();
+    await this.#runAsyncCleanup(this.#cleanupMethod(this.#storage, "close"));
+
+    this.#adapter = undefined;
+    this.#supervisor = undefined;
+    this.#sessionRouter = undefined;
+    this.#securityPolicy = undefined;
+    this.#broker = undefined;
+    this.#storage = undefined;
+    this.#config = undefined;
   }
 
   isStarted(): boolean {
@@ -306,6 +338,13 @@ export class Daemon {
   #subscribe(unsubscribe: Unsubscribe | undefined): void {
     if (unsubscribe !== undefined) {
       this.#unsubscribers.push(unsubscribe);
+    }
+  }
+
+  #unsubscribeAll(): void {
+    const unsubscribers = this.#unsubscribers.splice(0).reverse();
+    for (const unsubscribe of unsubscribers) {
+      this.#runSyncCleanup(unsubscribe);
     }
   }
 
@@ -348,12 +387,15 @@ export class Daemon {
     }
   }
 
-  #cleanupMethod(value: unknown, methodName: "close" | "stop"): CleanupMethod | undefined {
+  #cleanupMethod(
+    value: unknown,
+    methodName: "close" | "pauseInbound" | "stop",
+  ): CleanupMethod | undefined {
     if (typeof value !== "object" || value === null) {
       return undefined;
     }
 
-    const method = (value as Record<"close" | "stop", unknown>)[methodName];
+    const method = (value as Record<"close" | "pauseInbound" | "stop", unknown>)[methodName];
     if (typeof method !== "function") {
       return undefined;
     }
@@ -1114,4 +1156,8 @@ function generateRawCallbackToken(): string {
 
 function textInput(text: string): DaemonTextInput[] {
   return [{ type: "text", text, text_elements: [] }];
+}
+
+async function drainShutdown(): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve));
 }

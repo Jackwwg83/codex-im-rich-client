@@ -445,7 +445,63 @@ describe("Daemon skeleton (T14)", () => {
     expect(daemon.isStarted()).toBe(true);
 
     signalHandlers.get("SIGTERM")?.();
+    await flushDaemonHandlers();
 
+    expect(daemon.isStarted()).toBe(false);
+  });
+
+  it("stops in D37 order: pause inbound, fail pending, drain, supervisor, adapter, storage", async () => {
+    const order: string[] = [];
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn(() => () => {}),
+      failPendingAsTransportLost: vi.fn(() => {
+        order.push("broker.failPendingAsTransportLost");
+      }),
+    };
+    const storage = {
+      close: vi.fn(() => {
+        order.push("storage.close");
+      }),
+    };
+    const supervisor = {
+      stop: vi.fn(() => {
+        order.push("supervisor.stop");
+      }),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      pauseInbound: vi.fn(() => {
+        order.push("adapter.pauseInbound");
+      }),
+      stop: vi.fn(() => {
+        order.push("adapter.stop");
+      }),
+      start: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => storage,
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({}),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => supervisor,
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    await daemon.stop();
+
+    expect(order).toEqual([
+      "adapter.pauseInbound",
+      "broker.failPendingAsTransportLost",
+      "supervisor.stop",
+      "adapter.stop",
+      "storage.close",
+    ]);
     expect(daemon.isStarted()).toBe(false);
   });
 
