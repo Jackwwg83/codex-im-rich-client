@@ -7,9 +7,15 @@
     <string>io.codex-im-bridge</string>
     <key>ProgramArguments</key>
     <array>
-      <string>{{NODE_BIN}}</string>
-      <string>{{DAEMON_ENTRY}}</string>
+      <string>{{WRAPPER_ENTRY}}</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>NODE_BIN</key>
+      <string>{{NODE_BIN}}</string>
+      <key>DAEMON_ENTRY</key>
+      <string>{{DAEMON_ENTRY}}</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>

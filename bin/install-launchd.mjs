@@ -48,6 +48,8 @@ export async function planLaunchdInstall(options = {}) {
   const user = required(options.user ?? env.USER, "USER");
   const nodeBin = required(options.nodeBin ?? process.execPath, "NODE_BIN");
   const daemonEntry = options.daemonEntry ?? join(home, ".codex-im-bridge", "bin", "daemon.mjs");
+  const wrapperEntry =
+    options.wrapperEntry ?? join(home, ".codex-im-bridge", "bin", "load-and-run.sh");
   const plistPath = options.plistPath ?? join(home, "Library", "LaunchAgents", `${LABEL}.plist`);
   const template =
     options.template ?? (await readFile(options.templatePath ?? DEFAULT_TEMPLATE_PATH, "utf8"));
@@ -55,6 +57,7 @@ export async function planLaunchdInstall(options = {}) {
     HOME: home,
     NODE_BIN: nodeBin,
     DAEMON_ENTRY: daemonEntry,
+    WRAPPER_ENTRY: wrapperEntry,
     forbiddenSubstrings: options.forbiddenSubstrings ?? [],
   });
   return {
@@ -63,6 +66,7 @@ export async function planLaunchdInstall(options = {}) {
     home,
     nodeBin,
     daemonEntry,
+    wrapperEntry,
     plistPath,
     renderedPlist,
     launchctlArgs: ["load", plistPath],
@@ -122,6 +126,7 @@ async function main() {
     `label: ${result.plan.label}`,
     `user: ${result.plan.user}`,
     `plist: ${result.plan.plistPath}`,
+    `wrapper: ${result.plan.wrapperEntry}`,
     `node: ${result.plan.nodeBin}`,
     `daemon: ${result.plan.daemonEntry}`,
     `launchctl: launchctl ${result.plan.launchctlArgs.join(" ")}`,

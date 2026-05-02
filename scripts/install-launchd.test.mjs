@@ -24,7 +24,12 @@ describe("install-launchd (T29)", () => {
     expect(plan.plistPath).toBe("/Users/tester/Library/LaunchAgents/io.codex-im-bridge.plist");
     expect(plan.launchctlArgs).toEqual(["load", plan.plistPath]);
     expect(plan.renderedPlist).toContain("<string>io.codex-im-bridge</string>");
+    expect(plan.renderedPlist).toContain(
+      "<string>/Users/tester/.codex-im-bridge/bin/load-and-run.sh</string>",
+    );
+    expect(plan.renderedPlist).toContain("<key>NODE_BIN</key>");
     expect(plan.renderedPlist).toContain(`<string>${NODE_BIN}</string>`);
+    expect(plan.renderedPlist).toContain("<key>DAEMON_ENTRY</key>");
     expect(plan.renderedPlist).toContain(`<string>${DAEMON_ENTRY}</string>`);
     expect(plan.renderedPlist).toContain(
       "<string>/Users/tester/.codex-im-bridge/logs/daemon.log</string>",
