@@ -303,6 +303,55 @@ describe("Daemon skeleton (T14)", () => {
     expect(order).toContain("action.handler.fired");
   });
 
+  it("wires onMessage before adapter.start so an immediate inbound message reaches the handler", async () => {
+    const order: string[] = [];
+    const inboundMessage = { text: "/status" };
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const broker = {
+      attach: vi.fn(() => {
+        order.push("broker.attach");
+      }),
+      enablePendingMode: vi.fn((method: string) => {
+        order.push(`pending:${method}`);
+      }),
+      onPendingCreated: vi.fn(() => {
+        order.push("broker.onPendingCreated");
+        return () => {};
+      }),
+    };
+    const adapter = {
+      onAction: vi.fn(() => {
+        order.push("adapter.onAction");
+        return () => {};
+      }),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        order.push("adapter.onMessage");
+        messageHandler = handler;
+        return () => {};
+      }),
+      start: vi.fn(() => {
+        order.push("adapter.start");
+        messageHandler?.(inboundMessage);
+        order.push("message.handler.fired");
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({}),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+
+    expect(order.indexOf("adapter.onMessage")).toBeLessThan(order.indexOf("adapter.start"));
+    expect(order).toContain("message.handler.fired");
+  });
+
   it.each([
     ["loadConfig", []],
     ["openStorage", []],
