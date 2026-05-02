@@ -1,4 +1,4 @@
-// T2b + T2c (Phase 3) — runMigrations apply + idempotency.
+// T2b + T2c (Phase 3) — runMigrations apply + idempotency + atomicity.
 //
 // Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b/T2c
 //
@@ -13,6 +13,11 @@
 //       between runs; if the runner re-read it, the invalid SQL would
 //       throw. We further assert applied_at invariance (no re-insert
 //       into schema_version).
+//
+// T2c-extra (codex P2-1) — atomic rollback: a multi-statement migration
+//       whose later statement fails must leave BOTH the partial schema
+//       (intermediate CREATE TABLEs) AND the schema_version row rolled
+//       back, per `runMigrations` JSDoc. Pins the SAVEPOINT contract.
 //
 // T3a will replace the synthetic fixtures with the real `001-init.sql`
 // once that migration ships. Synthetic filenames here match the
@@ -146,6 +151,42 @@ describe("runMigrations idempotency (T2c)", () => {
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='foo'")
         .get();
       expect(fooTable).toEqual({ name: "foo" });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("rolls back the partial schema AND schema_version when a migration fails mid-body", () => {
+    // Multi-statement migration: first CREATE succeeds, second CREATE
+    // duplicates `foo` and throws. better-sqlite3 wraps the inner
+    // function in a SAVEPOINT, so SQLite must roll back BOTH the
+    // already-applied first statement AND the schema_version insert.
+    // This pins the atomicity contract documented in runMigrations'
+    // JSDoc — without it a future implementer could accidentally
+    // remove the `db.transaction(...)` wrapper and silently break
+    // crash-recovery.
+    writeFileSync(
+      join(migDir, "001-bad.sql"),
+      `
+        CREATE TABLE foo (id INTEGER PRIMARY KEY);
+        CREATE TABLE foo (id INTEGER PRIMARY KEY); -- duplicate, throws
+      `,
+    );
+
+    const db = openDatabase(":memory:");
+    try {
+      expect(() => runMigrations(db, migDir)).toThrow();
+
+      // Neither table survives the rollback.
+      const fooAfter = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='foo'")
+        .get();
+      expect(fooAfter).toBeUndefined();
+
+      // schema_version is still empty — no row got inserted for the
+      // failed migration.
+      const versionRows = db.prepare("SELECT version FROM schema_version").all();
+      expect(versionRows).toEqual([]);
     } finally {
       db.close();
     }

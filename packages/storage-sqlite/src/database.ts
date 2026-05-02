@@ -106,6 +106,16 @@ const MIGRATION_FILE_RE = /^\d{3}-[a-z0-9-]+\.sql$/;
  * transaction together with its `schema_version` insert, so a failed
  * migration leaves both the schema AND the version table untouched.
  *
+ * Migration body restrictions (codex P2-2):
+ *   Migration files MUST NOT contain explicit transaction-control
+ *   statements (`BEGIN`, `COMMIT`, `SAVEPOINT`, `ROLLBACK`, `RELEASE`).
+ *   The runner already wraps each migration body inside a SAVEPOINT
+ *   (via better-sqlite3's `db.transaction(...)`), so an explicit
+ *   `BEGIN`/`COMMIT` inside the body would either nest into a parser
+ *   error or break the atomic-rollback contract. Migrations are pure
+ *   DDL + DML; transaction boundaries are the runner's job, not the
+ *   migration author's.
+ *
  * @param db   An open `DatabaseHandle` (typically from `openDatabase`).
  * @param dir  Path to a directory containing migration files matching
  *             `NNN-kebab-name.sql`. Other entries are ignored. Caller
