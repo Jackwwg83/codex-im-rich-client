@@ -11,6 +11,11 @@ export type {
   LarkApprovalCardElement,
   LarkApprovalCardJson,
 } from "./card.js";
+export {
+  extractLarkActionWirePayload,
+  isLarkActionWirePayload,
+  redactLarkActionPayloadForLog,
+} from "./callback-codec.js";
 export { LARK_CAPABILITIES } from "./capabilities.js";
 export { normalizeLarkRawMessage } from "./message.js";
 export type { LarkRawMention, LarkRawMessageEvent } from "./message.js";

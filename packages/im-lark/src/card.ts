@@ -1,9 +1,8 @@
 import type { ChannelAdapter } from "@codex-im/channel-core";
+import { isLarkActionWirePayload } from "./callback-codec.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 type ApprovalActionInput = ApprovalCardInput["actions"][number];
-
-const CALLBACK_WIRE_RE = /^v1:[A-Z2-7]{16}$/;
 
 export interface LarkApprovalCardJson {
   readonly schema: "2.0";
@@ -64,7 +63,7 @@ function buttonForAction(action: ApprovalActionInput): LarkApprovalCardButton {
   if (wirePayload === undefined) {
     throw new Error("LarkChannelAdapter.sendCard requires action.wirePayload");
   }
-  if (!CALLBACK_WIRE_RE.test(wirePayload)) {
+  if (!isLarkActionWirePayload(wirePayload)) {
     throw new Error("LarkChannelAdapter.sendCard requires v1 opaque wirePayload");
   }
   return {
