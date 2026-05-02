@@ -35,6 +35,7 @@ import {
   type DatabaseHandle,
   hashCallbackToken,
 } from "@codex-im/storage-sqlite";
+import { type DaemonStatusSnapshot, writeDaemonStatusSnapshot } from "./status.js";
 
 type MaybePromise<T> = T | Promise<T>;
 type Unsubscribe = () => void;
@@ -276,6 +277,8 @@ export interface DaemonOptions {
   readonly stuckIssuedGraceMs?: number;
   readonly bindIssuedRetryDelaysMs?: readonly number[];
   readonly now?: () => Date;
+  readonly statusPath?: string;
+  readonly writeStatusSnapshot?: (snapshot: DaemonStatusSnapshot) => MaybePromise<void>;
 }
 
 export class Daemon {
@@ -289,6 +292,9 @@ export class Daemon {
   #supervisor: unknown;
   #adapter: DaemonAdapter | undefined;
   #stopPromise: Promise<void> | undefined;
+  #startedAt: Date | undefined;
+  #lastFatal: { at: string; message: string } | undefined;
+  #supervisorFailureCount = 0;
   #pruneInFlight = false;
   readonly #stuckIssuedApprovalIds = new Set<string>();
   readonly #transportLostStuckIssuedApprovalIds = new Set<string>();
@@ -349,8 +355,12 @@ export class Daemon {
       this.#subscribe(this.options.registerSignalHandler?.("SIGINT", () => this.#handleSignal()));
       this.#subscribe(this.#schedulePruneSweep());
       await this.#adapter?.start?.();
+      this.#startedAt = this.options.now?.() ?? new Date();
       this.#started = true;
+      await this.#writeStatusSnapshot();
     } catch (error) {
+      const now = this.options.now?.() ?? new Date();
+      this.#lastFatal = { at: now.toISOString(), message: this.#errorMessage(error) };
       await this.#cleanupPartialStart();
       throw error;
     }
@@ -1303,6 +1313,48 @@ export class Daemon {
     } finally {
       this.#pruneInFlight = false;
     }
+  }
+
+  async #writeStatusSnapshot(): Promise<void> {
+    const writer = this.options.writeStatusSnapshot ?? this.#statusPathWriter();
+    if (writer === undefined) {
+      return;
+    }
+    const now = this.options.now?.() ?? new Date();
+    const startedAt = this.#startedAt ?? now;
+    await writer({
+      pid: process.pid,
+      startedAt: startedAt.toISOString(),
+      currentCodexThreadCount: this.#currentCodexThreadCount(),
+      pendingApprovalCount: this.#broker?.approvalRecordCount?.() ?? 0,
+      lastCodexSpawnAt: null,
+      supervisorFailureCount: this.#supervisorFailureCount,
+      lastFatal: this.#lastFatal ?? null,
+    });
+  }
+
+  #statusPathWriter(): ((snapshot: DaemonStatusSnapshot) => Promise<void>) | undefined {
+    const statusPath = this.options.statusPath;
+    if (statusPath === undefined) {
+      return undefined;
+    }
+    return (snapshot) => writeDaemonStatusSnapshot(statusPath, snapshot);
+  }
+
+  #currentCodexThreadCount(): number {
+    const maybeRoutes = (
+      this.#sessionRouter as { list?: () => readonly SessionRoute[] } | undefined
+    )?.list?.();
+    if (maybeRoutes === undefined) {
+      return 0;
+    }
+    return maybeRoutes.filter(
+      (route) => route.kind === "bound" && route.codexThreadId !== undefined,
+    ).length;
+  }
+
+  #errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   #threadStartParams(route: Extract<SessionRoute, { kind: "bound" }>): DaemonThreadStartParams {

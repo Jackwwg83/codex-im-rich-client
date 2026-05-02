@@ -15,7 +15,12 @@ import {
   runMigrations,
 } from "@codex-im/storage-sqlite";
 import { describe, expect, it, vi } from "vitest";
-import { Daemon, type DaemonOptions, type DaemonSignal } from "../src/index.js";
+import {
+  Daemon,
+  type DaemonOptions,
+  type DaemonSignal,
+  type DaemonStatusSnapshot,
+} from "../src/index.js";
 
 const SRC_DIR = join(import.meta.dirname, "../src");
 const STORAGE_MIGRATIONS_DIR = join(import.meta.dirname, "../../storage-sqlite/src/migrations");
@@ -139,6 +144,51 @@ describe("Daemon skeleton (T14)", () => {
     expect(order.indexOf("broker.attach")).toBeLessThan(
       order.indexOf(`pending:${broker.enabled[0]}`),
     );
+  });
+
+  it("writes a local daemon status snapshot after successful startup", async () => {
+    const now = new Date("2026-05-02T20:00:00.000Z");
+    const target = { platform: "telegram", chatId: "-100status" };
+    const snapshots: DaemonStatusSnapshot[] = [];
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      approvalRecordCount: vi.fn(() => 2),
+    };
+    const sessionRouter = {
+      list: vi.fn(() => [
+        { kind: "bound", target, projectId: "p1", cwd: "/repo", codexThreadId: "thread-1" },
+        { kind: "bound", target, projectId: "p2", cwd: "/repo2" },
+        { kind: "unbound", target },
+      ]),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({}),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({}),
+      writeStatusSnapshot: vi.fn((snapshot: DaemonStatusSnapshot) => {
+        snapshots.push(snapshot);
+      }),
+      now: () => now,
+    });
+
+    await daemon.start();
+
+    expect(snapshots).toEqual([
+      {
+        pid: process.pid,
+        startedAt: "2026-05-02T20:00:00.000Z",
+        currentCodexThreadCount: 1,
+        pendingApprovalCount: 2,
+        lastCodexSpawnAt: null,
+        supervisorFailureCount: 0,
+        lastFatal: null,
+      },
+    ]);
   });
 
   it("constructs SecurityPolicy, SessionRouter, and Supervisor after pending-mode setup", async () => {
