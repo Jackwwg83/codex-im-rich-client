@@ -200,4 +200,45 @@ export class BindingRepository {
 
     return row === undefined ? undefined : hydrate(row);
   }
+
+  list(): ThreadBindingRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+          SELECT id,
+                 target_platform,
+                 target_chat_id,
+                 target_thread_key,
+                 target_topic_id,
+                 project_id,
+                 codex_thread_id,
+                 cwd,
+                 default_model,
+                 active_turn_id,
+                 created_at,
+                 updated_at
+            FROM thread_bindings
+        ORDER BY created_at ASC, id ASC
+        `,
+      )
+      .all() as ThreadBindingRow[];
+
+    return rows.map(hydrate);
+  }
+
+  delete(target: BindingTarget): boolean {
+    const result = this.db
+      .prepare(
+        `
+          DELETE FROM thread_bindings
+           WHERE target_platform = @targetPlatform
+             AND target_chat_id = @targetChatId
+             AND target_thread_key IS @targetThreadKey
+             AND target_topic_id IS @targetTopicId
+        `,
+      )
+      .run(normalizeTarget(target));
+
+    return result.changes > 0;
+  }
 }

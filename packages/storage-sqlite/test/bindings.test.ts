@@ -55,4 +55,74 @@ describe("BindingRepository (T4a)", () => {
       db.close();
     }
   });
+
+  it("lists bindings in insertion order", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new BindingRepository(db);
+      repo.upsert({
+        target: { platform: "telegram", chatId: "-100123456" },
+        projectId: "project-web",
+        codexThreadId: "thread_web",
+        cwd: "/tmp/codex-im/project-web",
+        now: "2026-05-02T14:01:00.000Z",
+      });
+      repo.upsert({
+        target: { platform: "telegram", chatId: "-100654321", topicId: "7" },
+        projectId: "project-api",
+        codexThreadId: "thread_api",
+        cwd: "/tmp/codex-im/project-api",
+        now: "2026-05-02T14:02:00.000Z",
+      });
+
+      expect(
+        repo.list().map((binding) => ({
+          target: binding.target,
+          projectId: binding.projectId,
+          codexThreadId: binding.codexThreadId,
+          cwd: binding.cwd,
+        })),
+      ).toEqual([
+        {
+          target: { platform: "telegram", chatId: "-100123456" },
+          projectId: "project-web",
+          codexThreadId: "thread_web",
+          cwd: "/tmp/codex-im/project-web",
+        },
+        {
+          target: { platform: "telegram", chatId: "-100654321", topicId: "7" },
+          projectId: "project-api",
+          codexThreadId: "thread_api",
+          cwd: "/tmp/codex-im/project-api",
+        },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("deletes a binding by target", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new BindingRepository(db);
+      const target = { platform: "telegram", chatId: "-100123456", topicId: "42" };
+      repo.upsert({
+        target,
+        projectId: "project-web",
+        codexThreadId: "thread_123",
+        cwd: "/tmp/codex-im/project-web",
+        now: "2026-05-02T14:03:00.000Z",
+      });
+
+      expect(repo.delete(target)).toBe(true);
+      expect(repo.findByTarget(target)).toBeUndefined();
+      expect(repo.delete(target)).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
 });
