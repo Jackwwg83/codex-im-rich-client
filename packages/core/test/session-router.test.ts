@@ -11,6 +11,7 @@ import type { Target } from "../src/types.js";
 const TARGET: Target = { platform: "telegram", chatId: "-1001" };
 
 class FakeBindingRepository implements SessionBindingRepository {
+  writeError: Error | undefined;
   lists = 0;
   readonly reads: Target[] = [];
   readonly writes: Array<SessionBindingInput & { target: Target }> = [];
@@ -31,6 +32,9 @@ class FakeBindingRepository implements SessionBindingRepository {
 
   upsert(input: SessionBindingInput & { target: Target }): SessionThreadBindingRecord {
     this.onBeforeWrite?.();
+    if (this.writeError !== undefined) {
+      throw this.writeError;
+    }
     this.writes.push(input);
     const now = "2026-05-02T00:00:00.000Z";
     const record: SessionThreadBindingRecord = {
@@ -236,5 +240,50 @@ describe("SessionRouter skeleton (T13a / D38)", () => {
     expect(bindings.lists).toBe(1);
     expect(bindings.reads).toEqual([]);
     expect(bindings.writes).toEqual([]);
+  });
+
+  it("does not update cache when bind write fails", () => {
+    const bindings = new FakeBindingRepository();
+    bindings.writeError = new Error("sqlite unavailable");
+    const router = new SessionRouter({ bindings });
+
+    expect(() =>
+      router.bind(TARGET, {
+        projectId: "web",
+        cwd: "/repo/web",
+      }),
+    ).toThrow("sqlite unavailable");
+
+    expect(router.resolve(TARGET)).toEqual({
+      kind: "unbound",
+      target: TARGET,
+    } satisfies SessionRoute);
+    expect(bindings.writes).toEqual([]);
+  });
+
+  it("does not update an existing project binding when bindThread write fails", () => {
+    const bindings = new FakeBindingRepository();
+    const router = new SessionRouter({ bindings });
+    router.bind(TARGET, {
+      projectId: "web",
+      cwd: "/repo/web",
+    });
+
+    bindings.writeError = new Error("sqlite unavailable");
+
+    expect(() => router.bindThread(TARGET, "thread_123")).toThrow("sqlite unavailable");
+    expect(router.resolve(TARGET)).toEqual({
+      kind: "bound",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+    } satisfies SessionRoute);
+    expect(bindings.writes).toEqual([
+      {
+        target: TARGET,
+        projectId: "web",
+        cwd: "/repo/web",
+      },
+    ]);
   });
 });
