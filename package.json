@@ -33,6 +33,8 @@
     "launchd:uninstall": "node bin/uninstall-launchd.mjs",
     "db:backup": "tsx packages/cli/src/index.ts db backup",
     "smoke:app-server": "tsx packages/cli/src/index.ts smoke app-server",
+    "smoke:lark-fake": "vitest run --config vitest.config.ts --project unit packages/daemon/test/lark-fake-smoke.test.ts",
+    "smoke:lark-live": "tsx packages/im-lark/scripts/live-smoke.mts",
     "smoke:telegram-fake": "tsx packages/cli/src/index.ts smoke telegram-fake",
     "smoke:telegram-live": "tsx packages/cli/src/index.ts smoke telegram-live",
     "smoke:telegram-real": "tsx packages/cli/src/index.ts smoke telegram-real",

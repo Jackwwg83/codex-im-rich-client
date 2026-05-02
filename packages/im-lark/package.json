@@ -7,10 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "smoke:live": "tsx scripts/live-smoke.mts",
     "typecheck": "tsc -b",
     "test": "vitest run --project unit"
   },
   "dependencies": {
-    "@codex-im/channel-core": "workspace:*"
+    "@codex-im/channel-core": "workspace:*",
+    "@larksuiteoapi/node-sdk": "^1.62.1"
   }
 }
