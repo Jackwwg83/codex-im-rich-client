@@ -1,23 +1,23 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, JAC-52 / T19d transport-lost turn synthesis/rendering complete, JAC-53 / T19e prune sweeps complete, JAC-62 / T37 mid-phase Codex review findings closed, JAC-54 through JAC-61 real Telegram adapter fake/contract slice complete, JAC-132 / T29 launchd plist dry-run installer complete, JAC-133 / T29a Keychain wrapper complete, and JAC-134 / T29b operator-gated Keychain launchd smoke docs complete.
-> **Handoff status:** JAC-134 complete: `docs/ops/keychain-launchd-smoke.md` documents the gated live Keychain/launchd smoke with `TELEGRAM_LIVE=1 KEYCHAIN_SMOKE=1`, preflight, redaction checks, rollback, and completion-note rules. `scripts/keychain-launchd-smoke-doc.test.mjs` pins the gates/rollback/no-token-literal requirements. No live Keychain or launchctl command was run. All 5 gates green. Next exact issue: JAC-135 / T30 launchd uninstall script with dry-run and Keychain-preserving behavior.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, JAC-52 / T19d transport-lost turn synthesis/rendering complete, JAC-53 / T19e prune sweeps complete, JAC-62 / T37 mid-phase Codex review findings closed, JAC-54 through JAC-61 real Telegram adapter fake/contract slice complete, JAC-132 / T29 launchd plist dry-run installer complete, JAC-133 / T29a Keychain wrapper complete, JAC-134 / T29b operator-gated Keychain launchd smoke docs complete, JAC-139 gate-flake fix complete, and JAC-135 / T30 launchd uninstall dry-run complete.
+> **Handoff status:** JAC-135 complete: `bin/uninstall-launchd.mjs` plans and executes injected `launchctl unload`, removes only `$HOME/Library/LaunchAgents/io.codex-im-bridge.plist`, preserves Keychain, supports dry-run, and refuses arbitrary paths outside LaunchAgents. JAC-139 also stabilized the legacy `stdio-transport` test waits after repeated full-suite false failures. All 5 gates green. Next exact issue: JAC-136 / T31 daemon log rotation wiring.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-134 / T29b** (operator-gated Keychain launchd smoke documentation).
-- **Next exact task:** **JAC-135 / T30** — launchd uninstall script with dry-run and Keychain-preserving behavior. Use temp HOME / injected launchctl tests; do not unload a real LaunchAgent.
+- **Active task:** None at this checkpoint. Last completed: **JAC-135 / T30** (launchd uninstall dry-run + Keychain-preserving behavior). Also completed **JAC-139** gate-flake stabilization.
+- **Next exact task:** **JAC-136 / T31** — daemon log rotation wiring. No public metrics/listener; no token/log secret leakage.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **Latest code commit:** `3b4ea94` (`docs(ops): JAC-134 add keychain launchd smoke runbook`)
-- **Tag distance at latest code commit:** `phase-2-codex-reviewed-107-g3b4ea94`
+- **Latest code commit:** `0830017` (`feat(ops): JAC-135 add launchd uninstall dry-run`)
+- **Tag distance at latest code commit:** `phase-2-codex-reviewed-110-g0830017`
 - **Origin:** synced after each pushed checkpoint; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -113,6 +113,8 @@
 | `b707f28` | T29 / JAC-132 | launchd plist template + dry-run installer, `pnpm launchd:install`, injected launchctl tests, secret-material guard |
 | `91d259a` | T29a / JAC-133 | Keychain `load-and-run.sh` wrapper, plist wrapper integration, mocked `security` tests, fail-closed env checks |
 | `3b4ea94` | T29b / JAC-134 | operator-gated Keychain launchd smoke runbook + doc guard test for gates/redaction/rollback/no token literals |
+| `fe35e86` | gate fix / JAC-139 | Stabilize `stdio-transport` tests by waiting for actual stdout/stderr/close events instead of fixed sleeps |
+| `0830017` | T30 / JAC-135 | launchd uninstall script, dry-run, injected `launchctl`, safe LaunchAgents-only removal, Keychain preservation |
 
 ## 3. Versions / pins
 
@@ -128,8 +130,8 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (12 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **930 passing + 1 skipped** across 91 test files (Phase 2 close: 720; +210 from Phase 3 storage/config/core/channel/daemon/telegram/ops prereqs) |
-| Lint | `pnpm lint` | green (204 files, biome) |
+| Tests | `pnpm test` | **935 passing + 1 skipped** across 92 test files (Phase 2 close: 720; +215 from Phase 3 storage/config/core/channel/daemon/telegram/ops prereqs) |
+| Lint | `pnpm lint` | green (206 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
 | F13 channel-core boundary | inherited from Phase 2 | green |
@@ -186,7 +188,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.7 launchd/log/status/backup and §17 dependency graph. The next task is **JAC-135 / T30**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.7 launchd/log/status/backup and §17 dependency graph. The next task is **JAC-136 / T31**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -225,4 +227,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-134 / T29b operator-gated Keychain launchd smoke documentation**. Continue with **JAC-135 / T30 launchd uninstall script**; keep implementation dry-run/temp-HOME/injected-command tested and do not unload a real LaunchAgent in unattended code work.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-135 / T30 launchd uninstall dry-run** plus **JAC-139 gate-flake stabilization**. Continue with **JAC-136 / T31 daemon log rotation wiring**.
