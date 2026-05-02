@@ -1,18 +1,23 @@
-// T2b (Phase 3) — first-run apply for runMigrations.
+// T2b + T2c (Phase 3) — runMigrations apply + idempotency.
 //
-// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b
+// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b/T2c
 //
-// One failing test target: a migrations dir containing one `001-*.sql`
-// file is applied on first run; both the migration's side-effect (a
-// `foo` table appears) AND the schema_version audit row are visible
-// after the call returns.
+// T2b — first-run apply: a migrations dir containing one `001-*.sql`
+//       file is applied on first run; both the migration's side-effect
+//       (a `foo` table appears) AND the schema_version audit row are
+//       visible after the call returns.
 //
-// T2c will extend this file with an idempotency test (re-running
-// applies nothing). T3a will replace the synthetic fixture with the
-// real `001-init.sql` once that migration ships.
+// T2c — idempotency: re-running runMigrations on the same dir applies
+//       nothing AND does not re-execute the migration body. We prove
+//       no re-execution by corrupting the migration file's contents
+//       between runs; if the runner re-read it, the invalid SQL would
+//       throw. We further assert applied_at invariance (no re-insert
+//       into schema_version).
 //
-// Synthetic migration filenames here match the production convention
-// `NNN-kebab.sql` so the runner's filter regex is exercised.
+// T3a will replace the synthetic fixtures with the real `001-init.sql`
+// once that migration ships. Synthetic filenames here match the
+// production convention `NNN-kebab.sql` so the runner's filter regex
+// is exercised.
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -86,6 +91,61 @@ describe("runMigrations first run (T2b)", () => {
         .prepare("SELECT version FROM schema_version ORDER BY applied_at, version")
         .all();
       expect(versions).toEqual([{ version: "001-init.sql" }, { version: "002-add-bar.sql" }]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("runMigrations idempotency (T2c)", () => {
+  let migDir: string;
+
+  beforeEach(() => {
+    migDir = mkdtempSync(join(tmpdir(), "codex-im-migrations-t2c-"));
+  });
+
+  afterEach(() => {
+    rmSync(migDir, { recursive: true, force: true });
+  });
+
+  it("re-running applies nothing and does not re-execute the migration body", () => {
+    const migPath = join(migDir, "001-init.sql");
+    writeFileSync(migPath, "CREATE TABLE foo (id INTEGER PRIMARY KEY);");
+
+    const db = openDatabase(":memory:");
+    try {
+      // First run: applies the migration, records it.
+      const first = runMigrations(db, migDir);
+      expect(first.applied).toEqual(["001-init.sql"]);
+
+      const firstRow = db
+        .prepare("SELECT version, applied_at FROM schema_version WHERE version = ?")
+        .get("001-init.sql") as { version: string; applied_at: number };
+      expect(firstRow.version).toBe("001-init.sql");
+
+      // Corrupt the migration file. If the runner re-reads or re-executes
+      // the body on the second call, SQLite will throw a syntax error and
+      // the test fails. The pass condition is therefore proof that the
+      // runner skipped the file purely on filename match against
+      // schema_version — exactly the idempotency contract T2c demands.
+      writeFileSync(migPath, "THIS IS NOT VALID SQL ;;;");
+
+      // Second run: must be a no-op.
+      const second = runMigrations(db, migDir);
+      expect(second.applied).toEqual([]);
+
+      // schema_version row count is unchanged AND applied_at was NOT
+      // overwritten (no INSERT/UPDATE happened against the recorded row).
+      const allRows = db
+        .prepare("SELECT version, applied_at FROM schema_version ORDER BY version")
+        .all();
+      expect(allRows).toEqual([{ version: "001-init.sql", applied_at: firstRow.applied_at }]);
+
+      // The first-run side-effect (the `foo` table) is still there.
+      const fooTable = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='foo'")
+        .get();
+      expect(fooTable).toEqual({ name: "foo" });
     } finally {
       db.close();
     }
