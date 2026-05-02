@@ -1,23 +1,23 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, and JAC-52 / T19d transport-lost turn synthesis/rendering complete.
-> **Handoff status:** JAC-52 complete: `EventNormalizer` now tracks pending turn state per runtime generation and `endWithTransportLostSynthetic()` appends one synthetic `turn_failed` with `cause: "transport_lost"` for each in-flight turn before `{done:true}`. Supervisor transport-close handling uses that path; render exposes `formatTurnFailed`; fake Telegram edit path is covered. All 5 gates green. Next exact issue: JAC-53 / T19e callback token and pending terminal-record prune sweeps.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, JAC-52 / T19d transport-lost turn synthesis/rendering complete, and JAC-53 / T19e prune sweeps complete.
+> **Handoff status:** JAC-53 complete: callback token expiration sweep is bounded and CAS-safe; stuck issued callback tokens can be revoked and failed as single-approval `transport_lost`; broker terminal records can be pruned by max-age/max-count/batch; daemon schedules interval sweeps and eager high-water sweeps. All 5 gates green. Next exact issue: JAC-62 / T37 mid-phase Codex outside-voice review after T19.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-52 / T19d** (synthesize and render `turn_failed` on transport loss).
-- **Next exact task:** **JAC-53 / T19e** — callback token and pending terminal-record prune sweeps.
+- **Active task:** None at this checkpoint. Last completed: **JAC-53 / T19e** (callback token and pending terminal-record prune sweeps).
+- **Next exact task:** **JAC-62 / T37** — mid-phase Codex outside-voice review after daemon T19.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **Latest code commit:** `11d2da2` (`feat(daemon): T19d synthesize transport-lost turns`)
-- **Tag distance at latest code commit:** `phase-2-codex-reviewed-80-g11d2da2`
+- **Latest code commit:** `49afab5` (`feat(daemon): T19e prune callback and approval records`)
+- **Tag distance at latest code commit:** `phase-2-codex-reviewed-82-g49afab5`
 - **Origin:** synced after each pushed checkpoint; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -97,6 +97,8 @@
 | `a4ef5a4` | T19c / JAC-51 | D37 shutdown order: pause inbound, fail pending as transport_lost, drain, stop supervisor/adapter, close storage |
 | `0b5dea6` | docs checkpoint | Refresh live-status for JAC-51 completion |
 | `11d2da2` | T19d / JAC-52 | Transport-loss synthetic `turn_failed` events per pending turn + render/fake-adapter edit coverage |
+| `fadafeb` | docs checkpoint | Refresh live-status for JAC-52 completion |
+| `49afab5` | T19e / JAC-53 | Callback-token expiration/stuck-issued sweeps, broker terminal-record prune, daemon interval/eager sweep triggers |
 
 ## 3. Versions / pins
 
@@ -112,8 +114,8 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **859 passing + 1 skipped** across 78 test files (Phase 2 close: 720; +139 from Phase 3 storage/config/core/channel/daemon prereqs) |
-| Lint | `pnpm lint` | green (176 files, biome) |
+| Tests | `pnpm test` | **865 passing + 1 skipped** across 79 test files (Phase 2 close: 720; +145 from Phase 3 storage/config/core/channel/daemon prereqs) |
+| Lint | `pnpm lint` | green (177 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
 | F13 channel-core boundary | inherited from Phase 2 | green |
@@ -123,7 +125,7 @@
 
 - **Phase 3 plan v2.4:** APPROVE_WITH_CHANGES at codex round 4 (4 P1 + 2 P2, all absorbed). Plan-of-record under `docs/superpowers/plans/2026-05-02-phase-3-plan.md`. Round-by-round records under `docs/phase-3/plan-v{1,2.1,2.2,2.3}-codex-{review,round2,round3,round4}.md`.
 - **Implementation T1.1+T2a+T2b+T2c review (impl-t1-t2c):** APPROVE_WITH_CHANGES, 0 P0 + 1 P1 + 2 P2. All findings cleared by commit `04a92fe`. Per-task scope verdict: clean across all 4 commits. Record at `docs/phase-3/impl-t1-t2c-codex-review.md`.
-- **Next planned codex review:** after the daemon approval callback flow (T16/T17) lands, or at the T19 daemon mid-review gate before real Telegram adapter work. Cadence is at-discretion, not per-task.
+- **Next planned codex review:** **JAC-62 / T37** now — daemon T19 is complete, so run the mid-phase outside-voice review before starting the real Telegram adapter slice.
 
 ## 6. Active redlines (carry forward into all future Phase 3 tasks)
 
@@ -132,7 +134,7 @@ Inherits everything from CLAUDE.md + Phase 1 + Phase 2 redlines. Phase 3 adds:
 - ❌ **D27** — `@codex-im/storage-sqlite` is the LOWEST layer. NO upward import (runtime OR type-only) of `@codex-im/core`, `@codex-im/codex-runtime`, `@codex-im/app-server-client`, `@codex-im/channel-core`, `@codex-im/protocol`, `@codex-im/render`, `@codex-im/daemon`, `@codex-im/im-telegram`. Storage stores opaque strings, not protocol shapes. Enforced by `no-upward-imports.test.ts`.
 - ❌ **D38** — sync write-through. SessionRouter's `/use` command MUST fail on SQLite write error; in-memory state MUST NOT be optimistically populated. better-sqlite3's sync API is the load-bearing primitive.
 - ❌ **D33 step ordering** — every callback validation step is read-only BEFORE `broker.resolve`. CAS bound→used fires only on `result.kind === "ok"` (i.e. broker accepted). Validation MUST NOT burn the token before the broker decides.
-- ❌ **D34** — `callback_tokens` stores ONLY the SHA-256 hash of the raw token; the raw bytes never reach SQLite. Action enum is `'allow_once' | 'allow_session' | 'decline' | 'abort'` (NOT `'cancel'`).
+- ❌ **D34** — `callback_tokens` stores ONLY the SHA-256 hash of the raw token; the raw bytes never reach SQLite. Action enum is `'allow_once' | 'allow_session' | 'decline' | 'abort'` (NOT `'cancel'`). Expire/revoke sweeps update rows by guarded status, not by raw token.
 - ❌ **D36** — SecurityPolicy auto-decline is NOT `binding_required`. The broker returns `ok` with `decision = decline`; codex sees the standard decline shape.
 - ❌ **D40** — broker single-approval extension is the ONLY API. No first-actor-wins fallback; no `expirePending()` as security boundary.
 - ❌ **D41** — `ApprovalUiAction.wirePayload` + `InboundAction.rawCallbackData` are the production callback contract. `callbackNonce` is legacy fallback only; production daemon code MUST NOT use it.
@@ -168,7 +170,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-53 / T19e**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.9 Reviews and §17 dependency graph. The next task is **JAC-62 / T37**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -207,4 +209,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-52 / T19d**. Continue with **JAC-53 / T19e**, then the rest of **JAC-20** dependency order.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-53 / T19e**. Continue with **JAC-62 / T37**, then proceed to the Telegram adapter dependency order if the review is acceptable.
