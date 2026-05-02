@@ -115,4 +115,23 @@ describe("TelegramChannelAdapter.onMessage raw fixtures (T26/T28a-c)", () => {
     });
     await adapter.stop();
   });
+
+  it("drops inbound messages after pauseInbound or stop", async () => {
+    const bot = new FakeTelegramBot();
+    const adapter = new TelegramChannelAdapter({ bot });
+    const seen = vi.fn();
+    adapter.onMessage(seen);
+
+    await bot.injectUpdate(loadFixture("private-message.json"));
+    expect(seen).not.toHaveBeenCalled();
+
+    await adapter.start();
+    await adapter.pauseInbound();
+    await bot.injectUpdate(loadFixture("private-message.json"));
+    expect(seen).not.toHaveBeenCalled();
+
+    await adapter.stop();
+    await bot.injectUpdate(loadFixture("private-message.json"));
+    expect(seen).not.toHaveBeenCalled();
+  });
 });

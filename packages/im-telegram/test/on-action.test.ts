@@ -128,4 +128,23 @@ describe("TelegramChannelAdapter.onAction raw fixtures (T27/T28d-f)", () => {
     );
     await adapter.stop();
   });
+
+  it("drops inbound actions after pauseInbound or stop", async () => {
+    const bot = new FakeTelegramBot();
+    const adapter = new TelegramChannelAdapter({ bot, now: () => NOW });
+    const seen = vi.fn();
+    adapter.onAction(seen);
+
+    await bot.injectUpdate(loadFixture("callback-message-deleted.json"));
+    expect(seen).not.toHaveBeenCalled();
+
+    await adapter.start();
+    await adapter.pauseInbound();
+    await bot.injectUpdate(loadFixture("callback-message-deleted.json"));
+    expect(seen).not.toHaveBeenCalled();
+
+    await adapter.stop();
+    await bot.injectUpdate(loadFixture("callback-message-deleted.json"));
+    expect(seen).not.toHaveBeenCalled();
+  });
 });

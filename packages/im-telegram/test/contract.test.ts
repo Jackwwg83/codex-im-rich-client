@@ -25,6 +25,7 @@ const CLOSED_CHANNEL_ADAPTER_METHODS = [
   "editText",
   "onAction",
   "onMessage",
+  "pauseInbound",
   "sendCard",
   "sendFile",
   "start",

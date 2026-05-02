@@ -150,6 +150,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   readonly #options: TelegramChannelAdapterOptions;
   #bot: TelegramBotLike | undefined;
   #started = false;
+  #inboundPaused = true;
   #messageHandlerInstalled = false;
   #actionHandlerInstalled = false;
   readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
@@ -170,14 +171,20 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     await bot.start();
     this.#bot = bot;
     this.#started = true;
+    this.#inboundPaused = false;
   }
 
   async stop(): Promise<void> {
     if (!this.#started) {
       return;
     }
+    this.#inboundPaused = true;
     this.#started = false;
     await this.#bot?.stop();
+  }
+
+  async pauseInbound(): Promise<void> {
+    this.#inboundPaused = true;
   }
 
   onMessage(handler: (msg: InboundMessage) => void): () => void {
@@ -321,6 +328,9 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   }
 
   #emitTelegramTextMessage(ctx: TelegramMessageContextLike): void {
+    if (!this.#acceptInbound()) {
+      return;
+    }
     const msg = normalizeTelegramTextMessage(ctx, this.#nowMs());
     for (const handler of this.#onMessageHandlers) {
       try {
@@ -332,6 +342,9 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   }
 
   #emitTelegramCallbackQuery(ctx: TelegramCallbackQueryContextLike): void {
+    if (!this.#acceptInbound()) {
+      return;
+    }
     const action = normalizeTelegramCallbackQuery(ctx, this.#nowMs());
     for (const handler of this.#onActionHandlers) {
       try {
@@ -340,6 +353,10 @@ export class TelegramChannelAdapter implements ChannelAdapter {
         // Keep one subscriber failure from blocking other subscribers.
       }
     }
+  }
+
+  #acceptInbound(): boolean {
+    return this.#started && !this.#inboundPaused;
   }
 }
 
