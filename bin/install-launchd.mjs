@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -79,10 +80,40 @@ export async function installLaunchd(options = {}) {
     return { dryRun: true, plan, wrotePlist: false, loaded: false };
   }
 
+  await verifyLaunchdRuntimePaths(plan, {
+    access: options.access ?? access,
+    stat: options.stat ?? stat,
+  });
   await (options.mkdir ?? mkdir)(dirname(plan.plistPath), { recursive: true });
   await (options.writeFile ?? writeFile)(plan.plistPath, plan.renderedPlist, { mode: 0o600 });
   await (options.runLaunchctl ?? runLaunchctl)(plan.launchctlArgs);
   return { dryRun: false, plan, wrotePlist: true, loaded: true };
+}
+
+export async function verifyLaunchdRuntimePaths(plan, options = {}) {
+  const accessFn = options.access ?? access;
+  const statFn = options.stat ?? stat;
+  await requireFileAccess(statFn, accessFn, plan.wrapperEntry, "WRAPPER_ENTRY", constants.X_OK);
+  await requireFileAccess(statFn, accessFn, plan.nodeBin, "NODE_BIN", constants.X_OK);
+  await requireFileAccess(statFn, accessFn, plan.daemonEntry, "DAEMON_ENTRY", constants.R_OK);
+}
+
+async function requireFileAccess(statFn, accessFn, path, label, mode) {
+  let stats;
+  try {
+    stats = await statFn(path);
+  } catch (error) {
+    throw new Error(`install-launchd: ${label} does not exist or is not accessible: ${path}`);
+  }
+  if (typeof stats.isFile !== "function" || !stats.isFile()) {
+    throw new Error(`install-launchd: ${label} must be a regular file: ${path}`);
+  }
+  try {
+    await accessFn(path, mode);
+  } catch (error) {
+    const accessName = mode === constants.X_OK ? "executable" : "readable";
+    throw new Error(`install-launchd: ${label} must be ${accessName}: ${path}`);
+  }
 }
 
 function required(value, name) {

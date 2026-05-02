@@ -3,6 +3,7 @@ import {
   assertNoLaunchdSecretMaterial,
   installLaunchd,
   planLaunchdInstall,
+  verifyLaunchdRuntimePaths,
 } from "../bin/install-launchd.mjs";
 
 const HOME = "/Users/tester";
@@ -69,18 +70,26 @@ describe("install-launchd (T29)", () => {
     const mkdir = vi.fn(async () => undefined);
     const writeFile = vi.fn(async () => undefined);
     const runLaunchctl = vi.fn(async () => undefined);
+    const access = vi.fn(async () => undefined);
+    const stat = vi.fn(async () => ({ isFile: () => true }));
 
     const result = await installLaunchd({
       home: HOME,
       user: USER,
       nodeBin: NODE_BIN,
       daemonEntry: DAEMON_ENTRY,
+      access,
+      stat,
       mkdir,
       writeFile,
       runLaunchctl,
     });
 
     expect(result.dryRun).toBe(false);
+    expect(stat).toHaveBeenCalledWith("/Users/tester/.codex-im-bridge/bin/load-and-run.sh");
+    expect(stat).toHaveBeenCalledWith(NODE_BIN);
+    expect(stat).toHaveBeenCalledWith(DAEMON_ENTRY);
+    expect(access).toHaveBeenCalledTimes(3);
     expect(mkdir).toHaveBeenCalledWith("/Users/tester/Library/LaunchAgents", {
       recursive: true,
     });
@@ -92,6 +101,56 @@ describe("install-launchd (T29)", () => {
     expect(runLaunchctl).toHaveBeenCalledWith([
       "load",
       "/Users/tester/Library/LaunchAgents/io.codex-im-bridge.plist",
+    ]);
+  });
+
+  it("fails closed before writing the plist when live wrapper or daemon paths are missing", async () => {
+    const mkdir = vi.fn(async () => undefined);
+    const writeFile = vi.fn(async () => undefined);
+    const runLaunchctl = vi.fn(async () => undefined);
+    const access = vi.fn(async () => undefined);
+    const stat = vi.fn(async (path) => {
+      if (path.endsWith("load-and-run.sh")) {
+        throw new Error("missing wrapper");
+      }
+      return { isFile: () => true };
+    });
+
+    await expect(
+      installLaunchd({
+        home: HOME,
+        user: USER,
+        nodeBin: NODE_BIN,
+        daemonEntry: DAEMON_ENTRY,
+        access,
+        stat,
+        mkdir,
+        writeFile,
+        runLaunchctl,
+      }),
+    ).rejects.toThrow(/WRAPPER_ENTRY.*does not exist/);
+
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(runLaunchctl).not.toHaveBeenCalled();
+  });
+
+  it("verifies wrapper and node executability plus daemon readability", async () => {
+    const plan = await planLaunchdInstall({
+      home: HOME,
+      user: USER,
+      nodeBin: NODE_BIN,
+      daemonEntry: DAEMON_ENTRY,
+    });
+    const access = vi.fn(async () => undefined);
+    const stat = vi.fn(async () => ({ isFile: () => true }));
+
+    await verifyLaunchdRuntimePaths(plan, { access, stat });
+
+    expect(access.mock.calls).toEqual([
+      ["/Users/tester/.codex-im-bridge/bin/load-and-run.sh", 1],
+      [NODE_BIN, 1],
+      [DAEMON_ENTRY, 4],
     ]);
   });
 
