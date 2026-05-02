@@ -37,6 +37,28 @@ This smoke proves the real Telegram adapter's normalized message shape can
 enter the daemon, pass policy, resolve a bound session, start a fake Codex
 thread, and start one fake turn.
 
+## `pnpm smoke:telegram-live` — live Telegram adapter smoke (gated)
+
+```bash
+TELEGRAM_LIVE=1 IM_TELEGRAM_BOT_TOKEN=... pnpm smoke:telegram-live
+```
+
+Starts the real Telegram adapter with an environment-provided bot token,
+validates the token against Telegram, waits for a bounded operator-gated
+duration, and stops the adapter. It does **not** spawn real Codex, make a model
+call, or open a public listener.
+
+Optional:
+
+```bash
+TELEGRAM_LIVE=1 IM_TELEGRAM_BOT_TOKEN=... TELEGRAM_LIVE_DURATION_MS=10000 \
+  pnpm smoke:telegram-live
+```
+
+`TELEGRAM_LIVE_DURATION_MS` defaults to 5000 and is bounded to 0-60000. The
+command refuses to run unless `TELEGRAM_LIVE=1` is explicit and the bot token
+is present. Token-shaped material is redacted from failure output.
+
 ## `pnpm smoke:real-turn` — end-to-end lifecycle (gated)
 
 ```bash
