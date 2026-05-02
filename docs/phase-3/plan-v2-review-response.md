@@ -1,11 +1,16 @@
-# Phase 3 plan v2 — review response matrix
+# Phase 3 plan review response matrix (v1 → v2 → v2.1 → v2.2)
 
-Companion to `docs/superpowers/plans/2026-05-02-phase-3-plan.md` (plan v2).
+Companion to `docs/superpowers/plans/2026-05-02-phase-3-plan.md` (plan v2.2).
 
-Tracks every Codex outside-voice C1 finding (`docs/phase-3/plan-v1-codex-review.md`)
-and gstack `/plan-eng-review` finding (in plan v1's `## GSTACK REVIEW REPORT`
-section, retained at the bottom of the v2 plan as historical record) →
-where it is fixed in v2.
+Tracks every Codex outside-voice + gstack `/plan-eng-review` finding
+across 4 plan revisions and 3+ review rounds → where each is fixed.
+
+| Revision | Commit | Trigger | Findings | Status |
+|---|---|---|---|---|
+| v1 | `b60a67d` | gstack round 1 (APPROVE_WITH_CHANGES) + codex round 1 (REJECT) | 6 P0 + 6 P1 + 3 P2 | superseded |
+| v2 | `ff1176b` | gstack round 2 (APPROVE_WITH_CHANGES) | 4 P1 + 4 P2, 0 P0 | superseded |
+| v2.1 | `4edfd81` | codex round 2 (REJECT) | 1 P0 + 5 P1 + 3 P2 | superseded |
+| **v2.2** | **(this commit)** | codex round 3 PENDING | TBD | current |
 
 ## Status legend
 
@@ -67,14 +72,16 @@ where it is fixed in v2.
 
 ## Pre-implementation re-review checklist
 
-Before plan v2.1 is approved for T1:
+Before plan v2.2 is approved for T1:
 
-1. ☑ **gstack `/plan-eng-review` round 2 on plan v2** — APPROVE_WITH_CHANGES, 4 P1 + 4 P2, 0 P0. All round-2 P1s + 2 P2s integrated into v2.1; 2 P2s deferred-justified. See `docs/phase-3/plan-v2-gstack-round2-review.md`.
-2. ☐ **Codex outside-voice review round 2 on plan v2.1** — verify no new structural bugs introduced by either v1→v2 redesign (especially D33 two-phase token flow) OR v2→v2.1 round-2 fixes.
-3. ☐ Cross-model agreement: Codex round 2 must return APPROVE or APPROVE_WITH_CHANGES on v2.1. Codex REJECT triggers v3.
-4. ☐ Verify `pnpm protocol:check` either passes (rebase onto `chore/codex-upgrade-0.128`) or is documented as deferred (T0.5 / R6).
+1. ☑ **gstack `/plan-eng-review` round 2 on plan v2** — APPROVE_WITH_CHANGES, 4 P1 + 4 P2, 0 P0. All round-2 P1s + 2 P2s integrated into v2.1; 2 P2s deferred-justified.
+2. ☑ **Codex outside-voice round 2 on plan v2.1** — REJECT, 1 P0 + 5 P1 + 3 P2. Codex confirmed round-1 P0s + round-2 P1s genuinely fixed; flagged NEW v2.1-introduced defects (boundary mismatch, CAS-pre-validation, single-approval API gap, G8 ordering, init-order test gap). All 1 P0 + 5 P1 + 3 P2 integrated into v2.2 (this revision). See `docs/phase-3/plan-v2.1-codex-round2.md`.
+3. ☐ **Codex outside-voice round 3 on plan v2.2** — verify v2.2's D40 / D41 / D42 amendments + §10.3 step reorder don't introduce new structural risks. Particular focus: D41 boundary amendment is safe under D14 escape clause; D40 single-approval API routes through `#settleEntry` correctly; D42 `endWithSynthetic` doesn't break Phase 1 supervisor's `endOfStream` invariants; §10.3 reorder doesn't create new races (especially the broker.resolve-then-CAS sequence with concurrent clicks).
+4. ☐ Cross-model agreement: Codex round 3 must return APPROVE or APPROVE_WITH_CHANGES on v2.2. Codex REJECT triggers v2.3 or v3 (whichever the user picks).
+5. ☐ (Optional) gstack round 3 on v2.2 — gstack round 2 was on v2; round 3 not strictly required since v2.1 + v2.2 only address codex round-2 findings, but a sanity pass is cheap.
+6. ☐ Verify `pnpm protocol:check` either passes (rebase onto `chore/codex-upgrade-0.128`) or is documented as deferred (T0.5 / R6).
 
-If Codex round 2 surfaces a new P0, plan v2.1 → v3 BEFORE T1.
+If Codex round 3 surfaces a new P0, plan v2.2 → v2.3 BEFORE T1.
 
 ## v2 → v2.1 round-2 fix matrix
 
@@ -88,3 +95,22 @@ If Codex round 2 surfaces a new P0, plan v2.1 → v3 BEFORE T1.
 | Round-2-P2-B | P2 | gstack round 2 | launchd Keychain wrapper has no integration test path | T29 detail + new T29a (load-and-run.sh wrapper + golden render + `--dry-run` test) + T29b (operator-gated Keychain integration smoke) | §16 T29 + T29a + T29b | fixed |
 | Round-2-P2-C | P2 | gstack round 2 | `SessionRouter.bindThread` orphan-codex-thread risk on partial failure | Documented as deferred in §23 P2 deferred subsection | §23 | deferred-justified |
 | Round-2-P2-D | P2 | gstack round 2 | Raw token in-process-memory lifetime test missing | Documented as deferred in §23 P2 deferred subsection (heap-dump scan tooling not in Phase 3 scope) | §23 | deferred-justified |
+
+## v2.1 → v2.2 codex round-2 fix matrix
+
+Codex outside-voice round 2 on v2.1 (`4edfd81`) returned **REJECT**
+with 1 P0 + 5 P1 + 3 P2. See `docs/phase-3/plan-v2.1-codex-round2.md`.
+Codex confirmed all round-1 P0s + round-2 P1s genuinely fixed; flagged
+new v2.1-introduced defects.
+
+| Round-2 codex ID | Severity | Finding | v2.2 fix | v2.2 location | Status |
+|---|---|---|---|---|---|
+| Codex-R2-P0 | P0 | D33/D34 callback_data shape doesn't fit closed Phase 2 boundary (no `wirePayload` on ApprovalAction; no `rawCallbackData` on InboundAction) | D41 — Phase 2 D14 escape clause: `ApprovalUiAction.wirePayload?: string`; `InboundAction.rawCallbackData: string`; adapter contract update; new tasks T6.6 + T18.1-T18.4 | §7 D41 + §16 T6.6 + T18.1-T18.4 + T16.4 + T17.1 + §23 R9 | fixed |
+| Codex-R2-P1-1 | P1 | callback_tokens schema `action='cancel'` vs UI `'abort'` mismatch | Schema CHECK enum changed to `'abort'`; new test T6f covers all 4 ApprovalUiAction kinds round-trip | §9 (lines 567/989) + §16 T6f | fixed |
+| Codex-R2-P1-2 | P1 | CAS burns token BEFORE broker validation (wrong actor / target / nonce kills the token) | §10.3 step reorder: validation steps 1-3 read-only; broker.resolve at step 4; CAS only on `result.kind === "ok"` (step 5). Non-settling broker errors leave token 'bound' for legitimate retry. Tests T17.3-T17.13 reordered; T17.6-T17.8 explicitly assert "token stays 'bound'" | §10.3 + §16 T17.x | fixed |
+| Codex-R2-P1-3 | P1 | T19e.4 single-approval transport_lost API doesn't exist on broker | D40 — new Phase 2 broker extension `failPendingApprovalAsTransportLost(approvalId)` routes through `#settleEntry`. Task T6.5 sequenced before T17.x. T19e.4 updated to call the new API | §7 D40 + §16 T6.5 + T19e.4 | fixed |
+| Codex-R2-P1-4 | P1 | G8 `endOfStream` hook ignores later enqueues; uses wrong `error` arm instead of `turn_failed` | D42 — new `EventNormalizer.endWithSynthetic(events)` enqueues then closes. T19d.1-3 rewritten to use D42 + correct `turn_failed` arm with proper threadId/turnId | §7 D42 + §16 T6.7 + T19d.0-T19d.4 | fixed |
+| Codex-R2-P1-5 | P1 | D29 init-order tests cover steps 1-9 but D29 has 13 steps | T15.5 expanded (1-13); new T15.6 / T15.7 / T15.8 cover D29 steps 10-13 (subscribe wires, adapter.start LAST, SIGTERM handler) | §16 T15.5-T15.8 | fixed |
+| Codex-R2-P2-1 | P2 | T19e.1 test "concurrent click on a non-expired token" doesn't prove the same-row sweep-vs-click race | T19e.1 test reworded to stage same-row race (sweep vs click on same expired bound token); assertion "exactly one path wins, never both" | §16 T19e.1 | fixed |
+| Codex-R2-P2-2 | P2 | §9 says `actor_kind='system'` for D36 auto-decline at INSERT, but D36 issues no token | §9 §10.5 narrowed: actor_kind='system' is schema headroom, NOT used by Phase 3 code paths (D36 issues no callback_token row at all) | §9 | fixed |
+| Codex-R2-P2-3 | P2 | §19/T0 still says "Codex round 2 on v2" in a v2.1 plan | All v2/v2.1 references throughout plan updated to v2.2; §19 exit criteria updated | header + §19 + footer | fixed |
