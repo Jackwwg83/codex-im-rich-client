@@ -242,6 +242,47 @@ describe("CallbackTokenRepository (T6d)", () => {
     }
   });
 
+  it("expires stale issued tokens left behind by sendCard failures", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new CallbackTokenRepository(db);
+      const issuedExpiredHash = hashCallbackToken("issued-expired-token");
+      const boundExpiredHash = hashCallbackToken("bound-expired-token");
+      const usedExpiredHash = hashCallbackToken("used-expired-token");
+      for (const [tokenHash, expiresAt] of [
+        [issuedExpiredHash, "2026-05-02T18:20:00.000Z"],
+        [boundExpiredHash, "2026-05-02T18:21:00.000Z"],
+        [usedExpiredHash, "2026-05-02T18:22:00.000Z"],
+      ] as const) {
+        repo.insert({
+          tokenHash,
+          approvalId: `approval-${tokenHash}`,
+          action: "decline",
+          callbackNonce: "nonce-expire-issued",
+          target: { platform: "telegram", chatId: "-100123456" },
+          actor: { kind: "im" },
+          createdAt: "2026-05-02T18:00:00.000Z",
+          expiresAt,
+        });
+      }
+      repo.casUpdate(boundExpiredHash, "issued", "bound");
+      repo.casUpdate(usedExpiredHash, "issued", "bound");
+      repo.casUpdate(usedExpiredHash, "bound", "used");
+
+      expect(repo.pruneExpired("2026-05-02T18:30:00.000Z")).toEqual([
+        expect.objectContaining({ tokenHash: issuedExpiredHash, status: "expired" }),
+        expect.objectContaining({ tokenHash: boundExpiredHash, status: "expired" }),
+      ]);
+      expect(repo.findByHash(issuedExpiredHash)).toMatchObject({ status: "expired" });
+      expect(repo.findByHash(boundExpiredHash)).toMatchObject({ status: "expired" });
+      expect(repo.findByHash(usedExpiredHash)).toMatchObject({ status: "used" });
+    } finally {
+      db.close();
+    }
+  });
+
   it("revokes only flagged old issued tokens for stuck step-5 bind failures", () => {
     const db = openDatabase(":memory:");
     try {

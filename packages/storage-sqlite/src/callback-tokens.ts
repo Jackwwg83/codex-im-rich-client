@@ -344,8 +344,8 @@ export class CallbackTokenRepository {
         `
           WITH selected(token_hash) AS (
             SELECT token_hash
-              FROM callback_tokens
-             WHERE status = 'bound'
+             FROM callback_tokens
+             WHERE status IN ('issued', 'bound')
                AND expires_at < @now
              ORDER BY expires_at ASC, token_hash ASC
              LIMIT @limit
