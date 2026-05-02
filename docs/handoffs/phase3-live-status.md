@@ -1,23 +1,23 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, and JAC-49 / T18 inbound prompt routing complete.
-> **Handoff status:** JAC-49 complete: inbound messages pass `SecurityPolicy.checkUserAndChat`, route through `CommandRouter`, resolve `SessionRouter` bindings, and call `CodexRuntime` wrappers via the current `Supervisor` runtime. Bound prompts call `turnStart`, active-turn prompts call `turnSteer`, missing thread bindings create a thread before `turnStart`, `/stop` calls `turnInterrupt`, and `/cu` remains fail-closed before runtime. All 5 gates green. Next exact issue: JAC-50 / T19a-T19b startup binding restore and `/use` binding write-failure UX.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, and JAC-50 / T19a-T19b binding restore/write-failure UX complete.
+> **Handoff status:** JAC-50 complete: default daemon startup now wires SQLite `BindingRepository` into `SessionRouter`, so cached bindings rebuild from disk. `/use <project>` binds through `SessionRouter.bind` before acking, sends a user-visible `editText` acknowledgement, and reports storage write failure without optimistic cache mutation. All 5 gates green. Next exact issue: JAC-51 / T19c SIGTERM ordering and fail pending approvals as `transport_lost`.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-49 / T18** (inbound prompt routing through `SecurityPolicy`, `CommandRouter`, `SessionRouter`, and current `CodexRuntime`).
-- **Next exact task:** **JAC-50 / T19a-T19b** — startup binding restore and `/use` command binding write-failure UX; writes must remain D38 sync write-through.
+- **Active task:** None at this checkpoint. Last completed: **JAC-50 / T19a-T19b** (startup binding restore + `/use` D38 write-failure UX).
+- **Next exact task:** **JAC-51 / T19c** — SIGTERM ordering: pause inbound, fail pending approvals as `transport_lost`, drain, supervisor.stop, adapter.stop, storage.close.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **Latest code commit:** `7b80321` (`feat(daemon): T18 route inbound prompts`)
-- **Tag distance at latest code commit:** `phase-2-codex-reviewed-74-g7b80321`
+- **Latest code commit:** `a1ae894` (`feat(daemon): T19a-T19b restore and bind sessions`)
+- **Tag distance at latest code commit:** `phase-2-codex-reviewed-76-ga1ae894`
 - **Origin:** synced after each pushed checkpoint; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -91,6 +91,8 @@
 | `9d0ec9e` | T17.6-T17.14 / JAC-48 | `broker.resolve` error branches answer fail-closed without callback token mutation |
 | `d6288c4` | docs checkpoint | Refresh live-status for JAC-48 completion |
 | `7b80321` | T18 / JAC-49 | Inbound prompt routing through policy, CommandRouter, SessionRouter, and current CodexRuntime |
+| `74555ee` | docs checkpoint | Refresh live-status for JAC-49 completion |
+| `a1ae894` | T19a-T19b / JAC-50 | Default SQLite binding restore and `/use` write-failure UX without optimistic cache mutation |
 
 ## 3. Versions / pins
 
@@ -106,7 +108,7 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **852 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +132 from Phase 3 storage/config/core/channel/daemon prereqs) |
+| Tests | `pnpm test` | **855 passing + 1 skipped** across 76 test files (Phase 2 close: 720; +135 from Phase 3 storage/config/core/channel/daemon prereqs) |
 | Lint | `pnpm lint` | green (173 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
@@ -162,7 +164,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-50 / T19a-T19b**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-51 / T19c**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -201,4 +203,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-49 / T18**. Continue with **JAC-50 / T19a-T19b**, then the rest of **JAC-20** dependency order.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-50 / T19a-T19b**. Continue with **JAC-51 / T19c**, then the rest of **JAC-20** dependency order.
