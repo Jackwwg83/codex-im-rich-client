@@ -35,10 +35,29 @@ describe("Daemon skeleton (T14)", () => {
     expect(daemon.isStarted()).toBe(false);
   });
 
-  it("stores the future injection bag without invoking dependencies in T14", async () => {
-    const loadConfig = vi.fn();
-    const openStorage = vi.fn();
-    const createBroker = vi.fn();
+  it("runs startup steps 1-3 in strict order and leaves future dependencies untouched", async () => {
+    const order: string[] = [];
+    const config = { dataDir: "/tmp/codex-im" };
+    const storage = { path: "/tmp/codex-im/state.db" };
+    const broker = {
+      attach: vi.fn(() => {
+        order.push("broker.attach");
+      }),
+    };
+    const loadConfig = vi.fn(() => {
+      order.push("loadConfig");
+      return config;
+    });
+    const openStorage = vi.fn((receivedConfig: unknown) => {
+      order.push("openStorage");
+      expect(receivedConfig).toBe(config);
+      return storage;
+    });
+    const createBroker = vi.fn((ctx: { config: unknown; storage: unknown }) => {
+      order.push("createBroker");
+      expect(ctx).toEqual({ config, storage });
+      return broker;
+    });
     const createSecurityPolicy = vi.fn();
     const createSessionRouter = vi.fn();
     const createSupervisor = vi.fn();
@@ -56,11 +75,12 @@ describe("Daemon skeleton (T14)", () => {
     const daemon = new Daemon(options);
     expect(daemon.options).toBe(options);
     await daemon.start();
-    await daemon.stop();
 
-    expect(loadConfig).not.toHaveBeenCalled();
-    expect(openStorage).not.toHaveBeenCalled();
-    expect(createBroker).not.toHaveBeenCalled();
+    expect(order).toEqual(["loadConfig", "openStorage", "createBroker", "broker.attach"]);
+    expect(loadConfig).toHaveBeenCalledTimes(1);
+    expect(openStorage).toHaveBeenCalledTimes(1);
+    expect(createBroker).toHaveBeenCalledTimes(1);
+    expect(broker.attach).toHaveBeenCalledTimes(1);
     expect(createSecurityPolicy).not.toHaveBeenCalled();
     expect(createSessionRouter).not.toHaveBeenCalled();
     expect(createSupervisor).not.toHaveBeenCalled();

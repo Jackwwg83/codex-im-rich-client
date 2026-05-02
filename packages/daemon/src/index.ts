@@ -11,6 +11,6 @@
 // facade rule from @codex-im/protocol.
 
 export { Daemon } from "./daemon.js";
-export type { DaemonOptions } from "./daemon.js";
+export type { DaemonBroker, DaemonBrokerContext, DaemonOptions } from "./daemon.js";
 export { Supervisor } from "./supervisor.js";
 export type { SupervisorAudit, SupervisorOptions } from "./types.js";
