@@ -1,7 +1,7 @@
 # Phase 4 Live Status
 
 > Single source of truth for Phase 4 planning/implementation. Read first on compact / resume / context loss after Phase 3 tag `phase-3-telegram-mvp-complete`.
-> **Last updated:** 2026-05-02 — JAC-153 Lark text send/edit/reply landed.
+> **Last updated:** 2026-05-02 — JAC-154 Lark approval card rendering and sendCard landed.
 > **Handoff status:** Phase 3 is tagged and complete. Phase 4 implementation may proceed through the Linear queue; live Lark smoke remains env-gated.
 
 ---
@@ -10,11 +10,11 @@
 
 - **Phase:** Phase 4 — Feishu/Lark adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`.
-- **Active Linear issue:** JAC-154 — Phase4-T6 Lark approval card rendering and sendCard.
+- **Active Linear issue:** JAC-155 — Phase4-T7 Lark updateCard/status streaming.
 - **Parent Linear issue:** JAC-9 — Phase 4 backlog / Feishu-Lark adapter.
 - **Current branch:** `codex/phase-4-planning`.
 - **Base:** `phase-3-telegram-mvp-complete` (`83c6ef0` target commit).
-- **Next exact action:** implement JAC-154 with TDD: render/send approval card with opaque `wirePayload` only.
+- **Next exact action:** implement JAC-155 with TDD: update existing card by messageRef; no callbacks yet.
 
 ## 2. Current decision state
 
@@ -60,8 +60,8 @@
 | JAC-151 | T3 long connection lifecycle fake client | done |
 | JAC-152 | T4 message receive fixtures | done |
 | JAC-153 | T5 send/edit text/reply | done |
-| JAC-154 | T6 sendCard/card rendering | active next |
-| JAC-155 | T7 updateCard/status streaming | blocked by JAC-154 |
+| JAC-154 | T6 sendCard/card rendering | done |
+| JAC-155 | T7 updateCard/status streaming | active next |
 | JAC-156 | T8a callback payload codec/extraction | ready after queue reaches T8a |
 | JAC-157 | T8b action to InboundAction mapping | blocked by JAC-156 |
 | JAC-158 | T8c ack/fail-closed behavior | blocked by JAC-156/JAC-157 |
@@ -78,7 +78,7 @@ No Phase 4 code has landed. Last Phase 3 tag target gates:
 |---|---|
 | `pnpm typecheck` | green: 13 of 14 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 104 files, 997 passing, 1 skipped |
+| `pnpm test` | green: 105 files, 1002 passing, 1 skipped |
 | `pnpm lint` | green: 229 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 

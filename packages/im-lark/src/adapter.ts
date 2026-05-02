@@ -9,6 +9,7 @@ import type {
   Target,
 } from "@codex-im/channel-core";
 import { LARK_CAPABILITIES } from "./capabilities.js";
+import { type LarkApprovalCardJson, renderLarkApprovalCard } from "./card.js";
 import { type LarkRawMessageEvent, normalizeLarkRawMessage } from "./message.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
@@ -29,6 +30,7 @@ export interface LarkMessageClientLike {
     replyToMessageId?: string;
   }): Promise<{ messageId: string }>;
   editText(input: { messageRef: MessageRef; text: string }): Promise<void>;
+  sendCard?(input: { target: Target; card: LarkApprovalCardJson }): Promise<{ messageId: string }>;
 }
 
 export interface LarkChannelAdapterOptions {
@@ -93,7 +95,18 @@ export class LarkChannelAdapter implements ChannelAdapter {
   }
 
   async sendCard(_target: Target, _card: ApprovalCardInput): Promise<SendCardResult> {
-    throw this.#notImplemented("sendCard", "JAC-154");
+    this.#assertStarted("sendCard");
+    const messageClient = this.#messageClient("sendCard");
+    if (messageClient.sendCard === undefined) {
+      throw new Error("LarkChannelAdapter.sendCard requires messageClient.sendCard");
+    }
+    const card = renderLarkApprovalCard(_card);
+    try {
+      const sent = await messageClient.sendCard({ target: _target, card });
+      return { messageRef: { target: _target, messageId: sent.messageId }, callbackNonce: "" };
+    } catch (error) {
+      throw new Error(`LarkChannelAdapter.sendCard failed: ${describeError(error)}`);
+    }
   }
 
   async updateCard(_ref: MessageRef, _card: ApprovalCardInput): Promise<void> {
