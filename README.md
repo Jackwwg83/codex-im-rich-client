@@ -15,7 +15,7 @@
 
 **Phase 4 状态**：✅ 完成（2026-05-02）。Feishu/Lark native adapter 已通过 JAC-162 review/handoff/tag gate，包含 long-connection receive、text/card send/update、opaque callback action、fake smoke、env-gated live smoke。**Phase 4 closeout：[`docs/handoffs/phase4-live-status.md`](docs/handoffs/phase4-live-status.md)，Phase 4 → Phase 5 交接见 [`docs/handoffs/2026-05-02-phase4-to-phase5.md`](docs/handoffs/2026-05-02-phase4-to-phase5.md)。**
 
-**Phase 5 状态**：🟡 进行中（2026-05-02）。DingTalk Stream adapter 已完成 JAC-78 plan review gate、JAC-79 `@codex-im/im-dingtalk` skeleton/boundary tests、JAC-80 Stream lifecycle fake test、JAC-81 message receive fixtures、JAC-82 card send/update；当前 SOT：[`docs/handoffs/phase5-live-status.md`](docs/handoffs/phase5-live-status.md)，计划：[`docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`](docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md)。
+**Phase 5 状态**：🟡 进行中（2026-05-02）。DingTalk Stream adapter 已完成 JAC-78 plan review gate、JAC-79 `@codex-im/im-dingtalk` skeleton/boundary tests、JAC-80 Stream lifecycle fake test、JAC-81 message receive fixtures、JAC-82 card send/update、JAC-83 callback codec/parser；当前 SOT：[`docs/handoffs/phase5-live-status.md`](docs/handoffs/phase5-live-status.md)，计划：[`docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`](docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md)。
 
 **Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
 - `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
@@ -43,7 +43,7 @@ pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol
 
 # 3. 全量验证
 pnpm typecheck                 # all 14 packages
-pnpm test                      # 1115 tests pass + 1 skipped (unit + contract)
+pnpm test                      # 1154 tests pass + 1 skipped (unit + contract)
 pnpm lint                      # biome check
 
 # 4. 操作员手动 smoke (非默认测试)

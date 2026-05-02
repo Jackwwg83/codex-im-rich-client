@@ -1,6 +1,12 @@
 export { DingTalkChannelAdapter } from "./adapter.js";
 export type { DingTalkCardClientLike, DingTalkChannelAdapterOptions } from "./adapter.js";
 export {
+  extractDingTalkActionWirePayload,
+  extractDingTalkCardCallbackWirePayload,
+  isDingTalkActionWirePayload,
+  redactDingTalkActionPayloadForLog,
+} from "./callback-codec.js";
+export {
   DINGTALK_CARD_CALLBACK_TYPE,
   DINGTALK_CARD_MAX_CONTENT_BYTES,
   assertDingTalkApprovalCardWithinLimits,

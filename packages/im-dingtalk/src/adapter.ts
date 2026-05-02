@@ -8,6 +8,7 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
+import { extractDingTalkCardCallbackWirePayload } from "./callback-codec.js";
 import { DINGTALK_CAPABILITIES } from "./capabilities.js";
 import { type DingTalkApprovalCardJson, renderDingTalkApprovalCard } from "./card.js";
 import {
@@ -197,6 +198,7 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     if (!this.#acceptInbound()) {
       return;
     }
+    extractDingTalkCardCallbackWirePayload(_event);
   }
 
   #acceptInbound(): boolean {

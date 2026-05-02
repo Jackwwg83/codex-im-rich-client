@@ -1,4 +1,5 @@
 import type { ChannelAdapter } from "@codex-im/channel-core";
+import { isDingTalkActionWirePayload } from "./callback-codec.js";
 
 export const DINGTALK_CARD_CALLBACK_TYPE = "STREAM";
 export const DINGTALK_CARD_MAX_CONTENT_BYTES = 30 * 1024;
@@ -58,7 +59,7 @@ function buttonForAction(action: ApprovalActionInput): DingTalkApprovalCardButto
   if (wirePayload === undefined) {
     throw new Error("DingTalkChannelAdapter.sendCard requires action.wirePayload");
   }
-  if (!isOpaqueV1WirePayload(wirePayload)) {
+  if (!isDingTalkActionWirePayload(wirePayload)) {
     throw new Error("DingTalkChannelAdapter.sendCard requires v1 opaque wirePayload");
   }
   return {
@@ -66,10 +67,6 @@ function buttonForAction(action: ApprovalActionInput): DingTalkApprovalCardButto
     type: typeForAction(action.kind),
     value: wirePayload,
   };
-}
-
-function isOpaqueV1WirePayload(value: string): boolean {
-  return /^v1:[A-Za-z0-9_-]{1,61}$/.test(value);
 }
 
 function labelForAction(kind: ApprovalActionInput["kind"]): string {
