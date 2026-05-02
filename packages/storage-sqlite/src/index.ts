@@ -81,3 +81,16 @@ export {
   type AuditRepositoryOptions,
   type AuditUnavailableMarker,
 } from "./audit.js";
+
+// T6d (Phase 3) — callback_tokens repository exports.
+export {
+  CallbackTokenRepository,
+  type CallbackMessageRef,
+  type CallbackTokenAction,
+  type CallbackTokenActor,
+  type CallbackTokenCasFields,
+  type CallbackTokenInsert,
+  type CallbackTokenRecord,
+  type CallbackTokenStatus,
+  type CallbackTokenTarget,
+} from "./callback-tokens.js";
