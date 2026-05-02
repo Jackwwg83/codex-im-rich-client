@@ -67,6 +67,10 @@ export class SessionRouter {
 
   constructor(options: SessionRouterOptions = {}) {
     this.#bindings = options.bindings;
+    for (const record of options.bindings?.list?.() ?? []) {
+      const route = routeFromRecord(record);
+      this.#cache.set(targetKey(route.target), route);
+    }
   }
 
   resolve(target: Target): SessionRoute {

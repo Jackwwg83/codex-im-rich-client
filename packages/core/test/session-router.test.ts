@@ -11,11 +11,23 @@ import type { Target } from "../src/types.js";
 const TARGET: Target = { platform: "telegram", chatId: "-1001" };
 
 class FakeBindingRepository implements SessionBindingRepository {
+  lists = 0;
   readonly reads: Target[] = [];
   readonly writes: Array<SessionBindingInput & { target: Target }> = [];
+  readonly list?: () => SessionThreadBindingRecord[];
   readonly #records = new Map<string, SessionThreadBindingRecord>();
 
-  constructor(private readonly onBeforeWrite?: () => void) {}
+  constructor(
+    private readonly onBeforeWrite?: () => void,
+    options: { withList?: boolean } = {},
+  ) {
+    if (options.withList === true) {
+      this.list = () => {
+        this.lists += 1;
+        return [...this.#records.values()];
+      };
+    }
+  }
 
   upsert(input: SessionBindingInput & { target: Target }): SessionThreadBindingRecord {
     this.onBeforeWrite?.();
@@ -195,5 +207,34 @@ describe("SessionRouter skeleton (T13a / D38)", () => {
       codexThreadId: "thread_123",
     } satisfies SessionRoute);
     expect(bindings.reads).toEqual([TARGET]);
+  });
+
+  it("rebuilds the memory cache from repository records on startup", () => {
+    const bindings = new FakeBindingRepository(undefined, { withList: true });
+    bindings.seed({
+      id: "tb_seed",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread_123",
+      defaultModel: "gpt-5.5",
+      createdAt: "2026-05-02T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    });
+
+    const router = new SessionRouter({ bindings });
+    bindings.clear();
+
+    expect(router.resolve(TARGET)).toEqual({
+      kind: "bound",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread_123",
+      defaultModel: "gpt-5.5",
+    } satisfies SessionRoute);
+    expect(bindings.lists).toBe(1);
+    expect(bindings.reads).toEqual([]);
+    expect(bindings.writes).toEqual([]);
   });
 });
