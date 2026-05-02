@@ -11,6 +11,7 @@ import type { Target } from "../src/types.js";
 const TARGET: Target = { platform: "telegram", chatId: "-1001" };
 
 class FakeBindingRepository implements SessionBindingRepository {
+  readonly reads: Target[] = [];
   readonly writes: Array<SessionBindingInput & { target: Target }> = [];
   readonly #records = new Map<string, SessionThreadBindingRecord>();
 
@@ -36,7 +37,16 @@ class FakeBindingRepository implements SessionBindingRepository {
   }
 
   findByTarget(target: Target): SessionThreadBindingRecord | undefined {
+    this.reads.push(target);
     return this.#records.get(JSON.stringify(target));
+  }
+
+  seed(record: SessionThreadBindingRecord): void {
+    this.#records.set(JSON.stringify(record.target), record);
+  }
+
+  clear(): void {
+    this.#records.clear();
   }
 }
 
@@ -131,5 +141,59 @@ describe("SessionRouter skeleton (T13a / D38)", () => {
         activeTurnId: "turn_1",
       },
     ]);
+  });
+
+  it("resolves from memory cache without hitting the repository", () => {
+    const bindings = new FakeBindingRepository();
+    const router = new SessionRouter({ bindings });
+
+    router.bind(TARGET, {
+      projectId: "web",
+      cwd: "/repo/web",
+    });
+
+    bindings.clear();
+    bindings.reads.length = 0;
+
+    expect(router.resolve(TARGET)).toEqual({
+      kind: "bound",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+    } satisfies SessionRoute);
+    expect(bindings.reads).toEqual([]);
+  });
+
+  it("falls back to the repository on cache miss and caches the result", () => {
+    const bindings = new FakeBindingRepository();
+    bindings.seed({
+      id: "tb_seed",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread_123",
+      createdAt: "2026-05-02T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    });
+    const router = new SessionRouter({ bindings });
+
+    expect(router.resolve(TARGET)).toEqual({
+      kind: "bound",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread_123",
+    } satisfies SessionRoute);
+
+    bindings.clear();
+
+    expect(router.resolve(TARGET)).toEqual({
+      kind: "bound",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread_123",
+    } satisfies SessionRoute);
+    expect(bindings.reads).toEqual([TARGET]);
   });
 });

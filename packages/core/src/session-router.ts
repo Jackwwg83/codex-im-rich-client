@@ -76,7 +76,13 @@ export class SessionRouter {
     }
 
     const record = this.#bindings?.findByTarget(target);
-    return record === undefined ? { kind: "unbound", target } : routeFromRecord(record);
+    if (record === undefined) {
+      return { kind: "unbound", target };
+    }
+
+    const route = routeFromRecord(record);
+    this.#cache.set(targetKey(target), route);
+    return route;
   }
 
   bind(target: Target, input: SessionBindingInput): SessionRoute {
