@@ -46,5 +46,10 @@
 //   CallbackTokenRepository     — D34 callback_tokens with Target hydration (T6d-f)
 //   EventLogRepository          — codex notification log (deferred to Phase 4)
 
-// T2a (Phase 3) — first real export.
-export { openDatabase, type DatabaseHandle } from "./database.js";
+// T2a + T2b (Phase 3) — database lifecycle exports.
+export {
+  openDatabase,
+  runMigrations,
+  type DatabaseHandle,
+  type MigrationRunResult,
+} from "./database.js";
