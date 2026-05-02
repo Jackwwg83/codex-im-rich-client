@@ -179,6 +179,15 @@ export class Supervisor {
   }
 
   /**
+   * Return the current runtime generation for production daemon routing.
+   * The daemon uses this to send IM prompts through CodexRuntime wrappers
+   * without owning the app-server subprocess lifecycle itself.
+   */
+  currentRuntime(): CodexRuntime | null {
+    return this.#currentRuntime;
+  }
+
+  /**
    * @internal — paired with currentClientForTest(). Tests assert that
    * #currentTransport identity changes per generation.
    */

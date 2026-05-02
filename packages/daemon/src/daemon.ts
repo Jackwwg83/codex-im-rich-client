@@ -4,6 +4,7 @@ import {
   type ApprovalActor,
   type ApprovalUiAction,
   type BindResult,
+  type CommandRouterResult,
   type IMRoutableApprovalMethod,
   IM_ROUTABLE_APPROVAL_METHODS,
   type PendingApprovalSnapshot,
@@ -13,7 +14,10 @@ import {
   type SecurityPolicyApprovalDestinationDecision,
   type SecurityPolicySender,
   type SecurityPolicyUserChatDecision,
+  type SessionBindingInput,
+  type SessionRoute,
   type Target,
+  routeInboundCommand,
 } from "@codex-im/core";
 import { type ApprovalCard, projectApprovalCard } from "@codex-im/render";
 import {
@@ -125,6 +129,61 @@ export interface DaemonSendCardResult {
 
 export interface DaemonUserChatPolicy {
   checkUserAndChat(target: Target, sender: SecurityPolicySender): SecurityPolicyUserChatDecision;
+}
+
+interface DaemonSessionRouter {
+  resolve(target: Target): SessionRoute;
+  bind?(target: Target, input: SessionBindingInput): SessionRoute;
+  bindThread?(target: Target, codexThreadId: string): SessionRoute;
+}
+
+interface DaemonTextInput {
+  readonly type: "text";
+  readonly text: string;
+  readonly text_elements: [];
+}
+
+interface DaemonCodexRuntime {
+  threadStart(params: DaemonThreadStartParams): MaybePromise<DaemonThreadStartResult>;
+  turnStart(params: DaemonTurnStartParams): MaybePromise<DaemonTurnStartResult>;
+  turnSteer(params: DaemonTurnSteerParams): MaybePromise<unknown>;
+  turnInterrupt?(params: DaemonTurnInterruptParams): MaybePromise<unknown>;
+}
+
+interface DaemonRuntimeProvider {
+  currentRuntime(): DaemonCodexRuntime | null | undefined;
+}
+
+interface DaemonThreadStartParams {
+  readonly cwd?: string | null;
+  readonly model?: string | null;
+}
+
+interface DaemonThreadStartResult {
+  readonly thread?: { readonly id?: string };
+}
+
+interface DaemonTurnStartParams {
+  readonly threadId: string;
+  readonly input: DaemonTextInput[];
+  readonly cwd?: string | null;
+  readonly model?: string | null;
+}
+
+interface DaemonTurnStartResult {
+  readonly turn?: { readonly id?: string };
+  readonly turnId?: string;
+}
+
+interface DaemonTurnSteerParams {
+  readonly threadId: string;
+  readonly input: DaemonTextInput[];
+  readonly expectedTurnId: string;
+}
+
+interface DaemonTurnInterruptParams {
+  readonly threadId: string;
+  readonly turnId: string;
 }
 
 export interface DaemonOptions {
@@ -389,7 +448,35 @@ export class Daemon {
     void this.#handleInboundAction(action);
   }
 
-  #handleMessage(_message: unknown): void {}
+  #handleMessage(message: unknown): void {
+    void this.#handleInboundMessage(message);
+  }
+
+  async #handleInboundMessage(message: unknown): Promise<void> {
+    try {
+      const inbound = this.#inboundMessage(message);
+      if (inbound === undefined) {
+        return;
+      }
+
+      const policy = this.#userChatPolicy(this.#securityPolicy);
+      if (policy?.checkUserAndChat(inbound.target, inbound.sender)?.kind !== "allow") {
+        return;
+      }
+
+      const routed = routeInboundCommand(inbound.text);
+      if (routed.kind === "prompt") {
+        await this.#routePrompt(inbound.target, routed.text);
+        return;
+      }
+
+      if (routed.kind === "command") {
+        await this.#routeCommand(inbound.target, routed);
+      }
+    } catch {
+      // Inbound message handling must fail closed without destabilizing daemon subscriptions.
+    }
+  }
 
   #handleSignal(): void {
     void this.stop();
@@ -648,6 +735,143 @@ export class Daemon {
     return value as DaemonUserChatPolicy;
   }
 
+  async #routePrompt(target: Target, text: string): Promise<void> {
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const runtime = this.#currentRuntime();
+    if (sessionRouter === undefined || runtime === undefined) {
+      return;
+    }
+
+    let route = sessionRouter.resolve(target);
+    if (route.kind !== "bound") {
+      return;
+    }
+
+    if (route.codexThreadId === undefined) {
+      const startedThread = await runtime.threadStart(this.#threadStartParams(route));
+      const threadId = this.#threadId(startedThread);
+      if (threadId === undefined || sessionRouter.bindThread === undefined) {
+        return;
+      }
+      route = sessionRouter.bindThread(target, threadId);
+    }
+
+    if (route.kind !== "bound" || route.codexThreadId === undefined) {
+      return;
+    }
+
+    const input = textInput(text);
+    if (route.activeTurnId !== undefined) {
+      await runtime.turnSteer({
+        threadId: route.codexThreadId,
+        input,
+        expectedTurnId: route.activeTurnId,
+      });
+      return;
+    }
+
+    const startedTurn = await runtime.turnStart({
+      threadId: route.codexThreadId,
+      input,
+      cwd: route.cwd,
+      ...(route.defaultModel === undefined ? {} : { model: route.defaultModel }),
+    });
+    const activeTurnId = this.#turnId(startedTurn);
+    if (activeTurnId !== undefined) {
+      this.#bindActiveTurn(sessionRouter, route, activeTurnId);
+    }
+  }
+
+  async #routeCommand(
+    target: Target,
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    if (command.name !== "stop") {
+      return;
+    }
+
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const runtime = this.#currentRuntime();
+    if (sessionRouter === undefined || runtime?.turnInterrupt === undefined) {
+      return;
+    }
+
+    const route = sessionRouter.resolve(target);
+    if (
+      route.kind !== "bound" ||
+      route.codexThreadId === undefined ||
+      route.activeTurnId === undefined
+    ) {
+      return;
+    }
+
+    await runtime.turnInterrupt({
+      threadId: route.codexThreadId,
+      turnId: route.activeTurnId,
+    });
+  }
+
+  #threadStartParams(route: Extract<SessionRoute, { kind: "bound" }>): DaemonThreadStartParams {
+    return {
+      cwd: route.cwd,
+      ...(route.defaultModel === undefined ? {} : { model: route.defaultModel }),
+    };
+  }
+
+  #bindActiveTurn(
+    sessionRouter: DaemonSessionRouter,
+    route: Extract<SessionRoute, { kind: "bound" }>,
+    activeTurnId: string,
+  ): void {
+    if (sessionRouter.bind === undefined || route.codexThreadId === undefined) {
+      return;
+    }
+
+    sessionRouter.bind(route.target, {
+      projectId: route.projectId,
+      cwd: route.cwd,
+      codexThreadId: route.codexThreadId,
+      ...(route.defaultModel === undefined ? {} : { defaultModel: route.defaultModel }),
+      activeTurnId,
+    });
+  }
+
+  #threadId(result: DaemonThreadStartResult): string | undefined {
+    return typeof result.thread?.id === "string" ? result.thread.id : undefined;
+  }
+
+  #turnId(result: DaemonTurnStartResult): string | undefined {
+    if (typeof result.turn?.id === "string") {
+      return result.turn.id;
+    }
+    return typeof result.turnId === "string" ? result.turnId : undefined;
+  }
+
+  #currentRuntime(): DaemonCodexRuntime | undefined {
+    const provider = this.#runtimeProvider(this.#supervisor);
+    return provider?.currentRuntime() ?? undefined;
+  }
+
+  #runtimeProvider(value: unknown): DaemonRuntimeProvider | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    if (typeof (value as Partial<DaemonRuntimeProvider>).currentRuntime !== "function") {
+      return undefined;
+    }
+    return value as DaemonRuntimeProvider;
+  }
+
+  #daemonSessionRouter(value: unknown): DaemonSessionRouter | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    if (typeof (value as Partial<DaemonSessionRouter>).resolve !== "function") {
+      return undefined;
+    }
+    return value as DaemonSessionRouter;
+  }
+
   #inboundAction(action: unknown):
     | {
         rawCallbackData: string;
@@ -680,6 +904,29 @@ export class Daemon {
       ...(target === undefined ? {} : { target }),
       ...(sender === undefined ? {} : { sender }),
     };
+  }
+
+  #inboundMessage(message: unknown):
+    | {
+        target: Target;
+        sender: SecurityPolicySender;
+        text: string;
+      }
+    | undefined {
+    if (typeof message !== "object" || message === null) {
+      return undefined;
+    }
+    const partial = message as Partial<{
+      target: unknown;
+      sender: unknown;
+      text: unknown;
+    }>;
+    const target = this.#daemonTarget(partial.target);
+    const sender = this.#daemonSender(partial.sender);
+    if (target === undefined || sender === undefined || typeof partial.text !== "string") {
+      return undefined;
+    }
+    return { target, sender, text: partial.text };
   }
 
   #daemonMessageRef(value: unknown): DaemonMessageRef | undefined {
@@ -754,4 +1001,8 @@ function generateRawCallbackToken(): string {
     }
   }
   return out.slice(0, 16);
+}
+
+function textInput(text: string): DaemonTextInput[] {
+  return [{ type: "text", text, text_elements: [] }];
 }

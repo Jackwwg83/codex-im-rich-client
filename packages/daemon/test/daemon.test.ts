@@ -12,6 +12,10 @@ import { Daemon, type DaemonOptions, type DaemonSignal } from "../src/index.js";
 
 const SRC_DIR = join(import.meta.dirname, "../src");
 
+async function flushDaemonHandlers(): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
 function readSourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -435,6 +439,357 @@ describe("Daemon skeleton (T14)", () => {
     signalHandlers.get("SIGTERM")?.();
 
     expect(daemon.isStarted()).toBe(false);
+  });
+
+  it("routes an allowed bound inbound prompt to runtime.turnStart and records the active turn", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+      defaultModel: "gpt-test",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => route),
+      bind: vi.fn(),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-1" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "ship the T18 slice",
+      messageRef: { target, messageId: "msg-1" },
+      receivedAt: new Date("2026-05-02T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(sessionRouter.resolve).toHaveBeenCalledWith(target);
+    expect(runtime.threadStart).not.toHaveBeenCalled();
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      input: [{ type: "text", text: "ship the T18 slice", text_elements: [] }],
+      cwd: "/repo/web",
+      model: "gpt-test",
+    });
+    expect(sessionRouter.bind).toHaveBeenCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+      defaultModel: "gpt-test",
+      activeTurnId: "turn-1",
+    });
+  });
+
+  it("routes an allowed prompt with an active turn to runtime.turnSteer", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-1",
+        activeTurnId: "turn-1",
+      })),
+      bind: vi.fn(),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(() => ({ turnId: "turn-1" })),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "continue that",
+      messageRef: { target, messageId: "msg-2" },
+      receivedAt: new Date("2026-05-02T00:00:01.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnSteer).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      input: [{ type: "text", text: "continue that", text_elements: [] }],
+      expectedTurnId: "turn-1",
+    });
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(sessionRouter.bind).not.toHaveBeenCalled();
+  });
+
+  it("starts a Codex thread before turnStart when the target has no thread binding", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const initialRoute = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+    };
+    const threadRoute = {
+      ...initialRoute,
+      codexThreadId: "thread-created",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => initialRoute),
+      bindThread: vi.fn(() => threadRoute),
+      bind: vi.fn(),
+    };
+    const runtime = {
+      threadStart: vi.fn(() => ({ thread: { id: "thread-created" } })),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-created" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "start fresh",
+      messageRef: { target, messageId: "msg-3" },
+      receivedAt: new Date("2026-05-02T00:00:02.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadStart).toHaveBeenCalledWith({ cwd: "/repo/web" });
+    expect(sessionRouter.bindThread).toHaveBeenCalledWith(target, "thread-created");
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-created",
+      input: [{ type: "text", text: "start fresh", text_elements: [] }],
+      cwd: "/repo/web",
+    });
+    expect(sessionRouter.bind).toHaveBeenCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-created",
+      activeTurnId: "turn-created",
+    });
+  });
+
+  it("fails closed before routing when SecurityPolicy denies the inbound sender", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-denied" };
+    const sender = { userId: "u-mallory" };
+    const sessionRouter = { resolve: vi.fn() };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "deny" as const, reason: "user_not_allowed" })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "should not route",
+      messageRef: { target, messageId: "msg-denied" },
+      receivedAt: new Date("2026-05-02T00:00:03.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(sessionRouter.resolve).not.toHaveBeenCalled();
+    expect(runtime.threadStart).not.toHaveBeenCalled();
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(runtime.turnSteer).not.toHaveBeenCalled();
+  });
+
+  it("rejects Phase 3 Computer Use commands before SessionRouter or runtime", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = { resolve: vi.fn() };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/cu open browser",
+      messageRef: { target, messageId: "msg-cu" },
+      receivedAt: new Date("2026-05-02T00:00:04.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(sessionRouter.resolve).not.toHaveBeenCalled();
+    expect(runtime.threadStart).not.toHaveBeenCalled();
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(runtime.turnSteer).not.toHaveBeenCalled();
+  });
+
+  it("routes /stop to turnInterrupt when the session has an active turn", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-1",
+        activeTurnId: "turn-1",
+      })),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(() => ({})),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/stop",
+      messageRef: { target, messageId: "msg-stop" },
+      receivedAt: new Date("2026-05-02T00:00:05.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnInterrupt).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(runtime.turnSteer).not.toHaveBeenCalled();
   });
 
   it("auto-declines policy-denied pending approvals through broker.resolve after binding", async () => {
