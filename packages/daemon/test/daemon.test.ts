@@ -594,6 +594,7 @@ describe("Daemon skeleton (T14)", () => {
       start: vi.fn(),
       sendCard: vi.fn(() => {
         order.push("sendCard");
+        return { messageRef: { target, messageId: "msg-tokenized" }, callbackNonce: "legacy" };
       }),
     };
     const callbackTokenRepository = {
@@ -675,6 +676,10 @@ describe("Daemon skeleton (T14)", () => {
       start: vi.fn(),
       sendCard: vi.fn(() => {
         order.push("sendCard");
+        return {
+          messageRef: { target, messageId: "msg-bind-before-send" },
+          callbackNonce: "legacy",
+        };
       }),
     };
     const broker = {
@@ -721,13 +726,13 @@ describe("Daemon skeleton (T14)", () => {
     pendingHandler?.(snapshot);
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(order).toEqual(["insert:allow_once", "insert:decline", "bindActorPolicy"]);
+    expect(order).toEqual(["insert:allow_once", "insert:decline", "bindActorPolicy", "sendCard"]);
     expect(broker.bindActorPolicy).toHaveBeenCalledWith(snapshot.id, {
       allowedActors: [actor],
       target,
       callbackNonce: "nonce-bind-before-send",
     });
-    expect(adapter.sendCard).not.toHaveBeenCalled();
+    expect(adapter.sendCard).toHaveBeenCalledTimes(1);
     expect(broker.resolve).not.toHaveBeenCalled();
   });
 
@@ -759,6 +764,7 @@ describe("Daemon skeleton (T14)", () => {
       start: vi.fn(),
       sendCard: vi.fn(() => {
         order.push("sendCard");
+        return { messageRef: { target, messageId: "msg-wire-payload" }, callbackNonce: "legacy" };
       }),
     };
     const broker = {
@@ -816,6 +822,7 @@ describe("Daemon skeleton (T14)", () => {
       "insert:abort",
       "bindActorPolicy",
       "cardReady",
+      "sendCard",
     ]);
     expect(readyCards).toHaveLength(1);
     expect(readyCards[0]?.target).toEqual(target);
@@ -835,7 +842,187 @@ describe("Daemon skeleton (T14)", () => {
     expect(JSON.stringify(inserted)).not.toContain("QRSTUVWXYZ234567");
     expect(JSON.stringify(inserted)).not.toContain("ABCDEFGH234567AA");
     expect(JSON.stringify(inserted)).not.toContain("QRSTUVWXABCDEFGH");
-    expect(adapter.sendCard).not.toHaveBeenCalled();
+    expect(adapter.sendCard).toHaveBeenCalledWith(target, readyCards[0]?.card);
+  });
+
+  it("sends the rendered card and binds issued token rows to the returned message ref", async () => {
+    const order: string[] = [];
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const actor = { kind: "im" as const, platform: "telegram", userId: "u-alice" };
+    const rawTokens = [
+      "ABCDEFGHIJKLMNOP",
+      "QRSTUVWXYZ234567",
+      "ABCDEFGH234567AA",
+      "QRSTUVWXABCDEFGH",
+    ];
+    const snapshot: PendingApprovalSnapshot = {
+      id: "approval-send-and-bind",
+      appServerRequestId: 9006,
+      method: "item/fileChange/requestApproval",
+      params: { changes: [{ path: "src/app.ts" }] },
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-02T00:30:00.000Z"),
+    };
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      start: vi.fn(),
+      sendCard: vi.fn((_cardTarget: typeof target, card: ApprovalCard) => {
+        order.push("sendCard");
+        expect(card.actions.every((action) => action.wirePayload?.startsWith("v1:"))).toBe(true);
+        return {
+          messageRef: { target, messageId: "msg-send-and-bind" },
+          callbackNonce: "legacy-adapter-nonce",
+        };
+      }),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(() => {
+        order.push("bindActorPolicy");
+        expect(adapter.sendCard).not.toHaveBeenCalled();
+        return { kind: "ok" as const };
+      }),
+      resolve: vi.fn(),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn((input: CallbackTokenInsert) => {
+        order.push(`insert:${input.action}`);
+        return { ...input, status: input.status ?? "issued" };
+      }),
+      casUpdate: vi.fn(
+        (tokenHash: string, fromStatus: string, toStatus: string, fields: unknown) => {
+          order.push(`cas:${tokenHash}:${fromStatus}->${toStatus}`);
+          return { tokenHash, status: toStatus, fields };
+        },
+      ),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkApprovalDestination: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      resolveApprovalAllowedActors: vi.fn(() => [actor]),
+      callbackTokenRepository,
+      generateCallbackNonce: () => "nonce-send-and-bind",
+      generateRawCallbackToken: () => rawTokens.shift() as string,
+      now: () => new Date("2026-05-02T00:00:02.000Z"),
+    });
+
+    await daemon.start();
+    pendingHandler?.(snapshot);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const tokenHashes = [
+      hashCallbackToken("ABCDEFGHIJKLMNOP"),
+      hashCallbackToken("QRSTUVWXYZ234567"),
+      hashCallbackToken("ABCDEFGH234567AA"),
+      hashCallbackToken("QRSTUVWXABCDEFGH"),
+    ];
+    expect(order).toEqual([
+      "insert:allow_once",
+      "insert:allow_session",
+      "insert:decline",
+      "insert:abort",
+      "bindActorPolicy",
+      "sendCard",
+      `cas:${tokenHashes[0]}:issued->bound`,
+      `cas:${tokenHashes[1]}:issued->bound`,
+      `cas:${tokenHashes[2]}:issued->bound`,
+      `cas:${tokenHashes[3]}:issued->bound`,
+    ]);
+    expect(callbackTokenRepository.casUpdate).toHaveBeenCalledTimes(4);
+    for (const tokenHash of tokenHashes) {
+      expect(callbackTokenRepository.casUpdate).toHaveBeenCalledWith(tokenHash, "issued", "bound", {
+        messageRef: { chatId: target.chatId, messageId: "msg-send-and-bind" },
+      });
+    }
+    expect(broker.resolve).not.toHaveBeenCalled();
+  });
+
+  it("leaves issued token rows untouched when sendCard throws", async () => {
+    const order: string[] = [];
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const actor = { kind: "im" as const, platform: "telegram", userId: "u-alice" };
+    const rawTokens = ["ABCDEFGHIJKLMNOP", "QRSTUVWXYZ234567"];
+    const snapshot: PendingApprovalSnapshot = {
+      id: "approval-send-failure",
+      appServerRequestId: 9007,
+      method: "item/execCommand/requestApproval",
+      params: {},
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-02T00:30:00.000Z"),
+    };
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      start: vi.fn(),
+      sendCard: vi.fn(() => {
+        order.push("sendCard");
+        throw new Error("remote send failed");
+      }),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(() => {
+        order.push("bindActorPolicy");
+        return { kind: "ok" as const };
+      }),
+      resolve: vi.fn(),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn((input: CallbackTokenInsert) => {
+        order.push(`insert:${input.action}`);
+        return { ...input, status: input.status ?? "issued" };
+      }),
+      casUpdate: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkApprovalDestination: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      resolveApprovalActions: vi.fn(() => ["allow_once", "decline"] as const),
+      resolveApprovalAllowedActors: vi.fn(() => [actor]),
+      callbackTokenRepository,
+      generateCallbackNonce: () => "nonce-send-failure",
+      generateRawCallbackToken: () => rawTokens.shift() as string,
+      now: () => new Date("2026-05-02T00:00:02.000Z"),
+    });
+
+    await daemon.start();
+    pendingHandler?.(snapshot);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(order).toEqual(["insert:allow_once", "insert:decline", "bindActorPolicy", "sendCard"]);
+    expect(callbackTokenRepository.casUpdate).not.toHaveBeenCalled();
+    expect(broker.resolve).not.toHaveBeenCalled();
   });
 
   it.each([

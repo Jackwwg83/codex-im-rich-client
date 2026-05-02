@@ -14,8 +14,10 @@ import {
 import { type ApprovalCard, projectApprovalCard } from "@codex-im/render";
 import {
   type CallbackTokenAction,
+  type CallbackTokenCasFields,
   type CallbackTokenInsert,
   type CallbackTokenRecord,
+  type CallbackTokenStatus,
   hashCallbackToken,
 } from "@codex-im/storage-sqlite";
 
@@ -57,6 +59,7 @@ export interface DaemonAdapterContext extends DaemonSupervisorContext {
 export interface DaemonAdapter {
   onAction(handler: (action: unknown) => void): Unsubscribe;
   onMessage(handler: (message: unknown) => void): Unsubscribe;
+  sendCard?(target: Target, card: ApprovalCard): MaybePromise<DaemonSendCardResult>;
   start?(): MaybePromise<void>;
   stop?(): MaybePromise<void>;
 }
@@ -70,6 +73,12 @@ export interface DaemonApprovalDestinationPolicy {
 
 export interface DaemonCallbackTokenRepository {
   insert(input: CallbackTokenInsert): CallbackTokenRecord | unknown;
+  casUpdate?(
+    tokenHash: string,
+    fromStatus: CallbackTokenStatus,
+    toStatus: CallbackTokenStatus,
+    fields?: CallbackTokenCasFields,
+  ): CallbackTokenRecord | unknown;
 }
 
 export interface DaemonIssuedCallbackToken {
@@ -81,6 +90,16 @@ export interface DaemonIssuedCallbackToken {
 export interface DaemonIssuedCallbackTokenBatch {
   readonly callbackNonce: string;
   readonly tokens: readonly DaemonIssuedCallbackToken[];
+}
+
+export interface DaemonMessageRef {
+  readonly target: Target;
+  readonly messageId: string;
+}
+
+export interface DaemonSendCardResult {
+  readonly messageRef: DaemonMessageRef;
+  readonly callbackNonce: string;
 }
 
 export interface DaemonOptions {
@@ -274,10 +293,12 @@ export class Daemon {
             target,
             callbackNonce: issued.callbackNonce,
           });
-          await this.options.onApprovalCardReady?.(
-            target,
-            this.#withWirePayloadTokens(baseCard, issued.tokens),
-          );
+          const card = this.#withWirePayloadTokens(baseCard, issued.tokens);
+          await this.options.onApprovalCardReady?.(target, card);
+          const sendResult = await this.#adapter?.sendCard?.(target, card);
+          if (sendResult !== undefined) {
+            this.#bindIssuedCallbackTokens(issued.tokens, sendResult.messageRef);
+          }
         }
         return;
       }
@@ -344,6 +365,18 @@ export class Daemon {
 
   #handleSignal(): void {
     void this.stop();
+  }
+
+  #bindIssuedCallbackTokens(
+    issuedTokens: readonly DaemonIssuedCallbackToken[],
+    messageRef: DaemonMessageRef,
+  ): void {
+    const repository = this.options.callbackTokenRepository;
+    for (const token of issuedTokens) {
+      repository?.casUpdate?.(token.tokenHash, "issued", "bound", {
+        messageRef: { chatId: messageRef.target.chatId, messageId: messageRef.messageId },
+      });
+    }
   }
 
   async #approvalActions(
