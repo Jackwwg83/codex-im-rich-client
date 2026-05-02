@@ -1,7 +1,7 @@
 # Phase 5 Live Status
 
 > Single source of truth for Phase 5 while DingTalk adapter work is active.
-> **Last updated:** 2026-05-02 - JAC-88 fake DingTalk smoke green.
+> **Last updated:** 2026-05-02 - JAC-89 env-gated live DingTalk smoke harness green.
 
 ---
 
@@ -10,12 +10,12 @@
 - **Phase:** Phase 5 - DingTalk adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
 - **Parent Linear issue:** JAC-10 - Phase 5 backlog / DingTalk adapter.
-- **Current Linear issue:** JAC-88 - fake DingTalk smoke.
+- **Current Linear issue:** JAC-89 - env-gated live DingTalk smoke harness.
 - **Branch:** `codex/phase-5-dingtalk`.
 - **Base:** `phase-4-lark-adapter-complete` (`7281e28`).
 - **Version:** `0.1.0-phase4`; do not bump until Phase 5 tag gate.
-- **Next exact action:** update Linear for JAC-88, then start JAC-89
-  env-gated live DingTalk smoke harness.
+- **Next exact action:** update Linear for JAC-89, then start JAC-90
+  final review / handoff / tag gate.
 
 ## 2. Current decision state
 
@@ -62,6 +62,10 @@
   through daemon prompt routing, then drives stale and successful card callback
   actions through daemon callback-token/messageRef validation and platform ack.
   It uses only fake clients and no network or credentials.
+- `pnpm smoke:dingtalk-live` now defaults to a redacted skip, supports a
+  `DINGTALK_LIVE_DRY_RUN=1` readiness check, and only opens a bounded
+  DingTalk Stream connection when `DINGTALK_LIVE=1` plus client-id and
+  secret-env indirection are explicitly present.
 - Current DingTalk capabilities are intentionally conservative:
   `supportsButtons=true`, `canEditMessage=true`, `supportsAttachments=false`,
   `maxCallbackDataBytes=64`.
@@ -110,21 +114,22 @@
 | JAC-85 | T7 approval round-trip fake test | done |
 | JAC-86 | T8 reconnect behavior | done |
 | JAC-87 | T9 adapter contract suite | done |
-| JAC-88 | T10 fake DingTalk smoke | green; Linear update pending |
-| JAC-89 | T11 env-gated live DingTalk smoke | next / OPERATOR_GATE + env-gated |
-| JAC-90 | T12 review/handoff/tag | blocked |
+| JAC-88 | T10 fake DingTalk smoke | done |
+| JAC-89 | T11 env-gated live DingTalk smoke | green default skip; Linear update pending |
+| JAC-90 | T12 review/handoff/tag | next |
 
 ## 6. Gate status
 
-Latest JAC-88 verification:
+Latest JAC-89 verification:
 
 | Gate | Result |
 |---|---|
 | `pnpm typecheck` | green: 14 of 15 workspace projects |
 | `pnpm typecheck:tests` | green |
 | `pnpm smoke:dingtalk-fake` | green: 1 file, 1 passing |
-| `pnpm test` | green: 124 files, 1182 passing, 1 skipped |
-| `pnpm lint` | green: 285 files checked |
+| `pnpm smoke:dingtalk-live` | green default skip: no network without `DINGTALK_LIVE=1` |
+| `pnpm test` | green: 125 files, 1185 passing, 1 skipped |
+| `pnpm lint` | green: 287 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 
 `protocol:check` must run serially because it regenerates protocol files before

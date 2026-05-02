@@ -251,5 +251,5 @@ Active branch: `codex/phase-4-planning`. Plan-of-record:
 - [x] **JAC-86 / T8** — reconnect behavior and duplicate callback/message idempotency tests.
 - [x] **JAC-87 / T9** — DingTalk adapter contract suite and boundary/secret guard coverage.
 - [x] **JAC-88 / T10** — fake DingTalk smoke through daemon routing; no live network or credentials.
-- [ ] **JAC-89 / T11** — env-gated live DingTalk smoke harness; default skip, no unattended live network.
+- [x] **JAC-89 / T11** — env-gated live DingTalk smoke harness; default skip, no unattended live network.
 - [ ] **JAC-90 / T12** — final review/handoff/tag per Phase 5 plan.
