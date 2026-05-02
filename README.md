@@ -13,6 +13,8 @@
 
 **Phase 3 状态**：✅ 完成（2026-05-02）。Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter + launchd/ops/smoke slice 已通过 JAC-64 / T39-T40 tag gate。**当前 single source of truth：[`docs/handoffs/phase3-live-status.md`](docs/handoffs/phase3-live-status.md)，Phase 3 → Phase 4 交接见 [`docs/handoffs/2026-05-02-phase3-to-phase4.md`](docs/handoffs/2026-05-02-phase3-to-phase4.md)。**
 
+**Phase 4 状态**：✅ 完成（2026-05-02）。Feishu/Lark native adapter 已通过 JAC-162 review/handoff/tag gate，包含 long-connection receive、text/card send/update、opaque callback action、fake smoke、env-gated live smoke。**Phase 4 closeout：[`docs/handoffs/phase4-live-status.md`](docs/handoffs/phase4-live-status.md)，Phase 4 → Phase 5 交接见 [`docs/handoffs/2026-05-02-phase4-to-phase5.md`](docs/handoffs/2026-05-02-phase4-to-phase5.md)。**
+
 **Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
 - `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
 - `@codex-im/channel-core` — closed `ChannelAdapter` 接口 (D14) + `TelegramShapeFakeChannelAdapter` (callback_data ≤62B + 60s answerCallbackQuery deadline + parse_mode unsupported, all cited from Telegram Bot API)
@@ -38,8 +40,8 @@ pnpm check:codex-version       # OK: 0.128.0
 pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol/
 
 # 3. 全量验证
-pnpm typecheck                 # all 12 packages
-pnpm test                      # 970 tests pass + 1 skipped (unit + contract)
+pnpm typecheck                 # all 13 packages
+pnpm test                      # 1078 tests pass + 1 skipped (unit + contract)
 pnpm lint                      # biome check
 
 # 4. 操作员手动 smoke (非默认测试)
@@ -70,6 +72,7 @@ packages/
   render/              IM-rich projection and plain-text fallback
   channel-core/        platform-neutral ChannelAdapter contract
   im-telegram/         real Telegram adapter package
+  im-lark/             real Feishu/Lark adapter package
   daemon/              production-shaped daemon / supervisor / status
 docs/
   handoffs/            phase live-status + phase-to-phase handoffs

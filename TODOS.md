@@ -223,6 +223,21 @@ current state — this index is just a checkpoint). Phase 3 -> Phase 4 handoff:
 | T29-T36 ops + launchd + smoke harnesses | `b707f28` → `36d8903` | final review scope |
 | T38 final review fixes | `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, `eb05753` | response recorded in `docs/phase-3/impl-t1-t36-final-review-response.md` |
 
-### Phase 4 next exact task
+## Phase 4 implementation progress (closed at JAC-162 tag gate, 2026-05-02)
 
-- [ ] **JAC-65** — Phase 4 plan review gate for Feishu/Lark adapter. Planning-only: create Phase 4 plan-of-record, review with Codex/GPT Pro, then confirm Linear child execution order before implementing `@codex-im/im-lark`.
+Active branch: `codex/phase-4-planning`. Plan-of-record:
+`docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`. Live status:
+`docs/handoffs/phase4-live-status.md`. Phase 4 -> Phase 5 handoff:
+`docs/handoffs/2026-05-02-phase4-to-phase5.md`.
+
+| Item | Commits | Review |
+|---|---|---|
+| T0/T0a plan + Lark action transport verification | `1d076ab`, `ceabfd4` | plan v1.2 GO_WITH_LOW_NITS |
+| T1-T4 package skeleton, config, lifecycle, receive fixtures | `9865e39` → `f3bf5b3` | final review scope |
+| T5-T8 text/card/action/ack surfaces | `23e5d14` → `77d6b56` | final review scope |
+| T9-T11 contract + fake smoke + env-gated live smoke | `681a0dd` → `f51c7c6` | final review scope |
+| T12 final review fixes | `50a90c4`, `c289a7a` | re-review GO_WITH_LOW_NITS; P2 low nits closed before tag |
+
+### Phase 5 next exact task
+
+- [ ] **Phase 5 DingTalk plan gate** — create/verify the Linear Phase 5 parent, write a DingTalk Stream-mode plan-of-record, review it before implementing `@codex-im/im-dingtalk`, then split into small Linear child issues.
