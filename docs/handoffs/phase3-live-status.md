@@ -1,24 +1,24 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed (T1.1 → T8b), and JAC-16 / T6.5-T6.7 broker/render/runtime prerequisites complete.
-> **Handoff status:** T6.5-T6.7 complete: single-approval `transport_lost`, `ApprovalUiAction.wirePayload`, and `EventNormalizer.endWithSynthetic`. All 5 gates green. Next exact issue: JAC-18 / T9.1 SecurityPolicy skeleton + types.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, and JAC-18 / T9-T13 core policy/router foundation complete.
+> **Handoff status:** JAC-18 complete: `SecurityPolicy`, `CommandRouter`, and `SessionRouter` foundation are implemented with D38 write-through guards. All 5 gates green. Next exact issue: JAC-19 / T-D41a-d channel-core callback payload boundary amendment.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **T6.5-T6.7 / JAC-16** (broker transport-loss single-approval extension, `ApprovalUiAction.wirePayload`, and `EventNormalizer.endWithSynthetic`).
-- **Next exact task:** **JAC-18 / T9.1** — `SecurityPolicy` skeleton + types, then T9.2-T9.5 policy behavior slices.
+- **Active task:** None at this checkpoint. Last completed: **JAC-18 / T9-T13** (`SecurityPolicy`, `CommandRouter`, and `SessionRouter` foundation including D38 write-through failure semantics).
+- **Next exact task:** **JAC-19 / T-D41a-d** — channel-core callback payload boundary amendment: `InboundAction.rawCallbackData`, adapter `wirePayload` contract JSDoc, boundary tests, and fake adapter update.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **HEAD:** current T7-T8 implementation commit (run `git log --oneline -1`); prior checkpoint `084aab8` added the autonomous-loop runbook.
-- **Tag distance:** `phase-2-codex-reviewed` plus current Phase 3 implementation commits (run `git describe --tags`)
-- **Origin:** local branch may be ahead until the operator/agent pushes; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
+- **HEAD:** `064db18` (`test(core): T13e session router write failure`)
+- **Tag distance:** `phase-2-codex-reviewed` plus current Phase 3 implementation commits (run `git describe --tags` for exact count)
+- **Origin:** synced at this checkpoint (`git rev-list --left-right --count origin/phase-3-implementation...HEAD` → `0 0`)
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
 
@@ -51,6 +51,17 @@
 | `de39ac9` | T6.5 | `ApprovalBroker.failPendingApprovalAsTransportLost(approvalId)` + single-approval tests |
 | `a0cdf64` | T6.6 | `ApprovalUiAction.wirePayload?: string` + render type round-trip test |
 | `260e23f` | T6.7 | `EventNormalizer.endWithSynthetic(events)` + FIFO/done/idempotence/parked-waiter tests |
+| `ec68bc7` | T9.1 | `SecurityPolicy` skeleton/types + default fail-closed behavior |
+| `1d35bec` | T9.2 | `SecurityPolicy.checkUserAndChat` allowlist enforcement |
+| `7eb7406` | T9.3 | `SecurityPolicy.checkApprovalDestination` auto-decline destination gate |
+| `82320e7` | T9.4 | `SecurityPolicy.checkCommand` deny/admin pattern handling |
+| `3901c7e` | T9.5 | Atomic `SecurityPolicy.reload()` validation/swap semantics |
+| `7d2ab81` | T12 | Pure `CommandRouter` for slash commands, prompts, attachments, and Phase 3 `/cu` rejection |
+| `f7c3c90` | T13a | `SessionRouter` interface + platform-neutral skeleton |
+| `b25d912` | T13b | `SessionRouter.bind` / `bindThread` sync write-through behavior tests |
+| `d0fce55` | T13c | `SessionRouter.resolve` cache hit + repository fallback cache population |
+| `a105f35` | T13d | Startup cache rebuild from injected binding repository `list()` |
+| `064db18` | T13e | Write-failure guard: no optimistic SessionRouter cache updates |
 
 ## 3. Versions / pins
 
@@ -66,8 +77,8 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **761 passing + 1 skipped** across 71 test files (Phase 2 close: 720; +41 from Phase 3 storage/config/prereqs) |
-| Lint | `pnpm lint` | green (164 files, biome) |
+| Tests | `pnpm test` | **788 passing + 1 skipped** across 74 test files (Phase 2 close: 720; +68 from Phase 3 storage/config/core/prereqs) |
+| Lint | `pnpm lint` | green (170 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
 | F13 channel-core boundary | inherited from Phase 2 | green |
@@ -122,7 +133,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.4 SecurityPolicy + CommandRouter + SessionRouter notes for the next T-task body. The next task is **JAC-18 / T9.1** (`SecurityPolicy` skeleton + types).
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.4b D41 boundary amendment tasks and §17 dependency graph. The next task is **JAC-19 / T-D41a-d**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. STOP and output a Context Recovery Report. Do NOT modify code until the user approves the recovery.
@@ -138,7 +149,7 @@ For the Codex agent picking this up:
    - Historical checkpoint: `git log --oneline -1` showed `f493360 docs(phase3): handoff checkpoint — bump live-status to f4e1b69 + add §10 codex handoff section`. Current HEAD is documented in §2.
    - Use `git rev-list --left-right --count origin/phase-3-implementation...HEAD` to verify local-vs-origin sync.
 2. **Verify gates green at the checkpoint:**
-   - `pnpm test` → 65 files, 739 pass + 1 skip.
+   - Current checkpoint: `pnpm test` → 74 files, 788 pass + 1 skip.
    - `pnpm typecheck` + `pnpm typecheck:tests` → both clean.
    - `pnpm lint` → 151 files clean.
    - `pnpm protocol:check` → codex 0.128.0, schema unchanged.
@@ -155,10 +166,10 @@ For the Codex agent picking this up:
 5. **Cadence expectations carried forward from prior sessions:**
    - One T-task per commit. Don't bundle T4a + T4b + T4c into one commit.
    - Run all 5 gates (typecheck / typecheck:tests / test / lint / protocol:check) before each commit.
-   - Stop after every T-task and output a completion report. Wait for "ok 开始 T<next>" before proceeding to the next T-task. (User explicitly preferred per-task pacing throughout T1.1 → T3a.)
+   - Current autonomous-loop directive: keep one focused issue per commit, update Linear/docs, push regularly, and continue through technical decisions without waiting for routine human approval. Escalate only for actions the tooling cannot perform safely.
    - Codex outside-voice impl review cadence is at-discretion, not per-task. Past pattern: review after a coherent batch (e.g. T1.1 → T2c was reviewed together). Suggest a review batch around T4a–T6c (storage repositories) when those land.
    - When the user says "做一次 codex review", produce a prompt under `docs/phase-3/impl-<scope>-codex-review-prompt.md`, invoke `cat <prompt> | codex exec --sandbox read-only -c model_reasoning_effort=xhigh > <output>.md 2> <output>.stderr` in the background.
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **T6.5-T6.7 / JAC-16**. Continue with **JAC-18 / T9.1** (`SecurityPolicy` skeleton + types), then split/execute the remaining JAC-18 policy/router slices.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-18 / T9-T13**. Continue with **JAC-19 / T-D41a-d** (channel-core callback payload boundary amendment), then proceed to daemon skeleton work under **JAC-38 / T14** and the rest of **JAC-20** dependency order.
