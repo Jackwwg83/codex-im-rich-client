@@ -22,6 +22,21 @@ Verifies:
 Without `CODEX_SMOKE=1`, exits 1 with an error message. This guards against
 accidental subprocess spawning during default test runs.
 
+## `pnpm smoke:telegram-fake` — CI-safe Telegram daemon smoke
+
+```bash
+pnpm smoke:telegram-fake
+```
+
+Runs a fake Telegram adapter through the daemon inbound prompt path using
+in-memory fakes only. It does not require `TELEGRAM_LIVE`,
+`CODEX_REAL_SMOKE`, or `IM_TELEGRAM_BOT_TOKEN`; it does not call real
+Telegram, spawn real Codex, make a model call, or open a listener.
+
+This smoke proves the real Telegram adapter's normalized message shape can
+enter the daemon, pass policy, resolve a bound session, start a fake Codex
+thread, and start one fake turn.
+
 ## `pnpm smoke:real-turn` — end-to-end lifecycle (gated)
 
 ```bash

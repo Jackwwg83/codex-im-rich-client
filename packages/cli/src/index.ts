@@ -25,6 +25,7 @@ function usage(): void {
       "",
       "commands:",
       "  smoke app-server     — initialize-only smoke (requires CODEX_SMOKE=1)",
+      "  smoke telegram-fake  — CI-safe fake Telegram daemon smoke",
       "  smoke real-turn      — full lifecycle smoke (requires CODEX_REAL_SMOKE=1)",
       "  runtime send         — runtime kernel smoke (requires CODEX_REAL_SMOKE=1)",
       "  daemon status        — local daemon status snapshot",
@@ -37,6 +38,9 @@ function usage(): void {
 
 if (cmd === "smoke" && sub === "app-server") {
   const { run } = await import("./smoke-app-server.js");
+  await run();
+} else if (cmd === "smoke" && sub === "telegram-fake") {
+  const { run } = await import("./smoke-telegram-fake.js");
   await run();
 } else if (cmd === "smoke" && sub === "real-turn") {
   const { run } = await import("./smoke-real-turn.js");

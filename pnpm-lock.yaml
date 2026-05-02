@@ -63,6 +63,12 @@ importers:
       '@codex-im/core':
         specifier: workspace:*
         version: link:../core
+      '@codex-im/daemon':
+        specifier: workspace:*
+        version: link:../daemon
+      '@codex-im/im-telegram':
+        specifier: workspace:*
+        version: link:../im-telegram
       '@codex-im/protocol':
         specifier: workspace:*
         version: link:../codex-protocol
