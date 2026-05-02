@@ -1,44 +1,35 @@
-// T9b Step 9b.6: build-time grep guard for approval method-name literals.
+// T9b Step 9b.6 (Phase 1) + T20 (Phase 2) — build-time grep guard for
+// approval method-name literals.
 //
 // D7's "single broker owns dispatch" invariant + the CLAUDE.md redline
 // "no hardcoded approval method names outside packages/core/" together
 // require a build-time check: any of the 9 generated ServerRequest
-// method literals appearing as a string in
-//   packages/{app-server-client,codex-runtime,daemon,cli}/src/**
-// is a violation. This test runs `git grep -F -l` for each method
-// against that scope and fails if any hit is found.
+// method literals appearing as a string in production src outside the
+// approved homes is a violation.
 //
-// Why this is more than a linter rule:
-// The ApprovalBroker is the single dispatch point for ServerRequest
-// methods. If another package in the runtime stack hardcodes one of
-// these literals, it's signaling intent to bypass the broker — either
-// by talking to AppServerClient.setServerRequestHandler directly or by
-// matching incoming method names ad hoc. Either route silently breaks
-// the single-handler invariant and the audit trail. T9b's guard makes
-// that impossible to land without removing the literal first.
+// PHASE 2 T20 SCOPE EXTENSION:
+//   - Adds packages/render/src + packages/channel-core/src to the
+//     scanned-directories set (Phase 2 packages must also obey F1).
+//   - Replaces the prior `git grep -F` pipeline with a filesystem
+//     walk. Reasons: (a) the new boundary tests in channel-core
+//     showed git-grep exits 1 on no-match (treated as failure unless
+//     wrapped) AND won't see uncommitted files; filesystem walk is
+//     cleaner. (b) Explicit ALLOWED_FILES allowlist makes the single
+//     authorized Phase 2 home (`approval-request-kind.ts`) explicit
+//     rather than implicit-by-omission.
+//   - decision-mapper.ts is NOT in the allowlist — Codex round-2 C1.
+//     The mapper switches on `ApprovalRequestKind`, not raw method
+//     strings. T20.3 has its own explicit assertion below.
 //
-// Scope decisions:
+// AUTHORIZED HOMES (only these may contain ServerRequest method literals):
+//   - packages/core/src/approval-broker.ts (Phase 1 DispatchTable)
+//   - packages/core/src/approval-request-kind.ts (Phase 2 classifier
+//     METHOD_TO_KIND table)
 //
-// - INCLUDED: packages/{app-server-client,codex-runtime,daemon,cli}/src/**
-//   These are the runtime modules that talk to AppServerClient. Any
-//   ServerRequest method literal here is suspicious.
-//
-// - EXCLUDED: packages/core/** — the broker itself OWNS the literals.
-// - EXCLUDED: packages/codex-protocol/** — generated from ts-rs; the
-//   literals appear as discriminator strings in the generated
-//   ClientRequest/ServerRequest unions, which is correct.
-// - EXCLUDED: packages/testkit/** — fixtures + replay helpers may
-//   reference real wire shapes for tests.
-// - EXCLUDED: docs/, scripts/, and all test directories.
-//
-// Why git grep specifically:
-// `git grep` honors .gitignore (skips dist/, node_modules/, etc.)
-// without us having to enumerate exclusions. -F matches literally so
-// the slashes in method names don't get interpreted as regex. -l
-// returns file paths, one per match. Exit code 1 means "no match" —
-// which is what we want; the test PASSES when git grep returns 1.
+// EVERY OTHER PRODUCTION FILE in the scanned dirs must be clean.
 
-import { execSync } from "node:child_process";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // The 9 generated ServerRequest method names as of codex 0.125.0. If a
@@ -57,48 +48,103 @@ const FORBIDDEN_METHOD_LITERALS = [
   "account/chatgptAuthTokens/refresh",
 ] as const;
 
-// Path-spec arguments for git grep. Trailing slash limits to files
-// under each directory. The daemon package doesn't exist yet (T11
-// creates it); git grep silently skips nonexistent paths.
-const SCOPE_PATHSPECS = [
-  "packages/app-server-client/src/",
-  "packages/codex-runtime/src/",
-  "packages/daemon/src/",
-  "packages/cli/src/",
-];
+// Directories scanned for forbidden literals. Each entry is a
+// path relative to the repo root. Nonexistent dirs are silently
+// skipped (e.g. packages/im-telegram/src is added when D17
+// flips to Option B).
+const SCANNED_DIRS = [
+  "packages/app-server-client/src",
+  "packages/codex-runtime/src",
+  "packages/daemon/src",
+  "packages/cli/src",
+  // Phase 2 additions:
+  "packages/render/src",
+  "packages/channel-core/src",
+  // packages/im-telegram/src — added when D17 Option B is approved.
+  // Phase 2 default is Option A (NOT shipped), so the dir is absent.
+  // Plus the broker's own package — to assert ONLY the two authorized
+  // files contain literals.
+  "packages/core/src",
+] as const;
 
-describe("T9b Step 9b.6: no approval method-name literals outside packages/core/", () => {
+// The two files where ServerRequest method literals are allowed to
+// appear. Both are in @codex-im/core; both are the canonical "method
+// → something" lookup tables that the plan deliberately concentrates
+// the literals into so future codex bumps require exactly one file
+// to update.
+const ALLOWED_FILES = new Set<string>([
+  "packages/core/src/approval-broker.ts",
+  "packages/core/src/approval-request-kind.ts",
+]);
+
+function listTsFiles(root: string): string[] {
+  const out: string[] = [];
+  let entries: string[];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    // Nonexistent dir (e.g. im-telegram before Option B) — skip silently.
+    return out;
+  }
+  for (const name of entries) {
+    const full = join(root, name);
+    let st: ReturnType<typeof statSync>;
+    try {
+      st = statSync(full);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) {
+      out.push(...listTsFiles(full));
+    } else if (full.endsWith(".ts") && !full.endsWith(".d.ts")) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+function gatherProductionFiles(): string[] {
+  const out: string[] = [];
+  for (const dir of SCANNED_DIRS) {
+    out.push(...listTsFiles(dir));
+  }
+  return out.sort();
+}
+
+describe("T20: ServerRequest method literals are confined to the two authorized homes", () => {
+  const PRODUCTION_FILES = gatherProductionFiles();
+
   for (const method of FORBIDDEN_METHOD_LITERALS) {
-    it(`literal '${method}' does not appear in any runtime src/`, () => {
-      // -F: fixed-string match (slashes are literal, not regex)
-      // -l: list filenames only (cheaper than full-line output)
-      // The pathspec list scopes the search to runtime stack src/ trees.
-      const args = ["grep", "-F", "-l", method, "--", ...SCOPE_PATHSPECS];
-      let stdout = "";
-      try {
-        stdout = execSync(`git ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")}`, {
-          stdio: ["ignore", "pipe", "ignore"],
-          encoding: "utf8",
-        });
-      } catch (err) {
-        // git grep exits 1 when there are no matches. That's the success
-        // case — re-throw only if exit code is something else (like 128
-        // for "not a git repo" or 2 for "argument error").
-        const e = err as { status?: number };
-        if (e.status === 1) return;
-        throw err;
+    it(`literal '${method}' appears only in approval-broker.ts + approval-request-kind.ts`, () => {
+      const offenders: string[] = [];
+      for (const file of PRODUCTION_FILES) {
+        if (ALLOWED_FILES.has(file)) continue;
+        const content = readFileSync(file, "utf-8");
+        if (content.includes(method)) {
+          offenders.push(file);
+        }
       }
-      // Got here: stdout has at least one matching file path. Surface
-      // the actual paths in the failure message so the developer can
-      // jump straight to the offending line.
-      const matches = stdout
-        .trim()
-        .split("\n")
-        .filter((s) => s.length > 0);
       expect(
-        matches,
-        `Found '${method}' in ${matches.length} file(s) outside packages/core/. Move the literal into packages/core/src/approval-broker.ts (the only authorized home), or import the dispatch via ApprovalBroker.registerHandler() instead of hardcoding.\nFiles:\n  ${matches.join("\n  ")}`,
+        offenders,
+        `Found '${method}' in ${offenders.length} file(s) outside the authorized homes (approval-broker.ts + approval-request-kind.ts).\nIf a renderer / adapter / wire-up needs to react to this method, switch on \`ApprovalRequestKind\` from \`classifyApprovalRequest()\` instead of the raw method string.\nFiles:\n  ${offenders.join("\n  ")}`,
       ).toEqual([]);
     });
   }
+});
+
+describe("T20.3: decision-mapper.ts contains zero ServerRequest method literals (Codex round-2 C1)", () => {
+  const MAPPER_PATH = "packages/core/src/decision-mapper.ts";
+  it("decision-mapper.ts switches on ApprovalRequestKind, never on raw method strings", () => {
+    const content = readFileSync(MAPPER_PATH, "utf-8");
+    const found: string[] = [];
+    for (const method of FORBIDDEN_METHOD_LITERALS) {
+      if (content.includes(method)) {
+        found.push(method);
+      }
+    }
+    expect(
+      found,
+      `decision-mapper.ts MUST switch on ApprovalRequestKind (D11 corrected). Found these protocol method literals embedded directly:\n  ${found.join("\n  ")}`,
+    ).toEqual([]);
+  });
 });
