@@ -1,6 +1,7 @@
-// T2b + T2c (Phase 3) — runMigrations apply + idempotency + atomicity.
+// T2b + T2c + T3a (Phase 3) — runMigrations behavior + first real
+// migration (001-init.sql owning schema_version).
 //
-// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b/T2c
+// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b/T2c/T3a
 //
 // T2b — first-run apply: a migrations dir containing one `001-*.sql`
 //       file is applied on first run; both the migration's side-effect
@@ -19,14 +20,22 @@
 //       (intermediate CREATE TABLEs) AND the schema_version row rolled
 //       back, per `runMigrations` JSDoc. Pins the SAVEPOINT contract.
 //
-// T3a will replace the synthetic fixtures with the real `001-init.sql`
-// once that migration ships. Synthetic filenames here match the
-// production convention `NNN-kebab.sql` so the runner's filter regex
-// is exercised.
+// T3a — real `src/migrations/` directory: runMigrations against the
+//       package's actual migrations dir applies `001-init.sql` and
+//       records it in schema_version. Pins the runner ↔ on-disk
+//       migration contract, and pins that 001-init.sql's column
+//       shape stays byte-compatible with the runner's bootstrap DDL
+//       (different statements with the same shape both succeed).
+//
+// Synthetic filenames in T2b/T2c match the production convention
+// `NNN-kebab.sql` so the runner's filter regex is exercised. T3a
+// uses the real on-disk migration so any drift between
+// SCHEMA_VERSION_DDL (database.ts) and 001-init.sql breaks loudly.
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, runMigrations } from "../src/database.js";
 
@@ -187,6 +196,75 @@ describe("runMigrations idempotency (T2c)", () => {
       // failed migration.
       const versionRows = db.prepare("SELECT version FROM schema_version").all();
       expect(versionRows).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("runMigrations against the real src/migrations/ directory (T3a)", () => {
+  // Resolve the package's actual migrations dir relative to this
+  // test file. Don't rely on cwd — vitest runs from the workspace
+  // root, but the path math here would be wrong for any other cwd.
+  const HERE = dirname(fileURLToPath(import.meta.url));
+  const REAL_MIGRATIONS_DIR = join(HERE, "../src/migrations");
+
+  it("applies 001-init.sql and records it in schema_version", () => {
+    const db = openDatabase(":memory:");
+    try {
+      const before = Date.now();
+      const result = runMigrations(db, REAL_MIGRATIONS_DIR);
+      const after = Date.now();
+
+      // Plan §16.2 T3a: "test that runner records the new row".
+      expect(result.applied).toEqual(["001-init.sql"]);
+
+      const rows = db
+        .prepare("SELECT version, applied_at FROM schema_version ORDER BY version")
+        .all() as { version: string; applied_at: number }[];
+      expect(rows.length).toBe(1);
+      expect(rows[0]?.version).toBe("001-init.sql");
+
+      // applied_at is Date.now() at apply time; sanity-check it sits
+      // inside the test's wall-clock window so a future implementer
+      // who switches to seconds-since-epoch would break this.
+      const ts = rows[0]?.applied_at ?? 0;
+      expect(ts).toBeGreaterThanOrEqual(before);
+      expect(ts).toBeLessThanOrEqual(after);
+
+      // schema_version's column shape from 001-init.sql must match the
+      // runner's bootstrap DDL (database.ts SCHEMA_VERSION_DDL). If
+      // they drift, this assertion catches it.
+      type ColInfo = {
+        name: string;
+        type: string;
+        notnull: number;
+        pk: number;
+      };
+      const cols = (db.prepare("PRAGMA table_info(schema_version)").all() as ColInfo[]).map(
+        (c) => ({ name: c.name, type: c.type, notnull: c.notnull, pk: c.pk }),
+      );
+      expect(cols).toEqual([
+        { name: "version", type: "TEXT", notnull: 1, pk: 1 },
+        { name: "applied_at", type: "INTEGER", notnull: 1, pk: 0 },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("is idempotent against the real migrations dir (re-run is a no-op)", () => {
+    const db = openDatabase(":memory:");
+    try {
+      const first = runMigrations(db, REAL_MIGRATIONS_DIR);
+      expect(first.applied).toEqual(["001-init.sql"]);
+
+      const second = runMigrations(db, REAL_MIGRATIONS_DIR);
+      expect(second.applied).toEqual([]);
+
+      // Single audit row, no duplicates.
+      const count = db.prepare("SELECT COUNT(*) AS c FROM schema_version").get() as { c: number };
+      expect(count.c).toBe(1);
     } finally {
       db.close();
     }
