@@ -1,16 +1,16 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + migrations + binding repository landed (T1.1 → T4c) + docs convergence (`f4e1b69`) + handoff checkpoint (`f493360`) + autonomous-loop runbook (`084aab8`).
-> **Handoff status:** T4c complete locally in the current implementation commit: D38 durable write-through failure semantics pinned by test. All 5 gates green. Next exact issue: JAC-32 / T5a.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + migrations + binding repository + approval repository base landed (T1.1 → T5a) + docs convergence (`f4e1b69`) + handoff checkpoint (`f493360`) + autonomous-loop runbook (`084aab8`).
+> **Handoff status:** T5a complete locally in the current implementation commit: `003-approvals.sql` + `ApprovalRepository.upsert/findById` + round-trip test. All 5 gates green. Next exact issue: JAC-33 / T5b.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **T4c / JAC-31** (`BindingRepository` durable write-through failure semantics pinned by failure-path test).
-- **Next exact task:** **T5a / JAC-32** — migration `003-approvals.sql` + `ApprovalRepository.upsert` and read path. One round-trip test. Do not include T5b redaction round-trip.
+- **Active task:** None at this checkpoint. Last completed: **T5a / JAC-32** (`003-approvals.sql` + `ApprovalRepository.upsert/findById` + one round-trip test).
+- **Next exact task:** **T5b / JAC-33** — `ApprovalRepository` redaction round-trip. Keep storage below core; use injected/redacted primitive payload rather than importing core redaction types. Do not start AuditRepository.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
@@ -37,7 +37,8 @@
 | `084aab8` | autonomous-loop runbook | Add `docs/automation/codex-app-autonomous-loop-runbook.md` + AGENTS/CLAUDE pointer |
 | `b25cb78` | T4a | `002-thread-bindings.sql` + `BindingRepository.upsert/findByTarget` + round-trip test |
 | `89742a3` | T4b | `BindingRepository.list/delete` + two focused tests |
-| current T4c commit | T4c | D38 write-failure surfaces to caller; no optimistic repository state |
+| `2904b36` | T4c | D38 write-failure surfaces to caller; no optimistic repository state |
+| current T5a commit | T5a | `003-approvals.sql` + `ApprovalRepository.upsert/findById` + round-trip test |
 
 ## 3. Versions / pins
 
@@ -53,8 +54,8 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (10 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **743 passing + 1 skipped** across 66 test files (Phase 2 close: 720; +23 from storage-sqlite) |
-| Lint | `pnpm lint` | green (153 files, biome) |
+| Tests | `pnpm test` | **744 passing + 1 skipped** across 67 test files (Phase 2 close: 720; +24 from storage-sqlite) |
+| Lint | `pnpm lint` | green (155 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
 | F13 channel-core boundary | inherited from Phase 2 | green |
@@ -109,7 +110,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.2 for the next T-task body. The next task is **T5a** (`003-approvals.sql` + `ApprovalRepository.upsert/read`).
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.2 for the next T-task body. The next task is **T5b** (`ApprovalRepository` redaction round-trip).
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. STOP and output a Context Recovery Report. Do NOT modify code until the user approves the recovery.
@@ -148,4 +149,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced: **T4a, T4b, and T4c are complete**. Continue with **T5a / JAC-32** only (`003-approvals.sql` + `ApprovalRepository.upsert/read`), and keep T5b redaction as a separate issue.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced: **T4a, T4b, T4c, and T5a are complete**. Continue with **T5b / JAC-33** only (`ApprovalRepository` redaction round-trip), and do not start AuditRepository yet.

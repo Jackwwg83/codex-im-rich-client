@@ -61,3 +61,12 @@ export {
   type BindingUpsert,
   type ThreadBindingRecord,
 } from "./bindings.js";
+
+// T5a (Phase 3) — approvals repository exports.
+export {
+  ApprovalRepository,
+  type ApprovalRecord,
+  type ApprovalStatus,
+  type ApprovalTarget,
+  type ApprovalUpsert,
+} from "./approvals.js";
