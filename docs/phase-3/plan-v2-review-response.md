@@ -11,7 +11,8 @@ across 4 plan revisions and 3+ review rounds → where each is fixed.
 | v2 | `ff1176b` | gstack round 2 (APPROVE_WITH_CHANGES) | 4 P1 + 4 P2, 0 P0 | superseded |
 | v2.1 | `4edfd81` | codex round 2 (REJECT) | 1 P0 + 5 P1 + 3 P2 | superseded |
 | v2.2 | `c606039` | codex round 3 (APPROVE_WITH_CHANGES) | 0 P0 + 6 P1 + 3 P2 | superseded |
-| **v2.3** | **(this commit)** | codex round 4 PENDING | TBD | current |
+| v2.3 | `83bfd90` | codex round 4 (APPROVE_WITH_CHANGES) | 0 P0 + 4 P1 + 2 P2 | superseded |
+| **v2.4** | **(this commit)** | T1 authorized; codex round 5 OPTIONAL | TBD | **current — T1 unlock pending T0.7 rebase** |
 
 ## Status legend
 
@@ -73,17 +74,16 @@ across 4 plan revisions and 3+ review rounds → where each is fixed.
 
 ## Pre-implementation re-review checklist
 
-Before plan v2.3 is approved for T1:
+T1 implementation unlock state for plan v2.4:
 
 1. ☑ **gstack `/plan-eng-review` round 2 on plan v2** — APPROVE_WITH_CHANGES, 4 P1 + 4 P2, 0 P0. v2.1 absorbed.
 2. ☑ **Codex outside-voice round 2 on plan v2.1** — REJECT, 1 P0 + 5 P1 + 3 P2. v2.2 absorbed.
-3. ☑ **Codex outside-voice round 3 on plan v2.2** — APPROVE_WITH_CHANGES, 0 P0 + 6 P1 + 3 P2. v2.3 (this revision) absorbed.
-4. ☐ **Codex outside-voice round 4 on plan v2.3** — verify all round-3 P1s + P2s genuinely fixed; verify v2.3 integration edits didn't introduce new defects. Convergence trajectory: REJECT → REJECT → APPROVE_WITH_CHANGES → expected APPROVE or APPROVE_WITH_CHANGES with at most P2 nits.
-5. ☐ Verify `pnpm protocol:check` either passes (rebase onto `chore/codex-upgrade-0.128`) or is documented as deferred (T0.7 / R6).
+3. ☑ **Codex outside-voice round 3 on plan v2.2** — APPROVE_WITH_CHANGES, 0 P0 + 6 P1 + 3 P2. v2.3 absorbed.
+4. ☑ **Codex outside-voice round 4 on plan v2.3** — APPROVE_WITH_CHANGES, 0 P0 + 4 P1 + 2 P2. Codex explicitly stated: "Implementation can begin after the P1 items above are patched". v2.4 (this revision) absorbed.
+5. ☐ **T0.7 codex-upgrade rebase**: rebase `phase-3-planning` onto `chore/codex-upgrade-0.128` (`d999af5`); resolve `pnpm protocol:check` (R6 carry-over). REQUIRED before T1.
+6. ☐ **Codex round 5 on v2.4** — OPTIONAL ultimate-verification. NOT REQUIRED per round 4's explicit T1-unlock authorization. The user may unlock T1 directly after T0.7 lands.
 
-If Codex round 4 surfaces a new P0, plan v2.3 → v2.4 (or v3) BEFORE T1.
-If Codex round 4 is APPROVE or APPROVE_WITH_CHANGES with only P2 nits,
-T1 is unlocked (after T0.7 codex-upgrade rebase).
+After T0.7 lands, **T1 is unlocked**. Phase 3 implementation may begin.
 
 ## v2 → v2.1 round-2 fix matrix
 
@@ -135,3 +135,19 @@ integration / consistency / refinement.
 | Codex-R3-P2-1 | P2 | T0 + §19 still say "Plan v2" / "round 2" / "Exit criteria (v2)" | T0.1-T0.8 rewritten with v2.3 round-4 sequencing; §19 heading updated | §16.1 T0 + §19 heading | fixed |
 | Codex-R3-P2-2 | P2 | §10.2 sketch shows `actor: null` in INSERT record but §9 says `actor_kind='im'` at INSERT | §10.2 sketch aligned: `actor_kind: 'im'`, `actor_user_id: NULL`, `actor_platform: NULL`, `msg_*: NULL` | §10.2 step 1 sketch | fixed |
 | Codex-R3-P2-3 | P2 | T29a Keychain wrapper `--dry-run` could leak token; no fail-closed for missing/empty Keychain output | T29a hardened: `set -euo pipefail`; nonempty-token check before exec; `--dry-run` prints `length=N` not value; new tests for empty-keychain + pipefail behavior | §16.7 T29a | fixed |
+
+## v2.3 → v2.4 codex round-4 fix matrix
+
+Codex round 4 on v2.3 (`83bfd90`) returned **APPROVE_WITH_CHANGES**
+with 0 P0 + 4 P1 + 2 P2. Codex explicitly stated: "Implementation
+can begin after the P1 items above are patched". v2.4 (this revision)
+patches them; T1 unlocks after T0.7 protocol-version rebase.
+
+| Round-4 codex ID | Severity | Finding | v2.4 fix | v2.4 location | Status |
+|---|---|---|---|---|---|
+| Codex-R4-P1-1 | P1 | §17 dependency graph omits T6.5/T6.6/T6.7 + T-D41a-d edges | §17 graph rewritten with explicit edges: T6.5→T19e.4; T6.6→T-D41a-d→T16/T17; T6.7→T19d.1; plus a "v2.4 hard-gate edges" subsection that names the implementation ordering constraint | §17 (rewritten) | fixed |
+| Codex-R4-P1-2 | P1 | T6.7 test (e) named "backpressure soft cap" but D42 prose specifies the new "waiter-already-blocked" test | T6.7 test (e) renamed to waiter-already-blocked; backpressure demoted to optional (f) | §16.2 T6.7 | fixed |
+| Codex-R4-P1-3 | P1 | T17.5 "concurrent-second-click CAS race" doesn't deterministically exercise audit.cas_unreachable_after_resolve (Phase 2 broker returns already_resolved, never reaches second daemon flow's ok-branch CAS) | T17.5 (b) test mechanism rewritten: fake CallbackTokenRepository hook returns rowsAffected=0 after broker.resolve ok; assert audit + force-update + ok ack + sibling revoke | §16.5 T17.5 | fixed |
+| Codex-R4-P1-4 | P1 | callback_tokens.target naming inconsistent: schema target_key (TEXT), record sketch target (Target shape), broker input record.target — wrong-target validation depends on exact Target shape | Schema replaced single `target_key TEXT` with 4 explicit columns (`target_platform`, `target_chat_id`, `target_thread_key`, `target_topic_id`); D34 documents `CallbackTokenRepository` `hydrate()` Target reconstruction; §10.2 INSERT sketch + §10.4 T-Sec-3 + §16.5 T17.x updated to use hydrated `record.target` deep-equal | §7 D34 + §9 schema + §10.2 step 1 + §10.4 T-Sec-3 + §10.4 T-Sec-12 (also updated for v2.2 step reorder) | fixed |
+| Codex-R4-P2-1 | P2 | T-D41c JSDoc-stale assertion only checks "legacy fallback" wording — too lax | T-D41c assertion strengthened: must contain BOTH "legacy fallback" AND "production ... ignores" / `rawCallbackData` source-of-truth wording | §16.4b T-D41c | fixed |
+| Codex-R4-P2-2 | P2 | Footer says "rounds 1 + 2 + 3" but table now has R4; R8 risk says round 3 is final gate | Footer heading updated to "rounds 1 + 2 + 3 + 4"; R8 rewritten to reflect convergence + T1 authorized state; review table extended with R4 column | §23 R8 + GSTACK REVIEW REPORT footer | fixed |
