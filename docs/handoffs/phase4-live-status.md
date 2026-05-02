@@ -1,7 +1,7 @@
 # Phase 4 Live Status
 
 > Single source of truth for Phase 4 planning/implementation. Read first on compact / resume / context loss after Phase 3 tag `phase-3-telegram-mvp-complete`.
-> **Last updated:** 2026-05-02 — JAC-158 Lark action ack/fail-closed behavior landed.
+> **Last updated:** 2026-05-02 — JAC-159 Lark adapter contract suite landed.
 > **Handoff status:** Phase 3 is tagged and complete. Phase 4 implementation may proceed through the Linear queue; live Lark smoke remains env-gated.
 
 ---
@@ -10,11 +10,11 @@
 
 - **Phase:** Phase 4 — Feishu/Lark adapter.
 - **Plan:** `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`.
-- **Active Linear issue:** JAC-159 — Phase4-T9 adapter contract suite.
+- **Active Linear issue:** JAC-160 — Phase4-T10 fake Lark smoke.
 - **Parent Linear issue:** JAC-9 — Phase 4 backlog / Feishu-Lark adapter.
 - **Current branch:** `codex/phase-4-planning`.
 - **Base:** `phase-3-telegram-mvp-complete` (`83c6ef0` target commit).
-- **Next exact action:** implement JAC-159 with TDD: adapter contract suite over lifecycle/message/card/action behavior.
+- **Next exact action:** implement JAC-160 with TDD: fake Lark smoke exercising message, card, callback, ack, and status update without live API calls.
 
 ## 2. Current decision state
 
@@ -65,8 +65,8 @@
 | JAC-156 | T8a callback payload codec/extraction | done |
 | JAC-157 | T8b action to InboundAction mapping | done |
 | JAC-158 | T8c ack/fail-closed behavior | done |
-| JAC-159 | T9 adapter contract suite | active next |
-| JAC-160 | T10 fake Lark smoke | blocked by JAC-159 |
+| JAC-159 | T9 adapter contract suite | done |
+| JAC-160 | T10 fake Lark smoke | active next |
 | JAC-161 | T11 env-gated live Lark smoke | blocked by JAC-160; not default CI |
 | JAC-162 | T12 review/handoff/tag | blocked by JAC-160 |
 
@@ -78,8 +78,8 @@ Latest Phase 4 implementation gates:
 |---|---|
 | `pnpm typecheck` | green: 13 of 14 workspace projects |
 | `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 109 files, 1054 passing, 1 skipped |
-| `pnpm lint` | green: 250 files checked |
+| `pnpm test` | green: 110 files, 1060 passing, 1 skipped |
+| `pnpm lint` | green: 251 files checked |
 | `pnpm protocol:check` | green: 234 schema files canonical |
 
 ## 7. Compact / resume
