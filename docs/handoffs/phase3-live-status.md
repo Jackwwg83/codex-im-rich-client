@@ -1,22 +1,22 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, and JAC-18 / T9-T13 core policy/router foundation complete.
-> **Handoff status:** JAC-18 complete: `SecurityPolicy`, `CommandRouter`, and `SessionRouter` foundation are implemented with D38 write-through guards. All 5 gates green. Next exact issue: JAC-19 / T-D41a-d channel-core callback payload boundary amendment.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, and JAC-19 / D41 channel-core callback payload boundary complete.
+> **Handoff status:** JAC-19 complete: `InboundAction.rawCallbackData`, `wirePayload` passthrough, and legacy callbackNonce fallback are pinned at the channel boundary. All 5 gates green. Next exact issue: JAC-38 / T14 daemon class skeleton and options.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-18 / T9-T13** (`SecurityPolicy`, `CommandRouter`, and `SessionRouter` foundation including D38 write-through failure semantics).
-- **Next exact task:** **JAC-19 / T-D41a-d** — channel-core callback payload boundary amendment: `InboundAction.rawCallbackData`, adapter `wirePayload` contract JSDoc, boundary tests, and fake adapter update.
+- **Active task:** None at this checkpoint. Last completed: **JAC-19 / T-D41a-d** (channel-core callback payload boundary amendment: `InboundAction.rawCallbackData`, adapter `wirePayload` contract JSDoc, boundary tests, and fake adapter update).
+- **Next exact task:** **JAC-38 / T14** — daemon class skeleton and options. Do not wire real startup flow yet.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **HEAD:** `064db18` (`test(core): T13e session router write failure`)
+- **HEAD:** `10e898e` (`feat(channel-core): D41 callback payload boundary`)
 - **Tag distance:** `phase-2-codex-reviewed` plus current Phase 3 implementation commits (run `git describe --tags` for exact count)
 - **Origin:** synced at this checkpoint (`git rev-list --left-right --count origin/phase-3-implementation...HEAD` → `0 0`)
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
@@ -62,6 +62,8 @@
 | `d0fce55` | T13c | `SessionRouter.resolve` cache hit + repository fallback cache population |
 | `a105f35` | T13d | Startup cache rebuild from injected binding repository `list()` |
 | `064db18` | T13e | Write-failure guard: no optimistic SessionRouter cache updates |
+| `ad44918` | docs checkpoint | Refresh live-status for JAC-18 completion |
+| `10e898e` | T-D41a-d / JAC-19 | `InboundAction.rawCallbackData`, `wirePayload` passthrough/fallback, fake adapter update, JSDoc guard |
 
 ## 3. Versions / pins
 
@@ -77,8 +79,8 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (11 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **788 passing + 1 skipped** across 74 test files (Phase 2 close: 720; +68 from Phase 3 storage/config/core/prereqs) |
-| Lint | `pnpm lint` | green (170 files, biome) |
+| Tests | `pnpm test` | **794 passing + 1 skipped** across 75 test files (Phase 2 close: 720; +74 from Phase 3 storage/config/core/channel prereqs) |
+| Lint | `pnpm lint` | green (171 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
 | F13 channel-core boundary | inherited from Phase 2 | green |
@@ -133,7 +135,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.4b D41 boundary amendment tasks and §17 dependency graph. The next task is **JAC-19 / T-D41a-d**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 Daemon wire-up and §17 dependency graph. The next task is **JAC-38 / T14**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. STOP and output a Context Recovery Report. Do NOT modify code until the user approves the recovery.
@@ -149,7 +151,7 @@ For the Codex agent picking this up:
    - Historical checkpoint: `git log --oneline -1` showed `f493360 docs(phase3): handoff checkpoint — bump live-status to f4e1b69 + add §10 codex handoff section`. Current HEAD is documented in §2.
    - Use `git rev-list --left-right --count origin/phase-3-implementation...HEAD` to verify local-vs-origin sync.
 2. **Verify gates green at the checkpoint:**
-   - Current checkpoint: `pnpm test` → 74 files, 788 pass + 1 skip.
+   - Current checkpoint: `pnpm test` → 75 files, 794 pass + 1 skip.
    - `pnpm typecheck` + `pnpm typecheck:tests` → both clean.
    - `pnpm lint` → 151 files clean.
    - `pnpm protocol:check` → codex 0.128.0, schema unchanged.
@@ -172,4 +174,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-18 / T9-T13**. Continue with **JAC-19 / T-D41a-d** (channel-core callback payload boundary amendment), then proceed to daemon skeleton work under **JAC-38 / T14** and the rest of **JAC-20** dependency order.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-19 / T-D41a-d**. Continue with daemon skeleton work under **JAC-38 / T14**, then the rest of **JAC-20** dependency order.
