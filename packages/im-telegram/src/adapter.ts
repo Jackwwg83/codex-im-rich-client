@@ -8,19 +8,50 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
+import { Bot } from "grammy";
 import { TELEGRAM_CAPABILITIES } from "./capabilities.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
+export interface TelegramBotLike {
+  start(): Promise<void>;
+  stop(): void | Promise<void>;
+}
+
+export interface TelegramChannelAdapterOptions {
+  readonly botToken?: string;
+  readonly bot?: TelegramBotLike;
+  readonly createBot?: (botToken: string) => TelegramBotLike;
+}
+
 export class TelegramChannelAdapter implements ChannelAdapter {
   readonly capabilities = TELEGRAM_CAPABILITIES;
 
+  readonly #options: TelegramChannelAdapterOptions;
+  #bot: TelegramBotLike | undefined;
+  #started = false;
+
+  constructor(options: TelegramChannelAdapterOptions = {}) {
+    this.#options = options;
+    this.#bot = options.bot;
+  }
+
   async start(): Promise<void> {
-    throw notImplemented("start");
+    if (this.#started) {
+      return;
+    }
+    const bot = this.#bot ?? this.#createBot();
+    await bot.start();
+    this.#bot = bot;
+    this.#started = true;
   }
 
   async stop(): Promise<void> {
-    throw notImplemented("stop");
+    if (!this.#started) {
+      return;
+    }
+    this.#started = false;
+    await this.#bot?.stop();
   }
 
   onMessage(_handler: (msg: InboundMessage) => void): () => void {
@@ -49,6 +80,14 @@ export class TelegramChannelAdapter implements ChannelAdapter {
 
   async sendFile(_target: Target, _file: OutboundFile): Promise<MessageRef> {
     throw notImplemented("sendFile");
+  }
+
+  #createBot(): TelegramBotLike {
+    const botToken = this.#options.botToken;
+    if (botToken === undefined || botToken.length === 0) {
+      throw new Error("TelegramChannelAdapter requires botToken before start()");
+    }
+    return (this.#options.createBot ?? ((token) => new Bot(token)))(botToken);
   }
 }
 
