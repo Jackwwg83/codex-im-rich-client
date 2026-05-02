@@ -78,6 +78,18 @@ function encodeCallbackData(approvalId: string, actionKind: string, nonce: strin
   return `${approvalId}|${actionKind}|${nonce}`;
 }
 
+type InjectableInboundAction = Omit<InboundAction, "rawCallbackData"> & {
+  readonly rawCallbackData?: string;
+};
+
+function callbackDataForAction(
+  approvalId: string,
+  action: ApprovalCard["actions"][number],
+  nonce: string,
+): string {
+  return action.wirePayload ?? encodeCallbackData(approvalId, action.kind, nonce);
+}
+
 export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
   readonly capabilities: ChannelCapabilities = TELEGRAM_LIKE_CAPABILITIES;
 
@@ -128,7 +140,7 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
     const callbackNonce = generateNonce();
     const callbackData: string[] = [];
     for (const action of card.actions) {
-      const data = encodeCallbackData(card.approvalId, action.kind, callbackNonce);
+      const data = callbackDataForAction(card.approvalId, action, callbackNonce);
       const bytes = new TextEncoder().encode(data).byteLength;
       if (bytes > CALLBACK_DATA_LIMIT_BYTES) {
         throw new Error(
@@ -153,7 +165,7 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
     if (!stored) return;
     const newData: string[] = [];
     for (const action of card.actions) {
-      const data = encodeCallbackData(card.approvalId, action.kind, stored.callbackNonce);
+      const data = callbackDataForAction(card.approvalId, action, stored.callbackNonce);
       const bytes = new TextEncoder().encode(data).byteLength;
       if (bytes > CALLBACK_DATA_LIMIT_BYTES) {
         throw new Error(
@@ -207,12 +219,16 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
     }
   }
 
-  injectAction(action: InboundAction): void {
+  injectAction(action: InjectableInboundAction): void {
     this.#assertRunning("injectAction");
-    this.#callbacks.set(action.callbackHandle, { receivedAt: action.receivedAt });
+    const normalized: InboundAction = {
+      ...action,
+      rawCallbackData: action.rawCallbackData ?? `v1:${action.callbackNonce}`,
+    };
+    this.#callbacks.set(normalized.callbackHandle, { receivedAt: normalized.receivedAt });
     for (const handler of this.#onAction) {
       try {
-        handler(action);
+        handler(normalized);
       } catch {
         // see above
       }

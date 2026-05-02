@@ -71,11 +71,13 @@ describe("channel-core types (T18)", () => {
       target: { platform: "telegram", chatId: "c-1" },
       sender: { userId: "u-1" },
       callbackNonce: "nonce-aaaaaaaaaaa",
+      rawCallbackData: "v1:token",
       receivedAt: new Date(),
       callbackHandle: "callback-query-id-1",
     };
     expect(action.uiAction.kind).toBe("allow_once");
     expect(action.callbackNonce).toBeTruthy();
+    expect(action.rawCallbackData).toBe("v1:token");
   });
 
   it("InboundAction.uiAction admits all 4 ApprovalAction variants", () => {

@@ -94,18 +94,25 @@ export type InboundMessage = {
 
 /**
  * Inbound action — user clicked an approval button (or typed an
- * action slash command on a non-buttons platform). The adapter MUST
- * round-trip the `callbackNonce` it received from the prior
- * `sendCard` / `updateCard` so the broker can detect stale callbacks
- * (D19 stale_callback validation).
+ * action slash command on a non-buttons platform).
  */
 export type InboundAction = {
   readonly approvalId: string;
   readonly uiAction: ApprovalAction;
   readonly target: Target;
   readonly sender: Sender;
-  /** Round-tripped from the rendered card; broker validates against bound policy. */
+  /**
+   * Legacy fallback round-tripped from the rendered card. Production
+   * Phase 3 daemon action handling ignores this field and uses
+   * `rawCallbackData` as the callback source of truth.
+   */
   readonly callbackNonce: string;
+  /**
+   * Verbatim platform callback payload. Production daemon code decodes
+   * this field (for example `v1:<opaque-token>`) before any
+   * broker.resolve call.
+   */
+  readonly rawCallbackData: string;
   /** Adapter-supplied wall-clock receive time. */
   readonly receivedAt: Date;
   /**

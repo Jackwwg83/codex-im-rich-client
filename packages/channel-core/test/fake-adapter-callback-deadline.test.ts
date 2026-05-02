@@ -28,6 +28,7 @@ function actionAt(ts: number): InboundAction {
     target: TARGET,
     sender: { userId: "u-1" },
     callbackNonce: "nonce-aaaaaaaaaaaaaaaa",
+    rawCallbackData: "v1:nonce-aaaaaaaaaaaaaaaa",
     receivedAt: new Date(ts),
     callbackHandle: "cb-q-deadline",
   };

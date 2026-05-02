@@ -29,11 +29,13 @@
 //   onAction(h)     — register inbound action (button click / slash
 //                     command) handler. Returns unsubscribe.
 //   sendCard(t, c)  — render an ApprovalCard at target t. Returns
-//                     MessageRef + callbackNonce. Adapter encodes
-//                     callback_data within capability limits; throws
-//                     synchronously on encoding overflow so the
-//                     daemon wire-up sees the bug locally instead of
-//                     as a remote 400.
+//                     MessageRef + legacy fallback callbackNonce.
+//                     When an action has wirePayload, adapter MUST use
+//                     that string verbatim as callback_data. Otherwise
+//                     it falls back to internal encoding within
+//                     capability limits; throws synchronously on
+//                     encoding overflow so the daemon wire-up sees the
+//                     bug locally instead of as a remote 400.
 //   updateCard(r,c) — re-render an existing card (typically status flip).
 //   editText(r, t)  — edit an existing message body (text-only).
 //   answerAction(handle, ack) — ack a callback_query within the
@@ -57,9 +59,12 @@ export type ActionAck = {
 
 /**
  * Outcome of a sendCard / updateCard call. The MessageRef lets the
- * daemon target subsequent updateCard / editText / answerAction; the
- * callbackNonce is what the broker binds via bindActorPolicy and
- * validates on resolve (D19 stale_callback).
+ * daemon target subsequent updateCard / editText / answerAction.
+ *
+ * callbackNonce is a legacy fallback for Phase 2 fake/e2e tests.
+ * The production Phase 3 daemon flow ignores callbackNonce when
+ * handling button clicks; rawCallbackData is the source of truth for
+ * callback token lookup.
  */
 export type SendCardResult = {
   readonly messageRef: MessageRef;
@@ -82,7 +87,12 @@ export interface ChannelAdapter {
   /** Subscribe to inbound user actions (button clicks). Returns unsubscribe. */
   onAction(handler: (action: InboundAction) => void): () => void;
 
-  /** Render an ApprovalCard. Returns MessageRef + callbackNonce. */
+  /**
+   * Render an ApprovalCard. Returns MessageRef + legacy fallback
+   * callbackNonce. If an action has `wirePayload`, adapters MUST use
+   * it verbatim as platform callback_data; otherwise they may fall
+   * back to their internal callbackNonce encoding.
+   */
   sendCard(target: Target, card: ApprovalCard): Promise<SendCardResult>;
 
   /** Re-render an existing card (typically a status flip). */
