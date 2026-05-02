@@ -67,6 +67,17 @@ export { actionToDecision } from "./action-to-decision.js";
 export { mapDecisionForPending } from "./decision-mapper.js";
 export type { WireDecisionResult } from "./decision-mapper.js";
 
+// Phase 3 T12 — pure platform-neutral inbound text router. Daemon
+// consumes this before deciding whether to start a prompt or run a
+// slash-command workflow. No runtime or IM side effects here.
+export { COMMAND_ROUTER_COMMANDS, routeInboundCommand } from "./command-router.js";
+export type {
+  CommandRouterAttachment,
+  CommandRouterCommandName,
+  CommandRouterResult,
+  RouteInboundCommandOptions,
+} from "./command-router.js";
+
 // Phase 2 T4 / T15 — pure secret-redaction primitive. Audit emit applies
 // it internally; @codex-im/render re-exports for project-approval text
 // fields per F10 (renderer applies redact + truncate before card lands
