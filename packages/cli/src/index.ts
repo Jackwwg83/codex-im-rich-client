@@ -28,6 +28,7 @@ function usage(): void {
       "  smoke real-turn      — full lifecycle smoke (requires CODEX_REAL_SMOKE=1)",
       "  runtime send         — runtime kernel smoke (requires CODEX_REAL_SMOKE=1)",
       "  daemon status        — local daemon status snapshot",
+      "  db backup            — local SQLite state backup",
       "",
       "see packages/cli/README.md for safety boundaries.",
     ].join("\n"),
@@ -53,6 +54,10 @@ if (cmd === "smoke" && sub === "app-server") {
   await run(passthrough);
 } else if (cmd === "daemon" && sub === "status") {
   const { run } = await import("./daemon-status.js");
+  const passthrough = argv.slice(2).filter((a) => a !== "--");
+  await run(passthrough);
+} else if (cmd === "db" && sub === "backup") {
+  const { run } = await import("./db-backup.js");
   const passthrough = argv.slice(2).filter((a) => a !== "--");
   await run(passthrough);
 } else {

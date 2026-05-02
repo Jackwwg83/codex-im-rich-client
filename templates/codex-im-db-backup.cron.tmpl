@@ -1,0 +1,9 @@
+# Codex IM Rich Client local SQLite backup.
+# Manual template only: replace {{...}} placeholders before installing with crontab.
+# Example: PNPM_BIN=/opt/homebrew/bin/pnpm
+# No secrets belong in this file.
+
+SHELL=/bin/zsh
+PATH={{PATH}}
+
+15 3 * * * cd {{REPO_DIR}} && {{PNPM_BIN}} db:backup >> {{HOME}}/.codex-im-bridge/logs/db-backup.log 2>&1

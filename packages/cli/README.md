@@ -143,10 +143,52 @@ the wire-shape codex expects (e.g. `{decision: "decline"}` for fileChange,
 not a `-32603 "handler error"` collapse). This is what Phase 2 IM
 adapter integration will build on.
 
+## `codex-im daemon status` — local daemon snapshot
+
+```bash
+tsx packages/cli/src/index.ts daemon status
+```
+
+Reads `~/.codex-im-bridge/daemon-status.json` and prints pid, uptime,
+current Codex thread count, pending approval count, last Codex spawn time,
+supervisor failure count, and last fatal if present. This is local-only:
+there is no HTTP/socket listener or process-control side effect.
+
+For tests or operator debugging:
+
+```bash
+tsx packages/cli/src/index.ts daemon status -- --status-file /tmp/daemon-status.json
+```
+
+Fatal text is redacted for Telegram-token-shaped material before printing.
+Missing or invalid snapshots exit non-zero.
+
+## `pnpm db:backup` — local SQLite backup
+
+```bash
+pnpm db:backup
+```
+
+Copies `~/.codex-im-bridge/state.db` to
+`~/.codex-im-bridge/backups/state-YYYYMMDD.db` and keeps the newest 30
+matching backup files. Retention only deletes files in the backup directory
+matching `state-YYYYMMDD.db`; other files are left alone.
+
+For tests or operator debugging:
+
+```bash
+pnpm db:backup -- --source /tmp/state.db --backup-dir /tmp/backups --keep 7
+```
+
+The cron example is a template only:
+`templates/codex-im-db-backup.cron.tmpl`. It is not installed by any command
+in this package.
+
 ## What is NOT in this CLI
 
-- No `codex-im daemon` runtime (Phase 1+).
-- No admin commands (`codex-im config validate`, `codex-im db migrate`, etc.).
+- No `codex-im daemon` runtime process.
+- No config/db migration admin surface beyond the local status and backup
+  helpers listed above.
 - No IM adapter wiring.
 
 This package is the smallest surface needed to exercise the Phase 0 stack

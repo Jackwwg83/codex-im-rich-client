@@ -31,6 +31,7 @@
     "protocol:check": "pnpm protocol:generate && git diff --exit-code packages/codex-protocol",
     "launchd:install": "node bin/install-launchd.mjs",
     "launchd:uninstall": "node bin/uninstall-launchd.mjs",
+    "db:backup": "tsx packages/cli/src/index.ts db backup",
     "smoke:app-server": "tsx packages/cli/src/index.ts smoke app-server",
     "smoke:real-turn": "tsx packages/cli/src/index.ts smoke real-turn",
     "runtime:send": "tsx packages/cli/src/index.ts runtime send"
