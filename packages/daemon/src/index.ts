@@ -10,5 +10,7 @@
 // Each new export is a deliberate code-review checkpoint, mirroring the
 // facade rule from @codex-im/protocol.
 
+export { Daemon } from "./daemon.js";
+export type { DaemonOptions } from "./daemon.js";
 export { Supervisor } from "./supervisor.js";
 export type { SupervisorAudit, SupervisorOptions } from "./types.js";
