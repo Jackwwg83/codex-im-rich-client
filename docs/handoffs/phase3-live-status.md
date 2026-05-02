@@ -1,23 +1,23 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, JAC-52 / T19d transport-lost turn synthesis/rendering complete, JAC-53 / T19e prune sweeps complete, JAC-62 / T37 mid-phase Codex review findings closed, and JAC-54 / T20 im-telegram skeleton complete.
-> **Handoff status:** JAC-54 complete: `@codex-im/im-telegram` package skeleton exists with `TelegramChannelAdapter` shell, Telegram capability constants, D24 boundary tests, and method-literal guard coverage extended to `packages/im-telegram/src`. No grammY lifecycle, callback codec, sendCard, raw fixtures, or live Telegram behavior has landed yet. All 5 gates green. Next exact issue: JAC-55 / T21 grammY lifecycle start/stop.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite block complete, config package + env secret resolver landed, broker/render/runtime prerequisites complete, JAC-18 / T9-T13 core policy/router foundation complete, JAC-19 / D41 channel-core callback payload boundary complete, JAC-39 / T15 daemon strict start order complete, JAC-40 through JAC-48 daemon approval callback flow complete, JAC-49 / T18 inbound prompt routing complete, JAC-50 / T19a-T19b binding restore/write-failure UX complete, JAC-51 / T19c shutdown ordering complete, JAC-52 / T19d transport-lost turn synthesis/rendering complete, JAC-53 / T19e prune sweeps complete, JAC-62 / T37 mid-phase Codex review findings closed, JAC-54 / T20 im-telegram skeleton complete, and JAC-55 / T21 grammY lifecycle complete.
+> **Handoff status:** JAC-55 complete: `TelegramChannelAdapter.start()` / `stop()` use grammY long-poll through an injectable bot factory or fake bot, are idempotent, fail closed without a bot token, and still contain no webhook/public-listener code. Callback codec, sendCard, raw fixtures, and live Telegram behavior have not landed yet. All 5 gates green. Next exact issue: JAC-56 / T22a callback codec v1 opaque token only.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **JAC-54 / T20** (`@codex-im/im-telegram` package skeleton and D24 boundary tests).
-- **Next exact task:** **JAC-55 / T21** — grammY lifecycle `start()` / `stop()` using long-poll, with no webhook/public listener.
+- **Active task:** None at this checkpoint. Last completed: **JAC-55 / T21** (grammY long-poll `start()` / `stop()` lifecycle).
+- **Next exact task:** **JAC-56 / T22a** — pure callback codec `encodeCallbackData(rawToken)` + decoder, v1 opaque token only.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **Latest code commit:** `d073ce1` (`feat(im-telegram): T20 add package skeleton`)
-- **Tag distance at latest code commit:** `phase-2-codex-reviewed-87-gd073ce1`
+- **Latest code commit:** `7d21752` (`feat(im-telegram): T21 add grammY lifecycle`)
+- **Tag distance at latest code commit:** `phase-2-codex-reviewed-89-g7d21752`
 - **Origin:** synced after each pushed checkpoint; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -103,6 +103,7 @@
 | `b5c4441` | T37 fixes / JAC-62 | Close all review findings: project ACL, command approval policy, callback target equality, async containment/audit, stuck-issued batch draining |
 | `83015c0` | docs checkpoint | Refresh live-status for JAC-62 completion |
 | `d073ce1` | T20 / JAC-54 | `@codex-im/im-telegram` package skeleton + D24 boundary tests + method-literal guard coverage |
+| `7d21752` | T21 / JAC-55 | grammY long-poll lifecycle with injectable fake/default bot, idempotent start/stop, and no-public-listener guard |
 
 ## 3. Versions / pins
 
@@ -118,8 +119,8 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (12 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **888 passing + 1 skipped** across 81 test files (Phase 2 close: 720; +168 from Phase 3 storage/config/core/channel/daemon/telegram prereqs) |
-| Lint | `pnpm lint` | green (184 files, biome) |
+| Tests | `pnpm test` | **892 passing + 1 skipped** across 82 test files (Phase 2 close: 720; +172 from Phase 3 storage/config/core/channel/daemon/telegram prereqs) |
+| Lint | `pnpm lint` | green (185 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
 | F13 channel-core boundary | inherited from Phase 2 | green |
@@ -176,7 +177,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.6 Telegram adapter and §17 dependency graph. The next task is **JAC-55 / T21**.
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.6 Telegram adapter and §17 dependency graph. The next task is **JAC-56 / T22a**.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -215,4 +216,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-54 / T20**. Continue with **JAC-55 / T21** in the Telegram adapter dependency order.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced through **JAC-55 / T21**. Continue with **JAC-56 / T22a** in the Telegram adapter dependency order.
