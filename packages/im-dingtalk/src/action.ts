@@ -3,6 +3,7 @@ import { extractDingTalkCardCallbackWirePayload } from "./callback-codec.js";
 import { DINGTALK_TOPIC_CARD, type DingTalkStreamEventLike } from "./client.js";
 
 const DINGTALK_CALLBACK_HANDLE_PREFIX = "dingtalk-card-action:";
+const REDACTED_DINGTALK_ID = "[redacted]";
 
 export interface DingTalkSanitizedCardActionRaw {
   readonly topic: string;
@@ -75,9 +76,9 @@ export function normalizeDingTalkRawCardAction(
     idempotencyKey: dingtalkCardActionIdempotencyKey(streamMessageId, outTrackId, actionId),
     raw: {
       topic: DINGTALK_TOPIC_CARD,
-      streamMessageId,
-      outTrackId,
-      spaceId,
+      streamMessageId: REDACTED_DINGTALK_ID,
+      outTrackId: REDACTED_DINGTALK_ID,
+      spaceId: REDACTED_DINGTALK_ID,
       spaceType,
       actionId,
     },

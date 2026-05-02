@@ -8,7 +8,11 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
-import { decodeDingTalkCallbackHandle, normalizeDingTalkRawCardAction } from "./action.js";
+import {
+  type DingTalkInboundAction,
+  decodeDingTalkCallbackHandle,
+  normalizeDingTalkRawCardAction,
+} from "./action.js";
 import { extractDingTalkCardCallbackWirePayload } from "./callback-codec.js";
 import { DINGTALK_CAPABILITIES } from "./capabilities.js";
 import { type DingTalkApprovalCardJson, renderDingTalkApprovalCard } from "./card.js";
@@ -18,9 +22,10 @@ import {
   type DingTalkStreamClientLike,
   type DingTalkStreamEventLike,
 } from "./client.js";
-import { normalizeDingTalkRawRobotMessage } from "./message.js";
+import { type DingTalkInboundMessage, normalizeDingTalkRawRobotMessage } from "./message.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
+const MAX_SEEN_ROBOT_KEYS = 4096;
 
 export interface DingTalkChannelAdapterOptions {
   readonly now?: () => Date;
@@ -55,6 +60,8 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   #started = false;
   #inboundPaused = true;
   #generation = 0;
+  readonly #seenRobotKeys = new Set<string>();
+  readonly #seenRobotKeyQueue: string[] = [];
   readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
   readonly #onActionHandlers = new Set<(action: InboundAction) => void>();
 
@@ -202,21 +209,29 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
 
   #installStreamCallbacks(streamClient: DingTalkStreamClientLike, generation: number): void {
     streamClient.registerCallbackListener(DINGTALK_TOPIC_ROBOT, (event) => {
-      this.#handleRobotCallback(event, generation);
+      return this.#handleRobotCallback(streamClient, event, generation);
     });
     streamClient.registerCallbackListener(DINGTALK_TOPIC_CARD, (event) => {
-      this.#handleCardCallback(event, generation);
+      return this.#handleCardCallback(streamClient, event, generation);
     });
   }
 
-  #handleRobotCallback(_event: DingTalkStreamEventLike, generation: number): void {
+  async #handleRobotCallback(
+    streamClient: DingTalkStreamClientLike,
+    _event: DingTalkStreamEventLike,
+    generation: number,
+  ): Promise<void> {
     if (!this.#acceptInbound(generation)) {
       return;
     }
-    let msg: InboundMessage;
+    await this.#ackStreamCallback(streamClient, _event);
+    let msg: DingTalkInboundMessage;
     try {
       msg = normalizeDingTalkRawRobotMessage(_event, this.#nowMs());
     } catch {
+      return;
+    }
+    if (!this.#rememberRobotKey(msg.idempotencyKey)) {
       return;
     }
     for (const handler of this.#onMessageHandlers) {
@@ -228,12 +243,20 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     }
   }
 
-  #handleCardCallback(_event: DingTalkStreamEventLike, generation: number): void {
+  async #handleCardCallback(
+    streamClient: DingTalkStreamClientLike,
+    _event: DingTalkStreamEventLike,
+    generation: number,
+  ): Promise<void> {
     if (!this.#acceptInbound(generation)) {
       return;
     }
+    await this.#ackStreamCallback(streamClient, _event);
     extractDingTalkCardCallbackWirePayload(_event);
-    const action = normalizeDingTalkRawCardAction(_event, this.#nowMs());
+    const action: DingTalkInboundAction | undefined = normalizeDingTalkRawCardAction(
+      _event,
+      this.#nowMs(),
+    );
     if (action === undefined) {
       return;
     }
@@ -244,6 +267,36 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
         // Keep one subscriber failure from blocking other subscribers.
       }
     }
+  }
+
+  async #ackStreamCallback(
+    streamClient: DingTalkStreamClientLike,
+    event: DingTalkStreamEventLike,
+  ): Promise<void> {
+    const messageId = event.headers?.messageId;
+    if (messageId === undefined || messageId.length === 0) {
+      return;
+    }
+    try {
+      await streamClient.ackCallback?.(messageId);
+    } catch {
+      // Stream ack is platform receipt only; business handling still fails closed above.
+    }
+  }
+
+  #rememberRobotKey(key: string): boolean {
+    if (this.#seenRobotKeys.has(key)) {
+      return false;
+    }
+    this.#seenRobotKeys.add(key);
+    this.#seenRobotKeyQueue.push(key);
+    while (this.#seenRobotKeyQueue.length > MAX_SEEN_ROBOT_KEYS) {
+      const oldest = this.#seenRobotKeyQueue.shift();
+      if (oldest !== undefined) {
+        this.#seenRobotKeys.delete(oldest);
+      }
+    }
+    return true;
   }
 
   #acceptInbound(generation: number): boolean {

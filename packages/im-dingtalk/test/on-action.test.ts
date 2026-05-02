@@ -60,9 +60,9 @@ describe("DingTalk card action messageRef validation (JAC-84)", () => {
       idempotencyKey: "card:stream_card_group_001:ding_card_group_001:btn_allow",
       raw: {
         topic: DINGTALK_TOPIC_CARD,
-        streamMessageId: "stream_card_group_001",
-        outTrackId: "ding_card_group_001",
-        spaceId: "dtv1.card//IM_GROUP.cid_card_group",
+        streamMessageId: "[redacted]",
+        outTrackId: "[redacted]",
+        spaceId: "[redacted]",
         spaceType: "IM_GROUP",
         actionId: "btn_allow",
       },

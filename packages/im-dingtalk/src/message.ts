@@ -1,6 +1,8 @@
 import type { InboundMessage, Sender, Target } from "@codex-im/channel-core";
 import { DINGTALK_TOPIC_ROBOT, type DingTalkStreamEventLike } from "./client.js";
 
+const REDACTED_DINGTALK_ID = "[redacted]";
+
 export interface DingTalkRawRobotMessage {
   readonly conversationId?: string;
   readonly msgId?: string;
@@ -72,9 +74,9 @@ export function normalizeDingTalkRawRobotMessage(
     idempotencyKey: dingtalkRobotIdempotencyKey(streamMessageId, robotMsgId),
     raw: {
       topic,
-      streamMessageId,
-      robotMsgId,
-      conversationId,
+      streamMessageId: REDACTED_DINGTALK_ID,
+      robotMsgId: REDACTED_DINGTALK_ID,
+      conversationId: REDACTED_DINGTALK_ID,
       conversationType,
       msgtype,
     },

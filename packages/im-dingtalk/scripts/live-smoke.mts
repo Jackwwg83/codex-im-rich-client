@@ -1,6 +1,6 @@
 #!/usr/bin/env -S pnpm exec tsx
 
-import { DWClient, EventAck, TOPIC_CARD, TOPIC_ROBOT } from "dingtalk-stream";
+import { DingTalkChannelAdapter, createDingTalkStreamClient } from "../src/index.js";
 
 const REQUIRED_FOR_LIVE = ["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET_ENV"] as const;
 const DEFAULT_DURATION_MS = 5_000;
@@ -48,22 +48,21 @@ async function main(): Promise<void> {
   }
 
   const counters = { robotEvents: 0, cardEvents: 0 };
-  const client = new DWClient({
+  const streamClient = createDingTalkStreamClient({
     clientId: requiredEnv("DINGTALK_CLIENT_ID"),
     clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
     debug: false,
   });
-  client.registerCallbackListener(TOPIC_ROBOT, (event) => {
+  const adapter = new DingTalkChannelAdapter({ streamClient });
+  adapter.onMessage(() => {
     counters.robotEvents++;
-    client.socketCallBackResponse(event.headers.messageId, { status: EventAck.SUCCESS });
   });
-  client.registerCallbackListener(TOPIC_CARD, (event) => {
+  adapter.onAction(() => {
     counters.cardEvents++;
-    client.socketCallBackResponse(event.headers.messageId, { status: EventAck.SUCCESS });
   });
 
   try {
-    await client.connect();
+    await adapter.start();
     await sleep(durationMs);
     printStatus({
       ...redactedStatus("connected"),
@@ -77,7 +76,7 @@ async function main(): Promise<void> {
     console.error(`[dingtalk-live-smoke] BLOCKED: ${redactKnownValues(errorMessage(error))}`);
     process.exitCode = 3;
   } finally {
-    client.disconnect();
+    await adapter.stop();
   }
 }
 

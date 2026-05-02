@@ -57,9 +57,9 @@ describe("DingTalk message receive fixtures (JAC-81)", () => {
       idempotencyKey: "robot:msg_test_private",
       raw: {
         topic: DINGTALK_TOPIC_ROBOT,
-        streamMessageId: "stream_msg_private_001",
-        robotMsgId: "msg_test_private",
-        conversationId: "cid_test_private",
+        streamMessageId: "[redacted]",
+        robotMsgId: "[redacted]",
+        conversationId: "[redacted]",
         conversationType: "1",
         msgtype: "text",
       },
@@ -86,13 +86,17 @@ describe("DingTalk message receive fixtures (JAC-81)", () => {
     expect(msg.messageRef.messageId).toBe("msg_test_image");
   });
 
-  it("keeps debug raw fields sanitized and pins both Stream and robot ids", () => {
+  it("keeps debug raw fields sanitized while preserving idempotency outside raw", () => {
     const msg = normalizeDingTalkRawRobotMessage(fixture("private-text-message.json"), 0);
     const rawJson = JSON.stringify(msg.raw);
 
-    expect(msg.raw.streamMessageId).toBe("stream_msg_private_001");
-    expect(msg.raw.robotMsgId).toBe("msg_test_private");
+    expect(msg.raw.streamMessageId).toBe("[redacted]");
+    expect(msg.raw.robotMsgId).toBe("[redacted]");
+    expect(msg.raw.conversationId).toBe("[redacted]");
     expect(msg.idempotencyKey).toBe("robot:msg_test_private");
+    expect(rawJson).not.toContain("stream_msg_private_001");
+    expect(rawJson).not.toContain("msg_test_private");
+    expect(rawJson).not.toContain("cid_test_private");
     expect(rawJson).not.toMatch(/sessionWebhook|access_token|clientSecret|client_secret/i);
   });
 

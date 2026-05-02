@@ -33,8 +33,15 @@ export type {
   DingTalkApprovalCardJson,
 } from "./card.js";
 export { DINGTALK_CAPABILITIES } from "./capabilities.js";
-export { DINGTALK_TOPIC_CARD, DINGTALK_TOPIC_ROBOT } from "./client.js";
+export {
+  DINGTALK_TOPIC_CARD,
+  DINGTALK_TOPIC_ROBOT,
+  createDingTalkStreamClient,
+} from "./client.js";
 export type {
+  DingTalkDwClientLike,
+  DingTalkStreamClientConfig,
+  DingTalkStreamClientDeps,
   DingTalkStreamClientLike,
   DingTalkStreamEventHandler,
   DingTalkStreamEventLike,

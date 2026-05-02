@@ -21,6 +21,7 @@ function fixture(name: string): DingTalkStreamEventLike {
 
 class ReconnectFakeStreamClient implements DingTalkStreamClientLike {
   readonly events: string[] = [];
+  readonly acks: string[] = [];
   readonly handlers = new Map<string, DingTalkStreamEventHandler[]>();
   connectHook: (() => void | Promise<void>) | undefined;
 
@@ -39,6 +40,10 @@ class ReconnectFakeStreamClient implements DingTalkStreamClientLike {
 
   disconnect() {
     this.events.push("stream.disconnect");
+  }
+
+  ackCallback(messageId: string) {
+    this.acks.push(messageId);
   }
 
   async injectAll(topic: string, event: DingTalkStreamEventLike): Promise<void> {
@@ -99,7 +104,7 @@ describe("DingTalk Stream reconnect behavior (JAC-86)", () => {
     expect(messages).toEqual(["hello from dingtalk"]);
   });
 
-  it("surfaces stable idempotency keys for duplicate Stream deliveries", async () => {
+  it("drops duplicate robot deliveries while leaving card replay checks to daemon tokens", async () => {
     const streamClient = new ReconnectFakeStreamClient();
     const adapter = new DingTalkChannelAdapter({ streamClient, now: () => NOW });
     const messages: DingTalkInboundMessage[] = [];
@@ -114,13 +119,16 @@ describe("DingTalk Stream reconnect behavior (JAC-86)", () => {
     await streamClient.injectLatest(DINGTALK_TOPIC_CARD, fixture("card-action-group.json"));
     await streamClient.injectLatest(DINGTALK_TOPIC_CARD, fixture("card-action-group.json"));
 
-    expect(messages.map((msg) => msg.idempotencyKey)).toEqual([
-      "robot:msg_test_private",
-      "robot:msg_test_private",
-    ]);
+    expect(messages.map((msg) => msg.idempotencyKey)).toEqual(["robot:msg_test_private"]);
     expect(actions.map((action) => action.idempotencyKey)).toEqual([
       "card:stream_card_group_001:ding_card_group_001:btn_allow",
       "card:stream_card_group_001:ding_card_group_001:btn_allow",
+    ]);
+    expect(streamClient.acks).toEqual([
+      "stream_msg_private_001",
+      "stream_msg_private_001",
+      "stream_card_group_001",
+      "stream_card_group_001",
     ]);
   });
 });
