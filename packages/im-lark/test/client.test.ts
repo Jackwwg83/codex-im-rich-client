@@ -5,6 +5,7 @@ import {
   type LarkSdkDeps,
   type LarkWsClientLike,
   createLarkSdkChannelAdapter,
+  encodeLarkCallbackHandle,
   renderLarkApprovalCard,
 } from "../src/index.js";
 
@@ -118,6 +119,19 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
         },
       },
     ]);
+  });
+
+  it("installs an explicit production no-op action ack strategy", async () => {
+    const adapter = createLarkSdkChannelAdapter(CONFIG, fakeSdkDeps({}));
+
+    await adapter.start();
+
+    await expect(
+      adapter.answerAction(encodeLarkCallbackHandle("ev_sdk_action", new Date(1710000600000)), {
+        ok: true,
+        userMessage: "acknowledged",
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 

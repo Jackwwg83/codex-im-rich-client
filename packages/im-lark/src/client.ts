@@ -1,6 +1,7 @@
 import * as lark from "@larksuiteoapi/node-sdk";
 import { LarkChannelAdapter } from "./adapter.js";
 import type {
+  LarkActionClientLike,
   LarkChannelAdapterOptions,
   LarkEventDispatcherLike,
   LarkMessageClientLike,
@@ -90,6 +91,7 @@ export function createLarkSdkAdapterOptions(
   return {
     wsClient,
     messageClient: createSdkMessageClient(client),
+    actionClient: createSdkActionClient(),
     createEventDispatcher: () =>
       deps.createEventDispatcher?.(config) ?? createDefaultDispatcher(config),
   };
@@ -175,6 +177,14 @@ function createSdkMessageClient(client: LarkSdkClientLike): LarkMessageClientLik
           data: { content: stringifyCard(input.card) },
         }),
       );
+    },
+  };
+}
+
+function createSdkActionClient(): LarkActionClientLike {
+  return {
+    async answerAction() {
+      // Lark long-connection callbacks are acknowledged by the SDK event handler return path.
     },
   };
 }

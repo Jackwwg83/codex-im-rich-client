@@ -117,6 +117,25 @@ describe("LarkChannelAdapter.onAction card.action.trigger mapping (JAC-157)", ()
     expect(seen).not.toHaveBeenCalled();
   });
 
+  it.each([undefined, null, true, 42, "raw", [], { event: null }, { event: "bad" }])(
+    "fails closed without throwing for malformed primitive %#",
+    async (event) => {
+      const dispatcher = new FakeLarkEventDispatcher();
+      const adapter = new LarkChannelAdapter({
+        wsClient: fakeWsClient(),
+        createEventDispatcher: () => dispatcher,
+        now: () => NOW,
+      });
+      const seen = vi.fn();
+
+      adapter.onAction(seen);
+      await adapter.start();
+
+      await expect(dispatcher.inject(event)).resolves.toBeUndefined();
+      expect(seen).not.toHaveBeenCalled();
+    },
+  );
+
   it("drops card actions before start and after stop", async () => {
     const dispatcher = new FakeLarkEventDispatcher();
     const adapter = new LarkChannelAdapter({

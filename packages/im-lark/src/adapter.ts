@@ -253,7 +253,12 @@ export class LarkChannelAdapter implements ChannelAdapter {
     if (!this.#acceptInbound()) {
       return;
     }
-    const action = normalizeLarkRawCardAction(raw, this.#nowMs());
+    let action: InboundAction | undefined;
+    try {
+      action = normalizeLarkRawCardAction(raw, this.#nowMs());
+    } catch {
+      return;
+    }
     if (action === undefined) {
       return;
     }

@@ -37,13 +37,16 @@ export interface LarkRawCardActionEvent {
   readonly open_chat_id?: string;
 }
 
-export type LarkRawCardActionInput = LarkRawCardActionEnvelope | LarkRawCardActionEvent;
+export type LarkRawCardActionInput = unknown;
 
 export function normalizeLarkRawCardAction(
   input: LarkRawCardActionInput,
   nowMs: number,
 ): InboundAction | undefined {
   const event = cardActionEvent(input);
+  if (event === undefined) {
+    return undefined;
+  }
   const eventId = envelopeEventId(input) ?? event.header?.event_id ?? event.event_id;
   const rawCallbackData = extractLarkActionWirePayload(event.action?.value);
   const senderId = larkOperatorId(event.operator);
@@ -116,16 +119,28 @@ function singleRequiredRef(primary: string | undefined, fallback: string | undef
   return primary ?? fallback;
 }
 
-function cardActionEvent(input: LarkRawCardActionInput): LarkRawCardActionEvent {
-  return hasNestedEvent(input) ? input.event : input;
+function cardActionEvent(input: LarkRawCardActionInput): LarkRawCardActionEvent | undefined {
+  const record = asRecord(input);
+  if (record === undefined) {
+    return undefined;
+  }
+  const event = asRecord(record.event);
+  return event === undefined
+    ? (record as unknown as LarkRawCardActionEvent)
+    : (event as unknown as LarkRawCardActionEvent);
 }
 
 function envelopeEventId(input: LarkRawCardActionInput): string | undefined {
-  return hasNestedEvent(input) ? input.header?.event_id : undefined;
+  const record = asRecord(input);
+  if (record === undefined || asRecord(record.event) === undefined) {
+    return undefined;
+  }
+  const eventId = asRecord(record.header)?.event_id;
+  return typeof eventId === "string" ? eventId : undefined;
 }
 
-function hasNestedEvent(
-  input: LarkRawCardActionInput,
-): input is LarkRawCardActionEnvelope & { readonly event: LarkRawCardActionEvent } {
-  return "event" in input && input.event !== undefined;
+function asRecord(input: unknown): Record<string, unknown> | undefined {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : undefined;
 }
