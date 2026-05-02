@@ -1122,6 +1122,136 @@ describe("Daemon skeleton (T14)", () => {
   );
 
   it.each([
+    {
+      name: "unknown inbound messageRef",
+      actionMessageRef: {
+        target: { platform: "telegram", chatId: "-allowed" },
+        messageId: "<unknown>",
+      },
+      recordMessageRef: { chatId: "-allowed", messageId: "msg-bound" },
+      expectedMessage: "stale message (cannot validate)",
+    },
+    {
+      name: "stale inbound messageRef",
+      actionMessageRef: {
+        target: { platform: "telegram", chatId: "-allowed" },
+        messageId: "msg-stale",
+      },
+      recordMessageRef: { chatId: "-allowed", messageId: "msg-bound" },
+      expectedMessage: "stale message",
+    },
+    {
+      name: "wrong chat messageRef",
+      actionMessageRef: {
+        target: { platform: "telegram", chatId: "-other" },
+        messageId: "msg-bound",
+      },
+      recordMessageRef: { chatId: "-allowed", messageId: "msg-bound" },
+      expectedMessage: "stale message",
+    },
+  ])(
+    "fails closed for $name before broker.resolve",
+    async ({ actionMessageRef, recordMessageRef, expectedMessage }) => {
+      let actionHandler: ((action: unknown) => void) | undefined;
+      const adapter = {
+        onAction: vi.fn((handler: (action: unknown) => void) => {
+          actionHandler = handler;
+          return () => {};
+        }),
+        onMessage: vi.fn(() => () => {}),
+        answerAction: vi.fn(),
+      };
+      const broker = {
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        onPendingCreated: vi.fn(() => () => {}),
+        resolve: vi.fn(),
+      };
+      const callbackTokenRepository = {
+        insert: vi.fn(),
+        findByHash: vi.fn(() => ({ status: "bound", messageRef: recordMessageRef })),
+        casUpdate: vi.fn(),
+      };
+
+      const daemon = new Daemon({
+        loadConfig: () => ({}),
+        openStorage: () => ({}),
+        createBroker: () => broker,
+        createSecurityPolicy: () => ({}),
+        createSessionRouter: () => ({}),
+        createSupervisor: () => ({}),
+        createAdapter: () => adapter,
+        callbackTokenRepository,
+      });
+
+      await daemon.start();
+      actionHandler?.({
+        rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+        callbackHandle: "callback-handle-1",
+        messageRef: actionMessageRef,
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(adapter.answerAction).toHaveBeenCalledWith("callback-handle-1", {
+        ok: false,
+        userMessage: expectedMessage,
+      });
+      expect(callbackTokenRepository.casUpdate).not.toHaveBeenCalled();
+      expect(broker.resolve).not.toHaveBeenCalled();
+    },
+  );
+
+  it("continues past messageRef validation for a bound token with matching messageRef", async () => {
+    let actionHandler: ((action: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const adapter = {
+      onAction: vi.fn((handler: (action: unknown) => void) => {
+        actionHandler = handler;
+        return () => {};
+      }),
+      onMessage: vi.fn(() => () => {}),
+      answerAction: vi.fn(),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn(() => () => {}),
+      resolve: vi.fn(),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      findByHash: vi.fn(() => ({
+        status: "bound",
+        messageRef: { chatId: target.chatId, messageId: "msg-bound" },
+      })),
+      casUpdate: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({}),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      callbackTokenRepository,
+    });
+
+    await daemon.start();
+    actionHandler?.({
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      callbackHandle: "callback-handle-1",
+      messageRef: { target, messageId: "msg-bound" },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(adapter.answerAction).not.toHaveBeenCalled();
+    expect(callbackTokenRepository.casUpdate).not.toHaveBeenCalled();
+    expect(broker.resolve).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ["loadConfig", []],
     ["openStorage", []],
     ["createBroker", ["storage.close"]],

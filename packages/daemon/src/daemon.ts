@@ -418,6 +418,12 @@ export class Daemon {
         inbound.callbackHandle,
         CALLBACK_TOKEN_FAIL_MESSAGES[status] ?? "stale or unknown",
       );
+      return;
+    }
+
+    const messageRefFailure = this.#messageRefFailure(record, inbound.messageRef);
+    if (messageRefFailure !== undefined) {
+      await this.#answerAction(inbound.callbackHandle, messageRefFailure);
     }
   }
 
@@ -441,6 +447,41 @@ export class Daemon {
       status === "revoked"
       ? status
       : undefined;
+  }
+
+  #messageRefFailure(
+    record: unknown,
+    messageRef: DaemonMessageRef | undefined,
+  ): string | undefined {
+    if (messageRef === undefined || messageRef.messageId === "<unknown>") {
+      return "stale message (cannot validate)";
+    }
+
+    const recordMessageRef = this.#recordMessageRef(record);
+    if (recordMessageRef === undefined) {
+      return "stale message (cannot validate)";
+    }
+
+    return recordMessageRef.chatId === messageRef.target.chatId &&
+      recordMessageRef.messageId === messageRef.messageId
+      ? undefined
+      : "stale message";
+  }
+
+  #recordMessageRef(record: unknown): { chatId: string; messageId: string } | undefined {
+    if (typeof record !== "object" || record === null) {
+      return undefined;
+    }
+    const messageRef = (record as Partial<CallbackTokenRecord>).messageRef;
+    if (
+      typeof messageRef !== "object" ||
+      messageRef === null ||
+      typeof messageRef.chatId !== "string" ||
+      typeof messageRef.messageId !== "string"
+    ) {
+      return undefined;
+    }
+    return { chatId: messageRef.chatId, messageId: messageRef.messageId };
   }
 
   async #approvalActions(
@@ -479,15 +520,55 @@ export class Daemon {
     return value as DaemonApprovalDestinationPolicy;
   }
 
-  #inboundAction(action: unknown): { rawCallbackData: string; callbackHandle: string } | undefined {
+  #inboundAction(
+    action: unknown,
+  ):
+    | { rawCallbackData: string; callbackHandle: string; messageRef?: DaemonMessageRef }
+    | undefined {
     if (typeof action !== "object" || action === null) {
       return undefined;
     }
-    const partial = action as Partial<{ rawCallbackData: unknown; callbackHandle: unknown }>;
+    const partial = action as Partial<{
+      rawCallbackData: unknown;
+      callbackHandle: unknown;
+      messageRef: unknown;
+    }>;
     if (typeof partial.rawCallbackData !== "string" || typeof partial.callbackHandle !== "string") {
       return undefined;
     }
-    return { rawCallbackData: partial.rawCallbackData, callbackHandle: partial.callbackHandle };
+    const messageRef = this.#daemonMessageRef(partial.messageRef);
+    return {
+      rawCallbackData: partial.rawCallbackData,
+      callbackHandle: partial.callbackHandle,
+      ...(messageRef === undefined ? {} : { messageRef }),
+    };
+  }
+
+  #daemonMessageRef(value: unknown): DaemonMessageRef | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    const partial = value as Partial<{ target: unknown; messageId: unknown }>;
+    if (typeof partial.target !== "object" || partial.target === null) {
+      return undefined;
+    }
+    const target = partial.target as Partial<Target>;
+    if (
+      typeof target.platform !== "string" ||
+      typeof target.chatId !== "string" ||
+      typeof partial.messageId !== "string"
+    ) {
+      return undefined;
+    }
+    return {
+      target: {
+        platform: target.platform,
+        chatId: target.chatId,
+        ...(typeof target.threadKey === "string" ? { threadKey: target.threadKey } : {}),
+        ...(typeof target.topicId === "string" ? { topicId: target.topicId } : {}),
+      },
+      messageId: partial.messageId,
+    };
   }
 }
 
