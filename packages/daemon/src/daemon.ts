@@ -12,16 +12,20 @@ import {
   type ResolveApprovalResult,
   type ResolveError,
   type SecurityPolicyApprovalDestinationDecision,
+  type SecurityPolicyCommandDecision,
+  type SecurityPolicyProjectDecision,
   type SecurityPolicySender,
   type SecurityPolicyUserChatDecision,
   type SessionBindingInput,
   type SessionRoute,
   SessionRouter,
   type Target,
+  classifyApprovalRequest,
   routeInboundCommand,
 } from "@codex-im/core";
 import { type ApprovalCard, projectApprovalCard } from "@codex-im/render";
 import {
+  type AuditInsert,
   BindingRepository,
   type CallbackTokenAction,
   type CallbackTokenCasFields,
@@ -103,6 +107,22 @@ export interface DaemonApprovalDestinationPolicy {
     snapshot: PendingApprovalSnapshot,
     target: Target,
   ): SecurityPolicyApprovalDestinationDecision;
+}
+
+export interface DaemonCommandPolicy {
+  checkCommand(command: string, cwd: string): SecurityPolicyCommandDecision;
+}
+
+export interface DaemonProjectPolicy {
+  checkProjectAccess(
+    projectId: string,
+    target: Target,
+    sender: SecurityPolicySender,
+  ): SecurityPolicyProjectDecision;
+}
+
+export interface DaemonAuditRepository {
+  insertBestEffort(input: AuditInsert): unknown;
 }
 
 export interface DaemonCallbackTokenRepository {
@@ -241,9 +261,11 @@ export interface DaemonOptions {
     target: Target,
   ) => MaybePromise<readonly NonNullable<ApprovalActor>[]>;
   readonly callbackTokenRepository?: DaemonCallbackTokenRepository;
+  readonly auditRepository?: DaemonAuditRepository;
   readonly renderApprovalCard?: (snapshot: PendingApprovalSnapshot) => ApprovalCard;
   readonly renderResolvedApprovalCard?: (record: CallbackTokenRecord) => ApprovalCard;
   readonly onApprovalCardReady?: (target: Target, card: ApprovalCard) => MaybePromise<void>;
+  readonly generateAuditId?: () => string;
   readonly generateCallbackNonce?: () => string;
   readonly generateRawCallbackToken?: () => string;
   readonly schedulePrune?: (handler: () => void, intervalMs: number) => Unsubscribe | undefined;
@@ -269,6 +291,7 @@ export class Daemon {
   #stopPromise: Promise<void> | undefined;
   #pruneInFlight = false;
   readonly #stuckIssuedApprovalIds = new Set<string>();
+  readonly #transportLostStuckIssuedApprovalIds = new Set<string>();
   readonly #unsubscribers: Unsubscribe[] = [];
 
   constructor(options: DaemonOptions = {}) {
@@ -364,6 +387,8 @@ export class Daemon {
     this.#broker = undefined;
     this.#storage = undefined;
     this.#config = undefined;
+    this.#stuckIssuedApprovalIds.clear();
+    this.#transportLostStuckIssuedApprovalIds.clear();
   }
 
   isStarted(): boolean {
@@ -401,6 +426,8 @@ export class Daemon {
     this.#broker = undefined;
     this.#storage = undefined;
     this.#config = undefined;
+    this.#stuckIssuedApprovalIds.clear();
+    this.#transportLostStuckIssuedApprovalIds.clear();
   }
 
   #runSyncCleanup(cleanup: CleanupMethod): void {
@@ -449,6 +476,16 @@ export class Daemon {
       const decision = policy?.checkApprovalDestination(snapshot, target);
       if (decision?.kind !== "auto_decline") {
         if (decision?.kind === "allow") {
+          const commandDecision = this.#commandApprovalDecision(snapshot);
+          if (commandDecision !== undefined && commandDecision.kind !== "allow") {
+            await this.#autoDeclineApproval(
+              snapshot,
+              target,
+              `security_policy_${commandDecision.reason}`,
+            );
+            return;
+          }
+
           const baseCard =
             this.options.renderApprovalCard?.(snapshot) ?? projectApprovalCard(snapshot);
           const actions = await this.#approvalActions(snapshot, baseCard);
@@ -475,27 +512,41 @@ export class Daemon {
         return;
       }
 
-      const actor = { kind: "system", reason: "policy_auto_decline" } as const;
-      const callbackNonce = this.options.generateCallbackNonce?.() ?? randomUUID();
-      const bindResult = this.#broker?.bindActorPolicy?.(snapshot.id, {
-        allowedActors: [actor],
-        target,
-        callbackNonce,
-      });
-      if (bindResult?.kind !== "ok") {
-        return;
-      }
-
-      await this.#broker?.resolve?.({
-        approvalId: snapshot.id,
-        decision: { kind: "decline" },
-        actor,
-        target,
-        callbackNonce,
-      });
+      await this.#autoDeclineApproval(snapshot, target, "policy_auto_decline");
     } catch {
       // Pending-created subscribers must not destabilize the broker.
     }
+  }
+
+  async #autoDeclineApproval(
+    snapshot: PendingApprovalSnapshot,
+    target: Target,
+    reason: string,
+  ): Promise<void> {
+    const actor = { kind: "system", reason } as const;
+    const callbackNonce = this.options.generateCallbackNonce?.() ?? randomUUID();
+    const bindResult = this.#broker?.bindActorPolicy?.(snapshot.id, {
+      allowedActors: [actor],
+      target,
+      callbackNonce,
+    });
+    if (bindResult?.kind !== "ok") {
+      return;
+    }
+
+    this.#emitAuditEvent("approval.policy_auto_decline", {
+      approvalId: snapshot.id,
+      target,
+      result: reason,
+      metadata: { reason },
+    });
+    await this.#broker?.resolve?.({
+      approvalId: snapshot.id,
+      decision: { kind: "decline" },
+      actor,
+      target,
+      callbackNonce,
+    });
   }
 
   async #issueCallbackTokens(
@@ -532,7 +583,12 @@ export class Daemon {
   }
 
   #handleAction(action: unknown): void {
-    void this.#handleInboundAction(action);
+    void this.#handleInboundAction(action).catch((error: unknown) => {
+      this.#emitAuditEvent("approval.callback_handler_failed", {
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+    });
   }
 
   #handleMessage(message: unknown): void {
@@ -553,7 +609,7 @@ export class Daemon {
 
       const routed = routeInboundCommand(inbound.text);
       if (routed.kind === "prompt") {
-        await this.#routePrompt(inbound.target, routed.text);
+        await this.#routePrompt(inbound, routed.text);
         return;
       }
 
@@ -612,6 +668,10 @@ export class Daemon {
 
     const rawToken = this.#decodeRawCallbackToken(inbound.rawCallbackData);
     if (rawToken === undefined) {
+      this.#emitAuditEvent("approval.callback_malformed", {
+        result: "failed",
+        metadata: { reason: "malformed_wire_payload" },
+      });
       await this.#answerAction(inbound.callbackHandle, "stale or unknown");
       return;
     }
@@ -619,10 +679,18 @@ export class Daemon {
     const record = this.options.callbackTokenRepository?.findByHash?.(hashCallbackToken(rawToken));
     const status = this.#callbackTokenStatus(record);
     if (status === undefined) {
+      this.#emitAuditEvent("approval.callback_unknown", {
+        result: "failed",
+        metadata: { tokenHash: hashCallbackToken(rawToken) },
+      });
       await this.#answerAction(inbound.callbackHandle, "stale or unknown");
       return;
     }
     if (status !== "bound") {
+      this.#emitAuditEvent("approval.callback_not_bound", {
+        approvalId: this.#recordApprovalId(record),
+        result: status,
+      });
       await this.#answerAction(
         inbound.callbackHandle,
         CALLBACK_TOKEN_FAIL_MESSAGES[status] ?? "stale or unknown",
@@ -632,25 +700,61 @@ export class Daemon {
 
     const messageRefFailure = this.#messageRefFailure(record, inbound.messageRef);
     if (messageRefFailure !== undefined) {
+      this.#emitAuditEvent(
+        messageRefFailure.includes("cannot validate")
+          ? "approval.message_ref_unknown"
+          : "approval.message_ref_mismatch",
+        {
+          approvalId: this.#recordApprovalId(record),
+          result: "failed",
+          metadata: { reason: messageRefFailure },
+        },
+      );
       await this.#answerAction(inbound.callbackHandle, messageRefFailure);
       return;
     }
 
     const actor = this.#inboundActor(inbound);
     if (actor === undefined || inbound.target === undefined || inbound.sender === undefined) {
+      this.#emitAuditEvent("approval.callback_unauthorized", {
+        approvalId: this.#recordApprovalId(record),
+        result: "failed",
+        metadata: { reason: "missing_actor_target_or_sender" },
+      });
       await this.#answerAction(inbound.callbackHandle, "unauthorized");
       return;
     }
 
     const policy = this.#userChatPolicy(this.#securityPolicy);
     if (policy?.checkUserAndChat(inbound.target, inbound.sender)?.kind !== "allow") {
+      this.#emitAuditEvent("approval.callback_unauthorized", {
+        approvalId: this.#recordApprovalId(record),
+        target: inbound.target,
+        result: "failed",
+        metadata: { reason: "security_policy_denied" },
+      });
       await this.#answerAction(inbound.callbackHandle, "unauthorized");
       return;
     }
 
     const resolvableRecord = this.#resolvableCallbackRecord(record);
     if (resolvableRecord === undefined) {
+      this.#emitAuditEvent("approval.callback_unknown", {
+        approvalId: this.#recordApprovalId(record),
+        result: "failed",
+        metadata: { reason: "record_not_resolvable" },
+      });
       await this.#answerAction(inbound.callbackHandle, "stale or unknown");
+      return;
+    }
+
+    if (!targetEqual(resolvableRecord.target, inbound.target)) {
+      this.#emitAuditEvent("approval.callback_target_mismatch", {
+        approvalId: resolvableRecord.approvalId,
+        target: inbound.target,
+        result: "failed",
+      });
+      await this.#answerAction(inbound.callbackHandle, "wrong target");
       return;
     }
 
@@ -678,22 +782,85 @@ export class Daemon {
     const repository = this.options.callbackTokenRepository;
     const used = repository?.casUpdate?.(record.tokenHash, "bound", "used", { actor });
     if (used === undefined) {
+      this.#emitAuditEvent("audit.cas_unreachable_after_resolve", {
+        approvalId: record.approvalId,
+        target: record.target,
+        result: "forced_used",
+        metadata: { tokenHash: record.tokenHash },
+      });
       repository?.forceMarkUsed?.(record.tokenHash, { actor });
     }
 
-    await this.#answerAction(callbackHandle, "decision recorded", true);
+    try {
+      await this.#answerAction(callbackHandle, "decision recorded", true);
+    } catch (error) {
+      this.#emitAuditEvent("approval.callback_ack_failed", {
+        approvalId: record.approvalId,
+        target: record.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+    }
     const terminalCard = this.options.renderResolvedApprovalCard?.(record);
     if (terminalCard !== undefined && record.messageRef !== undefined) {
-      await this.#adapter?.updateCard?.(
-        { target: record.target, messageId: record.messageRef.messageId },
-        terminalCard,
-      );
+      try {
+        await this.#adapter?.updateCard?.(
+          { target: record.target, messageId: record.messageRef.messageId },
+          terminalCard,
+        );
+      } catch (error) {
+        this.#emitAuditEvent("approval.callback_update_failed", {
+          approvalId: record.approvalId,
+          target: record.target,
+          result: "failed",
+          metadata: { error: errorMessage(error) },
+        });
+      }
     }
-    repository?.revokeBoundSiblings?.(record.approvalId, record.tokenHash);
+    try {
+      repository?.revokeBoundSiblings?.(record.approvalId, record.tokenHash);
+    } catch (error) {
+      this.#emitAuditEvent("approval.callback_sibling_revoke_failed", {
+        approvalId: record.approvalId,
+        target: record.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+    }
   }
 
   async #answerAction(callbackHandle: string, userMessage: string, ok = false): Promise<void> {
     await this.#adapter?.answerAction?.(callbackHandle, { ok, userMessage });
+  }
+
+  #emitAuditEvent(
+    action: string,
+    input: {
+      readonly approvalId?: string | undefined;
+      readonly target?: Target | undefined;
+      readonly result?: string | undefined;
+      readonly metadata?: Record<string, unknown> | undefined;
+    } = {},
+  ): void {
+    const repository = this.options.auditRepository;
+    if (repository === undefined) {
+      return;
+    }
+    try {
+      const metadataJson =
+        input.metadata === undefined ? undefined : JSON.stringify(input.metadata);
+      repository.insertBestEffort({
+        id: this.options.generateAuditId?.() ?? randomUUID(),
+        action,
+        ...(input.target === undefined ? {} : { targetKey: targetKey(input.target) }),
+        ...(input.approvalId === undefined ? {} : { approvalId: input.approvalId }),
+        ...(input.result === undefined ? {} : { result: input.result }),
+        ...(metadataJson === undefined ? {} : { metadataJson }),
+        createdAt: (this.options.now?.() ?? new Date()).toISOString(),
+      });
+    } catch {
+      // Daemon-level audit is best-effort and must not mutate control flow.
+    }
   }
 
   #resolveErrorMessage(error: ResolveError): string {
@@ -772,6 +939,14 @@ export class Daemon {
     return { chatId: messageRef.chatId, messageId: messageRef.messageId };
   }
 
+  #recordApprovalId(record: unknown): string | undefined {
+    if (typeof record !== "object" || record === null) {
+      return undefined;
+    }
+    const approvalId = (record as Partial<CallbackTokenRecord>).approvalId;
+    return typeof approvalId === "string" ? approvalId : undefined;
+  }
+
   #resolvableCallbackRecord(record: unknown): CallbackTokenRecord | undefined {
     if (typeof record !== "object" || record === null) {
       return undefined;
@@ -806,6 +981,25 @@ export class Daemon {
     return (
       this.options.resolveApprovalActions?.(snapshot) ?? card.actions.map((action) => action.kind)
     );
+  }
+
+  #commandApprovalDecision(
+    snapshot: PendingApprovalSnapshot,
+  ): SecurityPolicyCommandDecision | undefined {
+    const kind = classifyApprovalRequest(snapshot.method);
+    if (kind !== "command_execution" && kind !== "legacy_exec_command") {
+      return undefined;
+    }
+    const command =
+      readStringField(snapshot.params, "command") ??
+      readStringField(snapshot.params, "commandLineExpanded") ??
+      readStringField(snapshot.params, "commandLine");
+    if (command === undefined) {
+      return undefined;
+    }
+    const cwd =
+      readStringField(snapshot.params, "cwd") ?? readStringField(snapshot.params, "workdir") ?? "";
+    return this.#commandPolicy(this.#securityPolicy)?.checkCommand(command, cwd);
   }
 
   #withWirePayloadTokens(
@@ -845,15 +1039,47 @@ export class Daemon {
     return value as DaemonUserChatPolicy;
   }
 
-  async #routePrompt(target: Target, text: string): Promise<void> {
+  #commandPolicy(value: unknown): DaemonCommandPolicy | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    if (typeof (value as Partial<DaemonCommandPolicy>).checkCommand !== "function") {
+      return undefined;
+    }
+    return value as DaemonCommandPolicy;
+  }
+
+  #projectPolicy(value: unknown): DaemonProjectPolicy | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    if (typeof (value as Partial<DaemonProjectPolicy>).checkProjectAccess !== "function") {
+      return undefined;
+    }
+    return value as DaemonProjectPolicy;
+  }
+
+  #projectAllowed(projectId: string, target: Target, sender: SecurityPolicySender): boolean {
+    const policy = this.#projectPolicy(this.#securityPolicy);
+    return policy?.checkProjectAccess(projectId, target, sender).kind !== "deny";
+  }
+
+  async #routePrompt(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    text: string,
+  ): Promise<void> {
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();
     if (sessionRouter === undefined || runtime === undefined) {
       return;
     }
 
-    let route = sessionRouter.resolve(target);
+    let route = sessionRouter.resolve(inbound.target);
     if (route.kind !== "bound") {
+      return;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
@@ -863,7 +1089,7 @@ export class Daemon {
       if (threadId === undefined || sessionRouter.bindThread === undefined) {
         return;
       }
-      route = sessionRouter.bindThread(target, threadId);
+      route = sessionRouter.bindThread(inbound.target, threadId);
     }
 
     if (route.kind !== "bound" || route.codexThreadId === undefined) {
@@ -893,7 +1119,7 @@ export class Daemon {
   }
 
   async #routeCommand(
-    inbound: { target: Target; messageRef?: DaemonMessageRef },
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
     if (command.name === "use") {
@@ -929,7 +1155,7 @@ export class Daemon {
   }
 
   async #routeUseCommand(
-    inbound: { target: Target; messageRef?: DaemonMessageRef },
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
     const [projectId] = command.args;
@@ -941,6 +1167,10 @@ export class Daemon {
     const project = this.#projectConfig(projectId);
     if (project === undefined) {
       await this.#editInboundMessage(inbound.messageRef, `Unknown project: ${projectId}`);
+      return;
+    }
+    if (!this.#projectAllowed(projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
@@ -1030,9 +1260,25 @@ export class Daemon {
             flaggedApprovalIds,
             batchSize,
           ) ?? [];
+        const revokedIds = new Set(revoked.map((record) => record.approvalId));
         for (const record of revoked) {
-          this.#broker?.failPendingApprovalAsTransportLost?.(record.approvalId);
-          this.#stuckIssuedApprovalIds.delete(record.approvalId);
+          if (!this.#transportLostStuckIssuedApprovalIds.has(record.approvalId)) {
+            this.#broker?.failPendingApprovalAsTransportLost?.(record.approvalId);
+            this.#transportLostStuckIssuedApprovalIds.add(record.approvalId);
+          }
+        }
+        if (revoked.length === 0) {
+          for (const approvalId of flaggedApprovalIds) {
+            this.#stuckIssuedApprovalIds.delete(approvalId);
+            this.#transportLostStuckIssuedApprovalIds.delete(approvalId);
+          }
+        } else if (revoked.length < batchSize) {
+          for (const approvalId of flaggedApprovalIds) {
+            if (!revokedIds.has(approvalId)) {
+              this.#stuckIssuedApprovalIds.delete(approvalId);
+              this.#transportLostStuckIssuedApprovalIds.delete(approvalId);
+            }
+          }
         }
       }
 
@@ -1048,6 +1294,11 @@ export class Daemon {
         ),
         batchSize,
         now,
+      });
+    } catch (error) {
+      this.#emitAuditEvent("approval.prune_sweep_failed", {
+        result: "failed",
+        metadata: { error: errorMessage(error) },
       });
     } finally {
       this.#pruneInFlight = false;
@@ -1310,6 +1561,36 @@ function generateRawCallbackToken(): string {
 
 function textInput(text: string): DaemonTextInput[] {
   return [{ type: "text", text, text_elements: [] }];
+}
+
+function readStringField(value: unknown, key: string): string | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" ? field : undefined;
+}
+
+function targetEqual(a: Target, b: Target): boolean {
+  return (
+    a.platform === b.platform &&
+    a.chatId === b.chatId &&
+    (a.threadKey ?? null) === (b.threadKey ?? null) &&
+    (a.topicId ?? null) === (b.topicId ?? null)
+  );
+}
+
+function targetKey(target: Target): string {
+  return JSON.stringify([
+    target.platform,
+    target.chatId,
+    target.threadKey ?? null,
+    target.topicId ?? null,
+  ]);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function drainShutdown(): Promise<void> {

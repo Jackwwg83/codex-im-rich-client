@@ -55,10 +55,12 @@ export type SecurityPolicyCommandDecision =
   | SecurityPolicyAllowDecision
   | SecurityPolicyDenyDecision
   | SecurityPolicyRequireAdminDecision;
+export type SecurityPolicyProjectDecision = SecurityPolicyUserChatDecision;
 export type SecurityPolicyDecision =
   | SecurityPolicyUserChatDecision
   | SecurityPolicyApprovalDestinationDecision
-  | SecurityPolicyCommandDecision;
+  | SecurityPolicyCommandDecision
+  | SecurityPolicyProjectDecision;
 
 const POLICY_NOT_CONFIGURED = "policy_not_configured";
 
@@ -104,6 +106,37 @@ export class SecurityPolicy {
     }
     if (!this.#snapshot.allowedChats.includes(platformScoped(target.platform, target.chatId))) {
       return { kind: "auto_decline", reason: "approval_destination_denied" };
+    }
+    return { kind: "allow" };
+  }
+
+  checkProjectAccess(
+    projectId: string,
+    target: Target,
+    sender: SecurityPolicySender,
+  ): SecurityPolicyProjectDecision {
+    const globalDecision = this.checkUserAndChat(target, sender);
+    if (globalDecision.kind !== "allow") {
+      return globalDecision;
+    }
+
+    const projects = this.#snapshot.projects;
+    if (projects.length === 0) {
+      return { kind: "allow" };
+    }
+
+    const project = projects.find((candidate) => candidate.projectId === projectId);
+    if (project === undefined) {
+      return { kind: "deny", reason: "project_not_allowed" };
+    }
+    if (project.allowedChats.length === 0 || project.allowedUsers.length === 0) {
+      return { kind: "deny", reason: "project_policy_not_configured" };
+    }
+    if (!project.allowedChats.includes(platformScoped(target.platform, target.chatId))) {
+      return { kind: "deny", reason: "project_chat_not_allowed" };
+    }
+    if (!project.allowedUsers.includes(platformScoped(target.platform, sender.userId))) {
+      return { kind: "deny", reason: "project_user_not_allowed" };
     }
     return { kind: "allow" };
   }

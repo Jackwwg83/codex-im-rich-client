@@ -114,6 +114,83 @@ describe("SecurityPolicy.checkUserAndChat (T9.2 / D22)", () => {
   });
 });
 
+describe("SecurityPolicy.checkProjectAccess (Phase 3 mid-review P1)", () => {
+  it("allows globally allowed user/chat when no project ACLs are configured", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+
+    expect(
+      policy.checkProjectAccess(
+        "web",
+        { platform: "telegram", chatId: "-1001" },
+        { userId: "123" },
+      ),
+    ).toEqual({ kind: "allow" });
+  });
+
+  it("denies a globally allowed user/chat that is not allowed for the project", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      projects: [
+        {
+          projectId: "web",
+          allowedUsers: ["telegram:456"],
+          allowedChats: ["telegram:-1001"],
+        },
+      ],
+    });
+
+    expect(
+      policy.checkProjectAccess(
+        "web",
+        { platform: "telegram", chatId: "-1001" },
+        { userId: "123" },
+      ),
+    ).toEqual({ kind: "deny", reason: "project_user_not_allowed" });
+  });
+
+  it("denies globally allowed project access when the project ACL omits the chat", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      projects: [
+        {
+          projectId: "web",
+          allowedUsers: ["telegram:123"],
+          allowedChats: ["telegram:-2002"],
+        },
+      ],
+    });
+
+    expect(
+      policy.checkProjectAccess(
+        "web",
+        { platform: "telegram", chatId: "-1001" },
+        { userId: "123" },
+      ),
+    ).toEqual({ kind: "deny", reason: "project_chat_not_allowed" });
+  });
+
+  it("denies missing project entries once project ACLs are configured", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      projects: [
+        {
+          projectId: "api",
+          allowedUsers: ["telegram:123"],
+          allowedChats: ["telegram:-1001"],
+        },
+      ],
+    });
+
+    expect(
+      policy.checkProjectAccess(
+        "web",
+        { platform: "telegram", chatId: "-1001" },
+        { userId: "123" },
+      ),
+    ).toEqual({ kind: "deny", reason: "project_not_allowed" });
+  });
+});
+
 describe("SecurityPolicy.checkApprovalDestination (T9.3 / D36)", () => {
   it("allows approval rendering to an allowlisted destination", () => {
     const policy = new SecurityPolicy(ALLOW_CONFIG);

@@ -915,6 +915,71 @@ describe("Daemon skeleton (T14)", () => {
     }
   });
 
+  it("does not route prompts from restored bindings when project ACL denies the target", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const db = openDatabase(":memory:");
+    runMigrations(db, STORAGE_MIGRATIONS_DIR);
+    new BindingRepository(db).upsert({
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-restored",
+    });
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    try {
+      const daemon = new Daemon({
+        loadConfig: () => ({ projects: { web: { cwd: "/repo/web" } } }),
+        openStorage: () => db,
+        createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+        createSecurityPolicy: () => ({
+          checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+          checkProjectAccess: vi.fn(() => ({
+            kind: "deny" as const,
+            reason: "project_user_not_allowed",
+          })),
+        }),
+        createSupervisor: () => ({ currentRuntime: () => runtime }),
+        createAdapter: () => adapter,
+      });
+
+      await daemon.start();
+      messageHandler?.({
+        target,
+        sender,
+        text: "continue after restart",
+        messageRef: { target, messageId: "msg-restored" },
+        receivedAt: new Date("2026-05-02T00:00:06.000Z"),
+      });
+      await flushDaemonHandlers();
+
+      expect(runtime.threadStart).not.toHaveBeenCalled();
+      expect(runtime.turnStart).not.toHaveBeenCalled();
+      expect(runtime.turnSteer).not.toHaveBeenCalled();
+      expect(adapter.editText).toHaveBeenCalledWith(
+        { target, messageId: "msg-restored" },
+        "Project access denied",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   it("binds /use to a configured project before acknowledging the inbound message", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
@@ -975,6 +1040,56 @@ describe("Daemon skeleton (T14)", () => {
       projectId: "web",
       cwd: "/repo/web",
     });
+  });
+
+  it("does not bind /use when project ACL denies a globally allowed user/chat", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const messageRef = { target, messageId: "msg-use-denied" };
+    const bindings = {
+      upsert: vi.fn(),
+      findByTarget: vi.fn(),
+    };
+    const sessionRouter = new SessionRouter({ bindings });
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { web: { cwd: "/repo/web" } } }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({
+          kind: "deny" as const,
+          reason: "project_chat_not_allowed",
+        })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => undefined }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/use web",
+      messageRef,
+      receivedAt: new Date("2026-05-02T00:00:07.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(bindings.upsert).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(messageRef, "Project access denied");
+    expect(sessionRouter.resolve(target)).toEqual({ kind: "unbound", target });
   });
 
   it("reports /use storage write failure without optimistic SessionRouter cache update", async () => {
@@ -1153,6 +1268,80 @@ describe("Daemon skeleton (T14)", () => {
     expect(securityPolicy.checkApprovalDestination).toHaveBeenCalledWith(snapshot, target);
     expect(broker.bindActorPolicy).not.toHaveBeenCalled();
     expect(broker.resolve).not.toHaveBeenCalled();
+  });
+
+  it("auto-declines deny-pattern command approvals before token issue or rendering", async () => {
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const snapshot: PendingApprovalSnapshot = {
+      id: "approval-command-denied",
+      appServerRequestId: 9003,
+      method: "item/commandExecution/requestApproval",
+      params: { command: "rm -rf /tmp/project", cwd: "/repo/web" },
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-02T00:30:00.000Z"),
+    };
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(() => ({ kind: "ok" as const })),
+      resolve: vi.fn(() => ({ kind: "ok" as const, appliedAt: new Date() })),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      casUpdate: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      sendCard: vi.fn(),
+    };
+    const securityPolicy = {
+      checkApprovalDestination: vi.fn(() => ({ kind: "allow" as const })),
+      checkCommand: vi.fn(() => ({ kind: "deny" as const, reason: "command_denied" })),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => securityPolicy,
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      resolveApprovalAllowedActors: vi.fn(() => [
+        { kind: "im" as const, platform: "telegram", userId: "u" },
+      ]),
+      callbackTokenRepository,
+      generateCallbackNonce: () => "nonce-command-denied",
+    });
+
+    await daemon.start();
+    pendingHandler?.(snapshot);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(securityPolicy.checkApprovalDestination).toHaveBeenCalledWith(snapshot, target);
+    expect(securityPolicy.checkCommand).toHaveBeenCalledWith("rm -rf /tmp/project", "/repo/web");
+    expect(broker.bindActorPolicy).toHaveBeenCalledWith(snapshot.id, {
+      allowedActors: [{ kind: "system", reason: "security_policy_command_denied" }],
+      target,
+      callbackNonce: "nonce-command-denied",
+    });
+    expect(broker.resolve).toHaveBeenCalledWith({
+      approvalId: snapshot.id,
+      decision: { kind: "decline" },
+      actor: { kind: "system", reason: "security_policy_command_denied" },
+      target,
+      callbackNonce: "nonce-command-denied",
+    });
+    expect(callbackTokenRepository.insert).not.toHaveBeenCalled();
+    expect(callbackTokenRepository.casUpdate).not.toHaveBeenCalled();
+    expect(adapter.sendCard).not.toHaveBeenCalled();
   });
 
   it("issues hash-only callback token rows for allowed approval actions before remote send", async () => {
@@ -1920,6 +2109,108 @@ describe("Daemon skeleton (T14)", () => {
     expect(broker.resolve).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      "platform",
+      { platform: "lark", chatId: "-allowed", threadKey: "thread-a", topicId: "topic-a" },
+    ],
+    [
+      "threadKey",
+      { platform: "telegram", chatId: "-allowed", threadKey: "thread-b", topicId: "topic-a" },
+    ],
+    [
+      "topicId",
+      { platform: "telegram", chatId: "-allowed", threadKey: "thread-a", topicId: "topic-b" },
+    ],
+  ] as const)(
+    "fails closed before broker.resolve when callback target %s differs from the token record",
+    async (_field, inboundTarget) => {
+      let actionHandler: ((action: unknown) => void) | undefined;
+      const recordTarget = {
+        platform: "telegram",
+        chatId: "-allowed",
+        threadKey: "thread-a",
+        topicId: "topic-a",
+      };
+      const sender = { userId: "u-alice" };
+      const record: CallbackTokenRecord = {
+        tokenHash: hashCallbackToken("ABCDEFGHIJKLMNOP"),
+        approvalId: "approval-target-mismatch",
+        action: "allow_once",
+        callbackNonce: "nonce-target-mismatch",
+        target: recordTarget,
+        actor: { kind: "im" },
+        status: "bound",
+        messageRef: { chatId: recordTarget.chatId, messageId: "msg-bound" },
+        createdAt: "2026-05-02T00:00:02.000Z",
+        expiresAt: "2026-05-02T00:30:00.000Z",
+      };
+      const adapter = {
+        onAction: vi.fn((handler: (action: unknown) => void) => {
+          actionHandler = handler;
+          return () => {};
+        }),
+        onMessage: vi.fn(() => () => {}),
+        answerAction: vi.fn(),
+      };
+      const broker = {
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        onPendingCreated: vi.fn(() => () => {}),
+        resolve: vi.fn(),
+      };
+      const callbackTokenRepository = {
+        insert: vi.fn(),
+        findByHash: vi.fn(() => record),
+        casUpdate: vi.fn(),
+      };
+      const auditRepository = {
+        insertBestEffort: vi.fn(),
+      };
+
+      const daemon = new Daemon({
+        loadConfig: () => ({}),
+        openStorage: () => ({}),
+        createBroker: () => broker,
+        createSecurityPolicy: () => ({
+          checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        }),
+        createSessionRouter: () => ({}),
+        createSupervisor: () => ({}),
+        createAdapter: () => adapter,
+        callbackTokenRepository,
+        auditRepository,
+        generateAuditId: () => "audit-target-mismatch",
+        now: () => new Date("2026-05-02T00:00:04.000Z"),
+      });
+
+      await daemon.start();
+      actionHandler?.({
+        rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+        callbackHandle: "callback-handle-1",
+        target: inboundTarget,
+        sender,
+        messageRef: { target: inboundTarget, messageId: "msg-bound" },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(adapter.answerAction).toHaveBeenCalledWith("callback-handle-1", {
+        ok: false,
+        userMessage: "wrong target",
+      });
+      expect(callbackTokenRepository.casUpdate).not.toHaveBeenCalled();
+      expect(broker.resolve).not.toHaveBeenCalled();
+      expect(auditRepository.insertBestEffort).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "audit-target-mismatch",
+          action: "approval.callback_target_mismatch",
+          approvalId: record.approvalId,
+          result: "failed",
+        }),
+      );
+    },
+  );
+
   it("resolves a valid callback, marks the token used, updates the card, and revokes siblings", async () => {
     const order: string[] = [];
     let actionHandler: ((action: unknown) => void) | undefined;
@@ -2093,6 +2384,9 @@ describe("Daemon skeleton (T14)", () => {
       forceMarkUsed: vi.fn(() => ({ ...record, status: "used" as const })),
       revokeBoundSiblings: vi.fn(() => []),
     };
+    const auditRepository = {
+      insertBestEffort: vi.fn(),
+    };
 
     const daemon = new Daemon({
       loadConfig: () => ({}),
@@ -2105,6 +2399,9 @@ describe("Daemon skeleton (T14)", () => {
       createSupervisor: () => ({}),
       createAdapter: () => adapter,
       callbackTokenRepository,
+      auditRepository,
+      generateAuditId: () => "audit-cas-zero",
+      now: () => new Date("2026-05-02T00:00:04.000Z"),
       renderResolvedApprovalCard: vi.fn(() => terminalCard),
     });
 
@@ -2135,6 +2432,114 @@ describe("Daemon skeleton (T14)", () => {
     expect(callbackTokenRepository.revokeBoundSiblings).toHaveBeenCalledWith(
       record.approvalId,
       tokenHash,
+    );
+    expect(auditRepository.insertBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "audit-cas-zero",
+        action: "audit.cas_unreachable_after_resolve",
+        approvalId: record.approvalId,
+        result: "forced_used",
+      }),
+    );
+  });
+
+  it("contains post-resolve callback delivery failures and still revokes siblings", async () => {
+    let actionHandler: ((action: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const tokenHash = hashCallbackToken("ABCDEFGHIJKLMNOP");
+    const record: CallbackTokenRecord = {
+      tokenHash,
+      approvalId: "approval-post-resolve-failure",
+      action: "allow_once",
+      callbackNonce: "nonce-post-resolve-failure",
+      target,
+      actor: { kind: "im" },
+      status: "bound",
+      messageRef: { chatId: target.chatId, messageId: "msg-bound" },
+      createdAt: "2026-05-02T00:00:02.000Z",
+      expiresAt: "2026-05-02T00:30:00.000Z",
+    };
+    const terminalCard: ApprovalCard = {
+      schemaVersion: "approval-card.v1",
+      kind: "file_change",
+      approvalId: record.approvalId,
+      summary: "Decision recorded",
+      target: { riskLevel: "moderate" },
+      actions: [],
+      status: "resolved",
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+    };
+    const adapter = {
+      onAction: vi.fn((handler: (action: unknown) => void) => {
+        actionHandler = handler;
+        return () => {};
+      }),
+      onMessage: vi.fn(() => () => {}),
+      answerAction: vi.fn(() => {
+        throw new Error("ack failed");
+      }),
+      updateCard: vi.fn(() => {
+        throw new Error("edit failed");
+      }),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn(() => () => {}),
+      resolve: vi.fn(() => ({ kind: "ok" as const, appliedAt: new Date() })),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      findByHash: vi.fn(() => record),
+      casUpdate: vi.fn(() => ({ ...record, status: "used" as const })),
+      forceMarkUsed: vi.fn(),
+      revokeBoundSiblings: vi.fn(() => []),
+    };
+    const auditRepository = {
+      insertBestEffort: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      callbackTokenRepository,
+      auditRepository,
+      generateAuditId: () => "audit-post-resolve",
+      now: () => new Date("2026-05-02T00:00:04.000Z"),
+      renderResolvedApprovalCard: vi.fn(() => terminalCard),
+    });
+
+    await daemon.start();
+    actionHandler?.({
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      callbackHandle: "callback-handle-1",
+      target,
+      sender,
+      messageRef: { target, messageId: "msg-bound" },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(broker.resolve).toHaveBeenCalled();
+    expect(callbackTokenRepository.casUpdate).toHaveBeenCalledWith(tokenHash, "bound", "used", {
+      actor: { kind: "im", platform: "telegram", userId: "u-alice" },
+    });
+    expect(callbackTokenRepository.revokeBoundSiblings).toHaveBeenCalledWith(
+      record.approvalId,
+      tokenHash,
+    );
+    expect(auditRepository.insertBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "approval.callback_ack_failed" }),
+    );
+    expect(auditRepository.insertBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "approval.callback_update_failed" }),
     );
   });
 
@@ -2310,6 +2715,59 @@ describe("Daemon skeleton (T14)", () => {
     expect(broker.pruneTerminalRecords).toHaveBeenCalledTimes(1);
   });
 
+  it("contains prune sweep failures and emits daemon audit", async () => {
+    let scheduled: { handler: () => void; intervalMs: number } | undefined;
+    const auditRepository = {
+      insertBestEffort: vi.fn(),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      pruneExpired: vi.fn(() => {
+        throw new Error("sqlite busy");
+      }),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn(() => () => {}),
+      expirePending: vi.fn(),
+      pruneTerminalRecords: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({}),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => ({
+        onAction: vi.fn(() => () => {}),
+        onMessage: vi.fn(() => () => {}),
+      }),
+      callbackTokenRepository,
+      auditRepository,
+      schedulePrune: (handler, intervalMs) => {
+        scheduled = { handler, intervalMs };
+        return () => {};
+      },
+      generateAuditId: () => "audit-prune-failed",
+      now: () => new Date("2026-05-02T19:05:00.000Z"),
+    });
+
+    await daemon.start();
+
+    expect(() => scheduled?.handler()).not.toThrow();
+    expect(auditRepository.insertBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "audit-prune-failed",
+        action: "approval.prune_sweep_failed",
+        result: "failed",
+      }),
+    );
+    expect(broker.expirePending).not.toHaveBeenCalled();
+  });
+
   it("revokes stuck issued callback tokens and fails only the flagged approval as transport_lost", async () => {
     let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
     let scheduled: { handler: () => void; intervalMs: number } | undefined;
@@ -2404,6 +2862,109 @@ describe("Daemon skeleton (T14)", () => {
       100,
     );
     expect(broker.failPendingApprovalAsTransportLost).toHaveBeenCalledWith("approval-stuck-issued");
+  });
+
+  it("keeps stuck-issued approvals flagged across bounded revoke batches", async () => {
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    let scheduled: { handler: () => void; intervalMs: number } | undefined;
+    let currentNow = new Date("2026-05-02T19:20:02.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const actor = { kind: "im" as const, platform: "telegram", userId: "u-alice" };
+    const tokenHashes = [
+      hashCallbackToken("ABCDEFGHIJKLMNOP"),
+      hashCallbackToken("QRSTUVWXYZ234567"),
+    ];
+    const revokedRecords: CallbackTokenRecord[] = tokenHashes.map((tokenHash, index) => ({
+      tokenHash,
+      approvalId: "approval-stuck-issued-batch",
+      action: index === 0 ? "allow_once" : "decline",
+      callbackNonce: "nonce-stuck-issued-batch",
+      target,
+      actor: { kind: "im" },
+      status: "revoked",
+      createdAt: "2026-05-02T19:20:02.000Z",
+      expiresAt: "2026-05-02T19:50:00.000Z",
+    }));
+    const callbackTokenRepository = {
+      insert: vi.fn((input: CallbackTokenInsert) => ({ ...input, status: input.status })),
+      casUpdate: vi.fn(() => undefined),
+      pruneExpired: vi.fn(),
+      revokeStuckIssued: vi
+        .fn()
+        .mockReturnValueOnce([revokedRecords[0]])
+        .mockReturnValueOnce([revokedRecords[1]])
+        .mockReturnValueOnce([]),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      sendCard: vi.fn(() => ({
+        messageRef: { target, messageId: "msg-stuck-issued-batch" },
+        callbackNonce: "legacy",
+      })),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(() => ({ kind: "ok" as const })),
+      failPendingApprovalAsTransportLost: vi.fn(),
+      expirePending: vi.fn(),
+      pruneTerminalRecords: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkApprovalDestination: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      resolveApprovalActions: vi.fn(() => ["allow_once", "decline"] as const),
+      resolveApprovalAllowedActors: vi.fn(() => [actor]),
+      callbackTokenRepository,
+      generateCallbackNonce: () => "nonce-stuck-issued-batch",
+      generateRawCallbackToken: vi
+        .fn()
+        .mockReturnValueOnce("ABCDEFGHIJKLMNOP")
+        .mockReturnValueOnce("QRSTUVWXYZ234567"),
+      schedulePrune: (handler, intervalMs) => {
+        scheduled = { handler, intervalMs };
+        return () => {};
+      },
+      bindIssuedRetryDelaysMs: [],
+      pruneBatchSize: 1,
+      now: () => currentNow,
+    });
+
+    await daemon.start();
+    pendingHandler?.({
+      id: "approval-stuck-issued-batch",
+      appServerRequestId: 9903,
+      method: "item/fileChange/requestApproval",
+      params: {},
+      createdAt: currentNow,
+      expiresAt: new Date("2026-05-02T19:50:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    currentNow = new Date("2026-05-02T19:20:08.000Z");
+    scheduled?.handler();
+    scheduled?.handler();
+    scheduled?.handler();
+
+    expect(callbackTokenRepository.revokeStuckIssued).toHaveBeenCalledTimes(3);
+    expect(broker.failPendingApprovalAsTransportLost).toHaveBeenCalledTimes(1);
+    expect(broker.failPendingApprovalAsTransportLost).toHaveBeenCalledWith(
+      "approval-stuck-issued-batch",
+    );
   });
 
   it.each([

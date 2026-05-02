@@ -28,6 +28,7 @@ export type {
   SecurityPolicyDecision,
   SecurityPolicyDenyDecision,
   SecurityPolicyProjectConfig,
+  SecurityPolicyProjectDecision,
   SecurityPolicyRequireAdminDecision,
   SecurityPolicySender,
   SecurityPolicySnapshot,
