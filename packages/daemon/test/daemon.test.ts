@@ -1,16 +1,24 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { IM_ROUTABLE_APPROVAL_METHODS, type PendingApprovalSnapshot } from "@codex-im/core";
+import {
+  IM_ROUTABLE_APPROVAL_METHODS,
+  type PendingApprovalSnapshot,
+  SessionRouter,
+} from "@codex-im/core";
 import type { ApprovalCard } from "@codex-im/render";
 import {
+  BindingRepository,
   type CallbackTokenInsert,
   type CallbackTokenRecord,
   hashCallbackToken,
+  openDatabase,
+  runMigrations,
 } from "@codex-im/storage-sqlite";
 import { describe, expect, it, vi } from "vitest";
 import { Daemon, type DaemonOptions, type DaemonSignal } from "../src/index.js";
 
 const SRC_DIR = join(import.meta.dirname, "../src");
+const STORAGE_MIGRATIONS_DIR = join(import.meta.dirname, "../../storage-sqlite/src/migrations");
 
 async function flushDaemonHandlers(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
@@ -790,6 +798,182 @@ describe("Daemon skeleton (T14)", () => {
     });
     expect(runtime.turnStart).not.toHaveBeenCalled();
     expect(runtime.turnSteer).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds the default SessionRouter from SQLite bindings during daemon startup", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const db = openDatabase(":memory:");
+    runMigrations(db, STORAGE_MIGRATIONS_DIR);
+    new BindingRepository(db).upsert({
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-restored",
+    });
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-restored" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    try {
+      const daemon = new Daemon({
+        loadConfig: () => ({ projects: { web: { cwd: "/repo/web" } } }),
+        openStorage: () => db,
+        createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+        createSecurityPolicy: () => ({
+          checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        }),
+        createSupervisor: () => ({ currentRuntime: () => runtime }),
+        createAdapter: () => adapter,
+      });
+
+      await daemon.start();
+      messageHandler?.({
+        target,
+        sender,
+        text: "continue after restart",
+        messageRef: { target, messageId: "msg-restored" },
+        receivedAt: new Date("2026-05-02T00:00:06.000Z"),
+      });
+      await flushDaemonHandlers();
+
+      expect(runtime.threadStart).not.toHaveBeenCalled();
+      expect(runtime.turnStart).toHaveBeenCalledWith({
+        threadId: "thread-restored",
+        input: [{ type: "text", text: "continue after restart", text_elements: [] }],
+        cwd: "/repo/web",
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("binds /use to a configured project before acknowledging the inbound message", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const messageRef = { target, messageId: "msg-use" };
+    const bindings = {
+      upsert: vi.fn((input) => ({
+        id: "binding-use",
+        target: input.target,
+        projectId: input.projectId,
+        cwd: input.cwd,
+        createdAt: "2026-05-02T00:00:07.000Z",
+        updatedAt: "2026-05-02T00:00:07.000Z",
+      })),
+      findByTarget: vi.fn(),
+    };
+    const sessionRouter = new SessionRouter({ bindings });
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { web: { cwd: "/repo/web" } } }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => undefined }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/use web",
+      messageRef,
+      receivedAt: new Date("2026-05-02T00:00:07.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(bindings.upsert).toHaveBeenCalledWith({
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(messageRef, "Using project web");
+    expect(sessionRouter.resolve(target)).toMatchObject({
+      kind: "bound",
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+    });
+  });
+
+  it("reports /use storage write failure without optimistic SessionRouter cache update", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const messageRef = { target, messageId: "msg-use-fail" };
+    const bindings = {
+      upsert: vi.fn(() => {
+        throw new Error("disk full");
+      }),
+      findByTarget: vi.fn(() => undefined),
+    };
+    const sessionRouter = new SessionRouter({ bindings });
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { web: { cwd: "/repo/web" } } }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => undefined }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/use web",
+      messageRef,
+      receivedAt: new Date("2026-05-02T00:00:08.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(bindings.upsert).toHaveBeenCalledWith({
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      messageRef,
+      "Failed to bind project web: storage write failed",
+    );
+    expect(sessionRouter.resolve(target)).toEqual({ kind: "unbound", target });
   });
 
   it("auto-declines policy-denied pending approvals through broker.resolve after binding", async () => {

@@ -16,16 +16,19 @@ import {
   type SecurityPolicyUserChatDecision,
   type SessionBindingInput,
   type SessionRoute,
+  SessionRouter,
   type Target,
   routeInboundCommand,
 } from "@codex-im/core";
 import { type ApprovalCard, projectApprovalCard } from "@codex-im/render";
 import {
+  BindingRepository,
   type CallbackTokenAction,
   type CallbackTokenCasFields,
   type CallbackTokenInsert,
   type CallbackTokenRecord,
   type CallbackTokenStatus,
+  type DatabaseHandle,
   hashCallbackToken,
 } from "@codex-im/storage-sqlite";
 
@@ -77,6 +80,7 @@ export interface DaemonAdapter {
   answerAction?(callbackHandle: string, ack: DaemonActionAck): MaybePromise<void>;
   sendCard?(target: Target, card: ApprovalCard): MaybePromise<DaemonSendCardResult>;
   updateCard?(ref: DaemonMessageRef, card: ApprovalCard): MaybePromise<void>;
+  editText?(ref: DaemonMessageRef, body: string): MaybePromise<void>;
   start?(): MaybePromise<void>;
   stop?(): MaybePromise<void>;
 }
@@ -152,6 +156,11 @@ interface DaemonCodexRuntime {
 
 interface DaemonRuntimeProvider {
   currentRuntime(): DaemonCodexRuntime | null | undefined;
+}
+
+interface DaemonProjectConfig {
+  readonly cwd: string;
+  readonly defaultModel?: string;
 }
 
 interface DaemonThreadStartParams {
@@ -252,10 +261,11 @@ export class Daemon {
         broker: this.#broker,
       };
       this.#securityPolicy = await this.options.createSecurityPolicy?.(dependencyContext);
-      this.#sessionRouter = await this.options.createSessionRouter?.({
-        ...dependencyContext,
-        securityPolicy: this.#securityPolicy,
-      });
+      this.#sessionRouter =
+        (await this.options.createSessionRouter?.({
+          ...dependencyContext,
+          securityPolicy: this.#securityPolicy,
+        })) ?? this.#defaultSessionRouter(this.#storage);
       this.#supervisor = await this.options.createSupervisor?.({
         ...dependencyContext,
         securityPolicy: this.#securityPolicy,
@@ -471,7 +481,7 @@ export class Daemon {
       }
 
       if (routed.kind === "command") {
-        await this.#routeCommand(inbound.target, routed);
+        await this.#routeCommand(inbound, routed);
       }
     } catch {
       // Inbound message handling must fail closed without destabilizing daemon subscriptions.
@@ -783,13 +793,20 @@ export class Daemon {
   }
 
   async #routeCommand(
-    target: Target,
+    inbound: { target: Target; messageRef?: DaemonMessageRef },
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
-    if (command.name !== "stop") {
+    if (command.name === "use") {
+      await this.#routeUseCommand(inbound, command);
       return;
     }
 
+    if (command.name === "stop") {
+      await this.#routeStopCommand(inbound.target);
+    }
+  }
+
+  async #routeStopCommand(target: Target): Promise<void> {
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();
     if (sessionRouter === undefined || runtime?.turnInterrupt === undefined) {
@@ -809,6 +826,52 @@ export class Daemon {
       threadId: route.codexThreadId,
       turnId: route.activeTurnId,
     });
+  }
+
+  async #routeUseCommand(
+    inbound: { target: Target; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const [projectId] = command.args;
+    if (projectId === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Usage: /use <project>");
+      return;
+    }
+
+    const project = this.#projectConfig(projectId);
+    if (project === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, `Unknown project: ${projectId}`);
+      return;
+    }
+
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    if (sessionRouter?.bind === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Binding store unavailable");
+      return;
+    }
+
+    try {
+      sessionRouter.bind(inbound.target, {
+        projectId,
+        cwd: project.cwd,
+        ...(project.defaultModel === undefined ? {} : { defaultModel: project.defaultModel }),
+      });
+    } catch {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `Failed to bind project ${projectId}: storage write failed`,
+      );
+      return;
+    }
+
+    await this.#editInboundMessage(inbound.messageRef, `Using project ${projectId}`);
+  }
+
+  async #editInboundMessage(messageRef: DaemonMessageRef | undefined, body: string): Promise<void> {
+    if (messageRef === undefined) {
+      return;
+    }
+    await this.#adapter?.editText?.(messageRef, body);
   }
 
   #threadStartParams(route: Extract<SessionRoute, { kind: "bound" }>): DaemonThreadStartParams {
@@ -872,6 +935,44 @@ export class Daemon {
     return value as DaemonSessionRouter;
   }
 
+  #defaultSessionRouter(storage: unknown): SessionRouter | undefined {
+    const db = this.#databaseHandle(storage);
+    return db === undefined
+      ? undefined
+      : new SessionRouter({ bindings: new BindingRepository(db) });
+  }
+
+  #databaseHandle(value: unknown): DatabaseHandle | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    return typeof (value as Partial<DatabaseHandle>).prepare === "function"
+      ? (value as DatabaseHandle)
+      : undefined;
+  }
+
+  #projectConfig(projectId: string): DaemonProjectConfig | undefined {
+    if (typeof this.#config !== "object" || this.#config === null) {
+      return undefined;
+    }
+    const projects = (this.#config as { projects?: unknown }).projects;
+    if (typeof projects !== "object" || projects === null) {
+      return undefined;
+    }
+    const project = (projects as Record<string, unknown>)[projectId];
+    if (typeof project !== "object" || project === null) {
+      return undefined;
+    }
+    const partial = project as Partial<DaemonProjectConfig>;
+    if (typeof partial.cwd !== "string") {
+      return undefined;
+    }
+    return {
+      cwd: partial.cwd,
+      ...(typeof partial.defaultModel === "string" ? { defaultModel: partial.defaultModel } : {}),
+    };
+  }
+
   #inboundAction(action: unknown):
     | {
         rawCallbackData: string;
@@ -911,6 +1012,7 @@ export class Daemon {
         target: Target;
         sender: SecurityPolicySender;
         text: string;
+        messageRef?: DaemonMessageRef;
       }
     | undefined {
     if (typeof message !== "object" || message === null) {
@@ -920,13 +1022,20 @@ export class Daemon {
       target: unknown;
       sender: unknown;
       text: unknown;
+      messageRef: unknown;
     }>;
     const target = this.#daemonTarget(partial.target);
     const sender = this.#daemonSender(partial.sender);
     if (target === undefined || sender === undefined || typeof partial.text !== "string") {
       return undefined;
     }
-    return { target, sender, text: partial.text };
+    const messageRef = this.#daemonMessageRef(partial.messageRef);
+    return {
+      target,
+      sender,
+      text: partial.text,
+      ...(messageRef === undefined ? {} : { messageRef }),
+    };
   }
 
   #daemonMessageRef(value: unknown): DaemonMessageRef | undefined {
