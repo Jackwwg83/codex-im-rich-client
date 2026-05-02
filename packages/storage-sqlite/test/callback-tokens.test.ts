@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  type CallbackTokenAction,
   CallbackTokenRepository,
   hashCallbackToken,
   openDatabase,
@@ -10,6 +11,12 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REAL_MIGRATIONS_DIR = join(HERE, "../src/migrations");
+const CALLBACK_ACTIONS = [
+  "allow_once",
+  "allow_session",
+  "decline",
+  "abort",
+] as const satisfies readonly CallbackTokenAction[];
 
 describe("CallbackTokenRepository (T6d)", () => {
   it("round-trips insert, guarded status updates, hash lookup, and expired-token prune", () => {
@@ -111,6 +118,34 @@ describe("CallbackTokenRepository (T6d)", () => {
         if (value !== null && value !== undefined) {
           expect(String(value)).not.toContain(rawToken);
         }
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  it("round-trips every allowed callback token action and excludes cancel", () => {
+    expect(CALLBACK_ACTIONS).not.toContain("cancel" as CallbackTokenAction);
+
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new CallbackTokenRepository(db);
+      for (const [idx, action] of CALLBACK_ACTIONS.entries()) {
+        const tokenHash = hashCallbackToken(`synthetic-action-token-${idx}`);
+        repo.insert({
+          tokenHash,
+          approvalId: `approval-action-${idx}`,
+          action,
+          callbackNonce: `nonce-action-${idx}`,
+          target: { platform: "telegram", chatId: "-100123456" },
+          actor: { kind: "im" },
+          createdAt: "2026-05-02T16:50:00.000Z",
+          expiresAt: "2026-05-02T17:20:00.000Z",
+        });
+
+        expect(repo.findByHash(tokenHash)).toMatchObject({ action });
       }
     } finally {
       db.close();
