@@ -12,6 +12,7 @@
 
 export { Daemon } from "./daemon.js";
 export type {
+  DaemonActionAck,
   DaemonAdapter,
   DaemonAdapterContext,
   DaemonApprovalDestinationPolicy,

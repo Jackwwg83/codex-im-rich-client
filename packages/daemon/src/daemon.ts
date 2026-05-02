@@ -26,6 +26,13 @@ type Unsubscribe = () => void;
 type CleanupMethod = () => MaybePromise<void>;
 export type DaemonSignal = "SIGINT" | "SIGTERM";
 const CALLBACK_TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const CALLBACK_TOKEN_WIRE_RE = /^v1:([A-Z2-7]{16})$/;
+const CALLBACK_TOKEN_FAIL_MESSAGES: Partial<Record<CallbackTokenStatus, string>> = {
+  expired: "expired",
+  revoked: "stale token",
+  used: "already resolved",
+  issued: "binding not ready",
+};
 
 export interface DaemonBroker {
   attach(): void;
@@ -59,6 +66,7 @@ export interface DaemonAdapterContext extends DaemonSupervisorContext {
 export interface DaemonAdapter {
   onAction(handler: (action: unknown) => void): Unsubscribe;
   onMessage(handler: (message: unknown) => void): Unsubscribe;
+  answerAction?(callbackHandle: string, ack: DaemonActionAck): MaybePromise<void>;
   sendCard?(target: Target, card: ApprovalCard): MaybePromise<DaemonSendCardResult>;
   start?(): MaybePromise<void>;
   stop?(): MaybePromise<void>;
@@ -73,12 +81,18 @@ export interface DaemonApprovalDestinationPolicy {
 
 export interface DaemonCallbackTokenRepository {
   insert(input: CallbackTokenInsert): CallbackTokenRecord | unknown;
+  findByHash?(tokenHash: string): CallbackTokenRecord | unknown;
   casUpdate?(
     tokenHash: string,
     fromStatus: CallbackTokenStatus,
     toStatus: CallbackTokenStatus,
     fields?: CallbackTokenCasFields,
   ): CallbackTokenRecord | unknown;
+}
+
+export interface DaemonActionAck {
+  readonly ok: boolean;
+  readonly userMessage: string;
 }
 
 export interface DaemonIssuedCallbackToken {
@@ -359,7 +373,9 @@ export class Daemon {
     return { callbackNonce, tokens: issued };
   }
 
-  #handleAction(_action: unknown): void {}
+  #handleAction(action: unknown): void {
+    void this.#handleInboundAction(action);
+  }
 
   #handleMessage(_message: unknown): void {}
 
@@ -377,6 +393,54 @@ export class Daemon {
         messageRef: { chatId: messageRef.target.chatId, messageId: messageRef.messageId },
       });
     }
+  }
+
+  async #handleInboundAction(action: unknown): Promise<void> {
+    const inbound = this.#inboundAction(action);
+    if (inbound === undefined) {
+      return;
+    }
+
+    const rawToken = this.#decodeRawCallbackToken(inbound.rawCallbackData);
+    if (rawToken === undefined) {
+      await this.#answerAction(inbound.callbackHandle, "stale or unknown");
+      return;
+    }
+
+    const record = this.options.callbackTokenRepository?.findByHash?.(hashCallbackToken(rawToken));
+    const status = this.#callbackTokenStatus(record);
+    if (status === undefined) {
+      await this.#answerAction(inbound.callbackHandle, "stale or unknown");
+      return;
+    }
+    if (status !== "bound") {
+      await this.#answerAction(
+        inbound.callbackHandle,
+        CALLBACK_TOKEN_FAIL_MESSAGES[status] ?? "stale or unknown",
+      );
+    }
+  }
+
+  async #answerAction(callbackHandle: string, userMessage: string): Promise<void> {
+    await this.#adapter?.answerAction?.(callbackHandle, { ok: false, userMessage });
+  }
+
+  #decodeRawCallbackToken(rawCallbackData: string): string | undefined {
+    return CALLBACK_TOKEN_WIRE_RE.exec(rawCallbackData)?.[1];
+  }
+
+  #callbackTokenStatus(record: unknown): CallbackTokenStatus | undefined {
+    if (typeof record !== "object" || record === null) {
+      return undefined;
+    }
+    const status = (record as Partial<CallbackTokenRecord>).status;
+    return status === "issued" ||
+      status === "bound" ||
+      status === "used" ||
+      status === "expired" ||
+      status === "revoked"
+      ? status
+      : undefined;
   }
 
   async #approvalActions(
@@ -413,6 +477,17 @@ export class Daemon {
       return undefined;
     }
     return value as DaemonApprovalDestinationPolicy;
+  }
+
+  #inboundAction(action: unknown): { rawCallbackData: string; callbackHandle: string } | undefined {
+    if (typeof action !== "object" || action === null) {
+      return undefined;
+    }
+    const partial = action as Partial<{ rawCallbackData: unknown; callbackHandle: unknown }>;
+    if (typeof partial.rawCallbackData !== "string" || typeof partial.callbackHandle !== "string") {
+      return undefined;
+    }
+    return { rawCallbackData: partial.rawCallbackData, callbackHandle: partial.callbackHandle };
   }
 }
 

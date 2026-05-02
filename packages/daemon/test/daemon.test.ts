@@ -1026,6 +1026,102 @@ describe("Daemon skeleton (T14)", () => {
   });
 
   it.each([
+    {
+      name: "malformed callback payload",
+      rawCallbackData: "legacy-nonce",
+      record: undefined,
+      expectedLookup: false,
+      expectedMessage: "stale or unknown",
+    },
+    {
+      name: "unknown callback token",
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      record: undefined,
+      expectedLookup: true,
+      expectedMessage: "stale or unknown",
+    },
+    {
+      name: "expired callback token",
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      record: { status: "expired" },
+      expectedLookup: true,
+      expectedMessage: "expired",
+    },
+    {
+      name: "revoked callback token",
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      record: { status: "revoked" },
+      expectedLookup: true,
+      expectedMessage: "stale token",
+    },
+    {
+      name: "used callback token",
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      record: { status: "used" },
+      expectedLookup: true,
+      expectedMessage: "already resolved",
+    },
+    {
+      name: "issued callback token",
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      record: { status: "issued" },
+      expectedLookup: true,
+      expectedMessage: "binding not ready",
+    },
+  ])(
+    "fails closed for $name before broker.resolve",
+    async ({ rawCallbackData, record, expectedLookup, expectedMessage }) => {
+      let actionHandler: ((action: unknown) => void) | undefined;
+      const adapter = {
+        onAction: vi.fn((handler: (action: unknown) => void) => {
+          actionHandler = handler;
+          return () => {};
+        }),
+        onMessage: vi.fn(() => () => {}),
+        answerAction: vi.fn(),
+      };
+      const broker = {
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        onPendingCreated: vi.fn(() => () => {}),
+        resolve: vi.fn(),
+      };
+      const callbackTokenRepository = {
+        insert: vi.fn(),
+        findByHash: vi.fn(() => record),
+      };
+
+      const daemon = new Daemon({
+        loadConfig: () => ({}),
+        openStorage: () => ({}),
+        createBroker: () => broker,
+        createSecurityPolicy: () => ({}),
+        createSessionRouter: () => ({}),
+        createSupervisor: () => ({}),
+        createAdapter: () => adapter,
+        callbackTokenRepository,
+      });
+
+      await daemon.start();
+      actionHandler?.({ rawCallbackData, callbackHandle: "callback-handle-1" });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      if (expectedLookup) {
+        expect(callbackTokenRepository.findByHash).toHaveBeenCalledWith(
+          hashCallbackToken("ABCDEFGHIJKLMNOP"),
+        );
+      } else {
+        expect(callbackTokenRepository.findByHash).not.toHaveBeenCalled();
+      }
+      expect(adapter.answerAction).toHaveBeenCalledWith("callback-handle-1", {
+        ok: false,
+        userMessage: expectedMessage,
+      });
+      expect(broker.resolve).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     ["loadConfig", []],
     ["openStorage", []],
     ["createBroker", ["storage.close"]],
