@@ -107,6 +107,7 @@ export class Daemon {
       );
       this.#subscribe(this.#adapter?.onAction((action) => this.#handleAction(action)));
       this.#subscribe(this.#adapter?.onMessage((message) => this.#handleMessage(message)));
+      await this.#adapter?.start?.();
       this.#started = true;
     } catch (error) {
       await this.#cleanupPartialStart();

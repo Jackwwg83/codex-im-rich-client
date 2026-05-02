@@ -210,9 +210,6 @@ describe("Daemon skeleton (T14)", () => {
         order.push("adapter.onMessage");
         return unsubscribers.message;
       }),
-      start: vi.fn(() => {
-        order.push("adapter.start");
-      }),
     };
 
     const daemon = new Daemon({
@@ -255,7 +252,55 @@ describe("Daemon skeleton (T14)", () => {
       "adapter.onAction",
       "adapter.onMessage",
     ]);
-    expect(adapter.start).not.toHaveBeenCalled();
+  });
+
+  it("wires onAction before adapter.start so an immediate inbound action reaches the handler", async () => {
+    const order: string[] = [];
+    const inboundAction = { rawCallbackData: "v1:test-token" };
+    let actionHandler: ((action: unknown) => void) | undefined;
+    const broker = {
+      attach: vi.fn(() => {
+        order.push("broker.attach");
+      }),
+      enablePendingMode: vi.fn((method: string) => {
+        order.push(`pending:${method}`);
+      }),
+      onPendingCreated: vi.fn(() => {
+        order.push("broker.onPendingCreated");
+        return () => {};
+      }),
+    };
+    const adapter = {
+      onAction: vi.fn((handler: (action: unknown) => void) => {
+        order.push("adapter.onAction");
+        actionHandler = handler;
+        return () => {};
+      }),
+      onMessage: vi.fn(() => {
+        order.push("adapter.onMessage");
+        return () => {};
+      }),
+      start: vi.fn(() => {
+        order.push("adapter.start");
+        actionHandler?.(inboundAction);
+        order.push("action.handler.fired");
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({}),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+
+    expect(order.indexOf("adapter.onAction")).toBeLessThan(order.indexOf("adapter.start"));
+    expect(order).toContain("action.handler.fired");
   });
 
   it.each([
@@ -276,6 +321,17 @@ describe("Daemon skeleton (T14)", () => {
     [
       "adapter.onMessage",
       [
+        "action.unsubscribe",
+        "pending.unsubscribe",
+        "adapter.stop",
+        "supervisor.stop",
+        "storage.close",
+      ],
+    ],
+    [
+      "adapter.start",
+      [
+        "message.unsubscribe",
         "action.unsubscribe",
         "pending.unsubscribe",
         "adapter.stop",
@@ -331,6 +387,9 @@ describe("Daemon skeleton (T14)", () => {
           return () => {
             order.push("message.unsubscribe");
           };
+        }),
+        start: vi.fn(() => {
+          failAt("adapter.start");
         }),
         stop: vi.fn(() => {
           order.push("adapter.stop");
