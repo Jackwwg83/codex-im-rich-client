@@ -75,7 +75,9 @@ export {
 // T6a (Phase 3) — audit_log repository exports.
 export {
   AuditRepository,
+  type AuditInsertBestEffortResult,
   type AuditInsert,
   type AuditRecord,
   type AuditRepositoryOptions,
+  type AuditUnavailableMarker,
 } from "./audit.js";

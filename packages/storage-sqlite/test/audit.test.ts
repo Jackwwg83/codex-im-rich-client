@@ -92,4 +92,54 @@ describe("AuditRepository (T6a)", () => {
       db.close();
     }
   });
+
+  it("rate-limits SQLite failure markers and aggregates dropped audit writes", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+      db.exec(`
+        CREATE TRIGGER audit_log_insert_failure
+        BEFORE INSERT ON audit_log
+        BEGIN
+          SELECT RAISE(FAIL, 'audit sink unavailable');
+        END;
+      `);
+
+      const markers: Array<{ action: string; result?: string; metadataJson?: string }> = [];
+      const repo = new AuditRepository(db, {
+        nowMs: () => Date.parse("2026-05-02T15:00:00.000Z"),
+        onUnavailable: (marker) => markers.push(marker),
+      });
+
+      const first = repo.insertBestEffort({
+        id: "audit-fail-1",
+        action: "approval.created",
+        approvalId: "approval-1",
+        createdAt: "2026-05-02T15:00:00.000Z",
+      });
+      const second = repo.insertBestEffort({
+        id: "audit-fail-2",
+        action: "approval.resolved",
+        approvalId: "approval-2",
+        createdAt: "2026-05-02T15:00:01.000Z",
+      });
+
+      expect(first).toMatchObject({ ok: false, droppedCount: 1, markerEmitted: true });
+      expect(second).toMatchObject({ ok: false, droppedCount: 2, markerEmitted: false });
+      expect(repo.droppedCount()).toBe(2);
+      expect(markers).toHaveLength(1);
+      expect(markers[0]).toMatchObject({
+        action: "audit.sqlite_unavailable",
+        result: "failed",
+      });
+      expect(markers[0]?.metadataJson).toContain("audit sink unavailable");
+
+      const persisted = db.prepare("SELECT COUNT(*) AS count FROM audit_log").get() as {
+        count: number;
+      };
+      expect(persisted.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
 });

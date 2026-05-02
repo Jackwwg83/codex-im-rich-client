@@ -1,22 +1,22 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + migrations + binding repository + approval repository + audit repository redaction landed (T1.1 → T6b) + docs convergence (`f4e1b69`) + handoff checkpoint (`f493360`) + autonomous-loop runbook (`084aab8`).
-> **Handoff status:** T6b complete locally in the current implementation commit: injected `AuditRepository` redactor + redaction round-trip test. All 5 gates green. Next exact issue: JAC-112 / T6c.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + migrations + binding repository + approval repository + audit repository D31 failure handling landed (T1.1 → T6c) + docs convergence (`f4e1b69`) + handoff checkpoint (`f493360`) + autonomous-loop runbook (`084aab8`).
+> **Handoff status:** T6c complete locally in the current implementation commit: `AuditRepository.insertBestEffort` + rate-limited `audit.sqlite_unavailable` marker + dropped counter test. All 5 gates green. Next exact issue: JAC-35 / T6d.
 
 ---
 
 ## 1. Current phase / task
 
 - **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4.
-- **Active task:** None at this checkpoint. Last completed: **T6b / JAC-111** (`AuditRepository` injected redactor + redaction round-trip test).
-- **Next exact task:** **T6c / JAC-112** — `AuditRepository` rate-limited SQLite failure handling (D31). Do not start callback token repository in the same commit.
+- **Active task:** None at this checkpoint. Last completed: **T6c / JAC-112** (`AuditRepository.insertBestEffort` + rate-limited `audit.sqlite_unavailable` marker + dropped counter test).
+- **Next exact task:** **T6d / JAC-35** — migration 007 `callback_tokens`; `CallbackTokenRepository.insert`, `findByHash`, `casUpdate`, and `pruneExpired`. Store token hash only; never persist raw token bytes.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
 
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **HEAD:** current T6b implementation commit (run `git log --oneline -1`); prior checkpoint `084aab8` added the autonomous-loop runbook.
+- **HEAD:** current T6c implementation commit (run `git log --oneline -1`); prior checkpoint `084aab8` added the autonomous-loop runbook.
 - **Tag distance:** `phase-2-codex-reviewed` plus current Phase 3 implementation commits (run `git describe --tags`)
 - **Origin:** local branch may be ahead until the operator/agent pushes; verify with `git rev-list --left-right --count origin/phase-3-implementation...HEAD`
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
@@ -41,7 +41,8 @@
 | `931ad5f` | T5a | `003-approvals.sql` + `ApprovalRepository.upsert/findById` + round-trip test |
 | `d50e705` | T5b | Injected `ApprovalRepository` redactor + redaction round-trip test |
 | `baeb3f5` | T6a | `004-audit-log.sql` + `AuditRepository.insert/findById` + round-trip test |
-| current T6b commit | T6b | Injected `AuditRepository` redactor + redaction round-trip test |
+| `0c4fd23` | T6b | Injected `AuditRepository` redactor + redaction round-trip test |
+| current T6c commit | T6c | `AuditRepository.insertBestEffort` + rate-limited SQLite failure marker + dropped counter |
 
 ## 3. Versions / pins
 
@@ -57,7 +58,7 @@
 |---|---|---|
 | TypeScript | `pnpm typecheck` | green (10 packages strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess) |
 | Test typecheck | `pnpm typecheck:tests` | green |
-| Tests | `pnpm test` | **747 passing + 1 skipped** across 68 test files (Phase 2 close: 720; +27 from storage-sqlite) |
+| Tests | `pnpm test` | **748 passing + 1 skipped** across 68 test files (Phase 2 close: 720; +28 from storage-sqlite) |
 | Lint | `pnpm lint` | green (155 files, biome) |
 | Protocol gate | `pnpm protocol:check` | green (codex 0.128.0; 234 schema files canonical) |
 | D27 storage boundary | `packages/storage-sqlite/test/no-upward-imports.test.ts` | 8 packages forbidden, type-only included, `import|export ... from` predicate, multi-line aware |
@@ -113,7 +114,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.2 for the next T-task body. The next task is **T6c** (`AuditRepository` rate-limited SQLite failure handling).
+3. Read `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.2 for the next T-task body. The next task is **T6d** (migration 007 `callback_tokens`; `CallbackTokenRepository.insert/findByHash/casUpdate/pruneExpired`).
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. STOP and output a Context Recovery Report. Do NOT modify code until the user approves the recovery.
@@ -152,4 +153,4 @@ For the Codex agent picking this up:
    - Don't bump `package.json` `version`. Plan §19 item 28 ties `0.1.0-phase3-draft` to Phase 3 tag time.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 
-This section is the historical Claude-to-Codex handoff. The next live task has advanced: **T4a, T4b, T4c, T5a, T5b, T6a, and T6b are complete**. Continue with **T6c / JAC-112** only (`AuditRepository` rate-limited SQLite failure handling), and do not start callback_tokens yet.
+This section is the historical Claude-to-Codex handoff. The next live task has advanced: **T4a, T4b, T4c, T5a, T5b, T6a, T6b, and T6c are complete**. Continue with **T6d / JAC-35** only (`callback_tokens` repository core API), and do not start T6e/T6f yet.

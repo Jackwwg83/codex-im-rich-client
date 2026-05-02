@@ -30,7 +30,26 @@ export interface AuditRecord {
 
 export interface AuditRepositoryOptions {
   redact?: (text: string) => string;
+  nowMs?: () => number;
+  onUnavailable?: (marker: AuditUnavailableMarker) => void;
+  unavailableWindowMs?: number;
 }
+
+export interface AuditUnavailableMarker {
+  action: "audit.sqlite_unavailable";
+  result: "failed";
+  metadataJson: string;
+  createdAt: string;
+}
+
+export type AuditInsertBestEffortResult =
+  | { ok: true; record: AuditRecord; droppedCount: number }
+  | {
+      ok: false;
+      droppedCount: number;
+      markerEmitted: boolean;
+      errorMessage: string;
+    };
 
 interface AuditRow {
   id: string;
@@ -64,12 +83,20 @@ function hydrate(row: AuditRow): AuditRecord {
 
 export class AuditRepository {
   readonly #redact: (text: string) => string;
+  readonly #nowMs: () => number;
+  readonly #onUnavailable: ((marker: AuditUnavailableMarker) => void) | null;
+  readonly #unavailableWindowMs: number;
+  #droppedCount = 0;
+  #lastUnavailableMarkerAt: number | null = null;
 
   constructor(
     private readonly db: DatabaseHandle,
     opts: AuditRepositoryOptions = {},
   ) {
     this.#redact = opts.redact ?? ((text) => text);
+    this.#nowMs = opts.nowMs ?? (() => Date.now());
+    this.#onUnavailable = opts.onUnavailable ?? null;
+    this.#unavailableWindowMs = opts.unavailableWindowMs ?? 60_000;
   }
 
   insert(input: AuditInsert): AuditRecord {
@@ -120,6 +147,26 @@ export class AuditRepository {
     return this.findById(input.id) as AuditRecord;
   }
 
+  insertBestEffort(input: AuditInsert): AuditInsertBestEffortResult {
+    try {
+      return { ok: true, record: this.insert(input), droppedCount: this.#droppedCount };
+    } catch (error) {
+      this.#droppedCount += 1;
+      const now = this.#nowMs();
+      const markerEmitted = this.#maybeEmitUnavailableMarker(now, error);
+      return {
+        ok: false,
+        droppedCount: this.#droppedCount,
+        markerEmitted,
+        errorMessage: errorMessage(error),
+      };
+    }
+  }
+
+  droppedCount(): number {
+    return this.#droppedCount;
+  }
+
   findById(id: string): AuditRecord | undefined {
     const row = this.db
       .prepare(
@@ -147,4 +194,35 @@ export class AuditRepository {
   #redactOptional(value: string | undefined): string | null {
     return value === undefined ? null : this.#redact(value);
   }
+
+  #maybeEmitUnavailableMarker(now: number, error: unknown): boolean {
+    if (
+      this.#lastUnavailableMarkerAt !== null &&
+      now - this.#lastUnavailableMarkerAt < this.#unavailableWindowMs
+    ) {
+      return false;
+    }
+
+    this.#lastUnavailableMarkerAt = now;
+    if (this.#onUnavailable !== null) {
+      try {
+        this.#onUnavailable({
+          action: "audit.sqlite_unavailable",
+          result: "failed",
+          metadataJson: JSON.stringify({
+            droppedCount: this.#droppedCount,
+            error: errorMessage(error),
+          }),
+          createdAt: new Date(now).toISOString(),
+        });
+      } catch {
+        // Best-effort audit sink errors must never block broker/daemon paths.
+      }
+    }
+    return true;
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
