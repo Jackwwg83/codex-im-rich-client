@@ -12,15 +12,28 @@ import { LARK_CAPABILITIES } from "./capabilities.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
+export interface LarkEventDispatcherLike {
+  readonly kind?: string;
+}
+
+export interface LarkWsClientLike {
+  start(input: { eventDispatcher: LarkEventDispatcherLike }): Promise<void>;
+  close(params?: { force?: boolean }): void | Promise<void>;
+}
+
 export interface LarkChannelAdapterOptions {
   readonly now?: () => Date;
+  readonly wsClient?: LarkWsClientLike;
+  readonly createEventDispatcher?: () => LarkEventDispatcherLike;
 }
 
 export class LarkChannelAdapter implements ChannelAdapter {
   readonly capabilities = LARK_CAPABILITIES;
 
   readonly #options: LarkChannelAdapterOptions;
+  #wsClient: LarkWsClientLike | undefined;
   #started = false;
+  #inboundPaused = true;
   readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
   readonly #onActionHandlers = new Set<(action: InboundAction) => void>();
 
@@ -29,11 +42,29 @@ export class LarkChannelAdapter implements ChannelAdapter {
   }
 
   async start(): Promise<void> {
+    if (this.#started) {
+      return;
+    }
+    this.#inboundPaused = true;
+    const wsClient = this.#options.wsClient;
+    if (wsClient === undefined) {
+      throw new Error("LarkChannelAdapter.start requires an injected wsClient");
+    }
+    const eventDispatcher = this.#options.createEventDispatcher?.() ?? {};
+    await wsClient.start({ eventDispatcher });
+    this.#wsClient = wsClient;
     this.#started = true;
+    this.#inboundPaused = false;
   }
 
   async stop(): Promise<void> {
+    if (!this.#started) {
+      return;
+    }
+    this.#inboundPaused = true;
     this.#started = false;
+    await this.#wsClient?.close();
+    this.#wsClient = undefined;
   }
 
   onMessage(handler: (msg: InboundMessage) => void): () => void {
@@ -72,6 +103,10 @@ export class LarkChannelAdapter implements ChannelAdapter {
 
   _startedForTest(): boolean {
     return this.#started;
+  }
+
+  _inboundPausedForTest(): boolean {
+    return this.#inboundPaused;
   }
 
   _nowForTest(): Date {

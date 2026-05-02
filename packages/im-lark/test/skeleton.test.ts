@@ -15,17 +15,20 @@ describe("@codex-im/im-lark skeleton (JAC-149)", () => {
     expect(adapter.constructor.name).toBe("LarkChannelAdapter");
   });
 
-  it("has idempotent skeleton lifecycle without starting SDK/network work", async () => {
+  it("requires injected lifecycle dependencies before start", async () => {
     const now = new Date("2026-05-02T00:00:00.000Z");
     const adapter = new LarkChannelAdapter({ now: () => now });
 
     expect(adapter._startedForTest()).toBe(false);
-    await adapter.start();
-    await adapter.start();
-    expect(adapter._startedForTest()).toBe(true);
+    expect(adapter._inboundPausedForTest()).toBe(true);
     expect(adapter._nowForTest()).toBe(now);
 
-    await adapter.stop();
+    await expect(adapter.start()).rejects.toThrow(
+      "LarkChannelAdapter.start requires an injected wsClient",
+    );
+    expect(adapter._startedForTest()).toBe(false);
+    expect(adapter._inboundPausedForTest()).toBe(true);
+
     await adapter.stop();
     expect(adapter._startedForTest()).toBe(false);
   });
