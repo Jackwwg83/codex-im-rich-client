@@ -11,6 +11,7 @@
     "test": "vitest run --project unit"
   },
   "dependencies": {
-    "@codex-im/channel-core": "workspace:*"
+    "@codex-im/channel-core": "workspace:*",
+    "dingtalk-stream": "^2.1.5"
   }
 }

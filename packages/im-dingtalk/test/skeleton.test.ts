@@ -15,7 +15,7 @@ describe("@codex-im/im-dingtalk skeleton (JAC-79)", () => {
     expect(adapter.constructor.name).toBe("DingTalkChannelAdapter");
   });
 
-  it("keeps Stream lifecycle explicitly gated for JAC-80", async () => {
+  it("requires injected Stream lifecycle dependencies before start", async () => {
     const now = new Date("2026-05-02T00:00:00.000Z");
     const adapter = new DingTalkChannelAdapter({ now: () => now });
 
@@ -23,9 +23,7 @@ describe("@codex-im/im-dingtalk skeleton (JAC-79)", () => {
     expect(adapter._inboundPausedForTest()).toBe(true);
     expect(adapter._nowForTest()).toBe(now);
 
-    await expect(adapter.start()).rejects.toThrow(
-      "DingTalkChannelAdapter.start requires JAC-80 Stream lifecycle implementation",
-    );
+    await expect(adapter.start()).rejects.toThrow("requires an injected streamClient");
     expect(adapter._startedForTest()).toBe(false);
     expect(adapter._inboundPausedForTest()).toBe(true);
 

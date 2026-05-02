@@ -9,17 +9,25 @@ import type {
   Target,
 } from "@codex-im/channel-core";
 import { DINGTALK_CAPABILITIES } from "./capabilities.js";
+import {
+  DINGTALK_TOPIC_CARD,
+  DINGTALK_TOPIC_ROBOT,
+  type DingTalkStreamClientLike,
+  type DingTalkStreamEventLike,
+} from "./client.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
 export interface DingTalkChannelAdapterOptions {
   readonly now?: () => Date;
+  readonly streamClient?: DingTalkStreamClientLike;
 }
 
 export class DingTalkChannelAdapter implements ChannelAdapter {
   readonly capabilities = DINGTALK_CAPABILITIES;
 
   readonly #options: DingTalkChannelAdapterOptions;
+  #streamClient: DingTalkStreamClientLike | undefined;
   #started = false;
   #inboundPaused = true;
   readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
@@ -30,12 +38,35 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   }
 
   async start(): Promise<void> {
-    throw new Error("DingTalkChannelAdapter.start requires JAC-80 Stream lifecycle implementation");
+    if (this.#started) {
+      return;
+    }
+    this.#inboundPaused = true;
+    const streamClient = this.#options.streamClient;
+    if (streamClient === undefined) {
+      throw new Error("DingTalkChannelAdapter.start requires an injected streamClient");
+    }
+    this.#installStreamCallbacks(streamClient);
+    try {
+      await streamClient.connect();
+    } catch (error) {
+      this.#started = false;
+      this.#inboundPaused = true;
+      throw error;
+    }
+    this.#streamClient = streamClient;
+    this.#started = true;
+    this.#inboundPaused = false;
   }
 
   async stop(): Promise<void> {
+    if (!this.#started) {
+      return;
+    }
     this.#inboundPaused = true;
     this.#started = false;
+    await this.#streamClient?.disconnect();
+    this.#streamClient = undefined;
   }
 
   onMessage(handler: (msg: InboundMessage) => void): () => void {
@@ -86,5 +117,26 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
 
   #notImplemented(method: string, issue: string): Error {
     return new Error(`DingTalkChannelAdapter.${method} is not implemented until ${issue}`);
+  }
+
+  #installStreamCallbacks(streamClient: DingTalkStreamClientLike): void {
+    streamClient.registerCallbackListener(DINGTALK_TOPIC_ROBOT, (event) => {
+      this.#handleRobotCallback(event);
+    });
+    streamClient.registerCallbackListener(DINGTALK_TOPIC_CARD, (event) => {
+      this.#handleCardCallback(event);
+    });
+  }
+
+  #handleRobotCallback(_event: DingTalkStreamEventLike): void {
+    if (this.#inboundPaused) {
+      return;
+    }
+  }
+
+  #handleCardCallback(_event: DingTalkStreamEventLike): void {
+    if (this.#inboundPaused) {
+      return;
+    }
   }
 }
