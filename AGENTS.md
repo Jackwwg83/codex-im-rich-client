@@ -1,4 +1,4 @@
-# CLAUDE.md：Codex IM Rich Client 项目规则
+# AGENTS.md：Codex IM Rich Client 项目规则
 
 ## 项目目标
 
@@ -208,12 +208,12 @@ In addition to the project-wide redlines (start of this file):
 
 ## Compact / Resume Instructions
 
-After auto-compaction, manual `/compact`, `/resume`, or context loss, Claude Code must not continue implementation immediately.
+After auto-compaction, manual `/compact`, `/resume`, or context loss, Codex must not continue implementation immediately.
 
 First enter Context Recovery Mode:
 
 1. Read:
-   - CLAUDE.md
+   - AGENTS.md
    - README.md
    - current phase plan under docs/superpowers/plans/
    - latest handoff under docs/handoffs/

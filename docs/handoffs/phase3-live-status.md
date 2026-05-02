@@ -1,8 +1,8 @@
 # Phase 3 Live Status
 
 > Single source of truth for Phase 3 implementation. Read first on compact / resume / context loss.
-> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + first migration landed (T1.1 → T3a) + docs convergence (`f4e1b69`).
-> **Handoff status:** as of HEAD `f4e1b69`, work is paused at a clean checkpoint and handed off to Codex for subsequent T-task implementation. All gates green; no uncommitted code; origin is synced 0/0.
+> **Last updated:** 2026-05-02 — Phase 3 active; storage-sqlite skeleton + database lifecycle + first migration landed (T1.1 → T3a) + docs convergence (`f4e1b69`) + handoff checkpoint (`f493360`).
+> **Handoff status:** as of HEAD `f493360`, work is paused at a clean checkpoint and handed off to Codex for subsequent T-task implementation. All gates green; no uncommitted code; origin is synced 0/0.
 
 ---
 
@@ -16,8 +16,8 @@
 ## 2. Branch / HEAD
 
 - **Branch:** `phase-3-implementation`
-- **HEAD:** `f4e1b69` (docs convergence; last code commit `c06813e` at T3a)
-- **Tag distance:** `phase-2-codex-reviewed-14-gf4e1b69`
+- **HEAD:** `f493360` (handoff checkpoint; last code commit `c06813e` at T3a)
+- **Tag distance:** `phase-2-codex-reviewed-15-gf493360`
 - **Origin:** `origin/phase-3-implementation` synced 0/0 to HEAD
 - **Base tag:** `phase-2-codex-reviewed` (annotated, at `0d4dfc3`) — Phase 2 close + codex backfill review fix arc complete
 - **Branch genealogy:** `phase-2-codex-reviewed` → `chore/codex-upgrade-0.128` → `phase-3-planning` → `phase-3-implementation`
@@ -33,6 +33,7 @@
 | `04a92fe` | codex P1+P2 fix | Boundary tightening + atomic-rollback test + BEGIN/COMMIT JSDoc |
 | `c06813e` | T3a | `001-init.sql` owns schema_version DDL + real-dir runner test + PRAGMA shape pin |
 | `f4e1b69` | docs convergence | Phase 3 live-status doc + README/ROADMAP/TODOS/phase2-live-status banners (no source code) |
+| `f493360` | handoff checkpoint | Refresh this live-status HEAD + add §10 handoff to Codex section (no source code) |
 
 ## 3. Versions / pins
 
@@ -117,7 +118,7 @@ For the Codex agent picking this up:
 
 1. **Verify clean state:**
    - `git status --short --untracked-files=all` — only the standard untracked artifacts (`.claude/scheduled_tasks.lock`, `AGENTS.md`, six `*.stderr` review logs) should appear; anything else means uncommitted work was left behind.
-   - `git log --oneline -1` — must show `f4e1b69 docs(phase3): converge live status docs`.
+   - `git log --oneline -1` — must show `f493360 docs(phase3): handoff checkpoint — bump live-status to f4e1b69 + add §10 codex handoff section`.
    - `git rev-list --left-right --count origin/phase-3-implementation...HEAD` — must be `0	0`.
 2. **Verify gates green at the checkpoint:**
    - `pnpm test` → 65 files, 739 pass + 1 skip.
