@@ -3,6 +3,11 @@ import { extractLarkActionWirePayload } from "./callback-codec.js";
 
 const LARK_CALLBACK_HANDLE_PREFIX = "lark-card-action:";
 
+export interface LarkDecodedCallbackHandle {
+  readonly eventId: string;
+  readonly receivedAtMs: number;
+}
+
 export interface LarkRawCardActionEnvelope {
   readonly header?: {
     readonly event_id?: string;
@@ -75,6 +80,29 @@ export function normalizeLarkRawCardAction(
 
 export function encodeLarkCallbackHandle(eventId: string, receivedAt: Date): string {
   return `${LARK_CALLBACK_HANDLE_PREFIX}${receivedAt.getTime()}:${encodeURIComponent(eventId)}`;
+}
+
+export function decodeLarkCallbackHandle(handle: string): LarkDecodedCallbackHandle | undefined {
+  if (!handle.startsWith(LARK_CALLBACK_HANDLE_PREFIX)) {
+    return undefined;
+  }
+  const body = handle.slice(LARK_CALLBACK_HANDLE_PREFIX.length);
+  const separatorIndex = body.indexOf(":");
+  if (separatorIndex <= 0) {
+    return undefined;
+  }
+  const receivedAtText = body.slice(0, separatorIndex);
+  const encodedEventId = body.slice(separatorIndex + 1);
+  const receivedAtMs = Number.parseInt(receivedAtText, 10);
+  if (!Number.isSafeInteger(receivedAtMs) || String(receivedAtMs) !== receivedAtText) {
+    return undefined;
+  }
+  try {
+    const eventId = decodeURIComponent(encodedEventId);
+    return eventId.length > 0 ? { eventId, receivedAtMs } : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function larkOperatorId(operator: LarkRawCardActionEvent["operator"]): string | undefined {

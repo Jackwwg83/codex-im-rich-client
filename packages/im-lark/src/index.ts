@@ -1,11 +1,17 @@
 export { LarkChannelAdapter } from "./adapter.js";
-export { encodeLarkCallbackHandle, normalizeLarkRawCardAction } from "./action.js";
+export {
+  decodeLarkCallbackHandle,
+  encodeLarkCallbackHandle,
+  normalizeLarkRawCardAction,
+} from "./action.js";
 export type {
+  LarkDecodedCallbackHandle,
   LarkRawCardActionEnvelope,
   LarkRawCardActionEvent,
   LarkRawCardActionInput,
 } from "./action.js";
 export type {
+  LarkActionClientLike,
   LarkChannelAdapterOptions,
   LarkEventDispatcherLike,
   LarkMessageClientLike,

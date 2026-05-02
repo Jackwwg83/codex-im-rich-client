@@ -8,7 +8,11 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
-import { type LarkRawCardActionInput, normalizeLarkRawCardAction } from "./action.js";
+import {
+  type LarkRawCardActionInput,
+  decodeLarkCallbackHandle,
+  normalizeLarkRawCardAction,
+} from "./action.js";
 import { LARK_CAPABILITIES } from "./capabilities.js";
 import { type LarkApprovalCardJson, renderLarkApprovalCard } from "./card.js";
 import { type LarkRawMessageEvent, normalizeLarkRawMessage } from "./message.js";
@@ -39,10 +43,20 @@ export interface LarkMessageClientLike {
   updateCard?(input: { messageRef: MessageRef; card: LarkApprovalCardJson }): Promise<void>;
 }
 
+export interface LarkActionClientLike {
+  answerAction(input: {
+    callbackHandle: string;
+    eventId: string;
+    receivedAt: Date;
+    ack: ActionAck;
+  }): Promise<void>;
+}
+
 export interface LarkChannelAdapterOptions {
   readonly now?: () => Date;
   readonly wsClient?: LarkWsClientLike;
   readonly messageClient?: LarkMessageClientLike;
+  readonly actionClient?: LarkActionClientLike;
   readonly createEventDispatcher?: () => LarkEventDispatcherLike;
 }
 
@@ -143,7 +157,25 @@ export class LarkChannelAdapter implements ChannelAdapter {
   }
 
   async answerAction(_callbackHandle: string, _ack: ActionAck): Promise<void> {
-    throw this.#notImplemented("answerAction", "JAC-158");
+    this.#assertStarted("answerAction");
+    const decoded = decodeLarkCallbackHandle(_callbackHandle);
+    if (decoded === undefined) {
+      throw new Error("LarkChannelAdapter.answerAction invalid callback handle");
+    }
+    const actionClient = this.#options.actionClient;
+    if (actionClient === undefined) {
+      throw new Error("LarkChannelAdapter.answerAction requires an injected actionClient");
+    }
+    try {
+      await actionClient.answerAction({
+        callbackHandle: _callbackHandle,
+        eventId: decoded.eventId,
+        receivedAt: new Date(decoded.receivedAtMs),
+        ack: _ack,
+      });
+    } catch (error) {
+      throw new Error(`LarkChannelAdapter.answerAction failed: ${describeError(error)}`);
+    }
   }
 
   async sendFile(_target: Target, _file: OutboundFile): Promise<MessageRef> {
