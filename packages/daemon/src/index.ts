@@ -18,6 +18,7 @@ export type {
   DaemonBrokerContext,
   DaemonDependencyContext,
   DaemonOptions,
+  DaemonSignal,
   DaemonSessionRouterContext,
   DaemonSupervisorContext,
 } from "./daemon.js";

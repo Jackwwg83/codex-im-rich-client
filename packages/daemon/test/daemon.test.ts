@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { IM_ROUTABLE_APPROVAL_METHODS } from "@codex-im/core";
 import { describe, expect, it, vi } from "vitest";
-import { Daemon, type DaemonOptions } from "../src/index.js";
+import { Daemon, type DaemonOptions, type DaemonSignal } from "../src/index.js";
 
 const SRC_DIR = join(import.meta.dirname, "../src");
 
@@ -350,6 +350,85 @@ describe("Daemon skeleton (T14)", () => {
 
     expect(order.indexOf("adapter.onMessage")).toBeLessThan(order.indexOf("adapter.start"));
     expect(order).toContain("message.handler.fired");
+  });
+
+  it("registers signal handlers before returning and starts the adapter last", async () => {
+    const order: string[] = [];
+    const signalHandlers = new Map<DaemonSignal, () => void>();
+    const broker = {
+      attach: vi.fn(() => {
+        order.push("broker.attach");
+      }),
+      enablePendingMode: vi.fn((method: string) => {
+        order.push(`pending:${method}`);
+      }),
+      onPendingCreated: vi.fn(() => {
+        order.push("broker.onPendingCreated");
+        return () => {};
+      }),
+    };
+    const adapter = {
+      onAction: vi.fn(() => {
+        order.push("adapter.onAction");
+        return () => {};
+      }),
+      onMessage: vi.fn(() => {
+        order.push("adapter.onMessage");
+        return () => {};
+      }),
+      start: vi.fn(() => {
+        order.push("adapter.start");
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => {
+        order.push("loadConfig");
+        return {};
+      },
+      openStorage: () => {
+        order.push("openStorage");
+        return {};
+      },
+      createBroker: () => {
+        order.push("createBroker");
+        return broker;
+      },
+      createSecurityPolicy: () => {
+        order.push("createSecurityPolicy");
+        return {};
+      },
+      createSessionRouter: () => {
+        order.push("createSessionRouter");
+        return {};
+      },
+      createSupervisor: () => {
+        order.push("createSupervisor");
+        return {};
+      },
+      createAdapter: () => {
+        order.push("createAdapter");
+        return adapter;
+      },
+      registerSignalHandler: (signal, handler) => {
+        order.push(`signal:${signal}`);
+        signalHandlers.set(signal, handler);
+        return () => {};
+      },
+    });
+
+    await daemon.start();
+
+    expect(order.at(-1)).toBe("adapter.start");
+    expect(order.indexOf("signal:SIGTERM")).toBeLessThan(order.indexOf("adapter.start"));
+    expect(order.indexOf("signal:SIGINT")).toBeLessThan(order.indexOf("adapter.start"));
+    expect(signalHandlers.has("SIGTERM")).toBe(true);
+    expect(signalHandlers.has("SIGINT")).toBe(true);
+    expect(daemon.isStarted()).toBe(true);
+
+    signalHandlers.get("SIGTERM")?.();
+
+    expect(daemon.isStarted()).toBe(false);
   });
 
   it.each([

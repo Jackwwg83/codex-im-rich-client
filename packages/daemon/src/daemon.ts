@@ -3,6 +3,7 @@ import { type IMRoutableApprovalMethod, IM_ROUTABLE_APPROVAL_METHODS } from "@co
 type MaybePromise<T> = T | Promise<T>;
 type Unsubscribe = () => void;
 type CleanupMethod = () => MaybePromise<void>;
+export type DaemonSignal = "SIGINT" | "SIGTERM";
 
 export interface DaemonBroker {
   attach(): void;
@@ -46,6 +47,7 @@ export interface DaemonOptions {
   readonly createSessionRouter?: (ctx: DaemonSessionRouterContext) => MaybePromise<unknown>;
   readonly createSupervisor?: (ctx: DaemonSupervisorContext) => MaybePromise<unknown>;
   readonly createAdapter?: (ctx: DaemonAdapterContext) => MaybePromise<DaemonAdapter>;
+  readonly registerSignalHandler?: (signal: DaemonSignal, handler: () => void) => Unsubscribe;
 }
 
 export class Daemon {
@@ -107,6 +109,8 @@ export class Daemon {
       );
       this.#subscribe(this.#adapter?.onAction((action) => this.#handleAction(action)));
       this.#subscribe(this.#adapter?.onMessage((message) => this.#handleMessage(message)));
+      this.#subscribe(this.options.registerSignalHandler?.("SIGTERM", () => this.#handleSignal()));
+      this.#subscribe(this.options.registerSignalHandler?.("SIGINT", () => this.#handleSignal()));
       await this.#adapter?.start?.();
       this.#started = true;
     } catch (error) {
@@ -186,4 +190,8 @@ export class Daemon {
   #handleAction(_action: unknown): void {}
 
   #handleMessage(_message: unknown): void {}
+
+  #handleSignal(): void {
+    void this.stop();
+  }
 }
