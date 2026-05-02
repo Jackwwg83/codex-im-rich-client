@@ -26,7 +26,7 @@ describe("TelegramChannelAdapter lifecycle (T21)", () => {
     };
     const createBot = vi.fn(() => bot);
     const adapter = new TelegramChannelAdapter({
-      botToken: "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
+      botToken: "unit-test-bot-token",
       createBot,
     });
 
@@ -36,7 +36,7 @@ describe("TelegramChannelAdapter lifecycle (T21)", () => {
     await adapter.stop();
 
     expect(createBot).toHaveBeenCalledTimes(1);
-    expect(createBot).toHaveBeenCalledWith("123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi");
+    expect(createBot).toHaveBeenCalledWith("unit-test-bot-token");
     expect(bot.start).toHaveBeenCalledTimes(1);
     expect(bot.stop).toHaveBeenCalledTimes(1);
   });
