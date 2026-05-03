@@ -1,3 +1,10 @@
+import {
+  type ComputerUseCommandRejectedResult,
+  type ComputerUseCommandResult,
+  isComputerUseCommand,
+  parseComputerUseCommand,
+} from "./computer-use-command.js";
+
 export const COMMAND_ROUTER_COMMANDS = Object.freeze([
   "help",
   "projects",
@@ -31,15 +38,15 @@ export type CommandRouterResult =
       readonly text: string;
       readonly attachments: readonly CommandRouterAttachment[];
     }
+  | ComputerUseCommandResult
   | {
       readonly kind: "rejected";
-      readonly reason: "computer_use_not_supported" | "unknown_command";
+      readonly reason: ComputerUseCommandRejectedResult["reason"] | "unknown_command";
       readonly message: string;
       readonly rawText: string;
     };
 
 const COMMANDS = new Set<string>(COMMAND_ROUTER_COMMANDS);
-const COMPUTER_USE_COMMANDS = new Set(["cu", "computer-use"]);
 
 export function routeInboundCommand(
   text: string,
@@ -52,13 +59,8 @@ export function routeInboundCommand(
 
   const [rawCommand = "", ...args] = trimmed.slice(1).split(/\s+/u);
   const command = rawCommand.toLowerCase();
-  if (COMPUTER_USE_COMMANDS.has(command)) {
-    return {
-      kind: "rejected",
-      reason: "computer_use_not_supported",
-      message: "Computer Use is not supported in Phase 3",
-      rawText: text,
-    };
+  if (isComputerUseCommand(command)) {
+    return parseComputerUseCommand(args, text);
   }
 
   if (!COMMANDS.has(command)) {

@@ -1,7 +1,7 @@
 # Phase 6 Live Status
 
 > Single source of truth for Phase 6 while Computer Use work is active.
-> **Last updated:** 2026-05-03 - JAC-91 plan gate approved after v1.1 Codex re-review; JAC-92 parser-only implementation is next.
+> **Last updated:** 2026-05-03 - JAC-92 parser-only implementation complete; JAC-93 ComputerUsePolicy schema is next.
 
 ---
 
@@ -10,13 +10,13 @@
 - **Phase:** Phase 6 - explicit Computer Use flow.
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
 - **Parent Linear issue:** JAC-11 - Phase 6 backlog / explicit Computer Use flow.
-- **Current Linear issue:** JAC-92 - explicit `/cu` parser only.
+- **Current Linear issue:** JAC-93 - ComputerUsePolicy schema.
 - **Branch:** `codex/phase-6-computer-use`.
 - **Base tag:** `phase-5-dingtalk-adapter-complete`.
 - **Version:** `0.1.0-phase5`; do not bump until Phase 6 tag gate.
-- **Next exact action:** implement JAC-92 parser-only support for `/cu` and
-  `/computer-use`; no desktop action, provider, prompt wrapper, or protocol
-  handler.
+- **Next exact action:** implement JAC-93 ComputerUsePolicy schema/evaluator;
+  default disabled, denied apps fail closed, invalid/empty allowlist fails
+  closed.
 
 ## 2. Current Decision State
 
@@ -60,8 +60,8 @@
 | Issue | Scope | Status |
 |---|---|---|
 | JAC-91 | plan review gate | complete |
-| JAC-92 | `/cu` command parser only | current |
-| JAC-93 | ComputerUsePolicy schema | pending |
+| JAC-92 | `/cu` command parser only | complete |
+| JAC-93 | ComputerUsePolicy schema | current |
 | JAC-94 | allowed_apps / deny_apps config | pending |
 | JAC-95 | explicit `/cu` prompt wrapper | pending |
 | JAC-96 | normal prompt cannot create Computer Use intent | pending |
@@ -78,10 +78,10 @@ Latest Phase 6 JAC-91 closeout gates:
 
 | Gate | Result |
 |---|---|
-| `pnpm typecheck` | green on 2026-05-03 |
-| `pnpm typecheck:tests` | green on 2026-05-03 |
-| `pnpm test` | green: 126 files, 1186 passing, 1 skipped |
-| `pnpm lint` | green: 288 files checked |
+| `pnpm typecheck` | green on 2026-05-03 after JAC-92 |
+| `pnpm typecheck:tests` | green on 2026-05-03 after JAC-92 |
+| `pnpm test` | green: 126 files, 1187 passing, 1 skipped |
+| `pnpm lint` | green: 289 files checked |
 | `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
 
 ## 7. Compact / Resume

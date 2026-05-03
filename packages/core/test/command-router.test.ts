@@ -40,15 +40,39 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
     });
   });
 
-  it("rejects Computer Use commands explicitly in Phase 3", () => {
-    for (const text of ["/cu open Chrome", "/computer-use click button"]) {
-      expect(routeInboundCommand(text)).toEqual({
-        kind: "rejected",
-        reason: "computer_use_not_supported",
-        message: "Computer Use is not supported in Phase 3",
-        rawText: text,
-      });
-    }
+  it("parses explicit Computer Use commands without touching normal prompts", () => {
+    expect(routeInboundCommand("/cu open Chrome")).toEqual({
+      kind: "computer_use",
+      action: "start",
+      task: "open Chrome",
+      rawText: "/cu open Chrome",
+    });
+    expect(routeInboundCommand("/computer-use click button")).toEqual({
+      kind: "computer_use",
+      action: "start",
+      task: "click button",
+      rawText: "/computer-use click button",
+    });
+
+    expect(routeInboundCommand("open Chrome")).toEqual({
+      kind: "prompt",
+      text: "open Chrome",
+      attachments: [],
+    });
+  });
+
+  it("parses /cu status and rejects empty Computer Use commands", () => {
+    expect(routeInboundCommand("/cu status")).toEqual({
+      kind: "computer_use",
+      action: "status",
+      rawText: "/cu status",
+    });
+    expect(routeInboundCommand("/computer-use")).toEqual({
+      kind: "rejected",
+      reason: "computer_use_task_required",
+      message: "Usage: /cu <task> or /cu status",
+      rawText: "/computer-use",
+    });
   });
 
   it("rejects unknown slash commands instead of treating them as prompts", () => {

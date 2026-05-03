@@ -78,6 +78,16 @@ export type {
   CommandRouterResult,
   RouteInboundCommandOptions,
 } from "./command-router.js";
+export {
+  COMPUTER_USE_COMMANDS,
+  isComputerUseCommand,
+  parseComputerUseCommand,
+} from "./computer-use-command.js";
+export type {
+  ComputerUseCommandName,
+  ComputerUseCommandRejectedResult,
+  ComputerUseCommandResult,
+} from "./computer-use-command.js";
 
 // Phase 3 T13 — platform-neutral session routing between an IM target,
 // project config, and the persistent Codex thread binding. Storage is
