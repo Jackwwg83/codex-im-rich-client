@@ -2,8 +2,8 @@
 
 > Single source of truth for Phase 7 while extended platform / web-console
 > planning and implementation are active.
-> **Last updated:** 2026-05-03 - JAC-107 policy-gated web approval
-> decision helper implemented; JAC-108 multi-channel handoff is next.
+> **Last updated:** 2026-05-03 - JAC-108 policy-bound multi-channel
+> handoff implemented; JAC-165 review/handoff/tag gate is next.
 
 ---
 
@@ -13,14 +13,13 @@
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
 - **Parent Linear issue:** JAC-12 - Phase 7+ backlog / extended platforms and
   web console.
-- **Current Linear issue:** JAC-108 - multi-channel session handoff.
+- **Current Linear issue:** JAC-165 - Phase 7 review, handoff, and tag gate.
 - **Branch:** `codex/phase-7-planning`.
 - **Base tag:** `phase-6-computer-use-complete`.
 - **Version:** `0.1.0-phase6`; do not bump until Phase 7 tag gate.
-- **Next exact action:** define and implement explicit policy-bound target
-  transition for multi-channel session handoff. Handoff must fail unless the
-  completed team/operator model permits the actor, project, source target, and
-  destination target.
+- **Next exact action:** run Phase 7 final review, update handoff/version/tag
+  metadata, freeze this live status, and create the Phase 7 completion tag if
+  the review and gates pass.
 
 ## 2. Current Decision State
 
@@ -39,6 +38,10 @@
 - Web approval decisions now use an injected daemon helper that calls
   `ApprovalBroker.resolve()` only after `TeamOperatorPolicy` allows the actor
   and messageRef/target proof validates.
+- Multi-channel handoff now has a pure core helper that copies an existing
+  bound session to a destination target only after source and destination
+  `TeamOperatorPolicy` checks pass, and it writes only through
+  `SessionRouter.bind()`.
 - Web console starts as docs or loopback-only read-only status; public listener
   and approval UI require separate reviewed issues.
 - Team/operator policy must exist before shared approval UI can resolve actions.
@@ -80,11 +83,25 @@
 | JAC-106 | web console read-only status | complete; pure loopback-only/read-only status view implemented |
 | JAC-109 | team/operator model | complete; pure role/project/target policy exported from core |
 | JAC-107 | web console approval UI | complete; policy/messageRef gated broker resolve helper |
-| JAC-108 | multi-channel session handoff | current; requires explicit policy-bound target transition |
+| JAC-108 | multi-channel session handoff | complete; explicit policy-bound target transition helper |
+| JAC-165 | review, handoff, tag gate | current |
 
 ## 6. Gate Status
 
-Latest JAC-107 code gate:
+Latest JAC-108 code gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run packages/core/test/session-handoff.test.ts` | green: 4 passed |
+| `pnpm exec vitest run packages/core/test/session-handoff.test.ts packages/core/test/session-router.test.ts packages/core/test/team-operator-policy.test.ts` | green: 19 passed |
+| `pnpm --filter @codex-im/core typecheck` | green |
+| `pnpm typecheck` | green: 14 of 15 workspace projects |
+| `pnpm typecheck:tests` | green |
+| `pnpm test` | green: 136 files, 1237 passing, 1 skipped |
+| `pnpm lint` | green: 308 files checked |
+| `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
+
+Previous JAC-107 code gate:
 
 | Gate | Result |
 |---|---|

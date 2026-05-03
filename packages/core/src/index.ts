@@ -156,6 +156,13 @@ export type {
 // project config, and the persistent Codex thread binding. Storage is
 // injected structurally so @codex-im/core does not depend on SQLite.
 export { SessionRouter } from "./session-router.js";
+export { handoffSession } from "./session-handoff.js";
+export type {
+  SessionHandoffDenyReason,
+  SessionHandoffInput,
+  SessionHandoffResult,
+  SessionHandoffRouter,
+} from "./session-handoff.js";
 export type {
   SessionBindingInput,
   SessionBindingRepository,

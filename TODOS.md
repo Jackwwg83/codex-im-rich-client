@@ -294,4 +294,5 @@ Live status: `docs/handoffs/phase7-live-status.md`. Phase 6 -> Phase 7 handoff:
 - [x] **JAC-106 / T5** — local read-only web console status, no public listener or mutation. Implemented pure loopback-only bind plan + read-only status HTML view in daemon; no listener, secrets, or mutation controls.
 - [x] **JAC-109 / T6** — team/operator model before shared approval UI or handoff. Implemented pure `TeamOperatorPolicy` with viewer/operator/admin/auditor role capabilities still scoped by project and target.
 - [x] **JAC-107 / T7** — web console approval UI, gated by team/operator policy. Implemented injected daemon helper that only calls broker resolve after operator policy and messageRef/target proof pass.
-- [ ] **JAC-108 / T8** — multi-channel session handoff, gated by policy-bound target transition. Current next issue.
+- [x] **JAC-108 / T8** — multi-channel session handoff, gated by policy-bound target transition. Implemented pure core handoff helper that requires source and destination policy allow and writes only through `SessionRouter.bind()`.
+- [ ] **JAC-165 / T9** — Phase 7 review, handoff, and tag gate. Current next issue.
