@@ -143,7 +143,9 @@ Stream 模式。
 
 - streaming：卡片全量更新，降低更新频率到 2-3 秒。
 - approval：交互卡片按钮。
-- fallback：文本 `/approve <id>`。
+- fallback：默认只渲染非动作化文本，不暴露 raw approval id / callback token；
+  只有经过单独 review 的 secure command path 证明 actor/target/messageRef
+  校验完整后，才允许文本命令解析。
 
 ## 6. Satori/Koishi Adapter P2
 
@@ -217,13 +219,14 @@ RichCard
 
 ### supportsButtons=false
 
-把 approval 渲染成：
+默认把 approval 渲染成非动作化文本，只保留必要上下文和操作提示，不暴露
+raw approval id、callback token 或可直接 resolve 的文本命令。`/approve <id>` /
+`/deny <id>` 这类 fallback 被 Phase 7 安全规则取代，除非后续单独 review 的
+secure command path 明确证明 actor、target、messageRef、expiry/replay 校验完整。
 
 ```text
-审批 ID: appr_123
-/approve appr_123
-/deny appr_123
-/cancel appr_123
+Approval requires a channel with secure buttons or a reviewed secure command path.
+Open an approved channel to decide this request.
 ```
 
 ### canEditMessage=false

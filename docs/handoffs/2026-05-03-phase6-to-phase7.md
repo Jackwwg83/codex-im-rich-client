@@ -12,7 +12,7 @@ Generated: 2026-05-03
 - **Branch:** `codex/phase-6-computer-use`.
 - **Linear parent:** JAC-11.
 - **Final Linear issue:** JAC-101.
-- **Tag candidate HEAD:** `43a11e3`.
+- **Release HEAD:** `8b089d1`.
 
 ## 2. What Shipped
 

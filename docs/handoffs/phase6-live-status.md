@@ -1,8 +1,8 @@
 # Phase 6 Live Status
 
 > Single source of truth for Phase 6 Computer Use.
-> **Last updated:** 2026-05-03 - Phase 6 complete at tag candidate `43a11e3`;
-> final tag gate ready for `phase-6-computer-use-complete`.
+> **Last updated:** 2026-05-03 - Phase 6 complete at release commit `8b089d1`;
+> release tag `phase-6-computer-use-complete` pushed.
 
 ---
 
@@ -16,9 +16,9 @@
 - **Base tag:** `phase-5-dingtalk-adapter-complete`.
 - **Release tag:** `phase-6-computer-use-complete`.
 - **Version:** `0.1.0-phase6`.
-- **HEAD:** `43a11e3` - `fix(daemon): JAC-101 preserve computer use policy defaults`.
-- **Next exact action:** push branch/tag, update Linear, then start Phase 7 planning
-  from the Phase 6 -> Phase 7 handoff.
+- **HEAD:** `8b089d1` - `chore(release): JAC-101 close phase 6 tag gate`.
+- **Next exact action:** Phase 6 is frozen. Current work continues in
+  `docs/handoffs/phase7-live-status.md`.
 
 ## 2. Shipped Behavior
 
@@ -88,7 +88,7 @@ Review reports:
 
 ## 6. Gate Status
 
-Latest Phase 6 tag-gate candidate gates after `43a11e3`:
+Latest Phase 6 tag-gate candidate gates after `8b089d1`:
 
 | Gate | Result |
 |---|---|
