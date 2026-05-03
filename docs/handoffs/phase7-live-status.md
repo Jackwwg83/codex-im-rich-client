@@ -1,9 +1,9 @@
 # Phase 7 Live Status
 
-> Single source of truth for Phase 7 while extended platform / web-console
-> planning and implementation are active.
-> **Last updated:** 2026-05-03 - JAC-108 policy-bound multi-channel
-> handoff implemented; JAC-165 review/handoff/tag gate is next.
+> Single source of truth for Phase 7 extended platforms and web console.
+> **Last updated:** 2026-05-03 - Phase 7 complete; release tag
+> `phase-7-extended-platforms-web-console-complete` ready to push at this
+> closeout state.
 
 ---
 
@@ -13,42 +13,39 @@
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
 - **Parent Linear issue:** JAC-12 - Phase 7+ backlog / extended platforms and
   web console.
-- **Current Linear issue:** JAC-165 - Phase 7 review, handoff, and tag gate.
+- **Final Linear issue:** JAC-165 - Phase 7 review, handoff, and tag gate.
 - **Branch:** `codex/phase-7-planning`.
 - **Base tag:** `phase-6-computer-use-complete`.
-- **Version:** `0.1.0-phase6`; do not bump until Phase 7 tag gate.
-- **Next exact action:** run Phase 7 final review, update handoff/version/tag
-  metadata, freeze this live status, and create the Phase 7 completion tag if
-  the review and gates pass.
+- **Release tag:** `phase-7-extended-platforms-web-console-complete`.
+- **Version:** `0.1.0-phase7`.
+- **HEAD:** closeout commit `chore(release): JAC-165 close phase 7 tag gate`.
+- **Next exact action:** Phase 7 is frozen. Future work should start from a
+  new reviewed phase plan and Linear parent/children before implementation.
 
-## 2. Current Decision State
+## 2. Shipped Behavior
 
-- Capability matrix comes before fallback renderer or adapter implementation.
-- Satori/Koishi is a compatibility-layer candidate, not a native adapter
-  replacement.
-- Vercel Chat SDK is an adapter-layer candidate, not the Codex core.
+- Capability matrix records native and candidate channel surfaces, including
+  `implementable`, `spike-only`, `docs-only`, and `blocked` verdicts.
+- Satori/Koishi remains `spike-only`; no `im-satori` package, live server,
+  credentials, WebSocket, webhook, or listener shipped in Phase 7.
+- Vercel Chat SDK remains `spike-only`; it may inform future adapter-layer
+  research but does not replace Codex core/runtime semantics.
 - Lower-capability approval rendering now produces non-actionable text with no
   raw approval ids, callback tokens, or slash-command decision hints.
-- Web status now has a pure loopback-only, read-only status surface in
-  `@codex-im/daemon`; it renders no mutation controls, exposes no secrets, and
-  starts no listener.
-- Team/operator authorization now exists as a pure `@codex-im/core`
-  `TeamOperatorPolicy`; viewer/operator/admin/auditor roles are still scoped by
-  configured project and target lists.
-- Web approval decisions now use an injected daemon helper that calls
-  `ApprovalBroker.resolve()` only after `TeamOperatorPolicy` allows the actor
-  and messageRef/target proof validates.
-- Multi-channel handoff now has a pure core helper that copies an existing
-  bound session to a destination target only after source and destination
-  `TeamOperatorPolicy` checks pass, and it writes only through
+- Web status has a pure loopback-only, read-only status surface in
+  `@codex-im/daemon`; it starts no listener, renders no mutation controls, and
+  uses the core redactor for fatal-message snapshots/status HTML.
+- Team/operator authorization exists as pure `@codex-im/core`
+  `TeamOperatorPolicy` with viewer/operator/admin/auditor roles scoped by
+  configured project and target lists, including audit access.
+- Web approval decision helper requires a server-side bound approval proof
+  before calling an injected `ApprovalBroker.resolve()` surface.
+- Multi-channel handoff has a pure core helper that copies an existing bound
+  session to a destination target only after source and destination
+  `TeamOperatorPolicy` checks pass, and writes only through
   `SessionRouter.bind()`.
-- Web console starts as docs or loopback-only read-only status; public listener
-  and approval UI require separate reviewed issues.
-- Team/operator policy must exist before shared approval UI can resolve actions.
-- Lower-capability channels fail closed or render non-actionable fallback when
-  approval safety cannot be proven.
 
-## 3. Active Redlines
+## 3. Carry-Forward Redlines
 
 - No OpenClaw plugin.
 - No Codex CLI/TUI output parsing.
@@ -56,9 +53,12 @@
 - No public App Server listener.
 - No public web-console listener by default.
 - No approval bypass or first-actor-wins.
-- No raw callback token persistence or display.
-- No adapter import of broker/runtime/client/storage/daemon/render/protocol.
-- No live external platform calls in planning/spike tasks.
+- No raw callback token persistence, display, docs, logs, or Linear leakage.
+- No raw approval id or callback token in low-capability fallback text.
+- IM adapters do not call broker/runtime/client/storage/daemon/render/protocol
+  directly.
+- Candidate platform spikes do not instantiate clients, probe credentials, open
+  WebSocket/HTTP connections, or start listeners.
 - No real Computer Use provider work in Phase 7.
 - Unknown, unauthorized, ambiguous, low-capability, or security-uncertain paths
   fail closed or degrade to non-actionable text.
@@ -70,136 +70,55 @@
 | Phase 7 plan v1 Codex review | APPROVE_WITH_CHANGES: P1 ordering, loopback, fallback fixes required |
 | Phase 7 plan v1.1 Codex closure review | GO_WITH_LOW_NITS: P0/P1/P2 clear; JAC-104 may start |
 | JAC-104 capability matrix Codex review | GO_WITH_LOW_NITS: P0/P1/P2 clear; JAC-102 may start |
+| Phase 7 final implementation review | APPROVE_WITH_CHANGES: 1 P1 + 2 P2 + 1 P3 |
+| JAC-165 final review follow-up | GO_WITH_LOW_NITS: prior P1/P2/P3 closed; no new P0/P1 |
+
+Review reports:
+
+- `docs/phase-7/impl-final-codex-review.md`
+- `docs/phase-7/impl-final-codex-review-followup.md`
 
 ## 5. Linear Execution Queue
 
 | Issue | Scope | Status |
 |---|---|---|
-| JAC-164 | plan review gate | complete; closure review recorded |
-| JAC-104 | capability matrix | complete; review recorded |
-| JAC-102 | Satori/Koishi feasibility spike | complete; verdict `spike-only` |
-| JAC-103 | Vercel Chat SDK feasibility spike | complete; verdict `spike-only` |
-| JAC-105 | fallback renderer | complete; non-actionable approval fallback implemented in render |
-| JAC-106 | web console read-only status | complete; pure loopback-only/read-only status view implemented |
-| JAC-109 | team/operator model | complete; pure role/project/target policy exported from core |
-| JAC-107 | web console approval UI | complete; policy/messageRef gated broker resolve helper |
-| JAC-108 | multi-channel session handoff | complete; explicit policy-bound target transition helper |
-| JAC-165 | review, handoff, tag gate | current |
+| JAC-164 | plan review gate | complete |
+| JAC-104 | capability matrix | complete |
+| JAC-102 | Satori/Koishi feasibility spike | complete |
+| JAC-103 | Vercel Chat SDK feasibility spike | complete |
+| JAC-105 | fallback renderer | complete |
+| JAC-106 | web console read-only status | complete |
+| JAC-109 | team/operator model | complete |
+| JAC-107 | web console approval decision gate | complete |
+| JAC-108 | multi-channel session handoff | complete |
+| JAC-165 | review, handoff, tag gate | complete |
 
 ## 6. Gate Status
 
-Latest JAC-108 code gate:
+Latest Phase 7 tag-gate candidate gates for the closeout state:
 
 | Gate | Result |
 |---|---|
-| `pnpm exec vitest run packages/core/test/session-handoff.test.ts` | green: 4 passed |
-| `pnpm exec vitest run packages/core/test/session-handoff.test.ts packages/core/test/session-router.test.ts packages/core/test/team-operator-policy.test.ts` | green: 19 passed |
-| `pnpm --filter @codex-im/core typecheck` | green |
+| `pnpm vitest run --project unit packages/daemon/test/web-status.test.ts packages/daemon/test/web-approval.test.ts packages/core/test/team-operator-policy.test.ts` | green: 3 files, 20 passing |
 | `pnpm typecheck` | green: 14 of 15 workspace projects |
 | `pnpm typecheck:tests` | green |
 | `pnpm test` | green: 136 files, 1237 passing, 1 skipped |
 | `pnpm lint` | green: 308 files checked |
 | `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
+| `git diff --check phase-6-computer-use-complete` | green |
 
-Previous JAC-107 code gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm exec vitest run packages/daemon/test/web-approval.test.ts` | green: 3 passed |
-| `pnpm exec vitest run packages/daemon/test/web-approval.test.ts packages/daemon/test/web-status.test.ts` | green: 14 passed |
-| `pnpm --filter @codex-im/daemon typecheck` | green |
-| `pnpm typecheck` | green: 14 of 15 workspace projects |
-| `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 135 files, 1233 passing, 1 skipped |
-| `pnpm lint` | green: 306 files checked |
-| `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
-
-Previous JAC-109 code gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm exec vitest run packages/core/test/team-operator-policy.test.ts` | green: 6 passed |
-| `pnpm exec vitest run packages/core/test/security-policy.test.ts packages/core/test/team-operator-policy.test.ts` | green: 24 passed |
-| `pnpm --filter @codex-im/core typecheck` | green |
-| `pnpm typecheck` | green: 14 of 15 workspace projects |
-| `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 134 files, 1230 passing, 1 skipped |
-| `pnpm lint` | green: 304 files checked |
-| `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
-
-Previous JAC-106 code gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm exec vitest run packages/daemon/test/web-status.test.ts` | green: 11 passed |
-| `pnpm exec vitest run packages/daemon/test/status.test.ts packages/daemon/test/web-status.test.ts` | green: 12 passed |
-| `pnpm --filter @codex-im/daemon typecheck` | green |
-| `pnpm typecheck` | green: 14 of 15 workspace projects |
-| `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 133 files, 1224 passing, 1 skipped |
-| `pnpm lint` | green: 302 files checked |
-| `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
-
-Previous JAC-105 code gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm exec vitest run packages/render/test/plain-text-capability-matrix.test.ts` | green: 12 passed |
-| `pnpm --filter @codex-im/render typecheck` | green |
-| `pnpm typecheck` | green: 14 of 15 workspace projects |
-| `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 132 files, 1213 passing, 1 skipped |
-| `pnpm lint` | green: 301 files checked |
-| `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
-
-Previous JAC-103 docs-only gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm lint` | green: 301 files checked |
-| `git diff --check` | green |
-
-Previous JAC-102 docs-only gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm lint` | green: 301 files checked |
-| `git diff --check` | green |
-
-Previous JAC-104 docs-only gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm lint` | green: 301 files checked |
-| `git diff --check` | green |
-
-Previous JAC-164 docs-only gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm lint` | green: 301 files checked |
-| `git diff --check` | green |
-
-Latest pre-Phase-7 baseline from Phase 6 tag gate:
-
-| Gate | Result |
-|---|---|
-| `pnpm typecheck` | green: 14 of 15 workspace projects |
-| `pnpm typecheck:tests` | green |
-| `pnpm test` | green: 132 files, 1212 passing, 1 skipped |
-| `pnpm lint` | green: 301 files checked |
-| `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
-| `pnpm smoke:computer-use-live` | green default skip |
+`protocol:check` must run serially because it regenerates protocol files before
+diffing.
 
 ## 7. Compact / Resume
 
-If resuming during Phase 7:
+If resuming after Phase 7:
 
 1. Read this file first.
 2. Read the Phase 7 plan under `docs/superpowers/plans/`.
-3. Read `docs/handoffs/2026-05-03-phase6-to-phase7.md`.
+3. Read `docs/handoffs/2026-05-03-phase7-to-future.md`.
 4. Read `AGENTS.md` and
    `docs/automation/codex-app-autonomous-loop-runbook.md`.
 5. Run `git status --short` and `git log --oneline -8`.
-6. Continue from the current Linear issue when recovered state is clearly safe;
-   use GPT Pro/Codex outside-voice for technical ambiguity.
+6. Start any future phase from a reviewed plan and Linear issue split before
+   implementation.

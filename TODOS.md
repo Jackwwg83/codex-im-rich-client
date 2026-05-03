@@ -279,12 +279,13 @@ Active branch: `codex/phase-6-computer-use`. Plan-of-record:
 - [x] **JAC-100 / T10** — operator-gated live Computer Use smoke harness/default skip; default command skips, dry-run readiness is explicit, and real desktop execution remains blocked until provider capability is verified.
 - [x] **JAC-101 / T11** — final review/handoff/tag. Final review returned APPROVE_WITH_CHANGES at `650db47`; `1a5bb9b` closed P1/P2 blockers; re-review returned GO_WITH_LOW_NITS; `43a11e3` closed the remaining P3 default-value nit before tag.
 
-## Phase 7 planning progress (active, 2026-05-03)
+## Phase 7 planning progress (closed at JAC-165 tag gate, 2026-05-03)
 
 Active branch: `codex/phase-7-planning`. Plan-of-record:
 `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
 Live status: `docs/handoffs/phase7-live-status.md`. Phase 6 -> Phase 7 handoff:
-`docs/handoffs/2026-05-03-phase6-to-phase7.md`.
+`docs/handoffs/2026-05-03-phase6-to-phase7.md`. Phase 7 -> future handoff:
+`docs/handoffs/2026-05-03-phase7-to-future.md`.
 
 - [x] **JAC-164 / T0** — Phase 7 plan review gate. v1 returned APPROVE_WITH_CHANGES; v1.1 closure review returned GO_WITH_LOW_NITS with no remaining P0/P1/P2.
 - [x] **JAC-104 / T1** — capability matrix across native/future channels, including `Phase 7 verdict` values (`implementable`, `spike-only`, `docs-only`, `blocked`). Codex review returned GO_WITH_LOW_NITS with no P0/P1/P2.
@@ -295,4 +296,4 @@ Live status: `docs/handoffs/phase7-live-status.md`. Phase 6 -> Phase 7 handoff:
 - [x] **JAC-109 / T6** — team/operator model before shared approval UI or handoff. Implemented pure `TeamOperatorPolicy` with viewer/operator/admin/auditor role capabilities still scoped by project and target.
 - [x] **JAC-107 / T7** — web console approval UI, gated by team/operator policy. Implemented injected daemon helper that only calls broker resolve after operator policy and messageRef/target proof pass.
 - [x] **JAC-108 / T8** — multi-channel session handoff, gated by policy-bound target transition. Implemented pure core handoff helper that requires source and destination policy allow and writes only through `SessionRouter.bind()`.
-- [ ] **JAC-165 / T9** — Phase 7 review, handoff, and tag gate. Current next issue.
+- [x] **JAC-165 / T9** — Phase 7 review, handoff, and tag gate. Final implementation review returned APPROVE_WITH_CHANGES; `6269d99` closed the P1/P2/P3 findings; follow-up review returned GO_WITH_LOW_NITS; release tag `phase-7-extended-platforms-web-console-complete` closes the phase.
