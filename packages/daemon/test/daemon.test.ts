@@ -1433,6 +1433,242 @@ describe("Daemon skeleton (T14)", () => {
     });
   }
 
+  it("routes /help to the currently implemented IM control commands", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-100secret-chat" };
+    const sender = { userId: "u-secret-user" };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/Users/alice/private/project", defaultModel: "gpt-test" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => ({ kind: "unbound" as const, target })) }),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/help",
+      messageRef: { target, messageId: "msg-help" },
+      receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("/projects");
+    expect(body).toContain("/use <project>");
+    expect(body).toContain("/status");
+    expect(body).toContain("/stop");
+    expect(body).not.toContain("/fork");
+    expect(body).not.toContain("/new");
+    expect(body).not.toContain("-100secret-chat");
+    expect(body).not.toContain("u-secret-user");
+    expect(body).not.toContain("/Users/alice/private/project");
+  });
+
+  it("routes /projects to accessible configured projects without leaking local paths", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/Users/alice/private/web",
+        codexThreadId: "thread-1",
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/Users/alice/private/web", defaultModel: "gpt-test" },
+          ops: { cwd: "/Users/alice/private/ops" },
+          hidden: { cwd: "/Users/alice/private/hidden" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn((projectId: string) =>
+          projectId === "hidden"
+            ? { kind: "deny" as const, reason: "project_not_allowed" }
+            : { kind: "allow" as const },
+        ),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/projects",
+      messageRef: { target, messageId: "msg-projects" },
+      receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-projects" },
+      ["Projects:", "  ops", "* web (model gpt-test)"].join("\n"),
+    );
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).not.toContain("hidden");
+    expect(body).not.toContain("/Users/alice/private");
+    expect(body).not.toContain("-allowed");
+  });
+
+  it("routes /status to the current binding without leaking raw target or path data", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-100secret-chat", threadKey: "topic-secret" };
+    const sender = { userId: "u-secret-user" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/Users/alice/private/web",
+        codexThreadId: "thread-abcdefghijklmnopqrstuvwxyz",
+        activeTurnId: "turn-1234567890abcdef",
+      })),
+    };
+    const pending: PendingApprovalSnapshot = {
+      id: "approval-1",
+      appServerRequestId: 1,
+      method: "item/commandExecution/requestApproval",
+      params: { command: "touch /tmp/file" },
+      createdAt: new Date("2026-05-03T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-03T00:10:00.000Z"),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => [pending, pending]),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/status",
+      messageRef: { target, messageId: "msg-status" },
+      receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("target: telegram thread");
+    expect(body).toContain("binding: bound");
+    expect(body).toContain("project: web");
+    expect(body).toContain("thread: thread-abcde...");
+    expect(body).toContain("active turn: turn-1234567...");
+    expect(body).toContain("pending approvals: 2");
+    expect(body).not.toContain("-100secret-chat");
+    expect(body).not.toContain("u-secret-user");
+    expect(body).not.toContain("/Users/alice/private/web");
+    expect(body).not.toContain("thread-abcdefghijklmnopqrstuvwxyz");
+    expect(body).not.toContain("turn-1234567890abcdef");
+  });
+
+  it("routes /status for an unbound target", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-100secret-chat" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        approvalRecordCount: vi.fn(() => 1),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/status",
+      messageRef: { target, messageId: "msg-unbound-status" },
+      receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("target: telegram chat");
+    expect(body).toContain("binding: unbound");
+    expect(body).toContain("pending approvals: 1");
+    expect(body).not.toContain("-100secret-chat");
+  });
+
   it("routes /stop to turnInterrupt when the session has an active turn", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };

@@ -1621,6 +1621,21 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "help") {
+      await this.#routeHelpCommand(inbound);
+      return;
+    }
+
+    if (command.name === "projects") {
+      await this.#routeProjectsCommand(inbound);
+      return;
+    }
+
+    if (command.name === "status") {
+      await this.#routeStatusCommand(inbound);
+      return;
+    }
+
     if (command.name === "stop") {
       await this.#routeStopCommand(inbound);
       return;
@@ -1632,6 +1647,86 @@ export class Daemon {
         `/${command.name} is not implemented yet.`,
       );
     }
+  }
+
+  async #routeHelpCommand(inbound: { messageRef?: DaemonMessageRef }): Promise<void> {
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      [
+        "Commands:",
+        "/projects - List available projects.",
+        "/use <project> - Bind this chat to a project.",
+        "/status - Show current Codex IM status.",
+        "/stop - Interrupt the active Codex turn.",
+      ].join("\n"),
+    );
+  }
+
+  async #routeProjectsCommand(inbound: {
+    target: Target;
+    sender: SecurityPolicySender;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    const projects = this.#projectEntries().filter(([projectId]) =>
+      this.#projectAllowed(projectId, inbound.target, inbound.sender),
+    );
+
+    if (projects.length === 0) {
+      await this.#editInboundMessage(inbound.messageRef, "No projects available.");
+      return;
+    }
+
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      [
+        "Projects:",
+        ...projects.map(([projectId, project]) => {
+          const marker = route?.kind === "bound" && route.projectId === projectId ? "*" : " ";
+          const model =
+            project.defaultModel === undefined ? "" : ` (model ${project.defaultModel})`;
+          return `${marker} ${projectId}${model}`;
+        }),
+      ].join("\n"),
+    );
+  }
+
+  async #routeStatusCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    const lines = ["Status:", `target: ${this.#targetLabel(inbound.target)}`];
+    if (route?.kind !== "bound") {
+      lines.push("binding: unbound");
+      lines.push(`pending approvals: ${this.#pendingApprovalCount()}`);
+      await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
+      return;
+    }
+
+    lines.push("binding: bound");
+    lines.push(`project: ${route.projectId}`);
+    lines.push(`thread: ${this.#shortId(route.codexThreadId)}`);
+    lines.push(`active turn: ${this.#shortId(route.activeTurnId)}`);
+    lines.push(`pending approvals: ${this.#pendingApprovalCount()}`);
+    await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
+  }
+
+  #targetLabel(target: Target): string {
+    if (target.topicId !== undefined) {
+      return `${target.platform} topic`;
+    }
+    if (target.threadKey !== undefined) {
+      return `${target.platform} thread`;
+    }
+    return `${target.platform} chat`;
+  }
+
+  #shortId(value: string | undefined): string {
+    if (value === undefined) {
+      return "none";
+    }
+    return value.length <= 12 ? value : `${value.slice(0, 12)}...`;
   }
 
   #controlPlaneBlockMessage(target: Target, commandName: string): string | undefined {
@@ -1999,6 +2094,22 @@ export class Daemon {
       return undefined;
     }
     return value as DaemonSessionRouter;
+  }
+
+  #projectEntries(): Array<readonly [string, DaemonProjectConfig]> {
+    if (typeof this.#config !== "object" || this.#config === null) {
+      return [];
+    }
+    const projects = (this.#config as { projects?: unknown }).projects;
+    if (typeof projects !== "object" || projects === null) {
+      return [];
+    }
+    return Object.keys(projects)
+      .sort()
+      .flatMap((projectId): Array<readonly [string, DaemonProjectConfig]> => {
+        const project = this.#projectConfig(projectId);
+        return project === undefined ? [] : [[projectId, project] as const];
+      });
   }
 
   #defaultSessionRouter(storage: unknown): SessionRouter | undefined {

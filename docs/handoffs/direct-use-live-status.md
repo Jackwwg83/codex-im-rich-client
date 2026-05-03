@@ -2,12 +2,12 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 2 B0 complete; IM control-plane
-> context-changing commands now refuse during active turns or pending approvals.
+> **Last updated:** 2026-05-03 - Block 2 B1 in progress; `/help`,
+> `/projects`, and `/status` are implemented with redacted IM-safe output.
 
 ## 1. Current State
 
-- **Mode:** Block 1 production launch chain in progress.
+- **Mode:** Block 2 IM command control plane in progress.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
@@ -22,9 +22,10 @@
   - `42098fb` - A2 daemon bundle build artifact.
   - `3752f01` - A3 bridge install app layout + installed daemon preflight.
   - `90ff7ec` - A4 release-readiness bridge chain + ops doc convergence.
-  - pending commit - B0 IM command control-plane hard gates.
-- **Next exact action:** B1 implement `/help`, `/projects`, `/status`, then
-  `/new` only after durable thread session storage exists.
+  - `48e85c5` - B0 IM command control-plane hard gates.
+  - pending commit - B1 `/help`, `/projects`, `/status` IM-safe controls.
+- **Next exact action:** finish B1 gates/commit, then implement durable
+  `thread_sessions` before `/new`, `/threads`, `/switch`, `/alias`.
 
 ## 2. Why This Exists
 
@@ -67,7 +68,7 @@ Required P0 plan edits:
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
-| Block 2 | IM command control plane | in progress: B0 complete |
+| Block 2 | IM command control plane | in progress: B1 controls implemented, gates pending |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
