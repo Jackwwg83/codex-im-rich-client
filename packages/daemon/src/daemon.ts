@@ -1755,9 +1755,11 @@ export class Daemon {
           : true,
       ...(typeof candidate.defaultApp === "string" ? { defaultApp: candidate.defaultApp } : {}),
       allowedApps: stringArray(candidate.allowedApps),
-      denyApps: stringArray(candidate.denyApps),
+      ...(candidate.denyApps === undefined ? {} : { denyApps: stringArray(candidate.denyApps) }),
       unknownAppPolicy: "deny",
-      requireApprovalKeywords: stringArray(candidate.requireApprovalKeywords),
+      ...(candidate.requireApprovalKeywords === undefined
+        ? {}
+        : { requireApprovalKeywords: stringArray(candidate.requireApprovalKeywords) }),
       liveSmokeEnabled:
         typeof candidate.liveSmokeEnabled === "boolean" ? candidate.liveSmokeEnabled : false,
     };

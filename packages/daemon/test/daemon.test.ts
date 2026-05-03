@@ -981,6 +981,71 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.turnSteer).not.toHaveBeenCalled();
   });
 
+  it("preserves default Computer Use sensitive keywords when daemon receives partial config", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-cu",
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        computerUse: {
+          enabled: true,
+          defaultApp: "Google Chrome",
+          allowedApps: ["Google Chrome"],
+          liveSmokeEnabled: false,
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => route) }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/cu click the login button",
+      messageRef: { target, messageId: "msg-cu-sensitive" },
+      receivedAt: new Date("2026-05-03T00:00:01.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-cu-sensitive" },
+      expect.stringContaining("sensitive step"),
+    );
+    expect(runtime.threadStart).not.toHaveBeenCalled();
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(runtime.turnSteer).not.toHaveBeenCalled();
+  });
+
   it("does not wrap desktop-looking normal prompts as Computer Use", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
