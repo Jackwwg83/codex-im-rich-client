@@ -1,7 +1,7 @@
 #!/usr/bin/env -S pnpm exec tsx
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -95,14 +95,15 @@ export function buildReleaseReadinessSteps(
   options: ReleaseReadinessOptions = {},
 ): readonly ReleaseReadinessStep[] {
   const includeFullGates = options.includeFullGates !== false;
+  const bridgeContext = createBridgeReleaseContext();
   return [
     ...(includeFullGates ? FULL_GATE_STEPS : []),
-    launchdRuntimePrepareProofStep(),
-    step("launchd-install-dry-run", "launchd install dry-run", "pnpm", [
-      "launchd:install",
-      "--dry-run",
-    ]),
-    loadAndRunDryRunStep(),
+    step("bridge-build", "Build daemon bridge artifact", "pnpm", ["bridge:build"]),
+    bridgeInstallDryRunStep(bridgeContext),
+    bridgeInstallStep(bridgeContext),
+    launchdInstallDryRunStep(bridgeContext),
+    loadAndRunDryRunStep(bridgeContext),
+    bridgeRedactionScanStep(bridgeContext),
     sqliteBackupProofStep(),
     step("smoke-telegram-fake", "Telegram fake smoke", "pnpm", ["smoke:telegram-fake"]),
     step("smoke-lark-fake", "Lark fake smoke", "pnpm", ["smoke:lark-fake"]),
@@ -300,31 +301,110 @@ function step(
   };
 }
 
-function launchdRuntimePrepareProofStep(): ReleaseReadinessStep {
+interface BridgeReleaseContext {
+  readonly home: string;
+  readonly bridgeDir: string;
+  readonly configPath: string;
+  readonly appDaemon: string;
+  readonly wrapperEntry: string;
+  readonly migrationsDir: string;
+  readonly logsDir: string;
+  configWritten: boolean;
+}
+
+function createBridgeReleaseContext(): BridgeReleaseContext {
+  const home = mkdtempSync(join(tmpdir(), "codex-im-release-bridge-home-"));
+  const bridgeDir = join(home, ".codex-im-bridge");
+  return {
+    home,
+    bridgeDir,
+    configPath: join(bridgeDir, "config.toml"),
+    appDaemon: join(bridgeDir, "app", "daemon.mjs"),
+    wrapperEntry: join(bridgeDir, "bin", "load-and-run.sh"),
+    migrationsDir: join(bridgeDir, "app", "migrations"),
+    logsDir: join(bridgeDir, "logs"),
+    configWritten: false,
+  };
+}
+
+function ensureBridgeConfig(context: BridgeReleaseContext): void {
+  if (context.configWritten) {
+    return;
+  }
+  mkdirSync(context.bridgeDir, { recursive: true, mode: 0o700 });
+  writeFileSync(context.configPath, releaseBridgeConfigToml(context), { mode: 0o600 });
+  context.configWritten = true;
+}
+
+function bridgeInstallDryRunStep(context: BridgeReleaseContext): ReleaseReadinessStep {
   return step(
-    "launchd-runtime-prepare-proof",
-    "launchd runtime prepare proof",
-    "node",
-    ["bin/prepare-launchd-runtime.mjs"],
+    "bridge-install-dry-run",
+    "Bridge install dry-run in temp HOME",
+    "pnpm",
+    ["bridge:install", "--", "--dry-run"],
     {
-      prepare: () => ({
-        env: {
-          HOME: mkdtempSync(join(tmpdir(), "codex-im-release-runtime-home-")),
-          PNPM_BIN: process.env.npm_execpath ?? "pnpm",
-        },
-      }),
+      prepare: () => {
+        ensureBridgeConfig(context);
+        return {
+          args: ["bridge:install", "--", "--dry-run", "--home", context.home],
+        };
+      },
     },
   );
 }
 
-function loadAndRunDryRunStep(): ReleaseReadinessStep {
+function bridgeInstallStep(context: BridgeReleaseContext): ReleaseReadinessStep {
+  return step(
+    "bridge-install",
+    "Bridge install with installed daemon preflight",
+    "pnpm",
+    ["bridge:install"],
+    {
+      prepare: () => {
+        ensureBridgeConfig(context);
+        return { args: ["bridge:install", "--", "--home", context.home] };
+      },
+      safeOutputPattern: /preflight:\s*ok/i,
+    },
+  );
+}
+
+function launchdInstallDryRunStep(context: BridgeReleaseContext): ReleaseReadinessStep {
+  return step(
+    "launchd-install-dry-run",
+    "launchd install dry-run against installed bridge",
+    "pnpm",
+    ["launchd:install", "--dry-run"],
+    {
+      prepare: () => {
+        ensureBridgeConfig(context);
+        return {
+          args: [
+            "launchd:install",
+            "--",
+            "--dry-run",
+            "--home",
+            context.home,
+            "--daemon-entry",
+            context.appDaemon,
+            "--wrapper-entry",
+            context.wrapperEntry,
+          ],
+        };
+      },
+    },
+  );
+}
+
+function loadAndRunDryRunStep(context: BridgeReleaseContext): ReleaseReadinessStep {
   return step(
     "load-and-run-dry-run",
-    "Keychain wrapper dry-run",
+    "Installed Keychain wrapper dry-run",
     "bash",
     ["bin/load-and-run.sh", "--dry-run"],
     {
       prepare: () => {
+        ensureBridgeConfig(context);
         const shimDir = mkdtempSync(join(tmpdir(), "codex-im-release-security-"));
         writeFileSync(
           join(shimDir, "security"),
@@ -332,15 +412,46 @@ function loadAndRunDryRunStep(): ReleaseReadinessStep {
           { mode: 0o700 },
         );
         return {
+          command: "bash",
+          args: [context.wrapperEntry, "--dry-run"],
           env: {
             PATH: `${shimDir}${delimiter}${process.env.PATH ?? ""}`,
             USER: process.env.USER ?? "codex",
             NODE_BIN: process.execPath,
-            DAEMON_ENTRY: join(process.cwd(), "packages/daemon/src/index.ts"),
+            DAEMON_ENTRY: context.appDaemon,
+            CONFIG_PATH: context.configPath,
+            MIGRATIONS_DIR: context.migrationsDir,
             FAKE_SECURITY_TOKEN: FAKE_KEYCHAIN_TOKEN,
           },
         };
       },
+    },
+  );
+}
+
+function bridgeRedactionScanStep(context: BridgeReleaseContext): ReleaseReadinessStep {
+  return step(
+    "bridge-redaction-scan",
+    "Bridge installed artifact and launchd plist redaction scan",
+    "node",
+    ["scripts/bridge-redaction-scan.mjs"],
+    {
+      prepare: () => {
+        ensureBridgeConfig(context);
+        return {
+          env: {
+            BRIDGE_HOME: context.home,
+            BRIDGE_DAEMON: context.appDaemon,
+            BRIDGE_WRAPPER: context.wrapperEntry,
+            BRIDGE_CONFIG: context.configPath,
+            BRIDGE_MIGRATIONS: context.migrationsDir,
+            BRIDGE_LOGS: context.logsDir,
+            NODE_BIN: process.execPath,
+            FAKE_SECURITY_TOKEN_VALUE: FAKE_KEYCHAIN_TOKEN,
+          },
+        };
+      },
+      safeOutputPattern: /redaction scan ok/i,
     },
   );
 }
@@ -377,6 +488,48 @@ function sqliteBackupProofStep(): ReleaseReadinessStep {
       };
     },
   });
+}
+
+function releaseBridgeConfigToml(context: BridgeReleaseContext): string {
+  return `
+[daemon]
+data_dir = "${context.bridgeDir}/data"
+log_dir = "${context.logsDir}"
+
+[storage]
+sqlite_path = "${context.bridgeDir}/data/state.db"
+auto_migrate = true
+
+[codex]
+binary = "codex"
+version_pin = "0.128.0"
+
+[security]
+allowed_users = []
+allowed_chats = []
+admin_users = []
+
+[security.commands]
+deny_patterns = []
+require_admin_patterns = []
+
+[adapters.telegram]
+enabled = false
+bot_token_env = "IM_TELEGRAM_BOT_TOKEN"
+
+[adapters.lark]
+enabled = false
+app_id = "disabled"
+app_secret_env = "LARK_APP_SECRET"
+domain = "feishu"
+allowed_chat_ids = []
+
+[projects.default]
+cwd = "${context.home}"
+allowed_users = []
+allowed_chats = []
+writable_roots = ["${context.home}"]
+`;
 }
 
 function parseArgs(argv: readonly string[]): ReleaseReadinessOptions {

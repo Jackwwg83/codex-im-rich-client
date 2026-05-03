@@ -52,8 +52,14 @@ pnpm release:check -- --skip-full-gates
 Expected:
 
 - all mandatory gates pass;
-- launchd install dry-run renders a plist;
-- Keychain wrapper dry-run succeeds through the fake shim;
+- bridge build produces `dist/codex-im-daemon.mjs`;
+- bridge install dry-run and real temp-HOME install both pass;
+- installed daemon preflight passes from `~/.codex-im-bridge/app/daemon.mjs`
+  without depending on the repo cwd;
+- launchd install dry-run verifies the installed wrapper and daemon paths;
+- installed Keychain wrapper dry-run succeeds through the fake shim;
+- bridge redaction scan checks installed app files, wrapper, rendered plist, and
+  logs;
 - SQLite backup proof writes only to a temp directory;
 - fake Telegram/Lark/DingTalk smokes pass;
 - live smoke commands either default-skip or stop at explicit operator gates;
@@ -92,16 +98,21 @@ unset IM_TELEGRAM_BOT_TOKEN
 Run:
 
 ```bash
-pnpm launchd:prepare --dry-run
+pnpm bridge:build
+pnpm bridge:install --dry-run
+pnpm bridge:install
 pnpm launchd:install --dry-run
-bash bin/load-and-run.sh --dry-run
+~/.codex-im-bridge/bin/load-and-run.sh --dry-run
 ```
 
 Expected:
 
 - plist path is under `~/Library/LaunchAgents/io.codex-im-bridge.plist`;
 - wrapper is `~/.codex-im-bridge/bin/load-and-run.sh`;
-- daemon entry is `~/.codex-im-bridge/bin/daemon.mjs`;
+- daemon entry is `~/.codex-im-bridge/app/daemon.mjs`;
+- migrations are under `~/.codex-im-bridge/app/migrations`;
+- runtime native dependency `better-sqlite3` resolves from
+  `~/.codex-im-bridge/app/node_modules`;
 - token output is only `<set from Keychain, length=N>`;
 - no token bytes appear.
 
@@ -110,7 +121,8 @@ Expected:
 Only after non-live preflight and dry-run pass:
 
 ```bash
-pnpm launchd:prepare
+pnpm bridge:build
+pnpm bridge:install
 pnpm launchd:install
 launchctl print "gui/$(id -u)/io.codex-im-bridge"
 ```
@@ -119,6 +131,8 @@ Expected:
 
 - LaunchAgent loads under the current GUI user;
 - daemon starts through `~/.codex-im-bridge/bin/load-and-run.sh`;
+- daemon code runs from `~/.codex-im-bridge/app/daemon.mjs`, not from the repo
+  TypeScript sources;
 - token is passed only through process environment after Keychain lookup;
 - plist does not contain token bytes or token-looking literals.
 
@@ -184,6 +198,7 @@ Unload and remove the LaunchAgent:
 
 ```bash
 pnpm launchd:uninstall
+pnpm bridge:uninstall
 ```
 
 If manual cleanup is needed:
@@ -192,12 +207,15 @@ If manual cleanup is needed:
 PLIST="$HOME/Library/LaunchAgents/io.codex-im-bridge.plist"
 launchctl unload "$PLIST" 2>/dev/null || true
 rm -f "$PLIST"
+rm -rf "$HOME/.codex-im-bridge/app"
+rm -f "$HOME/.codex-im-bridge/bin/load-and-run.sh"
 security delete-generic-password -s codex-im-bridge -a "$USER" 2>/dev/null || true
 ```
 
 Rollback intentionally does not delete:
 
 - repository checkout;
+- bridge `config.toml`;
 - SQLite state;
 - backups;
 - non-secret logs unless a redaction failure occurred.

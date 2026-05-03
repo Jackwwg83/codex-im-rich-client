@@ -2,8 +2,8 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 1 A3 complete; bridge install writes a
-> runnable app layout and proves installed daemon preflight from temp HOME.
+> **Last updated:** 2026-05-03 - Block 1 A4 complete; `release:check` now
+> proves the bridge build/install/preflight/launchd dry-run/redaction chain.
 
 ## 1. Current State
 
@@ -20,9 +20,9 @@
   - `3bcdcd0` - docs-only Direct Use / Phase 8 plan v2 and live-status anchor.
   - `15dfba6` - A1 launchd dry-run runtime verification.
   - `42098fb` - A2 daemon bundle build artifact.
-  - pending commit - A3 bridge install app layout + installed daemon preflight.
-- **Next exact action:** A4 wire `release:check` through
-  `bridge:build -> bridge:install temp HOME -> launchd dry-run`.
+  - `3752f01` - A3 bridge install app layout + installed daemon preflight.
+  - pending commit - A4 release-readiness bridge chain + ops doc convergence.
+- **Next exact action:** Start Block 2 IM command control plane.
 
 ## 2. Why This Exists
 
@@ -64,8 +64,8 @@ Required P0 plan edits:
 | Block | Scope | Status |
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
-| Block 1 | truthful production launch chain | in progress: A3 complete |
-| Block 2 | IM command control plane | blocked on Block 1 |
+| Block 1 | truthful production launch chain | complete through A4 |
+| Block 2 | IM command control plane | next |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
@@ -148,6 +148,17 @@ Latest A3 targeted gates:
 | `pnpm lint` | green: 323 files checked |
 | `pnpm protocol:check` | green |
 
+Latest A4 gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit scripts/release-readiness-check.test.mts` | green: 1 file, 8 passing |
+| `pnpm release:check -- --skip-full-gates` | green; bridge build, dry-run install, real temp-HOME install, installed daemon preflight, launchd dry-run, wrapper dry-run, redaction scan, backup proof, fake IM smokes, and default live gates all passed |
+| `pnpm typecheck` | green |
+| `pnpm test` | green: 144 files, 1279 passing, 1 skipped |
+| `pnpm lint` | green: 324 files checked |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -156,8 +167,8 @@ Start with Block 1 only:
 2. Done: `feat(bridge): build daemon bundle`
 3. Done: `feat(bridge): install runtime app artifacts and dependencies`
 4. Done in A3: `test(bridge): prove installed daemon preflight from temp HOME`
-5. Next: `test(release): prove bridge install -> launchd dry-run chain`
-6. `docs(ops): update production launch docs to remove false-green wording`
+5. Done: `test(release): prove bridge install -> launchd dry-run chain`
+6. Done in A4: `docs(ops): update production launch docs to remove false-green wording`
 
 Do not start Track B commands until Block 1 is green.
 

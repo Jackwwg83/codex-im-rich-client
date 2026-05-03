@@ -19,9 +19,17 @@ describe("release-readiness-check (JAC-169)", () => {
       "protocol-check",
       "verify-fixtures",
     ]);
-    expect(ids).toContain("launchd-runtime-prepare-proof");
+    expect(ids.slice(8, 14)).toEqual([
+      "bridge-build",
+      "bridge-install-dry-run",
+      "bridge-install",
+      "launchd-install-dry-run",
+      "load-and-run-dry-run",
+      "bridge-redaction-scan",
+    ]);
     expect(ids).toContain("launchd-install-dry-run");
     expect(ids).toContain("load-and-run-dry-run");
+    expect(ids).toContain("bridge-redaction-scan");
     expect(ids).toContain("db-backup-proof");
     expect(ids).toContain("smoke-telegram-live-default-gate");
     expect(ids).toContain("smoke-computer-use-default-skip");
@@ -31,20 +39,50 @@ describe("release-readiness-check (JAC-169)", () => {
     const ids = buildReleaseReadinessSteps({ includeFullGates: false }).map((step) => step.id);
 
     expect(ids).not.toContain("typecheck");
-    expect(ids[0]).toBe("launchd-runtime-prepare-proof");
+    expect(ids[0]).toBe("bridge-build");
   });
 
   it("keeps operational temp fixture setup lazy until a step runs", () => {
     const steps = buildReleaseReadinessSteps({ includeFullGates: false });
-    const runtime = steps.find((step) => step.id === "launchd-runtime-prepare-proof");
+    const bridgeDryRun = steps.find((step) => step.id === "bridge-install-dry-run");
+    const bridgeInstall = steps.find((step) => step.id === "bridge-install");
+    const launchd = steps.find((step) => step.id === "launchd-install-dry-run");
     const keychain = steps.find((step) => step.id === "load-and-run-dry-run");
+    const redaction = steps.find((step) => step.id === "bridge-redaction-scan");
     const backup = steps.find((step) => step.id === "db-backup-proof");
 
-    expect(runtime?.prepare).toEqual(expect.any(Function));
+    expect(bridgeDryRun?.prepare).toEqual(expect.any(Function));
+    expect(bridgeInstall?.prepare).toEqual(expect.any(Function));
+    expect(launchd?.prepare).toEqual(expect.any(Function));
     expect(keychain?.env).toBeUndefined();
     expect(keychain?.prepare).toEqual(expect.any(Function));
+    expect(redaction?.prepare).toEqual(expect.any(Function));
     expect(backup?.args).toEqual(["db:backup", "--"]);
     expect(backup?.prepare).toEqual(expect.any(Function));
+  });
+
+  it("uses one shared temp HOME for bridge install, launchd dry-run, wrapper dry-run, and redaction scan", () => {
+    const steps = buildReleaseReadinessSteps({ includeFullGates: false });
+    const bridgeDryRun = steps.find((step) => step.id === "bridge-install-dry-run");
+    const bridgeInstall = steps.find((step) => step.id === "bridge-install");
+    const launchd = steps.find((step) => step.id === "launchd-install-dry-run");
+    const keychain = steps.find((step) => step.id === "load-and-run-dry-run");
+    const redaction = steps.find((step) => step.id === "bridge-redaction-scan");
+
+    const dryArgs = bridgeDryRun?.prepare?.().args ?? [];
+    const installArgs = bridgeInstall?.prepare?.().args ?? [];
+    const launchdArgs = launchd?.prepare?.().args ?? [];
+    const keychainEnv = keychain?.prepare?.().env ?? {};
+    const redactionEnv = redaction?.prepare?.().env ?? {};
+    const home = dryArgs[dryArgs.indexOf("--home") + 1];
+
+    expect(home).toBeDefined();
+    expect(installArgs).toContain(home);
+    expect(launchdArgs).toContain(home);
+    expect(keychainEnv.DAEMON_ENTRY).toBe(`${home}/.codex-im-bridge/app/daemon.mjs`);
+    expect(keychainEnv.CONFIG_PATH).toBe(`${home}/.codex-im-bridge/config.toml`);
+    expect(redactionEnv.BRIDGE_HOME).toBe(home);
+    expect(redactionEnv.BRIDGE_DAEMON).toBe(`${home}/.codex-im-bridge/app/daemon.mjs`);
   });
 
   it("treats Telegram live smokes as explicit default gates, not default live calls", () => {

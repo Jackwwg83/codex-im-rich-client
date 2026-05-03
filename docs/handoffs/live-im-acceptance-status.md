@@ -59,8 +59,8 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pending | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pending | bounded Stream connection completes |
-| launchd runtime prepare | `pnpm launchd:prepare --dry-run` | pass | `daemon.mjs` + wrapper paths planned without token material |
-| launchd dry-run | `pnpm launchd:install --dry-run && bash bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
+| bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
+| launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
 | launchd live start | `pnpm launchd:install` + `launchctl print ...` | pending | daemon starts under user LaunchAgent |
 | Redaction | plist/log grep for token-shaped output | pending | no token-shaped material |

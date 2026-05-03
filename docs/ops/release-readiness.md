@@ -31,8 +31,14 @@ pnpm release:check -- --skip-full-gates
 - Unit, contract, and CLI smoke tests.
 - Lint and protocol generation determinism.
 - Phase 1 captured fixture verification.
-- launchd plist dry-run rendering.
-- Keychain wrapper dry-run through a temporary fake `security` shim.
+- `bridge:build` production daemon bundle.
+- `bridge:install --dry-run` against a temporary HOME.
+- `bridge:install` against the same temporary HOME, including installed daemon
+  preflight from `~/.codex-im-bridge/app/daemon.mjs`.
+- launchd plist dry-run rendering against the installed bridge artifact.
+- installed Keychain wrapper dry-run through a temporary fake `security` shim.
+- bridge redaction scan across installed app files, wrapper, rendered plist, and
+  logs.
 - SQLite backup proof against a temporary database.
 - Fake Telegram/Lark/DingTalk smokes.
 - Live Telegram/real Telegram commands fail at their explicit operator gate by

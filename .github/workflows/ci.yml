@@ -63,3 +63,6 @@ jobs:
 
       - name: Verify captured fixtures
         run: pnpm exec tsx scripts/verify-phase1-fixtures.mts
+
+      - name: Non-live production launch chain
+        run: pnpm release:check -- --skip-full-gates
