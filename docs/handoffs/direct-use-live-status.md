@@ -298,7 +298,6 @@ Latest C8 targeted and live launchd evidence:
 | `pnpm test` | green: 148 files, 1334 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 | `pnpm release:check -- --skip-full-gates` | green; bridge install, launchd dry-run, redaction scan, daemon roundtrip, fake IM smokes, and default live gates passed |
-| `pnpm launchd:uninstall || true && pnpm bridge:build && pnpm bridge:install && pnpm launchd:install && pnpm launchd:status` | green; reinstalled C9 bundle, `daemon status: present pid=70626`, `launchctl` `state = running`, token log redacted |
 | follow-up `pnpm launchd:status` | still green; `daemon status: present pid=44886`, `launchctl` still `state = running`, `last exit code = (never exited)` |
 
 Latest C9 targeted gate:
@@ -311,6 +310,13 @@ Latest C9 targeted gate:
 | `pnpm test` | green: 148 files, 1334 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 | `pnpm release:check -- --skip-full-gates` | green; bridge install, launchd dry-run, redaction scan, daemon roundtrip, fake IM smokes, and default live gates passed |
+| `pnpm launchd:uninstall || true && pnpm bridge:build && pnpm bridge:install && pnpm launchd:install && pnpm launchd:status` | green; reinstalled C9 bundle, `daemon status: present pid=70626`, `launchctl` `state = running`, token log redacted |
+
+Latest soak checks:
+
+| Time | Result |
+|---|---|
+| 2026-05-04 00:23 SGT | `pnpm launchd:status` still green for pid `70626`; `launchctl print` still reports `state = running`, `runs = 1`, `last exit code = (never exited)`; daemon logs show startup plus Node deprecation warnings only; installed bridge redaction scan passed |
 
 ## 7. Next Implementation Order
 
