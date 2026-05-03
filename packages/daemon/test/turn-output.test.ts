@@ -191,6 +191,112 @@ describe("daemon turn output projection", () => {
 
     await daemon.stop();
   });
+
+  it("appends completed Codex item summaries to terminal IM output", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    let route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+        bind: (target: Target, input: SessionBindingInput) => {
+          route = { kind: "bound", target, ...input };
+          return route;
+        },
+        bindThread: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Create a file",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-file-1",
+      raw: {
+        params: {
+          item: {
+            type: "fileChange",
+            status: "declined",
+            changes: [{ path: "<CWD>/hello.txt" }],
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-1",
+      deltaText: "done",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length === 1);
+    expect(editText).toHaveBeenCalledWith(
+      { target: TARGET, messageId: "bot-output-1" },
+      "done\n\nCodex items:\n- fileChange declined: <CWD>/hello.txt",
+    );
+
+    await daemon.stop();
+  });
 });
 
 async function waitFor(predicate: () => boolean): Promise<void> {

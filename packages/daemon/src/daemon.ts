@@ -78,6 +78,7 @@ const DEFAULT_COMPUTER_USE_ALLOWED_TOOLS = Object.freeze([
 ] as const satisfies readonly ComputerUseAllowedTool[]);
 const EAGER_PRUNE_RATIO = 0.8;
 const MAX_IM_TEXT_CHARS = 3_800;
+const MAX_IM_ITEM_SUMMARIES = 6;
 
 export interface DaemonBroker {
   attach(): void;
@@ -257,6 +258,7 @@ interface DaemonRuntimeProvider {
 interface DaemonTurnOutputState {
   readonly target: Target;
   readonly turnId: string;
+  readonly itemSummaries: string[];
   messageRef?: DaemonMessageRef;
   text: string;
 }
@@ -1438,6 +1440,20 @@ export class Daemon {
       return;
     }
 
+    if (event.type === "item_completed") {
+      const state = this.#turnOutputs.get(turnOutputKey(event.threadId, event.turnId));
+      const summary = summarizeCodexItem(event.raw);
+      if (
+        state !== undefined &&
+        summary !== undefined &&
+        state.itemSummaries.length < MAX_IM_ITEM_SUMMARIES &&
+        !state.itemSummaries.includes(summary)
+      ) {
+        state.itemSummaries.push(summary);
+      }
+      return;
+    }
+
     if (
       event.type !== "turn_completed" &&
       event.type !== "turn_failed" &&
@@ -1453,7 +1469,10 @@ export class Daemon {
     }
     this.#turnOutputs.delete(key);
     this.#clearTerminalActiveTurn(state.target, event.threadId, event.turnId);
-    await this.#editTurnOutput(state, this.#terminalTurnOutputBody(event, state.text));
+    await this.#editTurnOutput(
+      state,
+      this.#terminalTurnOutputBody(event, state.text, state.itemSummaries),
+    );
   }
 
   #clearTerminalActiveTurn(target: Target, threadId: string, turnId: string): void {
@@ -1480,7 +1499,7 @@ export class Daemon {
   }
 
   async #openTurnOutput(target: Target, threadId: string, turnId: string): Promise<void> {
-    const state: DaemonTurnOutputState = { target, turnId, text: "" };
+    const state: DaemonTurnOutputState = { target, turnId, itemSummaries: [], text: "" };
     this.#turnOutputs.set(turnOutputKey(threadId, turnId), state);
     if (this.#adapter?.sendText === undefined) {
       return;
@@ -1511,14 +1530,25 @@ export class Daemon {
     }
   }
 
-  #terminalTurnOutputBody(event: CodexRichEvent, text: string): string {
+  #terminalTurnOutputBody(
+    event: CodexRichEvent,
+    text: string,
+    itemSummaries: readonly string[] = [],
+  ): string {
+    let body: string;
     if (event.type === "turn_completed") {
-      return text.length === 0 ? "Codex turn completed." : text;
+      body = text.length === 0 ? "Codex turn completed." : text;
+    } else if (event.type === "turn_interrupted") {
+      body = text.length === 0 ? "Codex turn interrupted." : `${text}\n\n[turn interrupted]`;
+    } else {
+      body = text.length === 0 ? "Codex turn failed." : `${text}\n\n[turn failed]`;
     }
-    if (event.type === "turn_interrupted") {
-      return text.length === 0 ? "Codex turn interrupted." : `${text}\n\n[turn interrupted]`;
+    if (itemSummaries.length === 0) {
+      return body;
     }
-    return text.length === 0 ? "Codex turn failed." : `${text}\n\n[turn failed]`;
+    return truncateImText(
+      `${body}\n\nCodex items:\n${itemSummaries.map((summary) => `- ${summary}`).join("\n")}`,
+    );
   }
 
   async #routeComputerUse(
@@ -2979,6 +3009,59 @@ function readStringField(value: unknown, key: string): string | undefined {
   }
   const field = (value as Record<string, unknown>)[key];
   return typeof field === "string" ? field : undefined;
+}
+
+function summarizeCodexItem(raw: unknown): string | undefined {
+  const item = readRawItem(raw);
+  if (item === undefined) {
+    return undefined;
+  }
+  const type = readStringField(item, "type");
+  if (
+    type === undefined ||
+    type === "userMessage" ||
+    type === "agentMessage" ||
+    type === "reasoning"
+  ) {
+    return undefined;
+  }
+
+  const status = readStringField(item, "status");
+  const detail = summarizeItemChanges(item);
+  const summary = [type, status].filter((part): part is string => part !== undefined).join(" ");
+  return truncateItemSummary(detail === undefined ? summary : `${summary}: ${detail}`);
+}
+
+function readRawItem(raw: unknown): Record<string, unknown> | undefined {
+  const rawRecord = readRecord(raw);
+  const params = readRecord(rawRecord?.params);
+  return readRecord(params?.item);
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function summarizeItemChanges(item: Record<string, unknown>): string | undefined {
+  const changes = item.changes;
+  if (!Array.isArray(changes)) {
+    return undefined;
+  }
+  const paths = changes
+    .map((change) => readStringField(change, "path"))
+    .filter((path): path is string => path !== undefined)
+    .slice(0, 3);
+  if (paths.length === 0) {
+    return undefined;
+  }
+  const suffix = changes.length > paths.length ? ` +${changes.length - paths.length} more` : "";
+  return `${paths.join(", ")}${suffix}`;
+}
+
+function truncateItemSummary(summary: string): string {
+  return summary.length <= 180 ? summary : `${summary.slice(0, 157)}...`;
 }
 
 function targetEqual(a: Target, b: Target): boolean {

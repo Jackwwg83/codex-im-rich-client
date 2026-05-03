@@ -114,6 +114,7 @@ the chat bubble appears to show.
 | Sequential turns | send two harmless prompts one after another | both complete in order | same target remains bound; no pending turn leak |
 | Long reply/edit | ask for a 20-line numbered list | working message edits to final text | no Telegram edit error in daemon log |
 | Development diagnostic | ask Codex to run `git status --short` and `git log --oneline -3` | concise repo-status reply | no file modifications; `active_turn_id` clears |
+| Development item summary | ask Codex to make a small safe file change in a test repo | final reply may include `Codex items:` with file/tool item status | item summary matches Codex runtime item status, not a custom IM-only task model |
 | Stale thread recovery | restart daemon/app-server, then send a prompt using the restored binding | prompt routes instead of disappearing | binding is rebound to a fresh Codex thread if old thread is rejected |
 | Approval render | ask to `touch` a `/tmp/codex-im-live-*` file | approval card with four actions | four callback tokens bound to one `messageRef` |
 | Allow once | tap `Allow once` | command runs; resolved card has no buttons | selected token `used`, siblings `revoked`, file exists |

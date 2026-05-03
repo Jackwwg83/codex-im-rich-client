@@ -2,9 +2,9 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 3 repeatable smoke in progress; C3 adds
-> `smoke:telegram-live-roundtrip` for operator-gated real Telegram inbound
-> daemon evidence.
+> **Last updated:** 2026-05-03 - Block 3 repeatable smoke in progress; C4 adds
+> concise Codex `item_completed` summaries to IM terminal turn output for
+> development-task visibility.
 
 ## 1. Current State
 
@@ -36,10 +36,13 @@
     approval callback smoke.
   - `38af098` - C2 rename/clarify `smoke:telegram-side-by-side` as the
     live Telegram adapter + real Codex side-by-side check.
-  - pending commit - C3 `smoke:telegram-live-roundtrip` operator-gated real
+  - `6839f98` - C3 `smoke:telegram-live-roundtrip` operator-gated real
     Telegram inbound daemon evidence.
-- **Next exact action:** finish C3 gates/commit, then run live roundtrip with
-  Telegram Web when an operator/browser driver can send the nonce prompt.
+  - current commit - C4 IM terminal output appends concise non-chat Codex item
+    summaries.
+- **Next exact action:** run live roundtrip with Telegram Web when an
+  operator/browser driver can send the nonce prompt, then move to Block 4
+  launchd/soak evidence.
 
 ## 2. Why This Exists
 
@@ -83,7 +86,7 @@ Required P0 plan edits:
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
-| Block 3 | repeatable smoke layers | in progress: C3 live roundtrip harness implemented, gates green |
+| Block 3 | repeatable smoke layers | complete through C4; live roundtrip command ready, real browser-driver send still pending |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
 ## 5. Active Redlines
@@ -232,6 +235,16 @@ Latest C3 targeted gates:
 | `pnpm test` | green: 147 files, 1326 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 
+Latest C4 gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/daemon/test/turn-output.test.ts` | green: 1 file, 3 passing |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 330 files checked |
+| `pnpm test` | green: 147 files, 1327 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -261,7 +274,8 @@ Block 3:
 
 1. `test(smoke): add daemon roundtrip control and approval smoke` (done)
 2. `chore(smoke): clarify Telegram side-by-side smoke` (done)
-3. `test(smoke): add operator-gated live Telegram roundtrip evidence` (ready to commit)
+3. `test(smoke): add operator-gated live Telegram roundtrip evidence` (done)
+4. `feat(daemon): append Codex item summaries to IM turn output` (done)
 
 ## 8. Compact / Resume
 
