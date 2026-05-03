@@ -16,7 +16,7 @@ DINGTALK_LIVE=1 \
 DINGTALK_LIVE_DRY_RUN=1 \
 DINGTALK_CLIENT_ID=ding_xxx \
 DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET \
-DINGTALK_CLIENT_SECRET=secret-value \
+DINGTALK_CLIENT_SECRET=replace_me \
 pnpm smoke:dingtalk-live
 ```
 
@@ -26,12 +26,13 @@ Run the bounded live Stream connection only with explicit env:
 DINGTALK_LIVE=1 \
 DINGTALK_CLIENT_ID=ding_xxx \
 DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET \
-DINGTALK_CLIENT_SECRET=secret-value \
+DINGTALK_CLIENT_SECRET=replace_me \
 DINGTALK_LIVE_DURATION_MS=5000 \
 pnpm smoke:dingtalk-live
 ```
 
-The command registers robot-message and card-callback Stream handlers and
+The command starts `DingTalkChannelAdapter` with the production `DWClient`
+wrapper, registers robot-message and card-callback Stream handlers, and
 acknowledges received events as platform receipts only. It does not accept
 approval decisions; daemon approval settlement remains in the normal callback
 token path.

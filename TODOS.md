@@ -238,7 +238,12 @@ Active branch: `codex/phase-4-planning`. Plan-of-record:
 | T9-T11 contract + fake smoke + env-gated live smoke | `681a0dd` → `f51c7c6` | final review scope |
 | T12 final review fixes | `50a90c4`, `c289a7a` | re-review GO_WITH_LOW_NITS; P2 low nits closed before tag |
 
-### Phase 5 next exact task
+## Phase 5 implementation progress (closed at JAC-90 tag gate, 2026-05-02)
+
+Active branch: `codex/phase-5-dingtalk`. Plan-of-record:
+`docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`. Live status:
+`docs/handoffs/phase5-live-status.md`. Phase 5 -> Phase 6 handoff:
+`docs/handoffs/2026-05-02-phase5-to-phase6.md`.
 
 - [x] **JAC-78 / Phase 5 DingTalk plan gate** — write/review the DingTalk Stream-mode plan-of-record before implementing `@codex-im/im-dingtalk`. Review result: v1 APPROVE_WITH_CHANGES, v1.1 GO. Current docs: `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`, `docs/phase-5/dingtalk-target-verification.md`, and `docs/handoffs/phase5-live-status.md`.
 - [x] **JAC-79 / T1** — `@codex-im/im-dingtalk` skeleton + boundary tests after JAC-78 review gate.
@@ -252,4 +257,8 @@ Active branch: `codex/phase-4-planning`. Plan-of-record:
 - [x] **JAC-87 / T9** — DingTalk adapter contract suite and boundary/secret guard coverage.
 - [x] **JAC-88 / T10** — fake DingTalk smoke through daemon routing; no live network or credentials.
 - [x] **JAC-89 / T11** — env-gated live DingTalk smoke harness; default skip, no unattended live network.
-- [ ] **JAC-90 / T12** — final review/handoff/tag per Phase 5 plan.
+- [x] **JAC-90 / T12** — final review/handoff/tag per Phase 5 plan. Final review first returned APPROVE_WITH_CHANGES; `4a308d2` closed P1/P2 blockers; re-review returned GO with no P0/P1/P2 findings.
+
+### Phase 6 next exact task
+
+- [ ] **Phase 6 / Computer Use plan gate** — create/review a Computer Use plan-of-record before implementation. Do not implement production Computer Use flow until the plan review gate passes; normal prompts must not trigger Computer Use implicitly.
