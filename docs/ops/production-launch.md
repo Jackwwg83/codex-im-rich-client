@@ -125,6 +125,7 @@ pnpm bridge:build
 pnpm bridge:install
 pnpm launchd:install
 launchctl print "gui/$(id -u)/io.codex-im-bridge"
+pnpm launchd:status
 ```
 
 Expected:
@@ -141,6 +142,7 @@ Expected:
 Status snapshot:
 
 ```bash
+pnpm launchd:status
 pnpm exec tsx packages/cli/src/index.ts daemon status
 ```
 

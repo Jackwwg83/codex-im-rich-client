@@ -35,6 +35,7 @@
     "release:check": "tsx scripts/release-readiness-check.mts",
     "launchd:prepare": "node bin/prepare-launchd-runtime.mjs",
     "launchd:install": "node bin/install-launchd.mjs",
+    "launchd:status": "node bin/launchd-status.mjs",
     "launchd:uninstall": "node bin/uninstall-launchd.mjs",
     "db:backup": "tsx packages/cli/src/index.ts db backup",
     "smoke:app-server": "tsx packages/cli/src/index.ts smoke app-server",

@@ -2,13 +2,13 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 3 repeatable smoke in progress; C4 adds
-> concise Codex `item_completed` summaries to IM terminal turn output for
-> development-task visibility.
+> **Last updated:** 2026-05-03 - Block 4 production acceptance prep in
+> progress; C5 adds read-only `launchd:status` evidence for loaded service and
+> daemon snapshot checks.
 
 ## 1. Current State
 
-- **Mode:** Block 3 repeatable smoke layers in progress.
+- **Mode:** Block 4 real production acceptance prep in progress.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
@@ -16,7 +16,7 @@
 - **Baseline HEAD:** `a641159`.
 - **Linear:** create a new parent/milestone named
   `Direct Use Completion / Phase 8 - Production usability hardening`.
-- **Current implementation block:** Block 3 - repeatable smoke layers.
+- **Current implementation block:** Block 4 - launchd / soak evidence.
 - **Completed in this effort:**
   - `3bcdcd0` - docs-only Direct Use / Phase 8 plan v2 and live-status anchor.
   - `15dfba6` - A1 launchd dry-run runtime verification.
@@ -38,11 +38,12 @@
     live Telegram adapter + real Codex side-by-side check.
   - `6839f98` - C3 `smoke:telegram-live-roundtrip` operator-gated real
     Telegram inbound daemon evidence.
-  - current commit - C4 IM terminal output appends concise non-chat Codex item
+  - `0e0c016` - C4 IM terminal output appends concise non-chat Codex item
     summaries.
+  - latest commit - C5 read-only `launchd:status` evidence command.
 - **Next exact action:** run live roundtrip with Telegram Web when an
-  operator/browser driver can send the nonce prompt, then move to Block 4
-  launchd/soak evidence.
+  operator/browser driver can send the nonce prompt; launchd install/soak
+  remains operator-gated.
 
 ## 2. Why This Exists
 
@@ -87,7 +88,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4; live roundtrip command ready, real browser-driver send still pending |
-| Block 4 | real production acceptance + 24h soak | operator-gated |
+| Block 4 | real production acceptance + 24h soak | in progress: read-only status evidence command implemented, gates green |
 
 ## 5. Active Redlines
 
@@ -245,6 +246,17 @@ Latest C4 gates:
 | `pnpm test` | green: 147 files, 1327 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 
+Latest C5 targeted gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit scripts/launchd-status.test.mjs` | green: 1 file, 4 passing |
+| `pnpm launchd:status` | expected local not-loaded exit 2; reports missing plist, not-loaded launchctl, and stale daemon status snapshot without token material |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 332 files checked |
+| `pnpm test` | green: 148 files, 1331 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -276,6 +288,10 @@ Block 3:
 2. `chore(smoke): clarify Telegram side-by-side smoke` (done)
 3. `test(smoke): add operator-gated live Telegram roundtrip evidence` (done)
 4. `feat(daemon): append Codex item summaries to IM turn output` (done)
+
+Block 4:
+
+1. `chore(launchd): add read-only launchd status evidence command` (done)
 
 ## 8. Compact / Resume
 

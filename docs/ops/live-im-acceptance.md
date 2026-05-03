@@ -236,6 +236,7 @@ pnpm launchd:install --dry-run
 ~/.codex-im-bridge/bin/load-and-run.sh --dry-run
 pnpm launchd:install
 launchctl print "gui/$(id -u)/io.codex-im-bridge"
+pnpm launchd:status
 ```
 
 Passing criteria:
@@ -246,6 +247,8 @@ Passing criteria:
 - dry-run shows token as `<set from Keychain, length=N>`;
 - plist path is under current user's `~/Library/LaunchAgents`;
 - daemon starts through the wrapper;
+- `pnpm launchd:status` reports loaded launchd state and daemon status snapshot
+  without secret material;
 - plist and logs contain no token-shaped material.
 
 Rollback:
