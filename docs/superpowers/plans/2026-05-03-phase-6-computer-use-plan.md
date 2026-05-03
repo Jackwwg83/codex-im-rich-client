@@ -1,11 +1,12 @@
 # Phase 6 Plan - Explicit Computer Use Flow
 
-Status: approved v1.1 for implementation
+Status: complete at JAC-101 tag gate
 Generated: 2026-05-03
 Base tag: `phase-5-dingtalk-adapter-complete`
 Branch: `codex/phase-6-computer-use`
 Linear parent: JAC-11
-Current gate: JAC-101 final review / handoff / tag
+Closeout: JAC-101 final review / handoff / tag complete; release tag
+`phase-6-computer-use-complete`
 
 ## 1. Mission
 

@@ -17,7 +17,7 @@
 
 **Phase 5 状态**：✅ 完成（2026-05-02）。DingTalk Stream adapter 已通过 JAC-90 review/handoff/tag gate，包含 Stream receive、card send/update、opaque callback action、adapter-level Stream ack、duplicate robot delivery suppression、fake smoke、env-gated live smoke。**Phase 5 closeout：[`docs/handoffs/phase5-live-status.md`](docs/handoffs/phase5-live-status.md)，Phase 5 → Phase 6 交接见 [`docs/handoffs/2026-05-02-phase5-to-phase6.md`](docs/handoffs/2026-05-02-phase5-to-phase6.md)。**
 
-**Phase 6 状态**：🟡 实现中（2026-05-03）。Computer Use 只允许显式 `/cu` / `/computer-use`；JAC-92–JAC-100 core safety/audit/smoke boundary 已完成，当前进入 JAC-101 final review / handoff / tag。SOT：[`docs/handoffs/phase6-live-status.md`](docs/handoffs/phase6-live-status.md)，计划：[`docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`](docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md)。
+**Phase 6 状态**：✅ 完成（2026-05-03）。Computer Use 显式 `/cu` / `/computer-use` flow 已通过 JAC-101 review/handoff/tag gate；normal prompts 不触发 CU，dynamic tool calls 需要 active scoped `/cu` session，audit/redaction/default-skip live smoke 均已落地，真实桌面 provider 仍需未来 capability evidence。**Phase 6 closeout：[`docs/handoffs/phase6-live-status.md`](docs/handoffs/phase6-live-status.md)，Phase 6 → Phase 7 交接见 [`docs/handoffs/2026-05-03-phase6-to-phase7.md`](docs/handoffs/2026-05-03-phase6-to-phase7.md)。**
 
 **Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
 - `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
@@ -45,7 +45,7 @@ pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol
 
 # 3. 全量验证
 pnpm typecheck                 # all 14 packages
-pnpm test                      # 1207 tests pass + 1 skipped (unit + contract)
+pnpm test                      # 1212 tests pass + 1 skipped (unit + contract)
 pnpm lint                      # biome check
 
 # 4. 操作员手动 smoke (非默认测试)

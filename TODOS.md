@@ -259,12 +259,12 @@ Active branch: `codex/phase-5-dingtalk`. Plan-of-record:
 - [x] **JAC-89 / T11** — env-gated live DingTalk smoke harness; default skip, no unattended live network.
 - [x] **JAC-90 / T12** — final review/handoff/tag per Phase 5 plan. Final review first returned APPROVE_WITH_CHANGES; `4a308d2` closed P1/P2 blockers; re-review returned GO with no P0/P1/P2 findings.
 
-## Phase 6 implementation progress (active, 2026-05-03)
+## Phase 6 implementation progress (closed at JAC-101 tag gate, 2026-05-03)
 
 Active branch: `codex/phase-6-computer-use`. Plan-of-record:
 `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`. Live status:
-`docs/handoffs/phase6-live-status.md`. Phase 5 -> Phase 6 handoff:
-`docs/handoffs/2026-05-02-phase5-to-phase6.md`.
+`docs/handoffs/phase6-live-status.md`. Phase 6 -> Phase 7 handoff:
+`docs/handoffs/2026-05-03-phase6-to-phase7.md`.
 
 - [x] **JAC-91 / T0** — Computer Use plan review gate. Plan v1 returned APPROVE_WITH_CHANGES; v1.1 Codex re-review returned GO with no remaining P0/P1/P2.
 - [x] **JAC-92 / T1** — explicit `/cu` command parser only; no desktop action/provider.
@@ -277,4 +277,4 @@ Active branch: `codex/phase-6-computer-use`. Plan-of-record:
 - [x] **JAC-98 / T8** — audit events for Computer Use trigger/tool-call outcomes.
 - [x] **JAC-99 / T9** — Chrome-only fake/manual smoke docs.
 - [x] **JAC-100 / T10** — operator-gated live Computer Use smoke harness/default skip; default command skips, dry-run readiness is explicit, and real desktop execution remains blocked until provider capability is verified.
-- [ ] **JAC-101 / T11** — final review/handoff/tag. **Current.**
+- [x] **JAC-101 / T11** — final review/handoff/tag. Final review returned APPROVE_WITH_CHANGES at `650db47`; `1a5bb9b` closed P1/P2 blockers; re-review returned GO_WITH_LOW_NITS; `43a11e3` closed the remaining P3 default-value nit before tag.
