@@ -11,18 +11,20 @@
 // body suppresses the slash-command hint list.
 //
 // Capability matrix:
-//   supportsButtons   — adapter renders inline buttons; body skips
-//                       the "/allow_once /decline …" hint list
+//   supportsButtons   — adapter renders inline buttons; body may include the
+//                       approval id because the secure buttons carry the action.
+//                       When false, Phase 7 renders a non-actionable fallback
+//                       and hides raw approval ids / callback tokens.
 //   canEditMessage    — adapter can edit the existing message body
 //                       on resolve; footer reads "this message will
 //                       update". When false, footer reads "we'll
 //                       post a follow-up".
 //
 // Status-aware:
-//   pending → action hints (if !supportsButtons) + "what happens next"
+//   pending → non-actionable fallback (if !supportsButtons) + "what happens next"
 //   resolved / expired / transport_lost → status line only, no hints
 
-import type { ApprovalAction, ApprovalCard, ApprovalStatus } from "./approval-card.js";
+import type { ApprovalCard, ApprovalStatus } from "./approval-card.js";
 
 export type ChannelCapabilities = {
   readonly supportsButtons: boolean;
@@ -36,13 +38,6 @@ const RISK_LABEL: Record<ApprovalCard["target"]["riskLevel"], string> = {
   critical: "CRITICAL",
 };
 
-const ACTION_LABEL: Record<ApprovalAction["kind"], string> = {
-  allow_once: "Approve once",
-  allow_session: "Approve for the rest of this session",
-  decline: "Decline",
-  abort: "Abort the turn",
-};
-
 const STATUS_LINE: Record<Exclude<ApprovalStatus, "pending">, string> = {
   resolved: "Status: resolved (decision already made).",
   expired: "Status: expired (no decision in time).",
@@ -51,17 +46,16 @@ const STATUS_LINE: Record<Exclude<ApprovalStatus, "pending">, string> = {
 
 export function formatPlainText(card: ApprovalCard, caps: ChannelCapabilities): string {
   const lines: string[] = [];
-  lines.push(`[${RISK_LABEL[card.target.riskLevel]} risk] Approval needed: ${card.approvalId}`);
+  const approvalIdSuffix = caps.supportsButtons ? `: ${card.approvalId}` : "";
+  lines.push(`[${RISK_LABEL[card.target.riskLevel]} risk] Approval needed${approvalIdSuffix}`);
   lines.push("");
   lines.push(card.summary);
 
   if (card.status === "pending") {
-    if (!caps.supportsButtons && card.actions.length > 0) {
+    if (!caps.supportsButtons) {
       lines.push("");
-      lines.push("Choose:");
-      for (const action of card.actions) {
-        lines.push(`  /${action.kind}  — ${ACTION_LABEL[action.kind]}`);
-      }
+      lines.push("Decision controls are unavailable in this channel.");
+      lines.push("Open an approved channel with secure buttons to decide this request.");
     }
     lines.push("");
     if (caps.canEditMessage) {

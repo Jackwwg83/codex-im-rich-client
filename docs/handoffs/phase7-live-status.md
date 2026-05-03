@@ -2,8 +2,8 @@
 
 > Single source of truth for Phase 7 while extended platform / web-console
 > planning and implementation are active.
-> **Last updated:** 2026-05-03 - JAC-103 Chat SDK feasibility recorded
-> `spike-only`; JAC-105 fallback renderer is next.
+> **Last updated:** 2026-05-03 - JAC-105 fallback renderer implemented;
+> JAC-106 loopback-only read-only web status is next.
 
 ---
 
@@ -13,14 +13,14 @@
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
 - **Parent Linear issue:** JAC-12 - Phase 7+ backlog / extended platforms and
   web console.
-- **Current Linear issue:** JAC-105 - fallback renderer.
+- **Current Linear issue:** JAC-106 - web console read-only status.
 - **Branch:** `codex/phase-7-planning`.
 - **Base tag:** `phase-6-computer-use-complete`.
 - **Version:** `0.1.0-phase6`; do not bump until Phase 7 tag gate.
-- **Next exact action:** implement or document the safe lower-capability
-  non-actionable approval fallback. Runtime implementation is allowed only if it
-  stays in render/channel-core scope and proves no raw approval ids, raw
-  callback tokens, actionable text commands, or method literals.
+- **Next exact action:** plan or implement local read-only web-console status.
+  The first slice must be loopback-only, exclude secrets, expose no mutation
+  controls, and reject public bind defaults such as `0.0.0.0`, `::`, or LAN
+  hosts.
 
 ## 2. Current Decision State
 
@@ -28,6 +28,8 @@
 - Satori/Koishi is a compatibility-layer candidate, not a native adapter
   replacement.
 - Vercel Chat SDK is an adapter-layer candidate, not the Codex core.
+- Lower-capability approval rendering now produces non-actionable text with no
+  raw approval ids, callback tokens, or slash-command decision hints.
 - Web console starts as docs or loopback-only read-only status; public listener
   and approval UI require separate reviewed issues.
 - Team/operator policy must exist before shared approval UI can resolve actions.
@@ -65,15 +67,27 @@
 | JAC-104 | capability matrix | complete; review recorded |
 | JAC-102 | Satori/Koishi feasibility spike | complete; verdict `spike-only` |
 | JAC-103 | Vercel Chat SDK feasibility spike | complete; verdict `spike-only` |
-| JAC-105 | fallback renderer | current; implementable with restrictions |
-| JAC-106 | web console read-only status | pending, plan-reviewed only |
+| JAC-105 | fallback renderer | complete; non-actionable approval fallback implemented in render |
+| JAC-106 | web console read-only status | current; loopback-only/read-only/no secrets |
 | JAC-109 | team/operator model | pending |
 | JAC-107 | web console approval UI | pending, gated by team/operator policy |
 | JAC-108 | multi-channel session handoff | pending, gated by team/operator policy |
 
 ## 6. Gate Status
 
-Latest JAC-103 docs-only gate:
+Latest JAC-105 code gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run packages/render/test/plain-text-capability-matrix.test.ts` | green: 12 passed |
+| `pnpm --filter @codex-im/render typecheck` | green |
+| `pnpm typecheck` | green: 14 of 15 workspace projects |
+| `pnpm typecheck:tests` | green |
+| `pnpm test` | green: 132 files, 1213 passing, 1 skipped |
+| `pnpm lint` | green: 301 files checked |
+| `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
+
+Previous JAC-103 docs-only gate:
 
 | Gate | Result |
 |---|---|
