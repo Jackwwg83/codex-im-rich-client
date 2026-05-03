@@ -126,6 +126,52 @@ describe("BindingRepository (T4a)", () => {
     }
   });
 
+  it("clears active turns on daemon startup without dropping thread bindings", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new BindingRepository(db);
+      const activeTarget = { platform: "telegram", chatId: "-100123456" };
+      const idleTarget = { platform: "telegram", chatId: "-100654321" };
+      repo.upsert({
+        target: activeTarget,
+        projectId: "project-web",
+        codexThreadId: "thread_web",
+        activeTurnId: "turn_stale",
+        cwd: "/tmp/codex-im/project-web",
+        now: "2026-05-02T14:05:00.000Z",
+      });
+      repo.upsert({
+        target: idleTarget,
+        projectId: "project-api",
+        codexThreadId: "thread_api",
+        cwd: "/tmp/codex-im/project-api",
+        now: "2026-05-02T14:06:00.000Z",
+      });
+
+      expect(repo.clearActiveTurns()).toEqual([
+        expect.objectContaining({
+          target: activeTarget,
+          codexThreadId: "thread_web",
+        }),
+      ]);
+      expect(repo.findByTarget(activeTarget)?.activeTurnId).toBeUndefined();
+      expect(repo.findByTarget(activeTarget)).toMatchObject({
+        projectId: "project-web",
+        codexThreadId: "thread_web",
+      });
+      expect(repo.findByTarget(idleTarget)?.activeTurnId).toBeUndefined();
+      expect(repo.findByTarget(idleTarget)).toMatchObject({
+        projectId: "project-api",
+        codexThreadId: "thread_api",
+      });
+      expect(repo.clearActiveTurns()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("surfaces SQLite write failure without creating optimistic repository state", () => {
     const db = openDatabase(":memory:");
     try {

@@ -5,6 +5,7 @@ import {
   FakeComputerUseProvider,
   IM_ROUTABLE_APPROVAL_METHODS,
   type PendingApprovalSnapshot,
+  type SessionRoute,
   SessionRouter,
 } from "@codex-im/core";
 import type { ApprovalCard } from "@codex-im/render";
@@ -145,6 +146,63 @@ describe("Daemon skeleton (T14)", () => {
     expect(broker.enabled).toEqual([...IM_ROUTABLE_APPROVAL_METHODS]);
     expect(order.indexOf("broker.attach")).toBeLessThan(
       order.indexOf(`pending:${broker.enabled[0]}`),
+    );
+  });
+
+  it("revokes stale bound callback tokens before accepting adapter input on startup", async () => {
+    const order: string[] = [];
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn(() => () => {}),
+      start: vi.fn(() => {
+        order.push("adapter.start");
+      }),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      revokeBound: vi.fn(() => {
+        order.push("callbackTokens.revokeBound");
+        return [
+          {
+            tokenHash: "hash",
+            approvalId: "approval-stale",
+            action: "allow_once" as const,
+            callbackNonce: "nonce",
+            target: { platform: "telegram", chatId: "-100123456" },
+            actor: { kind: "im" as const },
+            status: "revoked" as const,
+            createdAt: "2026-05-03T12:12:33.946Z",
+            expiresAt: "2026-05-03T12:42:33.946Z",
+          },
+        ];
+      }),
+    };
+    const audit = {
+      insertBestEffort: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createAdapter: () => adapter,
+      callbackTokenRepository,
+      auditRepository: audit,
+    });
+
+    await daemon.start();
+
+    expect(order).toEqual(["callbackTokens.revokeBound", "adapter.start"]);
+    expect(audit.insertBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "approval.callback_startup_revoked",
+        approvalId: "approval-stale",
+        result: "revoked",
+      }),
     );
   });
 
@@ -756,6 +814,108 @@ describe("Daemon skeleton (T14)", () => {
     });
   });
 
+  it("rebinds a fresh Codex thread when a restored thread cannot start a new turn", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    let currentRoute: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-stale",
+      defaultModel: "gpt-test",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => currentRoute),
+      bindThread: vi.fn((receivedTarget: typeof target, codexThreadId: string) => {
+        currentRoute = { ...currentRoute, codexThreadId };
+        expect(receivedTarget).toEqual(target);
+        return currentRoute;
+      }),
+      bind: vi.fn(
+        (
+          receivedTarget: typeof target,
+          input: {
+            projectId: string;
+            cwd: string;
+            codexThreadId?: string;
+            defaultModel?: string;
+            activeTurnId?: string;
+          },
+        ) => {
+          currentRoute = { kind: "bound" as const, target: receivedTarget, ...input };
+          return currentRoute;
+        },
+      ),
+    };
+    const runtime = {
+      threadStart: vi.fn(() => ({ thread: { id: "thread-fresh" } })),
+      turnStart: vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error("thread not found");
+        })
+        .mockImplementationOnce(() => ({ turn: { id: "turn-fresh" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      sendText: vi.fn(() => ({ target, messageId: "work-1" })),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "summarize git status",
+      messageRef: { target, messageId: "msg-stale" },
+      receivedAt: new Date("2026-05-02T00:00:03.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const input = [{ type: "text" as const, text: "summarize git status", text_elements: [] }];
+    expect(runtime.turnStart).toHaveBeenNthCalledWith(1, {
+      threadId: "thread-stale",
+      input,
+      cwd: "/repo/web",
+      model: "gpt-test",
+    });
+    expect(runtime.threadStart).toHaveBeenCalledWith({ cwd: "/repo/web", model: "gpt-test" });
+    expect(sessionRouter.bindThread).toHaveBeenCalledWith(target, "thread-fresh");
+    expect(runtime.turnStart).toHaveBeenNthCalledWith(2, {
+      threadId: "thread-fresh",
+      input,
+      cwd: "/repo/web",
+      model: "gpt-test",
+    });
+    expect(sessionRouter.bind).toHaveBeenCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-fresh",
+      defaultModel: "gpt-test",
+      activeTurnId: "turn-fresh",
+    });
+    expect(adapter.sendText).toHaveBeenCalledWith(target, "Codex is working...");
+  });
+
   it("fails closed before routing when SecurityPolicy denies the inbound sender", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-denied" };
@@ -1117,19 +1277,34 @@ describe("Daemon skeleton (T14)", () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
     const sender = { userId: "u-alice" };
+    let currentRoute: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+    };
     const sessionRouter = {
-      resolve: vi.fn(() => ({
-        kind: "bound" as const,
-        target,
-        projectId: "web",
-        cwd: "/repo/web",
-        codexThreadId: "thread-1",
-        activeTurnId: "turn-1",
-      })),
+      resolve: vi.fn(() => currentRoute),
+      bind: vi.fn(
+        (
+          receivedTarget: typeof target,
+          input: {
+            projectId: string;
+            cwd: string;
+            codexThreadId?: string;
+            defaultModel?: string;
+            activeTurnId?: string;
+          },
+        ) => {
+          currentRoute = { kind: "bound" as const, target: receivedTarget, ...input };
+          return currentRoute;
+        },
+      ),
     };
     const runtime = {
       threadStart: vi.fn(),
-      turnStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-1" } })),
       turnSteer: vi.fn(),
       turnInterrupt: vi.fn(() => ({})),
     };
@@ -1139,6 +1314,86 @@ describe("Daemon skeleton (T14)", () => {
         messageHandler = handler;
         return () => {};
       }),
+      sendText: vi.fn(() => ({ target, messageId: "work-1" })),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "run a long task",
+      messageRef: { target, messageId: "msg-start" },
+      receivedAt: new Date("2026-05-02T00:00:04.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(adapter.sendText).toHaveBeenCalledWith(target, "Codex is working...");
+
+    messageHandler?.({
+      target,
+      sender,
+      text: "/stop",
+      messageRef: { target, messageId: "msg-stop" },
+      receivedAt: new Date("2026-05-02T00:00:05.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnInterrupt).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "work-1" },
+      "Codex turn interrupted.",
+    );
+    expect(sessionRouter.bind).toHaveBeenLastCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+    });
+    expect(runtime.turnStart).toHaveBeenCalledTimes(1);
+    expect(runtime.turnSteer).not.toHaveBeenCalled();
+  });
+
+  it("replies clearly when /stop has no active Codex turn", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-1",
+      })),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
     };
 
     const daemon = new Daemon({
@@ -1158,17 +1413,16 @@ describe("Daemon skeleton (T14)", () => {
       target,
       sender,
       text: "/stop",
-      messageRef: { target, messageId: "msg-stop" },
-      receivedAt: new Date("2026-05-02T00:00:05.000Z"),
+      messageRef: { target, messageId: "msg-stop-idle" },
+      receivedAt: new Date("2026-05-02T00:00:05.500Z"),
     });
     await flushDaemonHandlers();
 
-    expect(runtime.turnInterrupt).toHaveBeenCalledWith({
-      threadId: "thread-1",
-      turnId: "turn-1",
-    });
-    expect(runtime.turnStart).not.toHaveBeenCalled();
-    expect(runtime.turnSteer).not.toHaveBeenCalled();
+    expect(runtime.turnInterrupt).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-stop-idle" },
+      "No active Codex turn.",
+    );
   });
 
   it("rebuilds the default SessionRouter from SQLite bindings during daemon startup", async () => {

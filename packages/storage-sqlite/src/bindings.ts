@@ -241,4 +241,31 @@ export class BindingRepository {
 
     return result.changes > 0;
   }
+
+  clearActiveTurns(): ThreadBindingRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+          UPDATE thread_bindings
+             SET active_turn_id = NULL,
+                 updated_at = @updatedAt
+           WHERE active_turn_id IS NOT NULL
+       RETURNING id,
+                 target_platform,
+                 target_chat_id,
+                 target_thread_key,
+                 target_topic_id,
+                 project_id,
+                 codex_thread_id,
+                 cwd,
+                 default_model,
+                 active_turn_id,
+                 created_at,
+                 updated_at
+        `,
+      )
+      .all({ updatedAt: new Date().toISOString() }) as ThreadBindingRow[];
+
+    return rows.map(hydrate);
+  }
 }

@@ -106,6 +106,8 @@ the chat bubble appears to show.
 | Basic turn | `Reply exactly: OK` | bot replies `OK` | `active_turn_id` clears after completion |
 | Sequential turns | send two harmless prompts one after another | both complete in order | same target remains bound; no pending turn leak |
 | Long reply/edit | ask for a 20-line numbered list | working message edits to final text | no Telegram edit error in daemon log |
+| Development diagnostic | ask Codex to run `git status --short` and `git log --oneline -3` | concise repo-status reply | no file modifications; `active_turn_id` clears |
+| Stale thread recovery | restart daemon/app-server, then send a prompt using the restored binding | prompt routes instead of disappearing | binding is rebound to a fresh Codex thread if old thread is rejected |
 | Approval render | ask to `touch` a `/tmp/codex-im-live-*` file | approval card with four actions | four callback tokens bound to one `messageRef` |
 | Allow once | tap `Allow once` | command runs; resolved card has no buttons | selected token `used`, siblings `revoked`, file exists |
 | Decline | tap `Decline` | command not run; decline text rendered | selected token `used`, file absent |
@@ -113,7 +115,9 @@ the chat bubble appears to show.
 | Allow session exact reuse | approve `printf ... >> file`, then send exact same prompt | second command runs without a new card | file grows twice; no new callback token row |
 | Allow session scoped change | after session approval, send different command/path | fresh approval is requested | new `approvalId` and new callback token group |
 | Duplicate click | click one approval action, then try another action on same card if still possible | second action fails closed or buttons are gone | only one token is `used`; siblings are `revoked` |
-| Pending restart | create a pending card, restart daemon, then click the card | either restored and resolved, or fails closed visibly | no silent execution without token/messageRef validation |
+| Pending restart | create a pending card, restart daemon, then click the card | fails closed visibly; no command runs | stale active turns clear and bound callback tokens revoke on daemon startup |
+| Stop idle | send `/stop` when no turn is active | `No active Codex turn.` | no active turn is created |
+| Stop active | send `/stop` while a Codex turn is active | working message changes to interrupted | `turnInterrupt` is called and `active_turn_id` clears |
 | Unauthorized private chat | message from non-allowlisted Telegram user | ignored or denied | no thread binding, no turn started |
 | Group mention | message bot in a test group with configured allowlist | only authorized target routes | target includes expected group chat/thread metadata |
 | Telegram API downtime | stop network or use invalid token in smoke | explicit smoke failure | no token bytes printed |
@@ -128,8 +132,10 @@ Suggested execution order for broad live coverage:
    actions.
 4. Run resilience scenarios: duplicate click, pending restart, and exact-session
    reuse.
-5. If a disposable group is available, run group and allowlist scenarios.
-6. Finish with redaction checks over generated plist, daemon logs, SQLite, and
+5. Run development-task scenarios: read-only repo diagnostics, stale-thread
+   recovery after restart, and `/stop` idle/active behavior.
+6. If a disposable group is available, run group and allowlist scenarios.
+7. Finish with redaction checks over generated plist, daemon logs, SQLite, and
    docs before recording evidence.
 
 Failure localization:

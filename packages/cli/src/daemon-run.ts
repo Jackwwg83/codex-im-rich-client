@@ -124,6 +124,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
           approvalId,
           exceptHash,
         ),
+      revokeBound: () => asRuntimeStorage(storageBox.current).callbackTokens.revokeBound(),
       pruneExpired: (now, limit) =>
         asRuntimeStorage(storageBox.current).callbackTokens.pruneExpired(now, limit),
       revokeStuckIssued: (cutoff, approvalIds, limit) =>
@@ -184,9 +185,11 @@ function openRuntimeStorage(config: CodexImConfig, migrationsDir: string): Runti
   if (config.storage.autoMigrate) {
     runMigrations(db, migrationsDir);
   }
+  const bindings = new BindingRepository(db);
+  bindings.clearActiveTurns();
   return {
     db,
-    bindings: new BindingRepository(db),
+    bindings,
     audit: new AuditRepository(db),
     callbackTokens: new CallbackTokenRepository(db),
     close: () => db.close(),

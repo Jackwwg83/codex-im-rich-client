@@ -242,6 +242,47 @@ describe("CallbackTokenRepository (T6d)", () => {
     }
   });
 
+  it("revokes all bound tokens on daemon startup while preserving non-bound rows", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new CallbackTokenRepository(db);
+      const issuedHash = hashCallbackToken("startup-issued");
+      const boundHash = hashCallbackToken("startup-bound");
+      const usedHash = hashCallbackToken("startup-used");
+      for (const [tokenHash, approvalId] of [
+        [issuedHash, "approval-issued"],
+        [boundHash, "approval-bound"],
+        [usedHash, "approval-used"],
+      ] as const) {
+        repo.insert({
+          tokenHash,
+          approvalId,
+          action: "allow_once",
+          callbackNonce: "nonce-startup",
+          target: { platform: "telegram", chatId: "-100123456" },
+          actor: { kind: "im" },
+          createdAt: "2026-05-02T18:10:00.000Z",
+          expiresAt: "2026-05-02T18:40:00.000Z",
+        });
+      }
+      repo.casUpdate(boundHash, "issued", "bound");
+      repo.casUpdate(usedHash, "issued", "bound");
+      repo.casUpdate(usedHash, "bound", "used");
+
+      expect(repo.revokeBound()).toEqual([
+        expect.objectContaining({ tokenHash: boundHash, status: "revoked" }),
+      ]);
+      expect(repo.findByHash(issuedHash)).toMatchObject({ status: "issued" });
+      expect(repo.findByHash(boundHash)).toMatchObject({ status: "revoked" });
+      expect(repo.findByHash(usedHash)).toMatchObject({ status: "used" });
+      expect(repo.revokeBound()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("expires stale issued tokens left behind by sendCard failures", () => {
     const db = openDatabase(":memory:");
     try {

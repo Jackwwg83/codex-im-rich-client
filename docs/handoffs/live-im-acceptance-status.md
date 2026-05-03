@@ -3,8 +3,9 @@
 > Single source of truth for real Telegram/Lark/DingTalk/Codex App live
 > acceptance after `production-readiness-2026-05-03-r2`.
 > **Last updated:** 2026-05-03 - Telegram real bot + real Codex turn +
-> approval callback acceptance passed with redacted Keychain credential;
-> Lark/DingTalk live acceptance remains pending.
+> approval callback acceptance + development-task control acceptance passed
+> with redacted Keychain credential; Lark/DingTalk live acceptance remains
+> pending.
 
 ---
 
@@ -41,6 +42,13 @@ until the matrix below is complete with real credentials and redacted evidence.
 | Telegram live adapter | `TELEGRAM_LIVE=1 IM_TELEGRAM_BOT_TOKEN=... pnpm smoke:telegram-live` | pass | real bot token from Keychain; adapter start/stop bounded; no token output |
 | Telegram + real Codex | `TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN=... pnpm smoke:telegram-real` | pass | harmless real turn `Reply exactly: OK` completed through real bot |
 | Telegram Web / daemon reply | `/use codex-im` then `Reply exactly: OK` in Telegram Web | pass | bot replied `Using project codex-im`, then `OK`; SQLite binding created and active turn cleared |
+| Telegram Web / project rejection | `/use does-not-exist` in Telegram Web | pass | bot replied `Unknown project: does-not-exist`; current binding not overwritten |
+| Telegram Web / sequential turns | two harmless prompts sent sequentially | pass | bot replied `FIRST-LIVE-2008` and `SECOND-LIVE-2008`; active turn cleared after both |
+| Telegram Web / long reply projection | 12-line exact reply prompt | pass | final Telegram message contained `LIVE-LINE-01` through `LIVE-LINE-12` |
+| Telegram Web / development diagnostic | read-only `git status --short` + `git log --oneline -3` prompt | pass | bot replied `DEV-STATUS-2034 branch dirty (7 modified files); latest commit 6c1be36...`; SQLite active turn cleared |
+| Telegram Web / stale thread recovery | send prompt after daemon/app-server restart with persisted old `codex_thread_id` | pass | daemon created a fresh Codex thread and routed the turn; no silent drop |
+| Telegram Web / startup stale state cleanup | restart daemon with stale active turn and bound callback tokens | pass | `thread_bindings.active_turn_id` cleared; stale bound callback tokens revoked; pending write file remained absent |
+| Telegram Web / stop idle feedback | `/stop` when no active Codex turn exists | pass | bot replied `No active Codex turn.` |
 | Telegram Web / approval allow once | shell command requiring approval, tap `Allow once` | pass | command ran once; callback token `allow_once=used`, sibling tokens revoked; resolved card has no buttons |
 | Telegram Web / approval decline | shell command requiring approval, tap `Decline` | pass | command not run; decline response rendered; target file absent; token `decline=used` |
 | Telegram Web / approval abort | shell command requiring approval, tap `Abort` | pass | Codex turn interrupted; target file absent; token `abort=used` |
@@ -115,3 +123,15 @@ Stop and treat as a blocker if:
   remained gated/skipped.
 - 2026-05-03: `smoke:telegram-live` re-ran after the grammY polling shutdown
   fix and passed with `started=true stopped=true`.
+- 2026-05-03: Telegram Web real daemon resilience pass covered invalid project,
+  sequential turns, 12-line long reply projection, stale persisted Codex thread
+  recovery after daemon restart, startup cleanup of stale active turns and bound
+  callback tokens, and read-only development diagnostic prompt
+  `DEV-STATUS-2034`.
+- 2026-05-03: Telegram Web `/stop` behavior clarified against real Codex App
+  semantics. When a turn is active, unit coverage now asserts immediate
+  interrupted output projection and active-turn cleanup. In live Telegram, a
+  long shell command prompt completed as Codex output `Command started and is
+  still running after 1s.` and left no active turn; a subsequent `/stop`
+  correctly replied `No active Codex turn.` rather than pretending an IM-owned
+  background task existed.

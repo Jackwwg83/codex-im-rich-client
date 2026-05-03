@@ -337,6 +337,21 @@ export class CallbackTokenRepository {
     return rows.map(hydrate);
   }
 
+  revokeBound(): CallbackTokenRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+          UPDATE callback_tokens
+             SET status = 'revoked'
+           WHERE status = 'bound'
+       RETURNING ${SELECT_COLUMNS}
+        `,
+      )
+      .all() as CallbackTokenRow[];
+
+    return rows.map(hydrate);
+  }
+
   pruneExpired(now: string, limit?: number): CallbackTokenRecord[] {
     const batchLimit = sanitizeLimit(limit);
     const rows = this.db

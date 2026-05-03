@@ -155,6 +155,7 @@ export interface DaemonCallbackTokenRepository {
   ): CallbackTokenRecord | unknown;
   forceMarkUsed?(tokenHash: string, fields?: CallbackTokenCasFields): CallbackTokenRecord | unknown;
   revokeBoundSiblings?(approvalId: string, exceptTokenHash: string): readonly CallbackTokenRecord[];
+  revokeBound?(): readonly CallbackTokenRecord[];
   pruneExpired?(now: string, limit?: number): readonly CallbackTokenRecord[];
   revokeStuckIssued?(
     cutoff: string,
@@ -379,6 +380,7 @@ export class Daemon {
         supervisor: this.#supervisor,
       };
       this.#adapter = await this.options.createAdapter?.(adapterContext);
+      this.#revokeStartupCallbackTokens();
       this.#subscribe(
         this.#broker?.onPendingCreated?.((snapshot) => {
           this.#maybeTriggerEagerPrune();
@@ -588,6 +590,17 @@ export class Daemon {
       await this.#autoDeclineApproval(snapshot, target, "policy_auto_decline");
     } catch {
       // Pending-created subscribers must not destabilize the broker.
+    }
+  }
+
+  #revokeStartupCallbackTokens(): void {
+    const records = this.options.callbackTokenRepository?.revokeBound?.() ?? [];
+    for (const record of records) {
+      this.#emitAuditEvent("approval.callback_startup_revoked", {
+        approvalId: record.approvalId,
+        target: record.target,
+        result: "revoked",
+      });
     }
   }
 
@@ -1206,25 +1219,18 @@ export class Daemon {
     }
     this.#ensureRuntimeEventPump(runtime);
 
-    let route = sessionRouter.resolve(inbound.target);
-    if (route.kind !== "bound") {
+    const initialRoute = sessionRouter.resolve(inbound.target);
+    if (initialRoute.kind !== "bound") {
       return;
     }
-    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+    if (!this.#projectAllowed(initialRoute.projectId, inbound.target, inbound.sender)) {
       await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
-    if (route.codexThreadId === undefined) {
-      const startedThread = await runtime.threadStart(this.#threadStartParams(route));
-      const threadId = this.#threadId(startedThread);
-      if (threadId === undefined || sessionRouter.bindThread === undefined) {
-        return;
-      }
-      route = sessionRouter.bindThread(inbound.target, threadId);
-    }
-
-    if (route.kind !== "bound" || route.codexThreadId === undefined) {
+    const hadPersistedThread = initialRoute.codexThreadId !== undefined;
+    let route = await this.#ensureBoundCodexThread(sessionRouter, runtime, inbound, initialRoute);
+    if (route === undefined) {
       return;
     }
 
@@ -1238,17 +1244,98 @@ export class Daemon {
       return;
     }
 
-    const startedTurn = await runtime.turnStart({
-      threadId: route.codexThreadId,
-      input,
-      cwd: route.cwd,
-      ...(route.defaultModel === undefined ? {} : { model: route.defaultModel }),
-    });
+    let startedTurn: DaemonTurnStartResult;
+    try {
+      startedTurn = await this.#startPromptTurn(runtime, route, input);
+    } catch (error) {
+      this.#emitAuditEvent("runtime.turn_start_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: route.codexThreadId },
+      });
+      if (!hadPersistedThread) {
+        await this.#editInboundMessage(inbound.messageRef, "Codex turn failed to start.");
+        return;
+      }
+      const freshRoute = await this.#startFreshCodexThread(sessionRouter, runtime, inbound, route);
+      if (freshRoute === undefined) {
+        return;
+      }
+      try {
+        startedTurn = await this.#startPromptTurn(runtime, freshRoute, input);
+        route = freshRoute;
+      } catch (retryError) {
+        this.#emitAuditEvent("runtime.turn_start_retry_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(retryError), threadId: freshRoute.codexThreadId },
+        });
+        await this.#editInboundMessage(inbound.messageRef, "Codex turn failed to start.");
+        return;
+      }
+    }
     const activeTurnId = this.#turnId(startedTurn);
     if (activeTurnId !== undefined) {
       this.#bindActiveTurn(sessionRouter, route, activeTurnId);
       await this.#openTurnOutput(inbound.target, route.codexThreadId, activeTurnId);
     }
+  }
+
+  async #ensureBoundCodexThread(
+    sessionRouter: DaemonSessionRouter,
+    runtime: DaemonCodexRuntime,
+    inbound: { target: Target; messageRef?: DaemonMessageRef },
+    route: Extract<SessionRoute, { kind: "bound" }>,
+  ): Promise<(Extract<SessionRoute, { kind: "bound" }> & { codexThreadId: string }) | undefined> {
+    if (route.codexThreadId !== undefined) {
+      return { ...route, codexThreadId: route.codexThreadId };
+    }
+    return await this.#startFreshCodexThread(sessionRouter, runtime, inbound, route);
+  }
+
+  async #startFreshCodexThread(
+    sessionRouter: DaemonSessionRouter,
+    runtime: DaemonCodexRuntime,
+    inbound: { target: Target; messageRef?: DaemonMessageRef },
+    route: Extract<SessionRoute, { kind: "bound" }>,
+  ): Promise<(Extract<SessionRoute, { kind: "bound" }> & { codexThreadId: string }) | undefined> {
+    try {
+      const startedThread = await runtime.threadStart(this.#threadStartParams(route));
+      const threadId = this.#threadId(startedThread);
+      if (threadId === undefined || sessionRouter.bindThread === undefined) {
+        await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
+        return undefined;
+      }
+      const rebound = sessionRouter.bindThread(inbound.target, threadId);
+      if (rebound.kind !== "bound" || rebound.codexThreadId === undefined) {
+        await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to bind.");
+        return undefined;
+      }
+      return { ...rebound, codexThreadId: rebound.codexThreadId };
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_start_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
+      return undefined;
+    }
+  }
+
+  #startPromptTurn(
+    runtime: DaemonCodexRuntime,
+    route: Extract<SessionRoute, { kind: "bound" }> & { codexThreadId: string },
+    input: DaemonTextInput[],
+  ): Promise<DaemonTurnStartResult> {
+    return Promise.resolve(
+      runtime.turnStart({
+        threadId: route.codexThreadId,
+        input,
+        cwd: route.cwd,
+        ...(route.defaultModel === undefined ? {} : { model: route.defaultModel }),
+      }),
+    );
   }
 
   #ensureRuntimeEventPump(runtime: DaemonCodexRuntime): void {
@@ -1528,23 +1615,28 @@ export class Daemon {
     }
 
     if (command.name === "stop") {
-      await this.#routeStopCommand(inbound.target);
+      await this.#routeStopCommand(inbound);
     }
   }
 
-  async #routeStopCommand(target: Target): Promise<void> {
+  async #routeStopCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();
     if (sessionRouter === undefined || runtime?.turnInterrupt === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex turn interrupt unavailable.");
       return;
     }
 
-    const route = sessionRouter.resolve(target);
+    const route = sessionRouter.resolve(inbound.target);
     if (
       route.kind !== "bound" ||
       route.codexThreadId === undefined ||
       route.activeTurnId === undefined
     ) {
+      await this.#editInboundMessage(inbound.messageRef, "No active Codex turn.");
       return;
     }
 
@@ -1552,6 +1644,24 @@ export class Daemon {
       threadId: route.codexThreadId,
       turnId: route.activeTurnId,
     });
+    this.#clearTerminalActiveTurn(inbound.target, route.codexThreadId, route.activeTurnId);
+    await this.#interruptTurnOutput(route.codexThreadId, route.activeTurnId);
+  }
+
+  async #interruptTurnOutput(threadId: string, turnId: string): Promise<void> {
+    const key = turnOutputKey(threadId, turnId);
+    const state = this.#turnOutputs.get(key);
+    if (state === undefined) {
+      return;
+    }
+    this.#turnOutputs.delete(key);
+    await this.#editTurnOutput(
+      state,
+      this.#terminalTurnOutputBody(
+        { type: "turn_interrupted", threadId, turnId, raw: {}, terminal: true },
+        state.text,
+      ),
+    );
   }
 
   async #routeUseCommand(
