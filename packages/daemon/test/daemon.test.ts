@@ -1,6 +1,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type DynamicToolCallHandler,
+  FakeComputerUseProvider,
   IM_ROUTABLE_APPROVAL_METHODS,
   type PendingApprovalSnapshot,
   SessionRouter,
@@ -801,11 +803,128 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.turnSteer).not.toHaveBeenCalled();
   });
 
-  it("rejects Phase 3 Computer Use commands before SessionRouter or runtime", async () => {
+  it("routes explicit /cu through prompt wrapping, session creation, audit, and broker tool gate", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    let dynamicToolHandler: DynamicToolCallHandler | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-cu",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => route),
+      bind: vi.fn(),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-cu" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const auditInserts: unknown[] = [];
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        computerUse: {
+          enabled: true,
+          defaultApp: "Google Chrome",
+          allowedApps: ["Google Chrome"],
+          denyApps: ["Keychain Access"],
+          requireApprovalKeywords: ["login", "token"],
+          liveSmokeEnabled: false,
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        registerDynamicToolCallHandler: vi.fn((handler: DynamicToolCallHandler) => {
+          dynamicToolHandler = handler;
+        }),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      auditRepository: { insertBestEffort: vi.fn((input) => auditInserts.push(input)) },
+      computerUseProvider: new FakeComputerUseProvider({
+        contentItems: [{ type: "inputText", text: "fake-cu-result" }],
+        success: true,
+      }),
+      generateComputerUseSessionId: () => "cu-session-1",
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/cu summarize the visible page",
+      messageRef: { target, messageId: "msg-cu" },
+      receivedAt: new Date("2026-05-02T00:00:04.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-cu",
+      input: [
+        expect.objectContaining({
+          type: "text",
+          text: expect.stringContaining("Computer Use was explicitly requested with /cu."),
+        }),
+      ],
+      cwd: "/repo/web",
+    });
+    expect(runtime.turnSteer).not.toHaveBeenCalled();
+    expect(sessionRouter.bind).toHaveBeenCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-cu",
+      activeTurnId: "turn-cu",
+    });
+    expect(auditInserts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "computer_use.intent_created" }),
+        expect.objectContaining({ action: "computer_use.prompt_wrapped" }),
+      ]),
+    );
+
+    await expect(
+      dynamicToolHandler?.({
+        method: "item/tool/call",
+        id: 1,
+        params: {
+          threadId: "thread-cu",
+          turnId: "turn-cu",
+          callId: "tool-call-cu",
+          namespace: null,
+          tool: "computer_use.synthetic",
+          arguments: { action: "observe" },
+        },
+      }),
+    ).resolves.toEqual({
+      contentItems: [{ type: "inputText", text: "fake-cu-result" }],
+      success: true,
+    });
+  });
+
+  it("routes /cu status to a safe policy summary without starting Codex work", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
     const sender = { userId: "u-alice" };
-    const sessionRouter = { resolve: vi.fn() };
     const runtime = {
       threadStart: vi.fn(),
       turnStart: vi.fn(),
@@ -818,16 +937,26 @@ describe("Daemon skeleton (T14)", () => {
         messageHandler = handler;
         return () => {};
       }),
+      editText: vi.fn(),
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({}),
+      loadConfig: () => ({
+        computerUse: {
+          enabled: true,
+          defaultApp: "Google Chrome",
+          allowedApps: ["Google Chrome"],
+          denyApps: ["Keychain Access"],
+          requireApprovalKeywords: ["login", "token"],
+          liveSmokeEnabled: false,
+        },
+      }),
       openStorage: () => ({}),
       createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
       createSecurityPolicy: () => ({
         checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
       }),
-      createSessionRouter: () => sessionRouter,
+      createSessionRouter: () => ({ resolve: vi.fn() }),
       createSupervisor: () => ({ currentRuntime: () => runtime }),
       createAdapter: () => adapter,
     });
@@ -836,13 +965,17 @@ describe("Daemon skeleton (T14)", () => {
     messageHandler?.({
       target,
       sender,
-      text: "/cu open browser",
-      messageRef: { target, messageId: "msg-cu" },
-      receivedAt: new Date("2026-05-02T00:00:04.000Z"),
+      text: "/cu status",
+      messageRef: { target, messageId: "msg-cu-status" },
+      receivedAt: new Date("2026-05-02T00:00:05.000Z"),
     });
     await flushDaemonHandlers();
 
-    expect(sessionRouter.resolve).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-cu-status" },
+      expect.stringContaining("Computer Use: enabled"),
+    );
+    expect(JSON.stringify(adapter.editText.mock.calls)).toContain("Google Chrome");
     expect(runtime.threadStart).not.toHaveBeenCalled();
     expect(runtime.turnStart).not.toHaveBeenCalled();
     expect(runtime.turnSteer).not.toHaveBeenCalled();

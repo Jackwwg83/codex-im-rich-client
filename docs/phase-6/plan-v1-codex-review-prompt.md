@@ -55,4 +55,3 @@ Required output:
 2. P0/P1/P2 findings, if any.
 3. Required plan changes before implementation.
 4. Whether JAC-92 may start after those changes.
-

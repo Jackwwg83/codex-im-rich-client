@@ -129,8 +129,10 @@ export type {
   ComputerUseSessionInput,
   ComputerUseSessionMatchInput,
   ComputerUseSessionMatchResult,
+  ComputerUseToolCallMatchInput,
   ComputerUseToolGateInput,
   ComputerUseToolGateOptions,
+  ComputerUseToolGateRequestInput,
 } from "./computer-use-session.js";
 export { emitComputerUseTriggerAudit } from "./computer-use-audit.js";
 export type {

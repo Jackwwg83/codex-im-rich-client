@@ -5,6 +5,14 @@ import {
   type ApprovalUiAction,
   type BindResult,
   type CommandRouterResult,
+  type ComputerUseAllowedTool,
+  type ComputerUseCommandResult,
+  ComputerUsePolicy,
+  type ComputerUsePolicyConfig,
+  type ComputerUseProvider,
+  ComputerUseSessionRegistry,
+  ComputerUseToolGate,
+  type DynamicToolCallHandler,
   type IMRoutableApprovalMethod,
   IM_ROUTABLE_APPROVAL_METHODS,
   type PendingApprovalSnapshot,
@@ -20,8 +28,11 @@ import {
   type SessionRoute,
   SessionRouter,
   type Target,
+  UnsupportedComputerUseProvider,
   classifyApprovalRequest,
+  redact,
   routeInboundCommand,
+  wrapComputerUsePrompt,
 } from "@codex-im/core";
 import { type ApprovalCard, projectApprovalCard } from "@codex-im/render";
 import {
@@ -55,11 +66,15 @@ const DEFAULT_TERMINAL_RECORD_MAX_COUNT = 10_000;
 const DEFAULT_PRUNE_BATCH_SIZE = 100;
 const DEFAULT_STUCK_ISSUED_GRACE_MS = 5_000;
 const DEFAULT_BIND_RETRY_DELAYS_MS = [50, 150, 350] as const;
+const DEFAULT_COMPUTER_USE_ALLOWED_TOOLS = Object.freeze([
+  { namespace: null, tool: "computer_use.synthetic" },
+] as const satisfies readonly ComputerUseAllowedTool[]);
 const EAGER_PRUNE_RATIO = 0.8;
 
 export interface DaemonBroker {
   attach(): void;
   enablePendingMode(method: IMRoutableApprovalMethod): void;
+  registerDynamicToolCallHandler?(handler: DynamicToolCallHandler): void;
   bindActorPolicy?(approvalId: string, policy: ActorPolicy): BindResult;
   resolve?(input: ResolveApprovalInput): MaybePromise<ResolveApprovalResult>;
   onPendingCreated?(handler: (snapshot: PendingApprovalSnapshot) => void): Unsubscribe;
@@ -263,12 +278,15 @@ export interface DaemonOptions {
   ) => MaybePromise<readonly NonNullable<ApprovalActor>[]>;
   readonly callbackTokenRepository?: DaemonCallbackTokenRepository;
   readonly auditRepository?: DaemonAuditRepository;
+  readonly computerUseProvider?: ComputerUseProvider;
+  readonly computerUseAllowedTools?: readonly ComputerUseAllowedTool[];
   readonly renderApprovalCard?: (snapshot: PendingApprovalSnapshot) => ApprovalCard;
   readonly renderResolvedApprovalCard?: (record: CallbackTokenRecord) => ApprovalCard;
   readonly onApprovalCardReady?: (target: Target, card: ApprovalCard) => MaybePromise<void>;
   readonly generateAuditId?: () => string;
   readonly generateCallbackNonce?: () => string;
   readonly generateRawCallbackToken?: () => string;
+  readonly generateComputerUseSessionId?: () => string;
   readonly schedulePrune?: (handler: () => void, intervalMs: number) => Unsubscribe | undefined;
   readonly pruneIntervalMs?: number;
   readonly terminalRecordMaxAgeMs?: number;
@@ -291,6 +309,8 @@ export class Daemon {
   #sessionRouter: unknown;
   #supervisor: unknown;
   #adapter: DaemonAdapter | undefined;
+  #computerUsePolicy: ComputerUsePolicy | undefined;
+  #computerUseRegistry: ComputerUseSessionRegistry | undefined;
   #stopPromise: Promise<void> | undefined;
   #startedAt: Date | undefined;
   #lastFatal: { at: string; message: string } | undefined;
@@ -320,6 +340,7 @@ export class Daemon {
       for (const method of IM_ROUTABLE_APPROVAL_METHODS) {
         this.#broker?.enablePendingMode(method);
       }
+      this.#setupComputerUseToolGate();
       const dependencyContext: DaemonDependencyContext = {
         config: this.#config,
         storage: this.#storage,
@@ -395,6 +416,8 @@ export class Daemon {
     this.#sessionRouter = undefined;
     this.#securityPolicy = undefined;
     this.#broker = undefined;
+    this.#computerUsePolicy = undefined;
+    this.#computerUseRegistry = undefined;
     this.#storage = undefined;
     this.#config = undefined;
     this.#stuckIssuedApprovalIds.clear();
@@ -418,6 +441,27 @@ export class Daemon {
     }
   }
 
+  #setupComputerUseToolGate(): void {
+    const registry = new ComputerUseSessionRegistry();
+    const policyConfig = this.#computerUsePolicyConfig(this.#config);
+    const policy =
+      policyConfig === undefined ? new ComputerUsePolicy() : new ComputerUsePolicy(policyConfig);
+    const audit = this.#computerUseAuditEmitter();
+    const gate = new ComputerUseToolGate({
+      registry,
+      policy,
+      provider: this.options.computerUseProvider ?? new UnsupportedComputerUseProvider({ audit }),
+      audit,
+      allowedTools: this.options.computerUseAllowedTools ?? DEFAULT_COMPUTER_USE_ALLOWED_TOOLS,
+    });
+
+    this.#computerUseRegistry = registry;
+    this.#computerUsePolicy = policy;
+    this.#broker?.registerDynamicToolCallHandler?.((req) =>
+      gate.handleToolCall({ params: req.params }),
+    );
+  }
+
   async #cleanupPartialStart(): Promise<void> {
     this.#started = false;
     const unsubscribers = this.#unsubscribers.splice(0).reverse();
@@ -434,6 +478,8 @@ export class Daemon {
     this.#sessionRouter = undefined;
     this.#securityPolicy = undefined;
     this.#broker = undefined;
+    this.#computerUsePolicy = undefined;
+    this.#computerUseRegistry = undefined;
     this.#storage = undefined;
     this.#config = undefined;
     this.#stuckIssuedApprovalIds.clear();
@@ -625,6 +671,16 @@ export class Daemon {
 
       if (routed.kind === "command") {
         await this.#routeCommand(inbound, routed);
+        return;
+      }
+
+      if (routed.kind === "computer_use") {
+        await this.#routeComputerUse(inbound, routed);
+        return;
+      }
+
+      if (routed.kind === "rejected") {
+        await this.#editInboundMessage(inbound.messageRef, routed.message);
       }
     } catch {
       // Inbound message handling must fail closed without destabilizing daemon subscriptions.
@@ -871,6 +927,54 @@ export class Daemon {
     } catch {
       // Daemon-level audit is best-effort and must not mutate control flow.
     }
+  }
+
+  #emitComputerUseAudit(
+    action: string,
+    input: {
+      readonly inbound: { target: Target; sender: SecurityPolicySender };
+      readonly route?: Extract<SessionRoute, { kind: "bound" }> | undefined;
+      readonly intent?: ComputerUseCommandResult | undefined;
+      readonly result?: string | undefined;
+      readonly metadata?: Record<string, unknown> | undefined;
+    },
+  ): void {
+    this.#emitAuditEvent(action, {
+      target: input.inbound.target,
+      result: input.result,
+      metadata: {
+        targetKey: targetKey(input.inbound.target),
+        actorKey: actorKey(input.inbound.target, input.inbound.sender),
+        ...(input.route === undefined ? {} : { projectId: input.route.projectId }),
+        ...(input.intent === undefined ? {} : { intentAction: input.intent.action }),
+        ...(input.intent?.action === "start" ? { task: redact(input.intent.task) } : {}),
+        ...redactMetadata(input.metadata),
+      },
+    });
+  }
+
+  #computerUseAuditEmitter(): {
+    emit: (event: { kind: string; metadata?: Record<string, unknown> }) => void;
+  } {
+    return {
+      emit: (event) => {
+        this.#emitAuditEvent(event.kind, { metadata: redactMetadata(event.metadata) });
+      },
+    };
+  }
+
+  #computerUseStatusText(policy: ComputerUsePolicy): string {
+    const snapshot = policy.snapshot;
+    const enabled = snapshot.enabled && snapshot.valid ? "enabled" : "disabled";
+    const defaultApp = snapshot.defaultApp ?? "<none>";
+    const allowedApps =
+      snapshot.allowedApps.length === 0 ? "<none>" : snapshot.allowedApps.join(", ");
+    return [
+      `Computer Use: ${enabled}`,
+      `Default app: ${defaultApp}`,
+      `Allowed apps: ${allowedApps}`,
+      `Live smoke: ${snapshot.liveSmokeEnabled ? "enabled" : "disabled"}`,
+    ].join("\n");
   }
 
   #resolveErrorMessage(error: ResolveError): string {
@@ -1126,6 +1230,158 @@ export class Daemon {
     if (activeTurnId !== undefined) {
       this.#bindActiveTurn(sessionRouter, route, activeTurnId);
     }
+  }
+
+  async #routeComputerUse(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: ComputerUseCommandResult,
+  ): Promise<void> {
+    const policy = this.#computerUsePolicy ?? new ComputerUsePolicy();
+    if (command.action === "status") {
+      await this.#editInboundMessage(inbound.messageRef, this.#computerUseStatusText(policy));
+      return;
+    }
+
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const runtime = this.#currentRuntime();
+    const registry = this.#computerUseRegistry;
+    if (sessionRouter === undefined || runtime === undefined || registry === undefined) {
+      this.#emitComputerUseAudit("computer_use.intent_denied", {
+        inbound,
+        intent: command,
+        result: "unavailable",
+        metadata: { reason: "daemon_not_ready" },
+      });
+      return;
+    }
+
+    let route = sessionRouter.resolve(inbound.target);
+    if (route.kind !== "bound") {
+      this.#emitComputerUseAudit("computer_use.intent_denied", {
+        inbound,
+        intent: command,
+        result: "unbound_target",
+        metadata: { reason: "unbound_target" },
+      });
+      return;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      this.#emitComputerUseAudit("computer_use.intent_denied", {
+        inbound,
+        route,
+        intent: command,
+        result: "project_denied",
+        metadata: { reason: "project_denied" },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+
+    const policyDecision = policy.check({ task: command.task });
+    if (policyDecision.kind === "deny") {
+      this.#emitComputerUseAudit("computer_use.intent_denied", {
+        inbound,
+        route,
+        intent: command,
+        result: policyDecision.reason,
+        metadata: { reason: policyDecision.reason },
+      });
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `Computer Use denied: ${policyDecision.reason}`,
+      );
+      return;
+    }
+    if (policyDecision.requiresApproval) {
+      this.#emitComputerUseAudit("computer_use.intent_denied", {
+        inbound,
+        route,
+        intent: command,
+        result: "sensitive_step_requires_approval",
+        metadata: {
+          reason: "sensitive_step_requires_approval",
+          approvalReasons: policyDecision.approvalReasons,
+        },
+      });
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Computer Use stopped before a sensitive step; explicit sensitive-step approval is not enabled yet.",
+      );
+      return;
+    }
+
+    if (route.codexThreadId === undefined) {
+      const startedThread = await runtime.threadStart(this.#threadStartParams(route));
+      const threadId = this.#threadId(startedThread);
+      if (threadId === undefined || sessionRouter.bindThread === undefined) {
+        return;
+      }
+      route = sessionRouter.bindThread(inbound.target, threadId);
+    }
+    if (route.kind !== "bound" || route.codexThreadId === undefined) {
+      return;
+    }
+
+    const wrapped = wrapComputerUsePrompt(command, policyDecision);
+    const input = textInput(wrapped.prompt);
+    let activeTurnId = route.activeTurnId;
+    if (activeTurnId !== undefined) {
+      await runtime.turnSteer({
+        threadId: route.codexThreadId,
+        input,
+        expectedTurnId: activeTurnId,
+      });
+    } else {
+      const startedTurn = await runtime.turnStart({
+        threadId: route.codexThreadId,
+        input,
+        cwd: route.cwd,
+        ...(route.defaultModel === undefined ? {} : { model: route.defaultModel }),
+      });
+      activeTurnId = this.#turnId(startedTurn);
+      if (activeTurnId !== undefined) {
+        this.#bindActiveTurn(sessionRouter, route, activeTurnId);
+      }
+    }
+    if (activeTurnId === undefined) {
+      return;
+    }
+
+    registry.start({
+      sessionId: this.options.generateComputerUseSessionId?.() ?? randomUUID(),
+      targetKey: targetKey(inbound.target),
+      actorKey: actorKey(inbound.target, inbound.sender),
+      projectId: route.projectId,
+      threadId: route.codexThreadId,
+      turnId: activeTurnId,
+      app: policyDecision.app,
+      task: command.task,
+      now: this.options.now?.() ?? new Date(),
+    });
+    this.#emitComputerUseAudit("computer_use.intent_created", {
+      inbound,
+      route,
+      intent: command,
+      result: "allow",
+      metadata: {
+        decision: "allow",
+        app: policyDecision.app,
+        task: command.task,
+        threadId: route.codexThreadId,
+        turnId: activeTurnId,
+      },
+    });
+    this.#emitComputerUseAudit("computer_use.prompt_wrapped", {
+      inbound,
+      route,
+      intent: command,
+      result: "wrapped",
+      metadata: {
+        app: wrapped.app,
+        threadId: route.codexThreadId,
+        turnId: activeTurnId,
+      },
+    });
   }
 
   async #routeCommand(
@@ -1472,6 +1728,41 @@ export class Daemon {
     };
   }
 
+  #computerUsePolicyConfig(config: unknown): ComputerUsePolicyConfig | undefined {
+    if (typeof config !== "object" || config === null) {
+      return undefined;
+    }
+    const raw = (config as { computerUse?: unknown }).computerUse;
+    if (typeof raw !== "object" || raw === null) {
+      return undefined;
+    }
+    const candidate = raw as Partial<{
+      enabled: unknown;
+      requireExplicitPrefix: unknown;
+      defaultApp: unknown;
+      allowedApps: unknown;
+      denyApps: unknown;
+      unknownAppPolicy: unknown;
+      requireApprovalKeywords: unknown;
+      liveSmokeEnabled: unknown;
+    }>;
+
+    return {
+      enabled: candidate.enabled === true,
+      requireExplicitPrefix:
+        typeof candidate.requireExplicitPrefix === "boolean"
+          ? candidate.requireExplicitPrefix
+          : true,
+      ...(typeof candidate.defaultApp === "string" ? { defaultApp: candidate.defaultApp } : {}),
+      allowedApps: stringArray(candidate.allowedApps),
+      denyApps: stringArray(candidate.denyApps),
+      unknownAppPolicy: "deny",
+      requireApprovalKeywords: stringArray(candidate.requireApprovalKeywords),
+      liveSmokeEnabled:
+        typeof candidate.liveSmokeEnabled === "boolean" ? candidate.liveSmokeEnabled : false,
+    };
+  }
+
   #inboundAction(action: unknown):
     | {
         rawCallbackData: string;
@@ -1639,6 +1930,27 @@ function targetKey(target: Target): string {
     target.threadKey ?? null,
     target.topicId ?? null,
   ]);
+}
+
+function actorKey(target: Target, sender: SecurityPolicySender): string {
+  return `${target.platform}:${sender.userId}`;
+}
+
+function stringArray(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function redactMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (metadata === undefined) {
+    return {};
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    out[key] = typeof value === "string" ? redact(value) : value;
+  }
+  return out;
 }
 
 function errorMessage(error: unknown): string {

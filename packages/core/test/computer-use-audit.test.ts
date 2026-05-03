@@ -3,7 +3,7 @@ import { AuditEmitter } from "../src/audit.js";
 import { emitComputerUseTriggerAudit } from "../src/computer-use-audit.js";
 
 describe("Computer Use audit helpers (Phase 6 JAC-98)", () => {
-  it("emits a redacted explicit /cu trigger audit event without target/chat/user ids", () => {
+  it("emits a redacted explicit /cu trigger audit event with routing context", () => {
     const audit = new AuditEmitter();
 
     emitComputerUseTriggerAudit({
@@ -14,17 +14,33 @@ describe("Computer Use audit helpers (Phase 6 JAC-98)", () => {
         task: "login with token sk-testsecret1234567890",
         rawText: "/cu login with token sk-testsecret1234567890",
       },
+      context: {
+        targetKey: '["telegram","-100allowed",null,null]',
+        actorKey: "telegram:u-alice",
+        projectId: "web",
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
       policyDecision: {
         kind: "allow",
         app: "Google Chrome",
         requiresApproval: true,
         approvalReasons: ["keyword:login", "keyword:token"],
       },
+      decision: "allow",
+      reason: "policy_allowed",
     });
 
     const event = audit.recent({ kind: "computer_use.intent_created", limit: 1 })[0];
     expect(event?.metadata).toEqual({
       action: "start",
+      targetKey: '["telegram","-100allowed",null,null]',
+      actorKey: "telegram:u-alice",
+      projectId: "web",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      decision: "allow",
+      reason: "policy_allowed",
       task: "login with token ***REDACTED:openai-token***",
       app: "Google Chrome",
       requiresApproval: true,
@@ -32,7 +48,6 @@ describe("Computer Use audit helpers (Phase 6 JAC-98)", () => {
     });
     const serialized = JSON.stringify(event);
     expect(serialized).not.toContain("sk-testsecret1234567890");
-    expect(serialized).not.toContain("telegram:");
     expect(serialized).not.toContain("chatId");
     expect(serialized).not.toContain("userId");
     expect(serialized).not.toContain("rawText");

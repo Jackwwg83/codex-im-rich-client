@@ -48,4 +48,3 @@ Required output:
 2. Remaining P0/P1/P2 findings, if any.
 3. Whether original P1/P2 findings are closed.
 4. Whether JAC-92 parser-only implementation may start.
-

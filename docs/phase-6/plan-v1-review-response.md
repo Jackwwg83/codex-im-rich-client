@@ -66,4 +66,3 @@ include `allow_session`.
 ## Remaining Gate
 
 Run plan v1.1 re-review. JAC-92 may start only if P1 findings are closed.
-
