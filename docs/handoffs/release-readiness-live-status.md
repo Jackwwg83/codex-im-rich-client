@@ -3,7 +3,7 @@
 > Single source of truth while bringing Codex IM Rich Client from Phase 7
 > complete to上线运行标准.
 > **Last updated:** 2026-05-03 - JAC-171 complete; release-readiness
-> handoff/tag packet ready for `production-readiness-2026-05-03`.
+> handoff/tag packet ready for `production-readiness-2026-05-03-r2`.
 
 ---
 
@@ -17,7 +17,7 @@
 - **Branch:** `codex/release-readiness`.
 - **Base tag:** `phase-7-extended-platforms-web-console-complete`.
 - **Version:** `0.1.0-phase7`.
-- **Release tag:** `production-readiness-2026-05-03`.
+- **Release tag:** `production-readiness-2026-05-03-r2`.
 - **Handoff:** `docs/handoffs/2026-05-03-production-readiness.md`.
 - **Next exact action:** run operator-chosen live IM smokes with real
   credentials when the Mac mini environment is ready.

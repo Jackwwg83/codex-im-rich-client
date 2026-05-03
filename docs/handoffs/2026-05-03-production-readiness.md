@@ -6,7 +6,10 @@ Status: release-ready local Mac mini candidate.
 
 - Branch: `codex/release-readiness`
 - Base tag: `phase-7-extended-platforms-web-console-complete`
-- Release tag: `production-readiness-2026-05-03`
+- Release tag: `production-readiness-2026-05-03-r2`
+- Supersedes local/remote tag `production-readiness-2026-05-03`, whose code was
+  green locally but whose first CI run exposed a shallow checkout tag-fetch
+  issue.
 - Version: `0.1.0-phase7`
 - Parent Linear issue: JAC-166
 - Final Linear issue: JAC-171
