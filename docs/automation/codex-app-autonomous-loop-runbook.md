@@ -13,7 +13,9 @@ If there is a conflict, the stricter rule wins.
 ## Source Of Truth
 
 - Linear project: `Codex IM Rich Client`
-- Current parent issue: `JAC-8`
+- Current parent issue: read the active phase parent from Linear and the latest
+  `docs/handoffs/phaseN-live-status.md` file. Historical examples may still
+  mention JAC-8 for Phase 3; do not treat that as current after later phases.
 - Current live status: read the latest active `docs/handoffs/phaseN-live-status.md`
   file before each issue.
 - Current phase plan: read the matching active phase plan under
@@ -122,10 +124,9 @@ appropriate:
 Before writing code for each issue:
 
 1. Read the Linear issue.
-2. Read parent issue `JAC-8`.
-3. Read `docs/handoffs/phase3-live-status.md`.
-4. Read the matching section of
-   `docs/superpowers/plans/2026-05-02-phase-3-plan.md`.
+2. Read the current phase parent issue.
+3. Read the latest active `docs/handoffs/phaseN-live-status.md`.
+4. Read the matching current phase plan under `docs/superpowers/plans/`.
 5. Run:
 
 ```bash
@@ -182,8 +183,8 @@ pnpm lint
 pnpm protocol:check
 ```
 
-7. Update `docs/handoffs/phase3-live-status.md` when current task, completed
-   tasks, next task, HEAD, or gate state changes.
+7. Update the active `docs/handoffs/phaseN-live-status.md` when current task,
+   completed tasks, next task, HEAD, or gate state changes.
 8. Commit one focused commit.
 9. Update Linear with a completion report if Linear write tools are available.
 
@@ -416,10 +417,10 @@ After auto-compaction, manual compact, resume, interruption, or context loss:
 ```text
 AGENTS.md
 CLAUDE.md
-docs/handoffs/phase3-live-status.md
-docs/superpowers/plans/2026-05-02-phase-3-plan.md
+latest active docs/handoffs/phaseN-live-status.md
+matching current phase plan under docs/superpowers/plans/
 current Linear issue
-parent Linear issue JAC-8
+current phase parent Linear issue
 ```
 
 4. Run:

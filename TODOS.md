@@ -259,6 +259,22 @@ Active branch: `codex/phase-5-dingtalk`. Plan-of-record:
 - [x] **JAC-89 / T11** — env-gated live DingTalk smoke harness; default skip, no unattended live network.
 - [x] **JAC-90 / T12** — final review/handoff/tag per Phase 5 plan. Final review first returned APPROVE_WITH_CHANGES; `4a308d2` closed P1/P2 blockers; re-review returned GO with no P0/P1/P2 findings.
 
-### Phase 6 next exact task
+## Phase 6 implementation progress (active, 2026-05-03)
 
-- [ ] **Phase 6 / Computer Use plan gate** — create/review a Computer Use plan-of-record before implementation. Do not implement production Computer Use flow until the plan review gate passes; normal prompts must not trigger Computer Use implicitly.
+Active branch: `codex/phase-6-computer-use`. Plan-of-record:
+`docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`. Live status:
+`docs/handoffs/phase6-live-status.md`. Phase 5 -> Phase 6 handoff:
+`docs/handoffs/2026-05-02-phase5-to-phase6.md`.
+
+- [x] **JAC-91 / T0** — Computer Use plan review gate. Plan v1 returned APPROVE_WITH_CHANGES; v1.1 Codex re-review returned GO with no remaining P0/P1/P2.
+- [ ] **JAC-92 / T1** — explicit `/cu` command parser only; no desktop action/provider. **Current.**
+- [ ] **JAC-93 / T2** — ComputerUsePolicy schema/evaluator.
+- [ ] **JAC-94 / T3** — `allowed_apps` / `deny_apps` config.
+- [ ] **JAC-95 / T4** — explicit `/cu` prompt wrapper.
+- [ ] **JAC-96 / T5** — normal prompt cannot create Computer Use intent; full dynamic-tool gate is JAC-97.
+- [ ] **JAC-163 / T6** — Computer Use capability evidence and fake/unsupported provider boundary.
+- [ ] **JAC-97 / T7** — dynamic tool gate + sensitive-step approval model.
+- [ ] **JAC-98 / T8** — audit events for Computer Use trigger/tool-call outcomes.
+- [ ] **JAC-99 / T9** — Chrome-only fake/manual smoke docs.
+- [ ] **JAC-100 / T10** — operator-gated live Computer Use smoke harness/default skip.
+- [ ] **JAC-101 / T11** — final review/handoff/tag.
