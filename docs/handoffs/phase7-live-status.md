@@ -2,8 +2,8 @@
 
 > Single source of truth for Phase 7 while extended platform / web-console
 > planning and implementation are active.
-> **Last updated:** 2026-05-03 - JAC-102 Satori/Koishi feasibility recorded
-> `spike-only`; JAC-103 Chat SDK feasibility is next.
+> **Last updated:** 2026-05-03 - JAC-103 Chat SDK feasibility recorded
+> `spike-only`; JAC-105 fallback renderer is next.
 
 ---
 
@@ -13,14 +13,14 @@
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
 - **Parent Linear issue:** JAC-12 - Phase 7+ backlog / extended platforms and
   web console.
-- **Current Linear issue:** JAC-103 - Vercel Chat SDK feasibility spike.
+- **Current Linear issue:** JAC-105 - fallback renderer.
 - **Branch:** `codex/phase-7-planning`.
 - **Base tag:** `phase-6-computer-use-complete`.
 - **Version:** `0.1.0-phase6`; do not bump until Phase 7 tag gate.
-- **Next exact action:** create `docs/phase-7/chat-sdk-feasibility.md` using
-  docs/static analysis/mocked fixtures only; no SDK adapter instantiation,
-  credential probing, webhook handler, listener, or generic chat-core
-  substitution.
+- **Next exact action:** implement or document the safe lower-capability
+  non-actionable approval fallback. Runtime implementation is allowed only if it
+  stays in render/channel-core scope and proves no raw approval ids, raw
+  callback tokens, actionable text commands, or method literals.
 
 ## 2. Current Decision State
 
@@ -64,8 +64,8 @@
 | JAC-164 | plan review gate | complete; closure review recorded |
 | JAC-104 | capability matrix | complete; review recorded |
 | JAC-102 | Satori/Koishi feasibility spike | complete; verdict `spike-only` |
-| JAC-103 | Vercel Chat SDK feasibility spike | current |
-| JAC-105 | fallback renderer | pending, gated by matrix/spikes |
+| JAC-103 | Vercel Chat SDK feasibility spike | complete; verdict `spike-only` |
+| JAC-105 | fallback renderer | current; implementable with restrictions |
 | JAC-106 | web console read-only status | pending, plan-reviewed only |
 | JAC-109 | team/operator model | pending |
 | JAC-107 | web console approval UI | pending, gated by team/operator policy |
@@ -73,7 +73,14 @@
 
 ## 6. Gate Status
 
-Latest JAC-102 docs-only gate:
+Latest JAC-103 docs-only gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm lint` | green: 301 files checked |
+| `git diff --check` | green |
+
+Previous JAC-102 docs-only gate:
 
 | Gate | Result |
 |---|---|
