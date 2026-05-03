@@ -23,6 +23,16 @@ export interface CodexImConfig {
       requireAdminPatterns: string[];
     };
   };
+  computerUse: {
+    enabled: boolean;
+    requireExplicitPrefix: boolean;
+    defaultApp: string;
+    allowedApps: string[];
+    denyApps: string[];
+    unknownAppPolicy: "deny";
+    requireApprovalKeywords: string[];
+    liveSmokeEnabled: boolean;
+  };
   adapters: {
     telegram: {
       enabled: boolean;
@@ -72,6 +82,38 @@ const envNameSchema = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, {
   message: "must be an environment variable name",
 });
 
+const SECRET_LOOKING_VALUE =
+  /(?:sk-[A-Za-z0-9_-]{8,}|xox[baprs]-[A-Za-z0-9-]+|gh[pousr]_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16})/u;
+
+const configPlainStringSchema = z
+  .string()
+  .min(1)
+  .refine((value) => !SECRET_LOOKING_VALUE.test(value), {
+    message: "must not look like a secret or token",
+  });
+
+const computerUseConfigDefaults = {
+  enabled: false,
+  require_explicit_prefix: true,
+  default_app: "Google Chrome",
+  allowed_apps: ["Google Chrome"],
+  deny_apps: ["1Password", "Keychain Access", "System Settings", "Terminal"],
+  unknown_app_policy: "deny" as const,
+  require_approval_keywords: [
+    "login",
+    "password",
+    "token",
+    "payment",
+    "checkout",
+    "delete",
+    "send",
+    "submit",
+    "publish",
+    "transfer",
+  ],
+  live_smoke_enabled: false,
+};
+
 const rawConfigSchema = z
   .object({
     daemon: z
@@ -105,6 +147,25 @@ const rawConfigSchema = z
           .strict(),
       })
       .strict(),
+    computer_use: z
+      .object({
+        enabled: z.boolean().default(computerUseConfigDefaults.enabled),
+        require_explicit_prefix: z
+          .boolean()
+          .default(computerUseConfigDefaults.require_explicit_prefix),
+        default_app: configPlainStringSchema.default(computerUseConfigDefaults.default_app),
+        allowed_apps: z
+          .array(configPlainStringSchema)
+          .default(computerUseConfigDefaults.allowed_apps),
+        deny_apps: z.array(configPlainStringSchema).default(computerUseConfigDefaults.deny_apps),
+        unknown_app_policy: z.literal("deny").default(computerUseConfigDefaults.unknown_app_policy),
+        require_approval_keywords: z
+          .array(configPlainStringSchema)
+          .default(computerUseConfigDefaults.require_approval_keywords),
+        live_smoke_enabled: z.boolean().default(computerUseConfigDefaults.live_smoke_enabled),
+      })
+      .strict()
+      .default(computerUseConfigDefaults),
     adapters: z
       .object({
         telegram: z
@@ -163,6 +224,16 @@ export function parseConfigToml(source: string): CodexImConfig {
         denyPatterns: parsed.security.commands.deny_patterns,
         requireAdminPatterns: parsed.security.commands.require_admin_patterns,
       },
+    },
+    computerUse: {
+      enabled: parsed.computer_use.enabled,
+      requireExplicitPrefix: parsed.computer_use.require_explicit_prefix,
+      defaultApp: parsed.computer_use.default_app,
+      allowedApps: parsed.computer_use.allowed_apps,
+      denyApps: parsed.computer_use.deny_apps,
+      unknownAppPolicy: parsed.computer_use.unknown_app_policy,
+      requireApprovalKeywords: parsed.computer_use.require_approval_keywords,
+      liveSmokeEnabled: parsed.computer_use.live_smoke_enabled,
     },
     adapters: {
       telegram: {

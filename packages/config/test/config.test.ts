@@ -23,6 +23,16 @@ admin_users   = ["telegram:123456789"]
 deny_patterns          = ["rm -rf /", "sudo ", "chmod -R 777"]
 require_admin_patterns = ["git push", "gh pr merge"]
 
+[computer_use]
+enabled = false
+require_explicit_prefix = true
+default_app = "Google Chrome"
+allowed_apps = ["Google Chrome"]
+deny_apps = ["1Password", "Keychain Access", "System Settings", "Terminal"]
+unknown_app_policy = "deny"
+require_approval_keywords = ["login", "password", "token"]
+live_smoke_enabled = false
+
 [adapters.telegram]
 enabled       = true
 bot_token_env = "IM_TELEGRAM_BOT_TOKEN"
@@ -61,6 +71,16 @@ describe("@codex-im/config (T7-T8)", () => {
       allowedChatIds: ["oc_test_chat"],
     });
     expect(config.storage.autoMigrate).toBe(false);
+    expect(config.computerUse).toEqual({
+      enabled: false,
+      requireExplicitPrefix: true,
+      defaultApp: "Google Chrome",
+      allowedApps: ["Google Chrome"],
+      denyApps: ["1Password", "Keychain Access", "System Settings", "Terminal"],
+      unknownAppPolicy: "deny",
+      requireApprovalKeywords: ["login", "password", "token"],
+      liveSmokeEnabled: false,
+    });
     expect(config.projects.web).toMatchObject({
       cwd: "/Users/mini/code/web",
       writableRoots: ["/Users/mini/code/web"],
@@ -88,6 +108,11 @@ describe("@codex-im/config (T7-T8)", () => {
         [security.commands]
         deny_patterns = []
         require_admin_patterns = []
+
+        [computer_use]
+        enabled = false
+        allowed_apps = ["Google Chrome"]
+        deny_apps = ["1Password"]
 
         [adapters.telegram]
         enabled = true
@@ -128,6 +153,26 @@ describe("@codex-im/config (T7-T8)", () => {
         ),
       ),
     ).toThrow(/environment variable name/);
+  });
+
+  it("parses Computer Use app policy and rejects token-looking app values", () => {
+    const config = parseConfigToml(
+      EXAMPLE_CONFIG.replace(
+        'deny_apps = ["1Password", "Keychain Access", "System Settings", "Terminal"]',
+        'deny_apps = ["1Password"]',
+      ),
+    );
+
+    expect(config.computerUse.denyApps).toEqual(["1Password"]);
+
+    expect(() =>
+      parseConfigToml(
+        EXAMPLE_CONFIG.replace(
+          'allowed_apps = ["Google Chrome"]',
+          'allowed_apps = ["sk-testsecret1234567890"]',
+        ),
+      ),
+    ).toThrow(/secret or token/);
   });
 
   it("resolves ${ENV.NAME} references and fails closed when env is missing", () => {
