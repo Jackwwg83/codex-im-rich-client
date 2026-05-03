@@ -45,6 +45,9 @@ import {
   type CallbackTokenRecord,
   type CallbackTokenStatus,
   type DatabaseHandle,
+  type ThreadSessionRecord,
+  ThreadSessionRepository,
+  type ThreadSessionUpsert,
   hashCallbackToken,
 } from "@codex-im/storage-sqlite";
 import { type DaemonStatusSnapshot, writeDaemonStatusSnapshot } from "./status.js";
@@ -163,6 +166,11 @@ export interface DaemonCallbackTokenRepository {
     approvalIds: readonly string[],
     limit?: number,
   ): readonly CallbackTokenRecord[];
+}
+
+export interface DaemonThreadSessionRepository {
+  upsert(input: ThreadSessionUpsert): ThreadSessionRecord;
+  touch?(target: Target, codexThreadId: string, now?: string): ThreadSessionRecord | undefined;
 }
 
 export interface DaemonPruneTerminalRecordsOptions {
@@ -293,6 +301,7 @@ export interface DaemonOptions {
   ) => MaybePromise<readonly NonNullable<ApprovalActor>[]>;
   readonly callbackTokenRepository?: DaemonCallbackTokenRepository;
   readonly auditRepository?: DaemonAuditRepository;
+  readonly threadSessionRepository?: DaemonThreadSessionRepository;
   readonly computerUseProvider?: ComputerUseProvider;
   readonly computerUseAllowedTools?: readonly ComputerUseAllowedTool[];
   readonly renderApprovalCard?: (snapshot: PendingApprovalSnapshot) => ApprovalCard;
@@ -1307,6 +1316,7 @@ export class Daemon {
         await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
         return undefined;
       }
+      this.#persistThreadSessionBestEffort(inbound.target, route, threadId);
       const rebound = sessionRouter.bindThread(inbound.target, threadId);
       if (rebound.kind !== "bound" || rebound.codexThreadId === undefined) {
         await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to bind.");
@@ -1321,6 +1331,31 @@ export class Daemon {
       });
       await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
       return undefined;
+    }
+  }
+
+  #persistThreadSessionBestEffort(
+    target: Target,
+    route: Extract<SessionRoute, { kind: "bound" }>,
+    codexThreadId: string,
+  ): void {
+    const repository = this.#threadSessionRepository();
+    if (repository === undefined) {
+      return;
+    }
+    try {
+      repository.upsert({
+        target,
+        projectId: route.projectId,
+        codexThreadId,
+        now: this.#nowIso(),
+      });
+    } catch (error) {
+      this.#emitAuditEvent("thread_session.best_effort_write_failed", {
+        target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: codexThreadId },
+      });
     }
   }
 
@@ -1636,12 +1671,17 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "new") {
+      await this.#routeNewCommand(inbound, command);
+      return;
+    }
+
     if (command.name === "stop") {
       await this.#routeStopCommand(inbound);
       return;
     }
 
-    if (command.name === "new" || command.name === "switch" || command.name === "fork") {
+    if (command.name === "switch" || command.name === "fork") {
       await this.#editInboundMessage(
         inbound.messageRef,
         `/${command.name} is not implemented yet.`,
@@ -1657,6 +1697,7 @@ export class Daemon {
         "/projects - List available projects.",
         "/use <project> - Bind this chat to a project.",
         "/status - Show current Codex IM status.",
+        "/new [title] - Start a new Codex thread.",
         "/stop - Interrupt the active Codex turn.",
       ].join("\n"),
     );
@@ -1710,6 +1751,91 @@ export class Daemon {
     lines.push(`active turn: ${this.#shortId(route.activeTurnId)}`);
     lines.push(`pending approvals: ${this.#pendingApprovalCount()}`);
     await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
+  }
+
+  async #routeNewCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const runtime = this.#currentRuntime();
+    const threadSessions = this.#threadSessionRepository();
+    if (sessionRouter === undefined || sessionRouter.bindThread === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Binding store unavailable");
+      return;
+    }
+    if (runtime === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex runtime unavailable.");
+      return;
+    }
+    if (threadSessions === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+      return;
+    }
+
+    const route = sessionRouter.resolve(inbound.target);
+    if (route.kind !== "bound") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "No project selected. Send /use <project> first.",
+      );
+      return;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+
+    let threadId: string | undefined;
+    try {
+      threadId = this.#threadId(await runtime.threadStart(this.#threadStartParams(route)));
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_start_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
+      return;
+    }
+    if (threadId === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
+      return;
+    }
+
+    const title = this.#threadTitleFromArgs(command.args);
+    try {
+      threadSessions.upsert({
+        target: inbound.target,
+        projectId: route.projectId,
+        codexThreadId: threadId,
+        ...(title === undefined ? {} : { title }),
+        now: this.#nowIso(),
+      });
+      const rebound = sessionRouter.bindThread(inbound.target, threadId);
+      if (rebound.kind !== "bound" || rebound.codexThreadId === undefined) {
+        await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to bind.");
+        return;
+      }
+    } catch (error) {
+      this.#emitAuditEvent("thread_session.write_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to save.");
+      return;
+    }
+
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      `New Codex thread ${this.#shortId(threadId)}${title === undefined ? "" : ` - ${title}`}`,
+    );
+  }
+
+  #threadTitleFromArgs(args: readonly string[]): string | undefined {
+    const title = args.join(" ").trim();
+    return title.length === 0 ? undefined : title.slice(0, 120);
   }
 
   #targetLabel(target: Target): string {
@@ -2026,6 +2152,10 @@ export class Daemon {
     };
   }
 
+  #nowIso(): string {
+    return (this.options.now?.() ?? new Date()).toISOString();
+  }
+
   #bindActiveTurn(
     sessionRouter: DaemonSessionRouter,
     route: Extract<SessionRoute, { kind: "bound" }>,
@@ -2117,6 +2247,14 @@ export class Daemon {
     return db === undefined
       ? undefined
       : new SessionRouter({ bindings: new BindingRepository(db) });
+  }
+
+  #threadSessionRepository(): DaemonThreadSessionRepository | undefined {
+    if (this.options.threadSessionRepository !== undefined) {
+      return this.options.threadSessionRepository;
+    }
+    const db = this.#databaseHandle(this.#storage);
+    return db === undefined ? undefined : new ThreadSessionRepository(db);
   }
 
   #databaseHandle(value: unknown): DatabaseHandle | undefined {
