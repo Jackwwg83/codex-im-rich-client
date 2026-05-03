@@ -32,8 +32,9 @@ The project is production-ready when all of these are true:
    external network calls.
 3. Mac mini launch operations are documented with dry-run, install, health,
    logs, backup, smoke, rollback, and redaction checks.
-4. Live smokes remain explicit, env-gated, and default-skip; dry-run readiness
-   is safe to run unattended.
+4. Live smokes remain explicit and env-gated. Some harnesses default-skip with
+   exit 0, while Telegram live/real smokes fail at an explicit operator gate
+   with no network call; both outcomes are safe to run unattended as checks.
 5. SQLite backup/restore expectations are documented and the existing backup
    command remains in the release checklist.
 6. Final release-readiness review is recorded and any P0/P1 blockers are
@@ -94,9 +95,9 @@ output before diffing.
 ### Release Readiness Local Gates
 
 - all CI/non-live mandatory gates;
-- `pnpm launchd:install -- --dry-run`;
+- `pnpm launchd:install --dry-run`;
 - `bash bin/load-and-run.sh --dry-run`;
-- default-skip checks for live smoke commands:
+- default-gate/default-skip checks for live smoke commands:
   - `pnpm smoke:telegram-live`
   - `pnpm smoke:telegram-real`
   - `pnpm smoke:lark-live`

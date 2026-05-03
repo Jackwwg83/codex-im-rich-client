@@ -10,7 +10,7 @@ describe("Keychain launchd smoke documentation (T29b)", () => {
 
     expect(text).toContain("TELEGRAM_LIVE=1");
     expect(text).toContain("KEYCHAIN_SMOKE=1");
-    expect(text).toContain("pnpm launchd:install -- --dry-run");
+    expect(text).toContain("pnpm launchd:install --dry-run");
     expect(text).toContain("bash bin/load-and-run.sh --dry-run");
     expect(text).toContain("security add-generic-password");
     expect(text).toContain("launchctl print");

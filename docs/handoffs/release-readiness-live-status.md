@@ -2,8 +2,8 @@
 
 > Single source of truth while bringing Codex IM Rich Client from Phase 7
 > complete to上线运行标准.
-> **Last updated:** 2026-05-03 - JAC-168 CI workflow added; JAC-169 production
-> ops preflight command is next.
+> **Last updated:** 2026-05-03 - JAC-169 production ops preflight command
+> implemented; JAC-170 operator launch checklist is next.
 
 ---
 
@@ -13,11 +13,11 @@
 - **Plan:** `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
 - **Linear project:** Codex IM Rich Client Release Readiness.
 - **Parent Linear issue:** JAC-166 - Release readiness parent -上线运行标准.
-- **Current Linear issue:** JAC-169 - RR T2 production ops preflight command.
+- **Current Linear issue:** JAC-170 - RR T3 operator launch checklist and rollback runbook.
 - **Branch:** `codex/release-readiness`.
 - **Base tag:** `phase-7-extended-platforms-web-console-complete`.
 - **Version:** `0.1.0-phase7`.
-- **Next exact action:** implement local release-readiness preflight command.
+- **Next exact action:** write the Mac mini operator launch checklist and rollback runbook.
 
 ## 2. Production Readiness Target
 
@@ -25,7 +25,8 @@
 - Local release-readiness preflight verifies dry-run operational safety.
 - Mac mini launch checklist covers install, status, logs, backup, smoke, and
   rollback.
-- Live smokes stay explicit/env-gated/default-skip.
+- Live smokes stay explicit/env-gated and either default-skip or fail at an
+  explicit operator gate without making network calls.
 - No secret material appears in docs, fixtures, logs, SQLite, Linear, or review
   packets.
 - Final outside-voice review clears P0/P1 before production-readiness tag.
@@ -48,8 +49,8 @@
 | JAC-166 | release readiness parent | in progress |
 | JAC-167 | plan + live status | complete |
 | JAC-168 | GitHub Actions CI | complete |
-| JAC-169 | production ops preflight command | current |
-| JAC-170 | operator launch checklist + rollback runbook | todo |
+| JAC-169 | production ops preflight command | complete |
+| JAC-170 | operator launch checklist + rollback runbook | current |
 | JAC-171 | final review, handoff, tag | todo |
 
 ## 5. Current Gate Evidence
@@ -81,6 +82,15 @@ Latest JAC-168 CI gate:
 | `pnpm lint` | green: 308 files checked |
 | `git diff --check` | green |
 | CI content review | `.github/workflows/ci.yml` uses Node 24, pnpm 10.33.2, pinned `@openai/codex@0.128.0`, and non-live gates only |
+
+Latest JAC-169 preflight gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --project unit scripts/release-readiness-check.test.mts scripts/keychain-launchd-smoke-doc.test.mjs` | green: 2 files, 5 passing |
+| `pnpm release:check -- --skip-full-gates` | green: launchd dry-run, Keychain wrapper dry-run, SQLite backup proof, fake smokes, and default live gates/skips |
+| `pnpm typecheck:tests` | green |
+| `pnpm lint` | green: 310 files checked |
 
 ## 6. Compact / Resume
 

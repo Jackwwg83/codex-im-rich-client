@@ -27,7 +27,7 @@ pnpm typecheck:tests
 pnpm test
 pnpm lint
 pnpm protocol:check
-pnpm launchd:install -- --dry-run
+pnpm launchd:install --dry-run
 bash bin/load-and-run.sh --dry-run
 ```
 
