@@ -49,7 +49,7 @@ Commands:
 pnpm smoke:telegram-fake
 pnpm smoke:daemon-roundtrip
 TELEGRAM_LIVE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-live
-TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-real
+TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-side-by-side
 ```
 
 Passing criteria:
@@ -58,7 +58,8 @@ Passing criteria:
 - daemon roundtrip covers IM controls plus approval callback resolution without
   live services;
 - live adapter starts and stops cleanly;
-- real smoke completes one harmless Codex turn;
+- side-by-side smoke completes one harmless Codex turn while the live Telegram
+  adapter starts/stops;
 - output does not print the bot token.
 
 ### Telegram Web daemon acceptance
@@ -129,8 +130,8 @@ the chat bubble appears to show.
 Suggested execution order for broad live coverage:
 
 1. Run `pnpm release:check` to prove the non-live baseline.
-2. Run `smoke:telegram-live` and `smoke:telegram-real` with the token loaded
-   from Keychain.
+2. Run `smoke:telegram-live` and `smoke:telegram-side-by-side` with the token
+   loaded from Keychain.
 3. Run the Telegram Web private-chat scenarios from bootstrap through approval
    actions.
 4. Run resilience scenarios: duplicate click, pending restart, and exact-session

@@ -103,7 +103,7 @@ describe("release-readiness-check (JAC-169)", () => {
       [1],
     ]);
     expect(telegram.map((step) => [step.id, step.expectedExitCodes])).toContainEqual([
-      "smoke-telegram-real-default-gate",
+      "smoke-telegram-side-by-side-default-gate",
       [1],
     ]);
   });
@@ -136,7 +136,7 @@ describe("release-readiness-check (JAC-169)", () => {
     };
     const defaultLiveStepIds = [
       "smoke-telegram-live-default-gate",
-      "smoke-telegram-real-default-gate",
+      "smoke-telegram-side-by-side-default-gate",
       "smoke-lark-live-default-skip",
       "smoke-dingtalk-live-default-skip",
       "smoke-computer-use-default-skip",

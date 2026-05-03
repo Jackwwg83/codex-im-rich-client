@@ -46,6 +46,7 @@ export interface RunTelegramRealSmokeOptions {
 }
 
 const DEFAULT_CODEX_PROMPT = "Reply exactly: OK";
+const SMOKE_NAME = "smoke:telegram-side-by-side";
 
 export async function runTelegramRealSmokeCore(
   options: RunTelegramRealSmokeOptions = {},
@@ -62,7 +63,7 @@ export async function runTelegramRealSmokeCore(
   if (env.TELEGRAM_LIVE !== "1") {
     safeError(
       [
-        "smoke:telegram-real is operator-gated for Telegram.",
+        `${SMOKE_NAME} is operator-gated for Telegram.`,
         "Run with TELEGRAM_LIVE=1 plus CODEX_REAL_SMOKE=1 and IM_TELEGRAM_BOT_TOKEN.",
       ].join("\n"),
     );
@@ -72,7 +73,7 @@ export async function runTelegramRealSmokeCore(
   if (env.CODEX_REAL_SMOKE !== "1") {
     safeError(
       [
-        "smoke:telegram-real is operator-gated for real Codex.",
+        `${SMOKE_NAME} is operator-gated for real Codex.`,
         "Run with CODEX_REAL_SMOKE=1 plus TELEGRAM_LIVE=1 after confirming login and quota.",
       ].join("\n"),
     );
@@ -81,7 +82,7 @@ export async function runTelegramRealSmokeCore(
 
   const botToken = env.IM_TELEGRAM_BOT_TOKEN;
   if (botToken === undefined || botToken.trim().length === 0) {
-    safeError("smoke:telegram-real requires IM_TELEGRAM_BOT_TOKEN in the environment.");
+    safeError(`${SMOKE_NAME} requires IM_TELEGRAM_BOT_TOKEN in the environment.`);
     return { ok: false, reason: "missing-token" };
   }
 
@@ -109,11 +110,11 @@ export async function runTelegramRealSmokeCore(
       telegramStopped: real.telegramStopped,
     } as const;
     safeOutput(
-      `smoke:telegram-real ok telegramStarted=${result.telegramStarted} telegramStopped=${result.telegramStopped} codexCompleted=${result.codexCompleted}`,
+      `${SMOKE_NAME} ok telegramStarted=${result.telegramStarted} telegramStopped=${result.telegramStopped} codexCompleted=${result.codexCompleted}`,
     );
     return result;
   } catch (error) {
-    safeError(`smoke:telegram-real failed: ${describeError(error)}`);
+    safeError(`${SMOKE_NAME} failed: ${describeError(error)}`);
     return { ok: false, reason: "real-failed" };
   }
 }
@@ -132,11 +133,8 @@ export async function runTelegramRealSmokeWithLiveServices(
     output: input.output,
   });
 
-  input.output("smoke:telegram-real starting real Codex harmless turn");
-  const log = pino(
-    { name: "smoke:telegram-real", level: "info" },
-    pino.destination({ fd: 2, sync: true }),
-  );
+  input.output(`${SMOKE_NAME} starting real Codex harmless turn`);
+  const log = pino({ name: SMOKE_NAME, level: "info" }, pino.destination({ fd: 2, sync: true }));
   const transport = new StdioTransport({
     command: "codex",
     args: ["app-server", "--listen", "stdio://"],

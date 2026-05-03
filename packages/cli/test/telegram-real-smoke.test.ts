@@ -3,7 +3,7 @@ import { type TelegramRealRunner, runTelegramRealSmokeCore } from "../src/smoke-
 
 const TOKEN = "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd";
 
-describe("smoke:telegram-real (T36)", () => {
+describe("smoke:telegram-side-by-side (T36 compatibility)", () => {
   it("refuses to run without TELEGRAM_LIVE=1", async () => {
     const stderr: string[] = [];
     const runReal = vi.fn<TelegramRealRunner>(async () => ({
@@ -127,7 +127,7 @@ describe("smoke:telegram-real (T36)", () => {
       telegramStopped: true,
     });
     expect(runReal).toHaveBeenCalledTimes(1);
-    expect(stdout.join("\n")).toContain("smoke:telegram-real ok");
+    expect(stdout.join("\n")).toContain("smoke:telegram-side-by-side ok");
     expect(stdout.join("\n")).toContain("<redacted:telegram-token>");
     expect(stdout.join("\n")).not.toContain(TOKEN);
   });

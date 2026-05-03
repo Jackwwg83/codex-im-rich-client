@@ -121,10 +121,10 @@ export function buildReleaseReadinessSteps(
       },
     ),
     step(
-      "smoke-telegram-real-default-gate",
-      "Telegram real smoke default gate",
+      "smoke-telegram-side-by-side-default-gate",
+      "Telegram side-by-side smoke default gate",
       "pnpm",
-      ["smoke:telegram-real"],
+      ["smoke:telegram-side-by-side"],
       {
         expectedExitCodes: [1],
         unsetEnv: DEFAULT_LIVE_SMOKE_UNSET_ENV,

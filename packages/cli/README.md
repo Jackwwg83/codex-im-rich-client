@@ -72,24 +72,26 @@ TELEGRAM_LIVE=1 IM_TELEGRAM_BOT_TOKEN=... TELEGRAM_LIVE_DURATION_MS=10000 \
 command refuses to run unless `TELEGRAM_LIVE=1` is explicit and the bot token
 is present. Token-shaped material is redacted from failure output.
 
-## `pnpm smoke:telegram-real` — live Telegram + real Codex smoke (gated)
+## `pnpm smoke:telegram-side-by-side` — live Telegram + real Codex side-by-side smoke (gated)
 
 ```bash
 TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN=... \
-  pnpm smoke:telegram-real
+  pnpm smoke:telegram-side-by-side
 ```
 
 Runs the live Telegram adapter token/start/stop smoke, then runs the existing
 real Codex harmless-turn path with `sandbox_mode=read-only` and
 `approval_policy=on-request`. This command can call Telegram and trigger one
 real Codex model turn, so it refuses to run unless **both** gates are present.
+It is a side-by-side readiness check, not proof of a real Telegram user message
+entering the daemon. `pnpm smoke:telegram-real` remains as a deprecated alias.
 
 Optional:
 
 ```bash
 TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN=... \
   TELEGRAM_LIVE_DURATION_MS=10000 CODEX_REAL_SMOKE_PROMPT='Reply exactly: OK' \
-  pnpm smoke:telegram-real
+  pnpm smoke:telegram-side-by-side
 ```
 
 Token-shaped material is redacted from all operator-facing output.

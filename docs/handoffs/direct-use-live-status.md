@@ -2,9 +2,9 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 3 repeatable smoke in progress;
-> `smoke:daemon-roundtrip` now covers IM control flow plus approval callback
-> resolution without live services.
+> **Last updated:** 2026-05-03 - Block 3 repeatable smoke in progress; C2
+> clarifies `smoke:telegram-side-by-side` as live Telegram adapter + real Codex
+> side-by-side readiness, not real Telegram inbound roundtrip proof.
 
 ## 1. Current State
 
@@ -32,10 +32,12 @@
   - `1479a37` - B6 `/alias <title>` local display metadata.
   - `9a7f9da` - B7 production daemon-run thread session repository wire-up.
   - `b5d86c5` - B8 `/fork [thread]` Codex thread fork control.
-  - pending commit - C1 `smoke:daemon-roundtrip` non-live daemon control and
+  - `15e3547` - C1 `smoke:daemon-roundtrip` non-live daemon control and
     approval callback smoke.
-- **Next exact action:** finish C1 gates/commit, then add/clarify live
-  Telegram roundtrip wording and operator evidence.
+  - pending commit - C2 rename/clarify `smoke:telegram-side-by-side` as the
+    live Telegram adapter + real Codex side-by-side check.
+- **Next exact action:** commit C2, then add the operator-gated live Telegram
+  roundtrip harness/evidence flow.
 
 ## 2. Why This Exists
 
@@ -79,7 +81,7 @@ Required P0 plan edits:
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
-| Block 3 | repeatable smoke layers | in progress: C1 daemon roundtrip implemented, gates green |
+| Block 3 | repeatable smoke layers | in progress: C2 side-by-side smoke wording implemented, gates green |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
 ## 5. Active Redlines
@@ -204,6 +206,18 @@ Latest C1 targeted gates:
 | `pnpm protocol:check` | green |
 | `pnpm release:check -- --skip-full-gates` | green; includes `smoke-daemon-roundtrip` with installed bridge migrations |
 
+Latest C2 gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/cli/test/telegram-real-smoke.test.ts scripts/release-readiness-check.test.mts` | green: 2 files, 13 passing |
+| `pnpm smoke:telegram-side-by-side` without live env | expected refusal: exits 1 with operator-gated Telegram message |
+| `pnpm release:check -- --skip-full-gates` | green; default release gate now checks `smoke-telegram-side-by-side-default-gate` |
+| `pnpm typecheck` | green |
+| `pnpm test` | green: 146 files, 1319 passing, 1 skipped |
+| `pnpm lint` | green: 328 files checked |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -231,7 +245,9 @@ Block 2:
 
 Block 3:
 
-1. `test(smoke): add daemon roundtrip control and approval smoke` (in progress)
+1. `test(smoke): add daemon roundtrip control and approval smoke` (done)
+2. `chore(smoke): clarify Telegram side-by-side smoke` (ready to commit)
+3. Next: `test(smoke): add operator-gated live Telegram roundtrip evidence`
 
 ## 8. Compact / Resume
 
