@@ -63,9 +63,9 @@ import {
 } from "../src/audit.js";
 
 describe("@codex-im/core AuditEmitter (T3.1)", () => {
-  // ─── AuditEventKind union (12 kinds) ─────────────────────────────────────
+  // ─── AuditEventKind union (13 kinds) ─────────────────────────────────────
 
-  it("AuditEventKind is the exact 12-kind union (compile-time guard)", () => {
+  it("AuditEventKind is the exact 13-kind union (compile-time guard)", () => {
     // Mirrors the Phase 1 skeleton.test.ts pattern for ApprovalActor /
     // ApprovalDecision exhaustiveness.
     const all: AuditEventKind[] = [
@@ -81,12 +81,13 @@ describe("@codex-im/core AuditEmitter (T3.1)", () => {
       "approval.unknown_approval_id",
       "approval.unsupported_method",
       "approval.unsupported_decision",
+      "computer_use.provider_unavailable",
     ];
-    expect(all.length).toBe(12);
+    expect(all.length).toBe(13);
   });
 
   it("AuditEventKind rejects unknown kinds at the type level", () => {
-    // @ts-expect-error — kinds outside the 12-arm union must not be assignable
+    // @ts-expect-error — kinds outside the 13-arm union must not be assignable
     const bad: AuditEventKind = "approval.computer_use_invocation";
     expect(bad).toBeDefined();
   });

@@ -172,6 +172,33 @@ describe("ApprovalBroker dispatch — registered handler path (T9a Step 9a.3 Gro
     await teardown(h);
   });
 
+  it("dispatches item/tool/call through the typed dynamic-tool registration API", async () => {
+    const h = await harness();
+    let received: unknown;
+    h.broker.registerDynamicToolCallHandler(async (req) => {
+      received = req.params;
+      return {
+        contentItems: [{ type: "inputText", text: "typed-result" }],
+        success: true,
+      };
+    });
+    const params = {
+      threadId: "t1",
+      turnId: "u1",
+      callId: "tool-call-typed",
+      namespace: null,
+      tool: "synthetic",
+      arguments: {},
+    };
+    const resp = await h.fake.emitServerRequest("item/tool/call", params, 5);
+    expect(received).toEqual(params);
+    expect(resp).toEqual({
+      contentItems: [{ type: "inputText", text: "typed-result" }],
+      success: true,
+    });
+    await teardown(h);
+  });
+
   it("dispatches mcpServer/elicitation/request to its registered handler", async () => {
     const h = await harness();
     let received: unknown;

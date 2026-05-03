@@ -4,11 +4,13 @@
 //
 // Phase 2 audit emission for the approval lifecycle. 12 enumerated event
 // kinds (see `AuditEventKind` below; sources tracked in plan §1 D13).
+// Phase 6 extends the same audit pipe for Computer Use provider boundary
+// failures.
 // Storage is an in-memory FIFO ring (default 1000 entries, hard MAX
 // 100_000 — Codex round-2 Q4) plus an optional structured logger sink.
 //
 // What T3 ships:
-//   - `AuditEventKind` (12-arm union)
+//   - `AuditEventKind` (approval lifecycle union + Phase 6 CU events)
 //   - `AuditEvent` shape (basic fields; `target?: Target` deferred to T6)
 //   - `AuditEventInput` (caller-supplied; emitter generates `id` + `createdAt`)
 //   - `AuditLogger` minimal duck-typed interface (Approved T3 decision —
@@ -53,10 +55,8 @@ import type { ApprovalActor } from "./types.js";
 export const AUDIT_RING_HARD_MAX = 100_000;
 
 /**
- * The 12 enumerated audit event kinds for Phase 2 approval lifecycle
- * emission. Each call-site in the broker / resolve / settle paths emits
- * exactly one of these (T7–T10 wire the emit sites; T21 e2e tests assert
- * one kind per failure-branch).
+ * Enumerated audit event kinds for approval lifecycle emission and Phase 6
+ * Computer Use provider boundaries.
  */
 export type AuditEventKind =
   | "approval.created"
@@ -70,7 +70,8 @@ export type AuditEventKind =
   | "approval.binding_required"
   | "approval.unknown_approval_id"
   | "approval.unsupported_method"
-  | "approval.unsupported_decision";
+  | "approval.unsupported_decision"
+  | "computer_use.provider_unavailable";
 
 /**
  * Minimal structural type for the optional structured-log sink.

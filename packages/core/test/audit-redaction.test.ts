@@ -459,7 +459,7 @@ describe("@codex-im/core AuditEmitter redaction (T5.1)", () => {
     });
 
     it("kind discriminator is structurally not redactable (passes through unchanged)", () => {
-      // `kind` is one of the 12 enumerated AuditEventKind strings; none
+      // `kind` is one of the enumerated AuditEventKind strings; none
       // of them match any T4 redact regex, so redact() is a no-op on
       // them. Pin this so a future widening of T4's patterns doesn't
       // accidentally clobber the discriminator.

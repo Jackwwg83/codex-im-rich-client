@@ -7,7 +7,7 @@
 //
 // Single-handler invariant: attach() throws on second call. Subsequent
 // modules (Phase 6 Computer Use approval flow, T11b supervisor handoff)
-// MUST go through ApprovalBroker.registerHandler — never call
+// MUST go through ApprovalBroker typed registration APIs — never call
 // client.setServerRequestHandler directly.
 //
 // Method-name boundary: the 9 string literals for ServerRequest methods
@@ -193,6 +193,8 @@ type DispatchTable = {
     ChatgptAuthTokensRefreshResponse
   >;
 };
+
+export type DynamicToolCallHandler = NonNullable<DispatchTable["item/tool/call"]["handler"]>;
 
 // Type-level guard: keys of DispatchTable MUST equal ServerRequest["method"].
 // If a generated arm is added without updating this table OR a stale key
@@ -617,6 +619,15 @@ export class ApprovalBroker {
   ): void {
     this.#table[method].handler = handler as DispatchTable[M]["handler"];
     this.#table[method].mode = "handler";
+  }
+
+  /**
+   * Phase 6 typed boundary for Computer Use dynamic tool calls. Daemon code
+   * must call this wrapper instead of carrying the raw `item/tool/call`
+   * method literal outside the broker's approved method table.
+   */
+  registerDynamicToolCallHandler(handler: DynamicToolCallHandler): void {
+    this.registerHandler("item/tool/call", handler);
   }
 
   /**

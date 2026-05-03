@@ -17,7 +17,11 @@ export type {
   ApprovalRecord,
 } from "./types.js";
 export { ApprovalBroker } from "./approval-broker.js";
-export type { DispatcherSpec, PruneTerminalRecordsOptions } from "./approval-broker.js";
+export type {
+  DispatcherSpec,
+  DynamicToolCallHandler,
+  PruneTerminalRecordsOptions,
+} from "./approval-broker.js";
 export { SecurityPolicy } from "./security-policy.js";
 export type {
   SecurityPolicyApprovalDestinationDecision,
@@ -105,6 +109,15 @@ export type {
 } from "./computer-use-policy.js";
 export { wrapComputerUsePrompt } from "./computer-use-prompt.js";
 export type { ComputerUsePromptEnvelope, ComputerUseStartIntent } from "./computer-use-prompt.js";
+export {
+  FakeComputerUseProvider,
+  UnsupportedComputerUseProvider,
+} from "./computer-use-provider.js";
+export type {
+  ComputerUseProvider,
+  ComputerUseProviderAudit,
+  ComputerUseProviderRequest,
+} from "./computer-use-provider.js";
 
 // Phase 3 T13 — platform-neutral session routing between an IM target,
 // project config, and the persistent Codex thread binding. Storage is

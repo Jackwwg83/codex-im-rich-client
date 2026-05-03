@@ -1,7 +1,7 @@
 # Computer Use Capability Evidence
 
 Generated: 2026-05-03
-Status: initial JAC-91 evidence stub
+Status: JAC-163 evidence update - real provider capability not verified
 
 ## 1. Local Protocol Evidence
 
@@ -30,7 +30,36 @@ Existing project behavior:
 - `packages/render/src/project-approval.ts` currently renders `tool_call` as a
   critical, decline-only Computer Use tool call.
 
-## 2. Unknowns To Resolve Before Real Provider
+## 2. JAC-163 Evidence Outcome
+
+No controlled real Computer Use dynamic-tool trace was captured in JAC-163.
+The implementation therefore records a blocker instead of guessing real
+namespace/tool names or argument schemas.
+
+Known local protocol shape remains:
+
+- method: `item/tool/call`
+- params: `DynamicToolCallParams`
+- response: `DynamicToolCallResponse`
+
+Unverified:
+
+- real Computer Use `namespace`;
+- real Computer Use `tool`;
+- real argument object shape;
+- whether argument payloads can contain screenshot references, visible browser
+  text, URLs, form labels, or user-entered values;
+- whether the local Codex App Computer Use capability is reachable from this
+  daemon process.
+
+JAC-163 implementation therefore lands only:
+
+- broker-owned typed dynamic-tool registration API;
+- `ComputerUseProvider` interface;
+- `UnsupportedComputerUseProvider` fail-closed fallback;
+- `FakeComputerUseProvider` for tests/fake smoke.
+
+## 3. Unknowns To Resolve Before Real Provider
 
 - Exact `namespace` and `tool` values emitted by Codex App Server for local
   Computer Use.
@@ -45,7 +74,7 @@ Existing project behavior:
 - Whether real provider execution can be deterministic enough for a bounded
   Chrome-only smoke.
 
-## 3. Current Decision
+## 4. Current Decision
 
 Do not implement a real desktop provider until the unknowns above are resolved
 and reviewed.
@@ -60,7 +89,7 @@ The first implementation should introduce:
 This lets Phase 6 implement the security-critical boundary without pretending a
 real provider capability is already verified.
 
-## 4. JAC-163 Exit Criteria
+## 5. JAC-163 Exit Criteria
 
 JAC-163 must produce one of these outcomes:
 
