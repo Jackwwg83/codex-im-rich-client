@@ -3,8 +3,9 @@
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
 > **Last updated:** 2026-05-03 - Block 4 production acceptance prep in
-> progress; C7 improves Telegram turn output with progress edits, chunked long
-> output, and native Codex item summaries for development/tool-call work.
+> progress; C8 fixes production launchd install/runtime packaging and proves the
+> installed bridge daemon is running under launchd with redacted Telegram token
+> logging.
 
 ## 1. Current State
 
@@ -42,11 +43,13 @@
     summaries.
   - `dfe732c` - C5 read-only `launchd:status` evidence command.
   - `92c5c5e` - C6 Telegram `/start` bootstrap maps to existing help.
-  - latest commit - C7 Telegram turn output streams progress, chunks long
+  - `6b7df19` - C7 Telegram turn output streams progress, chunks long
     output, and summarizes native Codex development/tool-call items.
-- **Next exact action:** run live roundtrip with Telegram Web when an
-  operator/browser driver can send the nonce prompt; launchd install/soak
-  remains operator-gated.
+  - latest commit - C8 production launchd install defaults to the installed
+    `app/daemon.mjs`, copies the daemon runtime dependency closure, and verifies
+    the real LaunchAgent reaches `state = running`.
+- **Next exact action:** continue launchd soak evidence and run a live Telegram
+  roundtrip when a user/browser driver can send the nonce prompt.
 
 ## 2. Why This Exists
 
@@ -91,7 +94,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4; live roundtrip command ready, real browser-driver send still pending |
-| Block 4 | real production acceptance + 24h soak | in progress: Telegram bootstrap help and richer Codex turn output implemented, gates green |
+| Block 4 | real production acceptance + 24h soak | in progress: installed bridge daemon is running under launchd; Telegram bootstrap/help and richer Codex turn output implemented |
 
 ## 5. Active Redlines
 
@@ -281,6 +284,20 @@ Latest C7 gates:
 | `pnpm protocol:check` | green |
 | `pnpm release:check -- --skip-full-gates` | green; includes bridge install chain, daemon roundtrip, fake IM smokes, and default live gates |
 
+Latest C8 targeted and live launchd evidence:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit scripts/build-daemon-bundle.test.mts scripts/install-bridge.test.mjs scripts/install-launchd.test.mjs scripts/release-readiness-check.test.mts scripts/load-and-run.test.mjs packages/daemon/test/logger.test.ts` | green: 6 files, 38 passing |
+| `pnpm launchd:uninstall || true && pnpm bridge:build && pnpm bridge:install && pnpm launchd:install && pnpm launchd:status` | green; launchd loaded installed `~/.codex-im-bridge/app/daemon.mjs`, `daemon status: present pid=44886`, and `launchctl print` reported `state = running` |
+| launchd stdout/stderr spot check | token log stayed `***REDACTED***`; only Node deprecation warnings in stderr |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 332 files checked |
+| `pnpm test` | green: 148 files, 1334 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+| `pnpm release:check -- --skip-full-gates` | green; bridge install, launchd dry-run, redaction scan, daemon roundtrip, fake IM smokes, and default live gates passed |
+| follow-up `pnpm launchd:status` | still green; `daemon status: present pid=44886`, `launchctl` still `state = running`, `last exit code = (never exited)` |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -318,6 +335,7 @@ Block 4:
 1. `chore(launchd): add read-only launchd status evidence command` (done)
 2. `fix(telegram): map /start to help` (done)
 3. `feat(daemon): stream and chunk Codex turn output for IM` (done)
+4. `fix(launchd): run installed app daemon with packaged runtime deps` (done)
 
 ## 8. Compact / Resume
 

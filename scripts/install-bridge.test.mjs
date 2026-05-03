@@ -24,11 +24,18 @@ describe("install-bridge", () => {
     expect(plan.appDaemon).toBe(join(home, ".codex-im-bridge", "app", "daemon.mjs"));
     expect(plan.wrapperEntry).toBe(join(home, ".codex-im-bridge", "bin", "load-and-run.sh"));
     expect(plan.migrationsDir).toBe(join(home, ".codex-im-bridge", "app", "migrations"));
-    expect(plan.runtimePackages.map((pkg) => `${pkg.name}@${pkg.version}`)).toEqual([
-      "better-sqlite3@12.9.0",
-      "bindings@1.5.0",
-      "file-uri-to-path@1.0.0",
-    ]);
+    expect(plan.runtimePackages.map((pkg) => `${pkg.name}@${pkg.version}`)).toEqual(
+      expect.arrayContaining([
+        "better-sqlite3@12.9.0",
+        "bindings@1.5.0",
+        "file-uri-to-path@1.0.0",
+        "pino@9.14.0",
+        "pino-roll@4.0.0",
+        "thread-stream@3.1.0",
+        "sonic-boom@4.2.1",
+        "atomic-sleep@1.0.0",
+      ]),
+    );
   });
 
   it("fails closed before writing anything when config.toml is missing", async () => {

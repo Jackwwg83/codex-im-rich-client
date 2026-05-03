@@ -8,7 +8,7 @@ import { build } from "esbuild";
 
 export const DAEMON_BUNDLE_ENTRY = "packages/cli/src/daemon-run-bundle-entry.ts";
 export const DAEMON_BUNDLE_OUTFILE = "dist/codex-im-daemon.mjs";
-export const DAEMON_BUNDLE_EXTERNAL = ["better-sqlite3"] as const;
+export const DAEMON_BUNDLE_EXTERNAL = ["better-sqlite3", "pino"] as const;
 export const DAEMON_BUNDLE_BANNER = [
   "#!/usr/bin/env node",
   'import { createRequire as __codexImCreateRequire } from "node:module";',

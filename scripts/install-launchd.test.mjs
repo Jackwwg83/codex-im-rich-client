@@ -9,7 +9,7 @@ import {
 const HOME = "/Users/tester";
 const USER = "tester";
 const NODE_BIN = "/opt/homebrew/bin/node";
-const DAEMON_ENTRY = "/Users/tester/.codex-im-bridge/bin/daemon.mjs";
+const DAEMON_ENTRY = "/Users/tester/.codex-im-bridge/app/daemon.mjs";
 const SECRET_BYTES = "not-a-real-secret-value";
 
 describe("install-launchd (T29)", () => {
@@ -18,7 +18,6 @@ describe("install-launchd (T29)", () => {
       home: HOME,
       user: USER,
       nodeBin: NODE_BIN,
-      daemonEntry: DAEMON_ENTRY,
       forbiddenSubstrings: [SECRET_BYTES],
     });
 
@@ -119,14 +118,12 @@ describe("install-launchd (T29)", () => {
     const access = vi.fn(async () => undefined);
     const lstat = vi.fn(async () => ({ isSymbolicLink: () => false }));
     const stat = vi.fn(async () => ({ isFile: () => true }));
-    const prepareRuntime = vi.fn(async () => undefined);
 
     const result = await installLaunchd({
       home: HOME,
       user: USER,
       nodeBin: NODE_BIN,
       daemonEntry: DAEMON_ENTRY,
-      prepareRuntime,
       access,
       lstat,
       stat,
@@ -136,12 +133,6 @@ describe("install-launchd (T29)", () => {
     });
 
     expect(result.dryRun).toBe(false);
-    expect(prepareRuntime).toHaveBeenCalledWith({
-      home: HOME,
-      nodeBin: NODE_BIN,
-      daemonEntry: DAEMON_ENTRY,
-      wrapperEntry: "/Users/tester/.codex-im-bridge/bin/load-and-run.sh",
-    });
     expect(lstat).toHaveBeenCalledWith("/Users/tester/.codex-im-bridge/bin/load-and-run.sh");
     expect(lstat).toHaveBeenCalledWith(DAEMON_ENTRY);
     expect(stat).toHaveBeenCalledWith("/Users/tester/.codex-im-bridge/bin/load-and-run.sh");
@@ -160,6 +151,34 @@ describe("install-launchd (T29)", () => {
       "load",
       "/Users/tester/Library/LaunchAgents/io.codex-im-bridge.plist",
     ]);
+  });
+
+  it("prepares a launchd runtime only when explicitly requested", async () => {
+    const prepareRuntime = vi.fn(async () => undefined);
+    const access = vi.fn(async () => undefined);
+    const lstat = vi.fn(async () => ({ isSymbolicLink: () => false }));
+    const stat = vi.fn(async () => ({ isFile: () => true }));
+
+    await installLaunchd({
+      home: HOME,
+      user: USER,
+      nodeBin: NODE_BIN,
+      daemonEntry: DAEMON_ENTRY,
+      prepareRuntime,
+      access,
+      lstat,
+      stat,
+      mkdir: vi.fn(async () => undefined),
+      writeFile: vi.fn(async () => undefined),
+      runLaunchctl: vi.fn(async () => undefined),
+    });
+
+    expect(prepareRuntime).toHaveBeenCalledWith({
+      home: HOME,
+      nodeBin: NODE_BIN,
+      daemonEntry: DAEMON_ENTRY,
+      wrapperEntry: "/Users/tester/.codex-im-bridge/bin/load-and-run.sh",
+    });
   });
 
   it("fails closed before writing the plist when live wrapper or daemon paths are missing", async () => {

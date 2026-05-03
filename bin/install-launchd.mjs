@@ -49,7 +49,7 @@ export async function planLaunchdInstall(options = {}) {
   const home = required(options.home ?? env.HOME, "HOME");
   const user = required(options.user ?? env.USER, "USER");
   const nodeBin = required(options.nodeBin ?? process.execPath, "NODE_BIN");
-  const daemonEntry = options.daemonEntry ?? join(home, ".codex-im-bridge", "bin", "daemon.mjs");
+  const daemonEntry = options.daemonEntry ?? join(home, ".codex-im-bridge", "app", "daemon.mjs");
   const wrapperEntry =
     options.wrapperEntry ?? join(home, ".codex-im-bridge", "bin", "load-and-run.sh");
   const plistPath = options.plistPath ?? join(home, "Library", "LaunchAgents", `${LABEL}.plist`);
@@ -86,8 +86,14 @@ export async function installLaunchd(options = {}) {
     return { dryRun: true, plan, wrotePlist: false, loaded: false };
   }
 
-  if (options.prepareRuntime !== false) {
-    await (options.prepareRuntime ?? prepareLaunchdRuntime)({
+  const prepareRuntime =
+    options.prepareRuntime === true
+      ? prepareLaunchdRuntime
+      : typeof options.prepareRuntime === "function"
+        ? options.prepareRuntime
+        : undefined;
+  if (prepareRuntime !== undefined) {
+    await prepareRuntime({
       home: plan.home,
       nodeBin: plan.nodeBin,
       daemonEntry: plan.daemonEntry,

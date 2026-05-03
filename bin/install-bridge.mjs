@@ -159,28 +159,76 @@ function resolveRuntimePackages(repoRoot) {
   const cliRequire = createRequire(
     pathToFileURL(join(repoRoot, "packages", "cli", "src", "daemon-run.ts")),
   );
-  const betterSqlite = readRuntimePackage("better-sqlite3", cliRequire);
-  const betterSqliteRequire = createRequire(
-    pathToFileURL(join(betterSqlite.sourceDir, "package.json")),
+  const daemonRequire = createRequire(
+    pathToFileURL(join(repoRoot, "packages", "daemon", "package.json")),
   );
-  const bindings = readRuntimePackage("bindings", betterSqliteRequire);
-  const bindingsRequire = createRequire(pathToFileURL(join(bindings.sourceDir, "package.json")));
-  const fileUriToPath = readRuntimePackage("file-uri-to-path", bindingsRequire);
-  return [betterSqlite, bindings, fileUriToPath];
+  const packages = new Map();
+  addRuntimePackageClosure("better-sqlite3", cliRequire, packages);
+  addRuntimePackageClosure("pino", daemonRequire, packages);
+  addRuntimePackageClosure("pino-roll", daemonRequire, packages);
+  return [...packages.values()];
 }
 
-function readRuntimePackage(name, requireFn) {
-  const packageJsonPath = requireFn.resolve(`${name}/package.json`);
+function addRuntimePackageClosure(name, requireFn, packages) {
+  const packageJsonPath = resolvePackageJsonPath(name, requireFn);
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
-  return {
+  const runtimePackage = {
     name,
     version: String(packageJson.version),
     sourceDir: dirname(packageJsonPath),
   };
+  const existing = packages.get(name);
+  if (existing !== undefined) {
+    if (
+      existing.version !== runtimePackage.version ||
+      existing.sourceDir !== runtimePackage.sourceDir
+    ) {
+      throw new Error(`install-bridge: conflicting runtime package versions for ${name}`);
+    }
+    return;
+  }
+  packages.set(name, runtimePackage);
+  const childRequire = createRequire(pathToFileURL(packageJsonPath));
+  for (const depName of Object.keys(packageJson.dependencies ?? {}).sort()) {
+    addRuntimePackageClosure(depName, childRequire, packages);
+  }
+}
+
+function resolvePackageJsonPath(name, requireFn) {
+  try {
+    return requireFn.resolve(`${name}/package.json`);
+  } catch (error) {
+    if (
+      error === null ||
+      typeof error !== "object" ||
+      error.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED"
+    ) {
+      throw error;
+    }
+  }
+
+  let dir = dirname(requireFn.resolve(name));
+  while (true) {
+    const packageJsonPath = join(dir, "package.json");
+    try {
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+      if (packageJson.name === name) {
+        return packageJsonPath;
+      }
+    } catch {
+      // Keep walking up until the package root is found.
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      throw new Error(`install-bridge: unable to resolve package.json for ${name}`);
+    }
+    dir = parent;
+  }
 }
 
 async function copyRuntimePackage(sourceDir, targetDir) {
   await rm(targetDir, { recursive: true, force: true });
+  await mkdir(dirname(targetDir), { recursive: true, mode: 0o700 });
   await cp(sourceDir, targetDir, {
     recursive: true,
     force: true,
