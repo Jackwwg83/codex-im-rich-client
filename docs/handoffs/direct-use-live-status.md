@@ -2,8 +2,8 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 1 A1 complete; launchd dry-run now
-> verifies runtime paths before returning.
+> **Last updated:** 2026-05-03 - Block 1 A2 complete; daemon bundle builds as
+> a launchd-runnable `.mjs` artifact with `better-sqlite3` external.
 
 ## 1. Current State
 
@@ -18,9 +18,10 @@
 - **Current implementation block:** Block 1 - truthful production launch chain.
 - **Completed in this effort:**
   - `3bcdcd0` - docs-only Direct Use / Phase 8 plan v2 and live-status anchor.
-  - pending commit - A1 launchd dry-run runtime verification.
-- **Next exact action:** A2 build daemon bundle with `better-sqlite3` external
-  and installed-runtime dependency strategy.
+  - `15dfba6` - A1 launchd dry-run runtime verification.
+  - pending commit - A2 daemon bundle build artifact.
+- **Next exact action:** A3 install runtime app artifacts and dependencies under
+  `~/.codex-im-bridge/app`.
 
 ## 2. Why This Exists
 
@@ -62,7 +63,7 @@ Required P0 plan edits:
 | Block | Scope | Status |
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
-| Block 1 | truthful production launch chain | in progress: A1 complete |
+| Block 1 | truthful production launch chain | in progress: A2 complete |
 | Block 2 | IM command control plane | blocked on Block 1 |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
@@ -119,13 +120,29 @@ Latest A1 full gates:
 | `pnpm lint` | green: 316 files checked |
 | `pnpm protocol:check` | green |
 
+Latest A2 targeted gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit scripts/build-daemon-bundle.test.mts` | green: 1 file, 4 passing |
+| `pnpm bridge:build` | green; produced ignored local `dist/codex-im-daemon.mjs` |
+
+Latest A2 full gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm typecheck` | green |
+| `pnpm test` | green: 142 files, 1267 passing, 1 skipped |
+| `pnpm lint` | green: 319 files checked |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
 
 1. Done: `fix(launchd): verify runtime paths during dry-run`
-2. Next: `feat(bridge): build daemon bundle`
-3. `feat(bridge): install runtime app artifacts and dependencies`
+2. Done: `feat(bridge): build daemon bundle`
+3. Next: `feat(bridge): install runtime app artifacts and dependencies`
 4. `test(bridge): prove installed daemon preflight from temp HOME`
 5. `test(release): prove bridge install -> launchd dry-run chain`
 6. `docs(ops): update production launch docs to remove false-green wording`
