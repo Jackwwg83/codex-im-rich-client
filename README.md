@@ -21,7 +21,7 @@
 
 **Phase 7 状态**：✅ 完成（2026-05-03）。Extended platforms / web console slice 已通过 JAC-165 review/handoff/tag gate；Satori/Koishi 与 Chat SDK 保持 spike-only，fallback renderer、loopback-only read-only web status、team/operator policy、web approval decision gate、multi-channel session handoff 均已落地。**Phase 7 closeout：[`docs/handoffs/phase7-live-status.md`](docs/handoffs/phase7-live-status.md)，Phase 7 → future 交接见 [`docs/handoffs/2026-05-03-phase7-to-future.md`](docs/handoffs/2026-05-03-phase7-to-future.md)。**
 
-**Release Readiness 状态**：🟡 进行中（2026-05-03）。目标是把 Phase 7 完成态提升到 Mac mini 上线运行标准：CI、release preflight、launchd/Keychain dry-run、smoke matrix、rollback 和最终 review/tag。SOT：[`docs/handoffs/release-readiness-live-status.md`](docs/handoffs/release-readiness-live-status.md)，计划：[`docs/superpowers/plans/2026-05-03-release-readiness-plan.md`](docs/superpowers/plans/2026-05-03-release-readiness-plan.md)。
+**Release Readiness 状态**：✅ 完成（2026-05-03）。Phase 7 完成态已提升到本地 Mac mini release candidate：CI、release preflight、launchd/Keychain dry-run、smoke matrix、rollback runbook、outside-voice review 和 tag gate 均已收敛。SOT：[`docs/handoffs/release-readiness-live-status.md`](docs/handoffs/release-readiness-live-status.md)，handoff：[`docs/handoffs/2026-05-03-production-readiness.md`](docs/handoffs/2026-05-03-production-readiness.md)，tag：`production-readiness-2026-05-03`。
 
 上线运行操作手册：[`docs/ops/production-launch.md`](docs/ops/production-launch.md)。上线前先跑 `pnpm release:check`；默认路径不写 Keychain、不 load/unload launchd、不发起 live IM/Codex/Computer Use。
 

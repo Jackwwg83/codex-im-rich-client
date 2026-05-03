@@ -309,4 +309,4 @@ Linear parent: JAC-166.
 - [x] **JAC-168 / RR T1** — GitHub Actions CI for mandatory non-live gates.
 - [x] **JAC-169 / RR T2** — production ops preflight command.
 - [x] **JAC-170 / RR T3** — operator launch checklist and rollback runbook.
-- [ ] **JAC-171 / RR T4** — final release readiness review, tag, and handoff. Current next issue.
+- [x] **JAC-171 / RR T4** — final release readiness review, tag, and handoff. Outside-voice review chain: initial `APPROVE_WITH_CHANGES`, P1 fixed by `16d11ca`, P3 lazy setup fixed by `7052a8a`, final delta review `GO_WITH_LOW_NITS`; closeout/tag packet records `pnpm release:check` green.

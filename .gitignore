@@ -7,3 +7,7 @@ packages/*/dist/
 /tmp/
 .vitest-cache/
 *.tsbuildinfo
+
+# Local automation and outside-voice review artifacts.
+.claude/scheduled_tasks.lock
+docs/phase-*/*.stderr

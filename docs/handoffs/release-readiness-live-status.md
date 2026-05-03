@@ -2,23 +2,25 @@
 
 > Single source of truth while bringing Codex IM Rich Client from Phase 7
 > complete to上线运行标准.
-> **Last updated:** 2026-05-03 - JAC-170 operator launch checklist written;
-> JAC-171 final review/tag is next.
+> **Last updated:** 2026-05-03 - JAC-171 complete; release-readiness
+> handoff/tag packet ready for `production-readiness-2026-05-03`.
 
 ---
 
 ## 1. Current State
 
-- **Mode:** Release readiness / production hardening.
+- **Mode:** Release readiness / production hardening complete.
 - **Plan:** `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
 - **Linear project:** Codex IM Rich Client Release Readiness.
 - **Parent Linear issue:** JAC-166 - Release readiness parent -上线运行标准.
-- **Current Linear issue:** JAC-171 - RR T4 final review, tag, and handoff.
+- **Current Linear issue:** none. JAC-171 is complete.
 - **Branch:** `codex/release-readiness`.
 - **Base tag:** `phase-7-extended-platforms-web-console-complete`.
 - **Version:** `0.1.0-phase7`.
-- **Next exact action:** run final release-readiness review, close blockers,
-  freeze handoff, and tag if gates pass.
+- **Release tag:** `production-readiness-2026-05-03`.
+- **Handoff:** `docs/handoffs/2026-05-03-production-readiness.md`.
+- **Next exact action:** run operator-chosen live IM smokes with real
+  credentials when the Mac mini environment is ready.
 
 ## 2. Production Readiness Target
 
@@ -47,12 +49,12 @@
 
 | Issue | Scope | Status |
 |---|---|---|
-| JAC-166 | release readiness parent | in progress |
+| JAC-166 | release readiness parent | complete |
 | JAC-167 | plan + live status | complete |
 | JAC-168 | GitHub Actions CI | complete |
 | JAC-169 | production ops preflight command | complete |
 | JAC-170 | operator launch checklist + rollback runbook | complete |
-| JAC-171 | final review, handoff, tag | current |
+| JAC-171 | final review, handoff, tag | complete |
 
 ## 5. Current Gate Evidence
 
@@ -99,6 +101,24 @@ Latest JAC-170 docs gate:
 |---|---|
 | `pnpm lint` | green: 310 files checked |
 | `git diff --check` | green |
+
+Final JAC-171 release gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --project unit scripts/release-readiness-check.test.mts scripts/keychain-launchd-smoke-doc.test.mjs` | green: 2 files, 8 passing |
+| `env TELEGRAM_LIVE=1 ... COMPUTER_USE_LIVE=1 pnpm release:check -- --skip-full-gates` | green: ambient live env scrubbed; default probes stayed gated/skipped |
+| `pnpm release:check` | green: full CI-equivalent gates + operational dry-runs + fake smokes + default live gates/skips |
+| `git diff --exit-code packages/codex-protocol` | green |
+| `git diff --check` | green |
+
+Final outside-voice review chain:
+
+| File | Verdict | Result |
+|---|---|---|
+| `docs/release-readiness/final-review.md` | `APPROVE_WITH_CHANGES` | found one P1 ambient live-smoke env blocker |
+| `docs/release-readiness/final-review-followup.md` | `GO_WITH_LOW_NITS` | confirmed P1 fixed by `16d11ca` |
+| `docs/release-readiness/final-review-delta.md` | `GO_WITH_LOW_NITS` | confirmed P3 lazy setup fixed by `7052a8a`; JAC-171 may proceed to handoff/tag |
 
 ## 6. Compact / Resume
 
