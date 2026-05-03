@@ -2,8 +2,8 @@
 
 > Single source of truth for Phase 7 while extended platform / web-console
 > planning and implementation are active.
-> **Last updated:** 2026-05-03 - JAC-164 closure review returned
-> `GO_WITH_LOW_NITS`; JAC-104 capability matrix is next.
+> **Last updated:** 2026-05-03 - JAC-104 capability matrix review returned
+> `GO_WITH_LOW_NITS`; JAC-102 Satori/Koishi feasibility is next.
 
 ---
 
@@ -13,12 +13,13 @@
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
 - **Parent Linear issue:** JAC-12 - Phase 7+ backlog / extended platforms and
   web console.
-- **Current Linear issue:** JAC-104 - capability matrix.
+- **Current Linear issue:** JAC-102 - Satori/Koishi feasibility spike.
 - **Branch:** `codex/phase-7-planning`.
 - **Base tag:** `phase-6-computer-use-complete`.
 - **Version:** `0.1.0-phase6`; do not bump until Phase 7 tag gate.
-- **Next exact action:** create `docs/phase-7/capability-matrix.md` with the
-  required `Phase 7 verdict` column and no runtime changes.
+- **Next exact action:** create `docs/phase-7/satori-koishi-feasibility.md`
+  using docs/static analysis/mocked fixtures only; no live server, credential
+  probing, adapter package, network client, webhook, or listener.
 
 ## 2. Current Decision State
 
@@ -53,14 +54,15 @@
 |---|---|
 | Phase 7 plan v1 Codex review | APPROVE_WITH_CHANGES: P1 ordering, loopback, fallback fixes required |
 | Phase 7 plan v1.1 Codex closure review | GO_WITH_LOW_NITS: P0/P1/P2 clear; JAC-104 may start |
+| JAC-104 capability matrix Codex review | GO_WITH_LOW_NITS: P0/P1/P2 clear; JAC-102 may start |
 
 ## 5. Linear Execution Queue
 
 | Issue | Scope | Status |
 |---|---|---|
 | JAC-164 | plan review gate | complete; closure review recorded |
-| JAC-104 | capability matrix | current |
-| JAC-102 | Satori/Koishi feasibility spike | pending |
+| JAC-104 | capability matrix | complete; review recorded |
+| JAC-102 | Satori/Koishi feasibility spike | current |
 | JAC-103 | Vercel Chat SDK feasibility spike | pending |
 | JAC-105 | fallback renderer | pending, gated by matrix/spikes |
 | JAC-106 | web console read-only status | pending, plan-reviewed only |
@@ -70,7 +72,14 @@
 
 ## 6. Gate Status
 
-Latest JAC-164 docs-only gate:
+Latest JAC-104 docs-only gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm lint` | green: 301 files checked |
+| `git diff --check` | green |
+
+Previous JAC-164 docs-only gate:
 
 | Gate | Result |
 |---|---|

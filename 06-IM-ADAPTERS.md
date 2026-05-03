@@ -15,35 +15,29 @@ P2 Vercel Chat SDK: Slack/Discord/Teams/GitHub/Linear/WhatsApp 等平台
 ## 2. ChannelAdapter 抽象
 
 ```ts
-export type PlatformName = "telegram" | "lark" | "dingtalk" | "satori" | "slack" | string;
-
 export interface Target {
-  platform: PlatformName;
+  platform: string;
   chatId: string;
   threadKey?: string;
   topicId?: string;
 }
 
 export interface Sender {
-  platformUserId: string;
-  username?: string;
+  userId: string;
   displayName?: string;
-  raw?: unknown;
 }
 
 export interface ChannelCapabilities {
-  canEditMessage: boolean;
-  canStreamByEditing: boolean;
   supportsButtons: boolean;
-  supportsCards: boolean;
-  supportsMarkdown: boolean;
-  supportsThreads: boolean;
-  supportsFileUpload: boolean;
-  supportsEphemeral: boolean;
-  callbackPayloadLimitBytes?: number;
-  maxTextLength?: number;
+  canEditMessage: boolean;
+  supportsAttachments: boolean;
+  maxCallbackDataBytes: number;
 }
 ```
+
+Phase 7 的扩展能力矩阵记录在
+`docs/phase-7/capability-matrix.md`。运行时代码仍以
+`packages/channel-core/src/adapter.ts` 的闭合 `ChannelAdapter` 接口为准。
 
 ## 3. Telegram Adapter
 
@@ -64,7 +58,8 @@ export interface ChannelCapabilities {
 ### 注意事项
 
 - 群聊中需要关闭 Telegram Bot Privacy Mode，或要求用户 mention bot。
-- callback data 长度有限，approval payload 不要塞完整 JSON，只塞短 id，例如 `appr_123:allow_once`。
+- callback data 长度有限，approval payload 只能是 daemon 生成的 opaque
+  `v1:` token；不要塞 raw approval id、action、actor、target 或 nonce tuple。
 - 长文本要切分。
 
 ### 渲染策略
