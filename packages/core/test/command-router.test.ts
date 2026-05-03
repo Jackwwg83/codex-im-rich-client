@@ -8,6 +8,7 @@ import {
 describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
   it("parses the Phase 3 slash commands with args", () => {
     const expected: CommandRouterCommandName[] = [
+      "start",
       "help",
       "projects",
       "new",

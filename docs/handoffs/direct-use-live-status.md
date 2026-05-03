@@ -3,8 +3,8 @@
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
 > **Last updated:** 2026-05-03 - Block 4 production acceptance prep in
-> progress; C5 adds read-only `launchd:status` evidence for loaded service and
-> daemon snapshot checks.
+> progress; C6 maps Telegram `/start` to the existing Codex IM help command for
+> first-contact usability.
 
 ## 1. Current State
 
@@ -40,7 +40,8 @@
     Telegram inbound daemon evidence.
   - `0e0c016` - C4 IM terminal output appends concise non-chat Codex item
     summaries.
-  - latest commit - C5 read-only `launchd:status` evidence command.
+  - `dfe732c` - C5 read-only `launchd:status` evidence command.
+  - latest commit - C6 Telegram `/start` bootstrap maps to existing help.
 - **Next exact action:** run live roundtrip with Telegram Web when an
   operator/browser driver can send the nonce prompt; launchd install/soak
   remains operator-gated.
@@ -88,7 +89,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4; live roundtrip command ready, real browser-driver send still pending |
-| Block 4 | real production acceptance + 24h soak | in progress: read-only status evidence command implemented, gates green |
+| Block 4 | real production acceptance + 24h soak | in progress: Telegram bootstrap help implemented, gates green |
 
 ## 5. Active Redlines
 
@@ -257,6 +258,16 @@ Latest C5 targeted gates:
 | `pnpm test` | green: 148 files, 1331 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 
+Latest C6 gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/core/test/command-router.test.ts packages/daemon/test/daemon.test.ts` | green: 2 files, 112 passing |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 332 files checked |
+| `pnpm test` | green: 148 files, 1331 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -292,6 +303,7 @@ Block 3:
 Block 4:
 
 1. `chore(launchd): add read-only launchd status evidence command` (done)
+2. `fix(telegram): map /start to help` (done)
 
 ## 8. Compact / Resume
 

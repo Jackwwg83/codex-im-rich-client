@@ -1433,7 +1433,7 @@ describe("Daemon skeleton (T14)", () => {
     });
   }
 
-  it("routes /help to the currently implemented IM control commands", async () => {
+  it("routes /start to the currently implemented IM control commands", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-100secret-chat" };
     const sender = { userId: "u-secret-user" };
@@ -1466,13 +1466,14 @@ describe("Daemon skeleton (T14)", () => {
     messageHandler?.({
       target,
       sender,
-      text: "/help",
+      text: "/start",
       messageRef: { target, messageId: "msg-help" },
       receivedAt: new Date("2026-05-03T00:00:00.000Z"),
     });
     await flushDaemonHandlers();
 
     const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("/start");
     expect(body).toContain("/projects");
     expect(body).toContain("/use <project>");
     expect(body).toContain("/status");

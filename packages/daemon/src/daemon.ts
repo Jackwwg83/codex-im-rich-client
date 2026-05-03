@@ -1718,7 +1718,7 @@ export class Daemon {
       return;
     }
 
-    if (command.name === "help") {
+    if (command.name === "start" || command.name === "help") {
       await this.#routeHelpCommand(inbound);
       return;
     }
@@ -1769,6 +1769,7 @@ export class Daemon {
       inbound.messageRef,
       [
         "Commands:",
+        "/start - Show these commands.",
         "/projects - List available projects.",
         "/use <project> - Bind this chat to a project.",
         "/status - Show current Codex IM status.",

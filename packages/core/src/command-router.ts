@@ -6,6 +6,7 @@ import {
 } from "./computer-use-command.js";
 
 export const COMMAND_ROUTER_COMMANDS = Object.freeze([
+  "start",
   "help",
   "projects",
   "new",

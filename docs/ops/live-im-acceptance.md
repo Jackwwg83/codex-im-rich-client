@@ -107,7 +107,7 @@ the chat bubble appears to show.
 
 | Area | Telegram input/action | Expected user-visible result | Non-UI assertion |
 |---|---|---|---|
-| Bot bootstrap | `/start` | bot remains reachable; no crash | daemon keeps polling |
+| Bot bootstrap | `/start` | command help is rendered | daemon keeps polling |
 | Project binding | `/use codex-im` | `Using project codex-im` | `thread_bindings` row exists for Telegram target |
 | Invalid project | `/use does-not-exist` | explicit unknown-project reply | no binding overwrite |
 | Basic turn | `Reply exactly: OK` | bot replies `OK` | `active_turn_id` clears after completion |
