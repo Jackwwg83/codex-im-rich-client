@@ -47,6 +47,7 @@
     "smoke:telegram-fake": "tsx packages/cli/src/index.ts smoke telegram-fake",
     "smoke:daemon-roundtrip": "tsx packages/cli/src/index.ts smoke daemon-roundtrip",
     "smoke:telegram-live": "tsx packages/cli/src/index.ts smoke telegram-live",
+    "smoke:telegram-live-roundtrip": "tsx packages/cli/src/index.ts smoke telegram-live-roundtrip",
     "smoke:telegram-side-by-side": "tsx packages/cli/src/index.ts smoke telegram-side-by-side",
     "smoke:telegram-real": "tsx packages/cli/src/index.ts smoke telegram-real",
     "smoke:real-turn": "tsx packages/cli/src/index.ts smoke real-turn",

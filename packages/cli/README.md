@@ -72,6 +72,33 @@ TELEGRAM_LIVE=1 IM_TELEGRAM_BOT_TOKEN=... TELEGRAM_LIVE_DURATION_MS=10000 \
 command refuses to run unless `TELEGRAM_LIVE=1` is explicit and the bot token
 is present. Token-shaped material is redacted from failure output.
 
+## `pnpm smoke:telegram-live-roundtrip` — live Telegram inbound daemon smoke (gated)
+
+```bash
+TELEGRAM_LIVE_ROUNDTRIP=1 IM_TELEGRAM_BOT_TOKEN=... \
+  pnpm smoke:telegram-live-roundtrip
+```
+
+Starts the real Telegram polling adapter, waits for a real Telegram user to
+send a generated nonce prompt, routes that inbound message through `Daemon`,
+starts a deterministic fake Codex turn, and verifies Telegram accepted the
+placeholder send plus final edit. This proves the live inbound IM path without
+spending model quota.
+
+Optional:
+
+```bash
+TELEGRAM_LIVE_ROUNDTRIP=1 IM_TELEGRAM_BOT_TOKEN=... \
+  TELEGRAM_ROUNDTRIP_ALLOWED_USER_ID=telegram:12345 \
+  TELEGRAM_ROUNDTRIP_ALLOWED_CHAT_ID=telegram:12345 \
+  TELEGRAM_ROUNDTRIP_TIMEOUT_MS=120000 \
+  pnpm smoke:telegram-live-roundtrip
+```
+
+The command prints the exact text to send in Telegram. It refuses to run unless
+`TELEGRAM_LIVE_ROUNDTRIP=1` is explicit and the bot token is present.
+Token-shaped material is redacted from failure output.
+
 ## `pnpm smoke:telegram-side-by-side` — live Telegram + real Codex side-by-side smoke (gated)
 
 ```bash

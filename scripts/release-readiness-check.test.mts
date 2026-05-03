@@ -33,6 +33,7 @@ describe("release-readiness-check (JAC-169)", () => {
     expect(ids).toContain("db-backup-proof");
     expect(ids).toContain("smoke-daemon-roundtrip");
     expect(ids).toContain("smoke-telegram-live-default-gate");
+    expect(ids).toContain("smoke-telegram-live-roundtrip-default-gate");
     expect(ids).toContain("smoke-computer-use-default-skip");
   });
 
@@ -103,6 +104,10 @@ describe("release-readiness-check (JAC-169)", () => {
       [1],
     ]);
     expect(telegram.map((step) => [step.id, step.expectedExitCodes])).toContainEqual([
+      "smoke-telegram-live-roundtrip-default-gate",
+      [1],
+    ]);
+    expect(telegram.map((step) => [step.id, step.expectedExitCodes])).toContainEqual([
       "smoke-telegram-side-by-side-default-gate",
       [1],
     ]);
@@ -111,8 +116,13 @@ describe("release-readiness-check (JAC-169)", () => {
   it("clears ambient live-smoke env before default live-gate checks", () => {
     const hostileEnv = {
       TELEGRAM_LIVE: "1",
+      TELEGRAM_LIVE_ROUNDTRIP: "1",
       TELEGRAM_LIVE_DURATION_MS: "0",
       IM_TELEGRAM_BOT_TOKEN: "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
+      TELEGRAM_ROUNDTRIP_ALLOWED_CHAT_ID: "-1001",
+      TELEGRAM_ROUNDTRIP_ALLOWED_USER_ID: "42",
+      TELEGRAM_ROUNDTRIP_NONCE: "abc123",
+      TELEGRAM_ROUNDTRIP_TIMEOUT_MS: "1000",
       CODEX_REAL_SMOKE: "1",
       CODEX_REAL_SMOKE_PROMPT: "real prompt",
       LARK_LIVE: "1",
@@ -136,6 +146,7 @@ describe("release-readiness-check (JAC-169)", () => {
     };
     const defaultLiveStepIds = [
       "smoke-telegram-live-default-gate",
+      "smoke-telegram-live-roundtrip-default-gate",
       "smoke-telegram-side-by-side-default-gate",
       "smoke-lark-live-default-skip",
       "smoke-dingtalk-live-default-skip",
@@ -149,7 +160,12 @@ describe("release-readiness-check (JAC-169)", () => {
 
       expect(env.PATH).toBe("/usr/bin");
       expect(env.TELEGRAM_LIVE).toBeUndefined();
+      expect(env.TELEGRAM_LIVE_ROUNDTRIP).toBeUndefined();
       expect(env.IM_TELEGRAM_BOT_TOKEN).toBeUndefined();
+      expect(env.TELEGRAM_ROUNDTRIP_ALLOWED_CHAT_ID).toBeUndefined();
+      expect(env.TELEGRAM_ROUNDTRIP_ALLOWED_USER_ID).toBeUndefined();
+      expect(env.TELEGRAM_ROUNDTRIP_NONCE).toBeUndefined();
+      expect(env.TELEGRAM_ROUNDTRIP_TIMEOUT_MS).toBeUndefined();
       expect(env.CODEX_REAL_SMOKE).toBeUndefined();
       expect(env.LARK_LIVE).toBeUndefined();
       expect(env.LARK_APP_SECRET_ENV).toBeUndefined();

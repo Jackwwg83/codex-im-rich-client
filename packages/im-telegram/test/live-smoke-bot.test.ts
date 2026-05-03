@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TelegramLiveSmokeBot } from "../src/index.js";
+import { TelegramLiveSmokeBot, TelegramRecordingBot } from "../src/index.js";
 import type {
   TelegramCallbackQueryHandlerLike,
   TelegramLiveSmokeBotLike,
@@ -51,5 +51,32 @@ describe("TelegramLiveSmokeBot", () => {
     await expect(bot.stop()).resolves.toBeUndefined();
 
     expect(fakeBot.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("records sanitized outbound send and edit text evidence", async () => {
+    const fakeBot: TelegramLiveSmokeBotLike = {
+      api: {
+        getMe: vi.fn(async () => ({ id: 1 })),
+        sendMessage: vi.fn(async () => ({ message_id: 42 })),
+        editMessageReplyMarkup: vi.fn(async () => undefined),
+        editMessageText: vi.fn(async () => undefined),
+        answerCallbackQuery: vi.fn(async () => undefined),
+      },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(() => undefined),
+      on: vi.fn(
+        (
+          _filter: "message:text" | "callback_query:data",
+          _handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
+        ) => undefined,
+      ),
+    };
+    const bot = new TelegramRecordingBot(fakeBot);
+
+    await bot.api.sendMessage("chat-1", "working", {});
+    await bot.api.editMessageText("chat-1", 42, "done", {});
+
+    expect(bot.sentMessages).toEqual([{ chatId: "chat-1", messageId: "42", text: "working" }]);
+    expect(bot.editedTexts).toEqual([{ chatId: "chat-1", messageId: "42", text: "done" }]);
   });
 });

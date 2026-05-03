@@ -4,7 +4,10 @@ import type {
   TelegramBotApiLike,
   TelegramBotLike,
   TelegramCallbackQueryHandlerLike,
+  TelegramEditMessageReplyMarkupOptions,
+  TelegramEditMessageTextOptions,
   TelegramMessageHandlerLike,
+  TelegramSendMessageOptions,
 } from "./adapter.js";
 
 export interface TelegramLiveSmokeBotOptions {
@@ -26,6 +29,18 @@ export interface TelegramLiveSmokeBotLike {
 
 export interface TelegramLiveSmokeBotApiLike extends TelegramBotApiLike {
   getMe(): Promise<unknown>;
+}
+
+export interface TelegramRecordedSendMessage {
+  readonly chatId: string;
+  readonly messageId: string;
+  readonly text: string;
+}
+
+export interface TelegramRecordedEditText {
+  readonly chatId: string;
+  readonly messageId: string;
+  readonly text: string;
 }
 
 const DEFAULT_VALIDATE_TIMEOUT_MS = 10_000;
@@ -103,6 +118,66 @@ export class TelegramLiveSmokeBot implements TelegramBotLike {
     handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
   ): unknown {
     return this.#bot.on(filter, handler);
+  }
+}
+
+/**
+ * Recording wrapper used by live acceptance smokes.
+ *
+ * It keeps Telegram API method interception inside im-telegram while exposing
+ * only sanitized sent/edited text evidence to CLI smoke orchestration.
+ */
+export class TelegramRecordingBot implements TelegramBotLike {
+  readonly #bot: TelegramBotLike;
+  readonly sentMessages: TelegramRecordedSendMessage[] = [];
+  readonly editedTexts: TelegramRecordedEditText[] = [];
+  readonly api: TelegramBotApiLike;
+
+  constructor(bot: TelegramBotLike) {
+    const api = bot.api;
+    if (api === undefined) {
+      throw new Error("TelegramRecordingBot requires a bot API");
+    }
+    this.#bot = bot;
+    this.api = {
+      sendMessage: async (chatId: string, text: string, options: TelegramSendMessageOptions) => {
+        const sent = await api.sendMessage(chatId, text, options);
+        this.sentMessages.push({ chatId, messageId: String(sent.message_id), text });
+        return sent;
+      },
+      editMessageReplyMarkup: (
+        chatId: string,
+        messageId: number,
+        options: TelegramEditMessageReplyMarkupOptions,
+      ) => api.editMessageReplyMarkup(chatId, messageId, options),
+      editMessageText: async (
+        chatId: string,
+        messageId: number,
+        text: string,
+        options: TelegramEditMessageTextOptions,
+      ) => {
+        const result = await api.editMessageText(chatId, messageId, text, options);
+        this.editedTexts.push({ chatId, messageId: String(messageId), text });
+        return result;
+      },
+      answerCallbackQuery: (callbackQueryId, options) =>
+        api.answerCallbackQuery(callbackQueryId, options),
+    };
+  }
+
+  start(): Promise<void> {
+    return this.#bot.start();
+  }
+
+  stop(): void | Promise<void> {
+    return this.#bot.stop();
+  }
+
+  on(
+    filter: "message:text" | "callback_query:data",
+    handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
+  ): unknown {
+    return this.#bot.on?.(filter, handler);
   }
 }
 

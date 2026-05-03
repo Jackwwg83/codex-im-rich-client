@@ -1,7 +1,7 @@
 export { decodeCallbackData, encodeCallbackData } from "./callback-codec.js";
 export { encodeTelegramCallbackHandle, TelegramChannelAdapter } from "./adapter.js";
 export { TelegramFakeSmokeBot } from "./fake-smoke-bot.js";
-export { TelegramLiveSmokeBot } from "./live-smoke-bot.js";
+export { TelegramLiveSmokeBot, TelegramRecordingBot } from "./live-smoke-bot.js";
 export type {
   TelegramAnswerCallbackQueryOptions,
   TelegramBotApiLike,
@@ -27,5 +27,10 @@ export type {
   TelegramFakeSmokeMessage,
   TelegramFakeSmokeSentMessage,
 } from "./fake-smoke-bot.js";
-export type { TelegramLiveSmokeBotApiLike, TelegramLiveSmokeBotLike } from "./live-smoke-bot.js";
+export type {
+  TelegramLiveSmokeBotApiLike,
+  TelegramLiveSmokeBotLike,
+  TelegramRecordedEditText,
+  TelegramRecordedSendMessage,
+} from "./live-smoke-bot.js";
 export { TELEGRAM_CAPABILITIES } from "./capabilities.js";

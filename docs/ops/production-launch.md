@@ -184,6 +184,7 @@ Operator-gated live checks:
 
 ```bash
 TELEGRAM_LIVE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-live
+TELEGRAM_LIVE_ROUNDTRIP=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-live-roundtrip
 TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-side-by-side
 LARK_LIVE=1 LARK_LIVE_DRY_RUN=1 ... pnpm smoke:lark-live
 DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live

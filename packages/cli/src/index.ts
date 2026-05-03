@@ -28,6 +28,7 @@ function usage(): void {
       "  smoke telegram-fake  — CI-safe fake Telegram daemon smoke",
       "  smoke daemon-roundtrip — CI-safe daemon control/approval roundtrip",
       "  smoke telegram-live  — live Telegram adapter smoke (requires TELEGRAM_LIVE=1)",
+      "  smoke telegram-live-roundtrip — live Telegram inbound daemon roundtrip smoke",
       "  smoke telegram-side-by-side — live Telegram adapter + real Codex side-by-side smoke",
       "  smoke telegram-real  — deprecated alias for telegram-side-by-side",
       "  smoke real-turn      — full lifecycle smoke (requires CODEX_REAL_SMOKE=1)",
@@ -52,6 +53,9 @@ if (cmd === "smoke" && sub === "app-server") {
   await run();
 } else if (cmd === "smoke" && sub === "telegram-live") {
   const { run } = await import("./smoke-telegram-live.js");
+  await run();
+} else if (cmd === "smoke" && sub === "telegram-live-roundtrip") {
+  const { run } = await import("./smoke-telegram-live-roundtrip.js");
   await run();
 } else if (cmd === "smoke" && sub === "telegram-side-by-side") {
   const { run } = await import("./smoke-telegram-real.js");

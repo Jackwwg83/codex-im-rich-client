@@ -50,8 +50,13 @@ const GENERIC_SECRET_RE =
 const FAKE_KEYCHAIN_TOKEN = "fake-keychain-token-value";
 const DEFAULT_LIVE_SMOKE_UNSET_ENV = [
   "TELEGRAM_LIVE",
+  "TELEGRAM_LIVE_ROUNDTRIP",
   "TELEGRAM_LIVE_DURATION_MS",
   "IM_TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_ROUNDTRIP_ALLOWED_CHAT_ID",
+  "TELEGRAM_ROUNDTRIP_ALLOWED_USER_ID",
+  "TELEGRAM_ROUNDTRIP_NONCE",
+  "TELEGRAM_ROUNDTRIP_TIMEOUT_MS",
   "CODEX_REAL_SMOKE",
   "CODEX_REAL_SMOKE_PROMPT",
   "LARK_LIVE",
@@ -114,6 +119,17 @@ export function buildReleaseReadinessSteps(
       "Telegram live smoke default gate",
       "pnpm",
       ["smoke:telegram-live"],
+      {
+        expectedExitCodes: [1],
+        unsetEnv: DEFAULT_LIVE_SMOKE_UNSET_ENV,
+        safeOutputPattern: /operator-gated/i,
+      },
+    ),
+    step(
+      "smoke-telegram-live-roundtrip-default-gate",
+      "Telegram live roundtrip smoke default gate",
+      "pnpm",
+      ["smoke:telegram-live-roundtrip"],
       {
         expectedExitCodes: [1],
         unsetEnv: DEFAULT_LIVE_SMOKE_UNSET_ENV,
