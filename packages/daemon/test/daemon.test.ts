@@ -1477,6 +1477,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("/use <project>");
     expect(body).toContain("/status");
     expect(body).toContain("/new [title]");
+    expect(body).toContain("/threads [project]");
     expect(body).toContain("/stop");
     expect(body).not.toContain("/fork");
     expect(body).not.toContain("-100secret-chat");
@@ -1980,6 +1981,158 @@ describe("Daemon skeleton (T14)", () => {
       input: [{ type: "text", text: "start the next task", text_elements: [] }],
       cwd: "/repo/web",
     });
+  });
+
+  it("routes /threads to redacted known Codex thread selectors", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-100secret-chat" };
+    const sender = { userId: "u-secret-user" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/Users/alice/private/web",
+        codexThreadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
+      })),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      listForTarget: vi.fn(() => [
+        {
+          id: "ts-current",
+          target,
+          projectId: "web",
+          codexThreadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
+          title: "Release \n check",
+          status: "open" as const,
+          createdAt: "2026-05-03T10:00:00.000Z",
+          updatedAt: "2026-05-03T10:00:00.000Z",
+          lastUsedAt: "2026-05-03T12:00:00.000Z",
+        },
+        {
+          id: "ts-api",
+          target,
+          projectId: "api",
+          codexThreadId: "thread-api-abcdefghijklmnopqrstuvwxyz",
+          status: "open" as const,
+          createdAt: "2026-05-03T09:00:00.000Z",
+          updatedAt: "2026-05-03T09:00:00.000Z",
+          lastUsedAt: "2026-05-03T11:00:00.000Z",
+        },
+        {
+          id: "ts-hidden",
+          target,
+          projectId: "hidden",
+          codexThreadId: "thread-hidden-abcdefghijklmnopqrstuvwxyz",
+          status: "open" as const,
+          createdAt: "2026-05-03T08:00:00.000Z",
+          updatedAt: "2026-05-03T08:00:00.000Z",
+          lastUsedAt: "2026-05-03T10:00:00.000Z",
+        },
+      ]),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn((projectId: string) =>
+          projectId === "hidden"
+            ? { kind: "deny" as const, reason: "project_not_allowed" }
+            : { kind: "allow" as const },
+        ),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/threads",
+      messageRef: { target, messageId: "msg-threads" },
+      receivedAt: new Date("2026-05-03T12:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(threadSessionRepository.listForTarget).toHaveBeenCalledWith(target, {
+      limit: 20,
+    });
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("Threads:");
+    expect(body).toContain("* 1 web Release check (thread-curre...) last 2026-05-03T12:00:00.000Z");
+    expect(body).toContain("  2 api (thread-api-a...) last 2026-05-03T11:00:00.000Z");
+    expect(body).not.toContain("hidden");
+    expect(body).not.toContain("-100secret-chat");
+    expect(body).not.toContain("u-secret-user");
+    expect(body).not.toContain("/Users/alice/private/web");
+    expect(body).not.toContain("thread-current-abcdefghijklmnopqrstuvwxyz");
+    expect(body).not.toContain("thread-api-abcdefghijklmnopqrstuvwxyz");
+  });
+
+  it("routes /threads with a project filter through project access policy", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      listForTarget: vi.fn(() => []),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({
+          kind: "deny" as const,
+          reason: "project_not_allowed",
+        })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => ({ kind: "unbound" as const, target })) }),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/threads hidden",
+      messageRef: { target, messageId: "msg-threads-denied" },
+      receivedAt: new Date("2026-05-03T12:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-threads-denied" },
+      "Project access denied",
+    );
+    expect(threadSessionRepository.listForTarget).not.toHaveBeenCalled();
   });
 
   it("routes /stop to turnInterrupt when the session has an active turn", async () => {

@@ -2,8 +2,8 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 2 B3 in progress; `/new [title]`
-> starts a real Codex thread and persists it before switching current binding.
+> **Last updated:** 2026-05-03 - Block 2 B4 in progress; `/threads [project]`
+> lists known Codex threads with redacted selectors and project filtering.
 
 ## 1. Current State
 
@@ -25,9 +25,10 @@
   - `48e85c5` - B0 IM command control-plane hard gates.
   - `6057714` - B1 `/help`, `/projects`, `/status` IM-safe controls.
   - `7892bed` - B2 `thread_sessions` migration + repository.
-  - pending commit - B3 `/new [title]` durable thread creation.
-- **Next exact action:** finish B3 gates/commit, then implement `/threads`
-  listing against `thread_sessions`.
+  - `0e631d0` - B3 `/new [title]` durable thread creation.
+  - pending commit - B4 `/threads [project]` thread listing.
+- **Next exact action:** finish B4 gates/commit, then implement `/switch`
+  with `thread/resume` before binding mutation.
 
 ## 2. Why This Exists
 
@@ -70,7 +71,7 @@ Required P0 plan edits:
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
-| Block 2 | IM command control plane | in progress: B3 `/new` implemented, gates pending |
+| Block 2 | IM command control plane | in progress: B4 `/threads` implemented, gates pending |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
@@ -192,7 +193,8 @@ Block 2:
 1. Done: `fix(daemon): refuse context switches during active work`
 2. Next: `feat(daemon): implement help projects and status commands`
 3. `feat(storage): add thread_sessions migration and repository` (done)
-4. `feat(daemon): implement /new with durable thread session persistence` (in progress)
+4. `feat(daemon): implement /new with durable thread session persistence` (done)
+5. `feat(daemon): implement /threads` (in progress)
 
 ## 8. Compact / Resume
 

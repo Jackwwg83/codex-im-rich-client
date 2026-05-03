@@ -45,6 +45,7 @@ import {
   type CallbackTokenRecord,
   type CallbackTokenStatus,
   type DatabaseHandle,
+  type ThreadSessionListOptions,
   type ThreadSessionRecord,
   ThreadSessionRepository,
   type ThreadSessionUpsert,
@@ -170,6 +171,10 @@ export interface DaemonCallbackTokenRepository {
 
 export interface DaemonThreadSessionRepository {
   upsert(input: ThreadSessionUpsert): ThreadSessionRecord;
+  listForTarget?(
+    target: Target,
+    options?: ThreadSessionListOptions,
+  ): readonly ThreadSessionRecord[];
   touch?(target: Target, codexThreadId: string, now?: string): ThreadSessionRecord | undefined;
 }
 
@@ -1666,6 +1671,11 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "threads") {
+      await this.#routeThreadsCommand(inbound, command);
+      return;
+    }
+
     if (command.name === "status") {
       await this.#routeStatusCommand(inbound);
       return;
@@ -1698,6 +1708,7 @@ export class Daemon {
         "/use <project> - Bind this chat to a project.",
         "/status - Show current Codex IM status.",
         "/new [title] - Start a new Codex thread.",
+        "/threads [project] - List known Codex threads.",
         "/stop - Interrupt the active Codex turn.",
       ].join("\n"),
     );
@@ -1728,6 +1739,46 @@ export class Daemon {
             project.defaultModel === undefined ? "" : ` (model ${project.defaultModel})`;
           return `${marker} ${projectId}${model}`;
         }),
+      ].join("\n"),
+    );
+  }
+
+  async #routeThreadsCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const repository = this.#threadSessionRepository();
+    if (repository?.listForTarget === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+      return;
+    }
+
+    const [projectId] = command.args;
+    if (
+      projectId !== undefined &&
+      !this.#projectAllowed(projectId, inbound.target, inbound.sender)
+    ) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    const listOptions: ThreadSessionListOptions =
+      projectId === undefined ? { limit: 20 } : { projectId, limit: 20 };
+    const records = repository
+      .listForTarget(inbound.target, listOptions)
+      .filter((record) => this.#projectAllowed(record.projectId, inbound.target, inbound.sender));
+
+    if (records.length === 0) {
+      await this.#editInboundMessage(inbound.messageRef, "No known Codex threads.");
+      return;
+    }
+
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      [
+        "Threads:",
+        ...records.map((record, index) => this.#formatThreadListLine(index + 1, record, route)),
       ].join("\n"),
     );
   }
@@ -1834,8 +1885,34 @@ export class Daemon {
   }
 
   #threadTitleFromArgs(args: readonly string[]): string | undefined {
-    const title = args.join(" ").trim();
+    const title = this.#sanitizeThreadTitle(args.join(" "));
     return title.length === 0 ? undefined : title.slice(0, 120);
+  }
+
+  #formatThreadListLine(
+    selector: number,
+    record: ThreadSessionRecord,
+    route: SessionRoute | undefined,
+  ): string {
+    const marker =
+      route?.kind === "bound" &&
+      route.projectId === record.projectId &&
+      route.codexThreadId === record.codexThreadId
+        ? "*"
+        : " ";
+    const title = record.title === undefined ? "" : ` ${this.#sanitizeThreadTitle(record.title)}`;
+    return `${marker} ${selector} ${record.projectId}${title} (${this.#shortId(
+      record.codexThreadId,
+    )}) last ${record.lastUsedAt}`;
+  }
+
+  #sanitizeThreadTitle(value: string): string {
+    let withoutControl = "";
+    for (const char of value) {
+      const code = char.charCodeAt(0);
+      withoutControl += code < 32 || code === 127 ? " " : char;
+    }
+    return withoutControl.replace(/\s+/g, " ").trim();
   }
 
   #targetLabel(target: Target): string {

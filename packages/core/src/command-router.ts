@@ -9,6 +9,7 @@ export const COMMAND_ROUTER_COMMANDS = Object.freeze([
   "help",
   "projects",
   "new",
+  "threads",
   "use",
   "switch",
   "fork",
