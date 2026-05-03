@@ -38,6 +38,18 @@ export type {
   SecurityPolicySnapshot,
   SecurityPolicyUserChatDecision,
 } from "./security-policy.js";
+export { TeamOperatorPolicy } from "./team-operator-policy.js";
+export type {
+  TeamOperatorAccessInput,
+  TeamOperatorAction,
+  TeamOperatorActor,
+  TeamOperatorConfig,
+  TeamOperatorDecision,
+  TeamOperatorDenyReason,
+  TeamOperatorPolicyConfig,
+  TeamOperatorPolicySnapshot,
+  TeamOperatorRole,
+} from "./team-operator-policy.js";
 
 // Phase 2 T2 — ApprovalRequestKind classifier (the only Phase 2 production
 // source allowed to read raw approval server-request method strings; see
