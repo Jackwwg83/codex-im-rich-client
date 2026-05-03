@@ -22,6 +22,10 @@ export type {
   TelegramTextMessageLike,
   TelegramUserLike,
 } from "./adapter.js";
-export type { TelegramFakeSmokeMessage } from "./fake-smoke-bot.js";
+export type {
+  TelegramFakeSmokeCallback,
+  TelegramFakeSmokeMessage,
+  TelegramFakeSmokeSentMessage,
+} from "./fake-smoke-bot.js";
 export type { TelegramLiveSmokeBotApiLike, TelegramLiveSmokeBotLike } from "./live-smoke-bot.js";
 export { TELEGRAM_CAPABILITIES } from "./capabilities.js";

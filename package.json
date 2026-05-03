@@ -45,6 +45,7 @@
     "smoke:lark-live": "tsx packages/im-lark/scripts/live-smoke.mts",
     "daemon:run": "tsx packages/cli/src/index.ts daemon run",
     "smoke:telegram-fake": "tsx packages/cli/src/index.ts smoke telegram-fake",
+    "smoke:daemon-roundtrip": "tsx packages/cli/src/index.ts smoke daemon-roundtrip",
     "smoke:telegram-live": "tsx packages/cli/src/index.ts smoke telegram-live",
     "smoke:telegram-real": "tsx packages/cli/src/index.ts smoke telegram-real",
     "smoke:real-turn": "tsx packages/cli/src/index.ts smoke real-turn",

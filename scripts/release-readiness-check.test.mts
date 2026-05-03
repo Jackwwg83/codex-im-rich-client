@@ -31,6 +31,7 @@ describe("release-readiness-check (JAC-169)", () => {
     expect(ids).toContain("load-and-run-dry-run");
     expect(ids).toContain("bridge-redaction-scan");
     expect(ids).toContain("db-backup-proof");
+    expect(ids).toContain("smoke-daemon-roundtrip");
     expect(ids).toContain("smoke-telegram-live-default-gate");
     expect(ids).toContain("smoke-computer-use-default-skip");
   });
@@ -49,6 +50,7 @@ describe("release-readiness-check (JAC-169)", () => {
     const launchd = steps.find((step) => step.id === "launchd-install-dry-run");
     const keychain = steps.find((step) => step.id === "load-and-run-dry-run");
     const redaction = steps.find((step) => step.id === "bridge-redaction-scan");
+    const roundtrip = steps.find((step) => step.id === "smoke-daemon-roundtrip");
     const backup = steps.find((step) => step.id === "db-backup-proof");
 
     expect(bridgeDryRun?.prepare).toEqual(expect.any(Function));
@@ -57,23 +59,26 @@ describe("release-readiness-check (JAC-169)", () => {
     expect(keychain?.env).toBeUndefined();
     expect(keychain?.prepare).toEqual(expect.any(Function));
     expect(redaction?.prepare).toEqual(expect.any(Function));
+    expect(roundtrip?.prepare).toEqual(expect.any(Function));
     expect(backup?.args).toEqual(["db:backup", "--"]);
     expect(backup?.prepare).toEqual(expect.any(Function));
   });
 
-  it("uses one shared temp HOME for bridge install, launchd dry-run, wrapper dry-run, and redaction scan", () => {
+  it("uses one shared temp HOME for bridge install, launchd dry-run, wrapper dry-run, redaction scan, and daemon roundtrip", () => {
     const steps = buildReleaseReadinessSteps({ includeFullGates: false });
     const bridgeDryRun = steps.find((step) => step.id === "bridge-install-dry-run");
     const bridgeInstall = steps.find((step) => step.id === "bridge-install");
     const launchd = steps.find((step) => step.id === "launchd-install-dry-run");
     const keychain = steps.find((step) => step.id === "load-and-run-dry-run");
     const redaction = steps.find((step) => step.id === "bridge-redaction-scan");
+    const roundtrip = steps.find((step) => step.id === "smoke-daemon-roundtrip");
 
     const dryArgs = bridgeDryRun?.prepare?.().args ?? [];
     const installArgs = bridgeInstall?.prepare?.().args ?? [];
     const launchdArgs = launchd?.prepare?.().args ?? [];
     const keychainEnv = keychain?.prepare?.().env ?? {};
     const redactionEnv = redaction?.prepare?.().env ?? {};
+    const roundtripEnv = roundtrip?.prepare?.().env ?? {};
     const home = dryArgs[dryArgs.indexOf("--home") + 1];
 
     expect(home).toBeDefined();
@@ -83,6 +88,9 @@ describe("release-readiness-check (JAC-169)", () => {
     expect(keychainEnv.CONFIG_PATH).toBe(`${home}/.codex-im-bridge/config.toml`);
     expect(redactionEnv.BRIDGE_HOME).toBe(home);
     expect(redactionEnv.BRIDGE_DAEMON).toBe(`${home}/.codex-im-bridge/app/daemon.mjs`);
+    expect(roundtripEnv.CODEX_IM_SMOKE_MIGRATIONS_DIR).toBe(
+      `${home}/.codex-im-bridge/app/migrations`,
+    );
   });
 
   it("treats Telegram live smokes as explicit default gates, not default live calls", () => {

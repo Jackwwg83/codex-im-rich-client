@@ -47,6 +47,7 @@ Commands:
 
 ```bash
 pnpm smoke:telegram-fake
+pnpm smoke:daemon-roundtrip
 TELEGRAM_LIVE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-live
 TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-real
 ```
@@ -54,6 +55,8 @@ TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:tel
 Passing criteria:
 
 - fake smoke passes;
+- daemon roundtrip covers IM controls plus approval callback resolution without
+  live services;
 - live adapter starts and stops cleanly;
 - real smoke completes one harmless Codex turn;
 - output does not print the bot token.

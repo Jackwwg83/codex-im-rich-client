@@ -105,6 +105,7 @@ export function buildReleaseReadinessSteps(
     loadAndRunDryRunStep(bridgeContext),
     bridgeRedactionScanStep(bridgeContext),
     sqliteBackupProofStep(),
+    daemonRoundtripSmokeStep(bridgeContext),
     step("smoke-telegram-fake", "Telegram fake smoke", "pnpm", ["smoke:telegram-fake"]),
     step("smoke-lark-fake", "Lark fake smoke", "pnpm", ["smoke:lark-fake"]),
     step("smoke-dingtalk-fake", "DingTalk fake smoke", "pnpm", ["smoke:dingtalk-fake"]),
@@ -452,6 +453,23 @@ function bridgeRedactionScanStep(context: BridgeReleaseContext): ReleaseReadines
         };
       },
       safeOutputPattern: /redaction scan ok/i,
+    },
+  );
+}
+
+function daemonRoundtripSmokeStep(context: BridgeReleaseContext): ReleaseReadinessStep {
+  return step(
+    "smoke-daemon-roundtrip",
+    "Daemon injected roundtrip smoke",
+    "pnpm",
+    ["smoke:daemon-roundtrip"],
+    {
+      prepare: () => ({
+        env: {
+          CODEX_IM_SMOKE_MIGRATIONS_DIR: context.migrationsDir,
+        },
+      }),
+      safeOutputPattern: /smoke:daemon-roundtrip ok/i,
     },
   );
 }

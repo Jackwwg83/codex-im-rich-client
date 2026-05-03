@@ -169,6 +169,7 @@ Safe unattended checks:
 
 ```bash
 pnpm release:check -- --skip-full-gates
+pnpm smoke:daemon-roundtrip
 pnpm smoke:telegram-fake
 pnpm smoke:lark-fake
 pnpm smoke:dingtalk-fake

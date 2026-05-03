@@ -37,6 +37,19 @@ This smoke proves the real Telegram adapter's normalized message shape can
 enter the daemon, pass policy, resolve a bound session, start a fake Codex
 thread, and start one fake turn.
 
+## `pnpm smoke:daemon-roundtrip` — CI-safe daemon control/approval smoke
+
+```bash
+pnpm smoke:daemon-roundtrip
+```
+
+Runs the real daemon orchestration with real SQLite migrations/repositories and
+the real Telegram adapter shape, but injects fake Telegram inbound and a fake
+CodexRuntime. It covers `/use`, `/new`, `/fork`, `/threads`, `/switch`, one
+prompt turn, `/stop`, approval-card rendering, callback token binding, and
+`ApprovalBroker.resolve()` callback flow. It does not require live Telegram,
+real Codex, Keychain, or a bot token.
+
 ## `pnpm smoke:telegram-live` — live Telegram adapter smoke (gated)
 
 ```bash

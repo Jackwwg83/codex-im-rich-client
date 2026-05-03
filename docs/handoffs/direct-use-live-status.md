@@ -2,14 +2,13 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 2 B8 in progress; `/fork` maps IM
-> control to Codex App Server `thread/fork` without adding an IM-only task
-> model.
+> **Last updated:** 2026-05-03 - Block 3 repeatable smoke in progress;
+> `smoke:daemon-roundtrip` now covers IM control flow plus approval callback
+> resolution without live services.
 
 ## 1. Current State
 
-- **Mode:** Block 2 IM command control plane closing; Block 3 repeatable smoke
-  is next.
+- **Mode:** Block 3 repeatable smoke layers in progress.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
@@ -17,7 +16,7 @@
 - **Baseline HEAD:** `a641159`.
 - **Linear:** create a new parent/milestone named
   `Direct Use Completion / Phase 8 - Production usability hardening`.
-- **Current implementation block:** Block 2 - IM command control plane.
+- **Current implementation block:** Block 3 - repeatable smoke layers.
 - **Completed in this effort:**
   - `3bcdcd0` - docs-only Direct Use / Phase 8 plan v2 and live-status anchor.
   - `15dfba6` - A1 launchd dry-run runtime verification.
@@ -32,9 +31,11 @@
   - `71d346d` - B5 `/switch <thread>` resume-before-bind flow.
   - `1479a37` - B6 `/alias <title>` local display metadata.
   - `9a7f9da` - B7 production daemon-run thread session repository wire-up.
-  - pending commit - B8 `/fork [thread]` Codex thread fork control.
-- **Next exact action:** finish B8 gates/commit, then start Block 3 repeatable
-  smoke layers.
+  - `b5d86c5` - B8 `/fork [thread]` Codex thread fork control.
+  - pending commit - C1 `smoke:daemon-roundtrip` non-live daemon control and
+    approval callback smoke.
+- **Next exact action:** finish C1 gates/commit, then add/clarify live
+  Telegram roundtrip wording and operator evidence.
 
 ## 2. Why This Exists
 
@@ -77,8 +78,8 @@ Required P0 plan edits:
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
-| Block 2 | IM command control plane | in progress: B8 `/fork` implemented, gates pending |
-| Block 3 | repeatable smoke layers | next after B8 |
+| Block 2 | IM command control plane | complete through B8 |
+| Block 3 | repeatable smoke layers | in progress: C1 daemon roundtrip implemented, gates green |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
 ## 5. Active Redlines
@@ -191,6 +192,18 @@ Latest B8 targeted gates:
 | `pnpm lint` | green: 326 files checked |
 | `pnpm protocol:check` | green |
 
+Latest C1 targeted gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/cli/test/daemon-roundtrip-smoke.test.ts scripts/release-readiness-check.test.mts` | green: 2 files, 10 passing |
+| `pnpm smoke:daemon-roundtrip` | green: `/use`, `/new`, `/fork`, `/threads`, `/switch`, prompt turn, `/stop`, approval card, callback resolve |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 328 files checked |
+| `pnpm test` | green: 146 files, 1319 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+| `pnpm release:check -- --skip-full-gates` | green; includes `smoke-daemon-roundtrip` with installed bridge migrations |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -214,7 +227,11 @@ Block 2:
 6. `feat(daemon): implement /switch with thread/resume-before-bind` (done)
 7. `feat(daemon): implement /alias` (done)
 8. `fix(cli): wire thread sessions into production daemon-run` (done)
-9. `feat(daemon): implement /fork with thread/fork semantics` (in progress)
+9. `feat(daemon): implement /fork with thread/fork semantics` (done)
+
+Block 3:
+
+1. `test(smoke): add daemon roundtrip control and approval smoke` (in progress)
 
 ## 8. Compact / Resume
 
