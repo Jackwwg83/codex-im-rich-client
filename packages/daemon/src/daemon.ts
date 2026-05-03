@@ -78,7 +78,10 @@ const DEFAULT_COMPUTER_USE_ALLOWED_TOOLS = Object.freeze([
 ] as const satisfies readonly ComputerUseAllowedTool[]);
 const EAGER_PRUNE_RATIO = 0.8;
 const MAX_IM_TEXT_CHARS = 3_800;
+const MAX_IM_TEXT_CHUNKS = 6;
+const MAX_IM_TEXT_BUFFER_CHARS = MAX_IM_TEXT_CHARS * MAX_IM_TEXT_CHUNKS;
 const MAX_IM_ITEM_SUMMARIES = 6;
+const PROGRESS_EDIT_INTERVAL_MS = 1_500;
 
 export interface DaemonBroker {
   attach(): void;
@@ -260,6 +263,7 @@ interface DaemonTurnOutputState {
   readonly turnId: string;
   readonly itemSummaries: string[];
   messageRef?: DaemonMessageRef;
+  lastProgressEditAtMs?: number;
   text: string;
 }
 
@@ -1435,7 +1439,8 @@ export class Daemon {
     if (event.type === "agent_message_delta") {
       const state = this.#turnOutputs.get(turnOutputKey(event.threadId, event.turnId));
       if (state !== undefined) {
-        state.text = truncateImText(`${state.text}${event.deltaText}`);
+        state.text = appendImText(state.text, event.deltaText);
+        await this.#maybeEditTurnProgress(state);
       }
       return;
     }
@@ -1469,7 +1474,7 @@ export class Daemon {
     }
     this.#turnOutputs.delete(key);
     this.#clearTerminalActiveTurn(state.target, event.threadId, event.turnId);
-    await this.#editTurnOutput(
+    await this.#publishTerminalTurnOutput(
       state,
       this.#terminalTurnOutputBody(event, state.text, state.itemSummaries),
     );
@@ -1515,19 +1520,83 @@ export class Daemon {
     }
   }
 
-  async #editTurnOutput(state: DaemonTurnOutputState, body: string): Promise<void> {
+  async #editTurnOutput(state: DaemonTurnOutputState, body: string): Promise<boolean> {
     if (state.messageRef === undefined || this.#adapter?.editText === undefined) {
-      return;
+      return false;
     }
     try {
       await this.#adapter.editText(state.messageRef, body);
+      return true;
     } catch (error) {
       this.#emitAuditEvent("runtime.turn_output_edit_failed", {
         target: state.target,
         result: "failed",
         metadata: { error: errorMessage(error), turnId: state.turnId },
       });
+      return false;
     }
+  }
+
+  async #publishTerminalTurnOutput(state: DaemonTurnOutputState, body: string): Promise<void> {
+    const chunks = splitImText(body);
+    const [firstChunk, ...continuationChunks] = chunks;
+    if (firstChunk !== undefined) {
+      const edited = await this.#editTurnOutput(state, firstChunk);
+      if (!edited && !(await this.#sendTurnOutputChunk(state, firstChunk))) {
+        return;
+      }
+    }
+    if (continuationChunks.length === 0 || this.#adapter?.sendText === undefined) {
+      return;
+    }
+    for (const chunk of continuationChunks) {
+      if (!(await this.#sendTurnOutputChunk(state, chunk))) {
+        return;
+      }
+    }
+  }
+
+  async #sendTurnOutputChunk(state: DaemonTurnOutputState, body: string): Promise<boolean> {
+    if (this.#adapter?.sendText === undefined) {
+      return false;
+    }
+    try {
+      await this.#adapter.sendText(state.target, body);
+      return true;
+    } catch (error) {
+      this.#emitAuditEvent("runtime.turn_output_send_failed", {
+        target: state.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), turnId: state.turnId },
+      });
+      return false;
+    }
+  }
+
+  async #maybeEditTurnProgress(state: DaemonTurnOutputState): Promise<void> {
+    if (state.text.length === 0) {
+      return;
+    }
+    const nowMs = (this.options.now?.() ?? new Date()).getTime();
+    if (
+      state.lastProgressEditAtMs !== undefined &&
+      nowMs - state.lastProgressEditAtMs < PROGRESS_EDIT_INTERVAL_MS
+    ) {
+      return;
+    }
+    state.lastProgressEditAtMs = nowMs;
+    await this.#editTurnOutput(state, this.#inProgressTurnOutputBody(state));
+  }
+
+  #inProgressTurnOutputBody(state: DaemonTurnOutputState): string {
+    if (state.itemSummaries.length === 0) {
+      return state.text.length === 0 ? "Codex is working..." : truncateImText(state.text);
+    }
+    return truncateImText(
+      `${state.text.length === 0 ? "Codex is working..." : state.text}\n\nCodex items:\n${state.itemSummaries
+        .map((summary) => `- ${summary}`)
+        .join("\n")}`,
+    );
   }
 
   #terminalTurnOutputBody(
@@ -2446,7 +2515,7 @@ export class Daemon {
       return;
     }
     this.#turnOutputs.delete(key);
-    await this.#editTurnOutput(
+    await this.#publishTerminalTurnOutput(
       state,
       this.#terminalTurnOutputBody(
         { type: "turn_interrupted", threadId, turnId, raw: {}, terminal: true },
@@ -3004,6 +3073,36 @@ function truncateImText(text: string): string {
   return `${text.slice(0, MAX_IM_TEXT_CHARS - 24)}\n\n[truncated for IM]`;
 }
 
+function appendImText(base: string, delta: string): string {
+  const next = `${base}${delta}`;
+  if (next.length <= MAX_IM_TEXT_BUFFER_CHARS) {
+    return next;
+  }
+  return `${next.slice(0, MAX_IM_TEXT_BUFFER_CHARS - 24)}\n\n[truncated for IM]`;
+}
+
+function splitImText(text: string): readonly string[] {
+  if (text.length <= MAX_IM_TEXT_CHARS) {
+    return [text];
+  }
+  const chunks: string[] = [];
+  let offset = 0;
+  while (offset < text.length && chunks.length < MAX_IM_TEXT_CHUNKS) {
+    const prefix = chunks.length === 0 ? "" : "[continued]\n";
+    const limit = MAX_IM_TEXT_CHARS - prefix.length;
+    const lastAllowedChunk = chunks.length === MAX_IM_TEXT_CHUNKS - 1;
+    let chunk = text.slice(offset, offset + limit);
+    offset += chunk.length;
+    if (lastAllowedChunk && offset < text.length) {
+      const marker = "\n\n[truncated for IM]";
+      chunk = `${chunk.slice(0, Math.max(0, limit - marker.length))}${marker}`;
+      offset = text.length;
+    }
+    chunks.push(`${prefix}${chunk}`);
+  }
+  return chunks.length === 0 ? [""] : chunks;
+}
+
 function readStringField(value: unknown, key: string): string | undefined {
   if (typeof value !== "object" || value === null) {
     return undefined;
@@ -3028,7 +3127,7 @@ function summarizeCodexItem(raw: unknown): string | undefined {
   }
 
   const status = readStringField(item, "status");
-  const detail = summarizeItemChanges(item);
+  const detail = summarizeItemDetail(item, type);
   const summary = [type, status].filter((part): part is string => part !== undefined).join(" ");
   return truncateItemSummary(detail === undefined ? summary : `${summary}: ${detail}`);
 }
@@ -3059,6 +3158,79 @@ function summarizeItemChanges(item: Record<string, unknown>): string | undefined
   }
   const suffix = changes.length > paths.length ? ` +${changes.length - paths.length} more` : "";
   return `${paths.join(", ")}${suffix}`;
+}
+
+function summarizeItemDetail(item: Record<string, unknown>, type: string): string | undefined {
+  if (type === "fileChange") {
+    return summarizeItemChanges(item);
+  }
+  if (type === "commandExecution") {
+    return summarizeCommandExecutionItem(item);
+  }
+  if (type === "mcpToolCall") {
+    return summarizeNamedToolItem(item, "server");
+  }
+  if (type === "dynamicToolCall") {
+    return summarizeNamedToolItem(item, "namespace");
+  }
+  if (type === "collabAgentToolCall") {
+    return readStringField(item, "tool");
+  }
+  if (type === "webSearch") {
+    const query = readStringField(item, "query");
+    return query === undefined ? undefined : redact(query);
+  }
+  if (type === "imageView") {
+    return readStringField(item, "path");
+  }
+  if (type === "imageGeneration") {
+    return readStringField(item, "savedPath") ?? readStringField(item, "result");
+  }
+  if (type === "plan") {
+    const text = readStringField(item, "text");
+    return text === undefined ? undefined : redact(text.replace(/\s+/g, " ").trim());
+  }
+  return undefined;
+}
+
+function summarizeCommandExecutionItem(item: Record<string, unknown>): string | undefined {
+  const command = readStringField(item, "command");
+  const exitCode = readNumberField(item, "exitCode");
+  const durationMs = readNumberField(item, "durationMs");
+  const parts: string[] = [];
+  if (command !== undefined) {
+    parts.push(redact(command));
+  }
+  if (exitCode !== undefined) {
+    parts.push(`exit ${exitCode}`);
+  }
+  if (durationMs !== undefined) {
+    parts.push(`${durationMs}ms`);
+  }
+  return parts.length === 0 ? undefined : parts.join("; ");
+}
+
+function summarizeNamedToolItem(
+  item: Record<string, unknown>,
+  namespaceKey: string,
+): string | undefined {
+  const namespace = readStringField(item, namespaceKey);
+  const tool = readStringField(item, "tool");
+  if (namespace === undefined) {
+    return tool;
+  }
+  if (tool === undefined) {
+    return namespace;
+  }
+  return `${namespace}.${tool}`;
+}
+
+function readNumberField(value: unknown, key: string): number | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "number" && Number.isFinite(field) ? field : undefined;
 }
 
 function truncateItemSummary(summary: string): string {

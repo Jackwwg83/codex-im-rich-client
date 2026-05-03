@@ -135,7 +135,7 @@ describe("smoke:telegram-live-roundtrip", () => {
       observedUserId: "42",
       turnStarts: 1,
       sentMessages: 1,
-      finalEdits: 1,
+      finalEdits: 2,
     });
     expect(bot.sentMessages.map((message) => message.text)).toContain("Codex is working...");
     expect(bot.editedMessages.map((message) => message.text)).toContain(

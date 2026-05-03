@@ -3,8 +3,8 @@
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
 > **Last updated:** 2026-05-03 - Block 4 production acceptance prep in
-> progress; C6 maps Telegram `/start` to the existing Codex IM help command for
-> first-contact usability.
+> progress; C7 improves Telegram turn output with progress edits, chunked long
+> output, and native Codex item summaries for development/tool-call work.
 
 ## 1. Current State
 
@@ -41,7 +41,9 @@
   - `0e0c016` - C4 IM terminal output appends concise non-chat Codex item
     summaries.
   - `dfe732c` - C5 read-only `launchd:status` evidence command.
-  - latest commit - C6 Telegram `/start` bootstrap maps to existing help.
+  - `92c5c5e` - C6 Telegram `/start` bootstrap maps to existing help.
+  - latest commit - C7 Telegram turn output streams progress, chunks long
+    output, and summarizes native Codex development/tool-call items.
 - **Next exact action:** run live roundtrip with Telegram Web when an
   operator/browser driver can send the nonce prompt; launchd install/soak
   remains operator-gated.
@@ -89,7 +91,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4; live roundtrip command ready, real browser-driver send still pending |
-| Block 4 | real production acceptance + 24h soak | in progress: Telegram bootstrap help implemented, gates green |
+| Block 4 | real production acceptance + 24h soak | in progress: Telegram bootstrap help and richer Codex turn output implemented, gates green |
 
 ## 5. Active Redlines
 
@@ -268,6 +270,17 @@ Latest C6 gates:
 | `pnpm test` | green: 148 files, 1331 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 
+Latest C7 gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/daemon/test/turn-output.test.ts packages/cli/test/telegram-live-roundtrip-smoke.test.ts` | green: 2 files, 11 passing |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 332 files checked |
+| `pnpm test` | green: 148 files, 1333 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+| `pnpm release:check -- --skip-full-gates` | green; includes bridge install chain, daemon roundtrip, fake IM smokes, and default live gates |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -304,6 +317,7 @@ Block 4:
 
 1. `chore(launchd): add read-only launchd status evidence command` (done)
 2. `fix(telegram): map /start to help` (done)
+3. `feat(daemon): stream and chunk Codex turn output for IM` (done)
 
 ## 8. Compact / Resume
 

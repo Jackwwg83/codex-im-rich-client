@@ -184,9 +184,14 @@ describe("daemon turn output projection", () => {
       terminal: true,
     });
 
-    await waitFor(() => editText.mock.calls.length === 1);
+    await waitFor(() => editText.mock.calls.length >= 2);
     expect(sendText).toHaveBeenCalledWith(TARGET, "Codex is working...");
-    expect(editText).toHaveBeenCalledWith({ target: TARGET, messageId: "bot-output-1" }, "OK");
+    expect(editText).toHaveBeenNthCalledWith(
+      1,
+      { target: TARGET, messageId: "bot-output-1" },
+      "OK",
+    );
+    expect(editText).toHaveBeenLastCalledWith({ target: TARGET, messageId: "bot-output-1" }, "OK");
     expect(route.activeTurnId).toBeUndefined();
 
     await daemon.stop();
@@ -289,11 +294,249 @@ describe("daemon turn output projection", () => {
       terminal: true,
     });
 
-    await waitFor(() => editText.mock.calls.length === 1);
-    expect(editText).toHaveBeenCalledWith(
+    await waitFor(() => editText.mock.calls.length >= 2);
+    expect(editText).toHaveBeenLastCalledWith(
       { target: TARGET, messageId: "bot-output-1" },
       "done\n\nCodex items:\n- fileChange declined: <CWD>/hello.txt",
     );
+
+    await daemon.stop();
+  });
+
+  it("summarizes native development and tool-call Codex items in terminal IM output", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    let route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+        bind: (target: Target, input: SessionBindingInput) => {
+          route = { kind: "bound", target, ...input };
+          return route;
+        },
+        bindThread: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Use tools",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-command",
+      raw: {
+        params: {
+          item: {
+            type: "commandExecution",
+            status: "completed",
+            command: "pnpm test",
+            exitCode: 0,
+            durationMs: 120,
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-mcp",
+      raw: {
+        params: {
+          item: {
+            type: "mcpToolCall",
+            status: "completed",
+            server: "github",
+            tool: "createPullRequest",
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-dynamic",
+      raw: {
+        params: {
+          item: {
+            type: "dynamicToolCall",
+            status: "completed",
+            namespace: "browser-use",
+            tool: "open",
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-agent",
+      deltaText: "done",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length >= 2);
+    expect(editText).toHaveBeenLastCalledWith(
+      { target: TARGET, messageId: "bot-output-1" },
+      [
+        "done",
+        "",
+        "Codex items:",
+        "- commandExecution completed: pnpm test; exit 0; 120ms",
+        "- mcpToolCall completed: github.createPullRequest",
+        "- dynamicToolCall completed: browser-use.open",
+      ].join("\n"),
+    );
+
+    await daemon.stop();
+  });
+
+  it("splits long terminal Codex output into continuation IM messages", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: `bot-output-${sendText.mock.calls.length + 1}`,
+    }));
+    const editText = vi.fn(async () => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    let route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+        bind: (target: Target, input: SessionBindingInput) => {
+          route = { kind: "bound", target, ...input };
+          return route;
+        },
+        bindThread: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Write a long answer",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    const longText = "0123456789\n".repeat(450);
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-agent",
+      deltaText: longText,
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => sendText.mock.calls.length >= 2);
+    const [, continuationBody] = sendText.mock.calls[1] as [Target, string];
+    expect(continuationBody).toMatch(/^\[continued\]\n/);
+    expect(continuationBody).not.toContain("[truncated for IM]");
 
     await daemon.stop();
   });
