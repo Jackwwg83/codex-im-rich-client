@@ -12,7 +12,11 @@
 
 export { Daemon } from "./daemon.js";
 export { createDaemonLogger, planDaemonLogger } from "./logger.js";
-export { writeDaemonStatusSnapshot } from "./status.js";
+export {
+  planDaemonWebStatusConsole,
+  renderDaemonWebStatusView,
+  writeDaemonStatusSnapshot,
+} from "./status.js";
 export type {
   DaemonActionAck,
   DaemonAdapter,
@@ -47,6 +51,10 @@ export type {
   DaemonStatusFatal,
   DaemonStatusSnapshot,
   DaemonStatusSnapshotIo,
+  DaemonWebStatusConsoleOptions,
+  DaemonWebStatusConsolePlan,
+  DaemonWebStatusView,
+  DaemonWebStatusViewOptions,
 } from "./status.js";
 export { Supervisor } from "./supervisor.js";
 export type { SupervisorAudit, SupervisorOptions } from "./types.js";

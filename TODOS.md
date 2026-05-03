@@ -291,7 +291,7 @@ Live status: `docs/handoffs/phase7-live-status.md`. Phase 6 -> Phase 7 handoff:
 - [x] **JAC-102 / T2** — Satori/Koishi feasibility spike; no production adapter or live server. Verdict: `spike-only`; no `im-satori` package in the autonomous Phase 7 loop.
 - [x] **JAC-103 / T3** — Vercel Chat SDK feasibility spike; adapter layer only, never Codex core. Verdict: `spike-only`; no Chat SDK runtime integration in the autonomous Phase 7 loop.
 - [x] **JAC-105 / T4** — fallback renderer, gated by matrix/spikes. Implemented non-actionable low-capability approval fallback in render; no raw approval ids, callback tokens, or slash-command decision hints.
-- [ ] **JAC-106 / T5** — local read-only web console status, no public listener or mutation. Current next issue.
-- [ ] **JAC-109 / T6** — team/operator model before shared approval UI or handoff.
+- [x] **JAC-106 / T5** — local read-only web console status, no public listener or mutation. Implemented pure loopback-only bind plan + read-only status HTML view in daemon; no listener, secrets, or mutation controls.
+- [ ] **JAC-109 / T6** — team/operator model before shared approval UI or handoff. Current next issue.
 - [ ] **JAC-107 / T7** — web console approval UI, gated by team/operator policy.
 - [ ] **JAC-108 / T8** — multi-channel session handoff, gated by policy-bound target transition.
