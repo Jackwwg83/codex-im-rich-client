@@ -103,6 +103,8 @@ export type {
   ComputerUsePolicySnapshot,
   ComputerUseUnknownAppPolicy,
 } from "./computer-use-policy.js";
+export { wrapComputerUsePrompt } from "./computer-use-prompt.js";
+export type { ComputerUsePromptEnvelope, ComputerUseStartIntent } from "./computer-use-prompt.js";
 
 // Phase 3 T13 — platform-neutral session routing between an IM target,
 // project config, and the persistent Codex thread binding. Storage is
