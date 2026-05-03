@@ -13,6 +13,10 @@ pnpm release:check
 The default command runs CI-equivalent gates first, then local operational
 dry-runs. It must not write Keychain entries, call `launchctl load/unload`, make
 live external IM calls, trigger real Codex turns, or execute real Computer Use.
+Default live-smoke probes are environment-hermetic: the preflight clears live
+gate, credential selector, token, and dry-run variables before checking that
+Telegram fails at its operator gate and Lark/DingTalk/Computer Use report
+`status=skip` with `gate=disabled`.
 
 For a faster operational dry-run after the full gates have already passed:
 
@@ -34,6 +38,8 @@ pnpm release:check -- --skip-full-gates
 - Live Telegram/real Telegram commands fail at their explicit operator gate by
   default without making a network call.
 - Lark/DingTalk/Computer Use live harnesses default-skip without credentials.
+- Ambient live-smoke environment variables cannot turn default checks into live
+  behavior.
 - Command output does not contain token-shaped material.
 
 ## Forbidden By Default

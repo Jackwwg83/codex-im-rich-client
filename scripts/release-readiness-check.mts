@@ -12,6 +12,7 @@ export interface ReleaseReadinessStep {
   readonly args: readonly string[];
   readonly expectedExitCodes: readonly number[];
   readonly env?: Record<string, string | undefined>;
+  readonly unsetEnv?: readonly string[];
   readonly safeOutputPattern?: RegExp;
 }
 
@@ -39,6 +40,33 @@ const TOKEN_SHAPED_RE = /\b\d{5,}:[A-Za-z0-9_-]{20,}\b/;
 const GENERIC_SECRET_RE =
   /\b(?:ghp_[A-Za-z0-9_]{20,}|xox[abdprs]-[A-Za-z0-9-]{10,}|sk-(?!ip\b)[A-Za-z0-9_-]{20,}|Authorization:\s*Bearer\s+\S+)/i;
 const FAKE_KEYCHAIN_TOKEN = "fake-keychain-token-value";
+const DEFAULT_LIVE_SMOKE_UNSET_ENV = [
+  "TELEGRAM_LIVE",
+  "TELEGRAM_LIVE_DURATION_MS",
+  "IM_TELEGRAM_BOT_TOKEN",
+  "CODEX_REAL_SMOKE",
+  "CODEX_REAL_SMOKE_PROMPT",
+  "LARK_LIVE",
+  "LARK_LIVE_DRY_RUN",
+  "LARK_APP_ID",
+  "LARK_APP_SECRET_ENV",
+  "LARK_APP_SECRET",
+  "LARK_TARGET_CHAT_ID",
+  "LARK_LIVE_TEXT",
+  "LARK_DOMAIN",
+  "DINGTALK_LIVE",
+  "DINGTALK_LIVE_DRY_RUN",
+  "DINGTALK_CLIENT_ID",
+  "DINGTALK_CLIENT_SECRET_ENV",
+  "DINGTALK_CLIENT_SECRET",
+  "DINGTALK_LIVE_DURATION_MS",
+  "COMPUTER_USE_LIVE",
+  "COMPUTER_USE_PROVIDER_VERIFIED",
+  "COMPUTER_USE_LIVE_DRY_RUN",
+  "COMPUTER_USE_LIVE_APP",
+  "COMPUTER_USE_LIVE_TASK",
+] as const;
+const DEFAULT_SKIP_PATTERN = /"status":\s*"skip"[\s\S]*"gate":\s*"disabled"[\s\S]*SKIP/i;
 
 const FULL_GATE_STEPS: readonly ReleaseReadinessStep[] = [
   step("check-codex-version", "Check Codex version pin", "pnpm", ["check:codex-version"]),
@@ -75,24 +103,53 @@ export function buildReleaseReadinessSteps(
       "Telegram live smoke default gate",
       "pnpm",
       ["smoke:telegram-live"],
-      { expectedExitCodes: [1], safeOutputPattern: /operator-gated/i },
+      {
+        expectedExitCodes: [1],
+        unsetEnv: DEFAULT_LIVE_SMOKE_UNSET_ENV,
+        safeOutputPattern: /operator-gated/i,
+      },
     ),
     step(
       "smoke-telegram-real-default-gate",
       "Telegram real smoke default gate",
       "pnpm",
       ["smoke:telegram-real"],
-      { expectedExitCodes: [1], safeOutputPattern: /operator-gated/i },
+      {
+        expectedExitCodes: [1],
+        unsetEnv: DEFAULT_LIVE_SMOKE_UNSET_ENV,
+        safeOutputPattern: /operator-gated/i,
+      },
     ),
-    step("smoke-lark-live-default-skip", "Lark live smoke default skip", "pnpm", [
-      "smoke:lark-live",
-    ]),
-    step("smoke-dingtalk-live-default-skip", "DingTalk live smoke default skip", "pnpm", [
-      "smoke:dingtalk-live",
-    ]),
-    step("smoke-computer-use-default-skip", "Computer Use live smoke default skip", "pnpm", [
-      "smoke:computer-use-live",
-    ]),
+    step(
+      "smoke-lark-live-default-skip",
+      "Lark live smoke default skip",
+      "pnpm",
+      ["smoke:lark-live"],
+      {
+        unsetEnv: DEFAULT_LIVE_SMOKE_UNSET_ENV,
+        safeOutputPattern: DEFAULT_SKIP_PATTERN,
+      },
+    ),
+    step(
+      "smoke-dingtalk-live-default-skip",
+      "DingTalk live smoke default skip",
+      "pnpm",
+      ["smoke:dingtalk-live"],
+      {
+        unsetEnv: DEFAULT_LIVE_SMOKE_UNSET_ENV,
+        safeOutputPattern: DEFAULT_SKIP_PATTERN,
+      },
+    ),
+    step(
+      "smoke-computer-use-default-skip",
+      "Computer Use live smoke default skip",
+      "pnpm",
+      ["smoke:computer-use-live"],
+      {
+        unsetEnv: DEFAULT_LIVE_SMOKE_UNSET_ENV,
+        safeOutputPattern: DEFAULT_SKIP_PATTERN,
+      },
+    ),
   ];
 }
 
@@ -128,10 +185,7 @@ export function runReleaseReadinessCheck(
 function runStep(stepDef: ReleaseReadinessStep): ReleaseReadinessStepResult {
   const result = spawnSync(stepDef.command, stepDef.args, {
     cwd: process.cwd(),
-    env: {
-      ...process.env,
-      ...stepDef.env,
-    },
+    env: buildStepEnv(stepDef),
     encoding: "utf8",
   });
   const exitCode = result.status ?? 1;
@@ -157,6 +211,24 @@ function runStep(stepDef: ReleaseReadinessStep): ReleaseReadinessStepResult {
   };
 }
 
+export function buildStepEnv(
+  stepDef: Pick<ReleaseReadinessStep, "env" | "unsetEnv">,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...baseEnv };
+  for (const name of stepDef.unsetEnv ?? []) {
+    delete env[name];
+  }
+  for (const [name, value] of Object.entries(stepDef.env ?? {})) {
+    if (value === undefined) {
+      delete env[name];
+    } else {
+      env[name] = value;
+    }
+  }
+  return env;
+}
+
 function formatStepResult(result: ReleaseReadinessStepResult): string {
   const status = result.ok ? "PASS" : "FAIL";
   return `[release-readiness] ${status} ${result.id}: ${result.command} (exit ${result.exitCode})\n`;
@@ -170,6 +242,7 @@ function step(
   options: {
     readonly expectedExitCodes?: readonly number[];
     readonly env?: Record<string, string | undefined>;
+    readonly unsetEnv?: readonly string[];
     readonly safeOutputPattern?: RegExp;
   } = {},
 ): ReleaseReadinessStep {
@@ -180,6 +253,7 @@ function step(
     args,
     expectedExitCodes: options.expectedExitCodes ?? [0],
     ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.unsetEnv === undefined ? {} : { unsetEnv: options.unsetEnv }),
     ...(options.safeOutputPattern === undefined
       ? {}
       : { safeOutputPattern: options.safeOutputPattern }),
