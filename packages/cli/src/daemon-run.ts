@@ -31,6 +31,7 @@ import {
   type CallbackTokenRecord,
   CallbackTokenRepository,
   type DatabaseHandle,
+  ThreadSessionRepository,
   openDatabase,
   runMigrations,
 } from "@codex-im/storage-sqlite";
@@ -48,6 +49,7 @@ interface RuntimeStorage {
   readonly bindings: BindingRepository;
   readonly audit: AuditRepository;
   readonly callbackTokens: CallbackTokenRepository;
+  readonly threadSessions: ThreadSessionRepository;
   close(): void;
 }
 
@@ -143,6 +145,19 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
       insertBestEffort: (input) =>
         asRuntimeStorage(storageBox.current).audit.insertBestEffort(input),
     },
+    threadSessionRepository: {
+      upsert: (input) => asRuntimeStorage(storageBox.current).threadSessions.upsert(input),
+      listForTarget: (target, options) =>
+        asRuntimeStorage(storageBox.current).threadSessions.listForTarget(target, options),
+      findByTargetAndThread: (target, threadId) =>
+        asRuntimeStorage(storageBox.current).threadSessions.findByTargetAndThread(target, threadId),
+      touch: (target, threadId, now) =>
+        asRuntimeStorage(storageBox.current).threadSessions.touch(target, threadId, now),
+      rename: (target, threadId, title, now) =>
+        asRuntimeStorage(storageBox.current).threadSessions.rename(target, threadId, title, now),
+      switchCurrent: (input) =>
+        asRuntimeStorage(storageBox.current).threadSessions.switchCurrent(input),
+    },
     renderResolvedApprovalCard: renderResolvedCallbackApprovalCard,
     statusPath: flags.statusPath ?? join(config.daemon.dataDir, "daemon-status.json"),
   });
@@ -201,6 +216,7 @@ function openRuntimeStorage(config: CodexImConfig, migrationsDir: string): Runti
     bindings,
     audit: new AuditRepository(db),
     callbackTokens: new CallbackTokenRepository(db),
+    threadSessions: new ThreadSessionRepository(db),
     close: () => db.close(),
   };
 }

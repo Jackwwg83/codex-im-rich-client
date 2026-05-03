@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DAEMON_CODEX_CONFIG_OVERRIDES,
@@ -36,5 +38,13 @@ describe("daemon run safety rails", () => {
       status: "resolved",
       createdAt: new Date("2026-05-03T11:28:37.158Z"),
     });
+  });
+
+  it("wires durable thread sessions into the production daemon", () => {
+    const source = readFileSync(join(import.meta.dirname, "../src/daemon-run.ts"), "utf8");
+
+    expect(source).toContain("new ThreadSessionRepository(db)");
+    expect(source).toContain("threadSessionRepository");
+    expect(source).toContain("switchCurrent");
   });
 });
