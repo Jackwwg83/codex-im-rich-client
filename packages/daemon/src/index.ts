@@ -17,6 +17,7 @@ export {
   renderDaemonWebStatusView,
   writeDaemonStatusSnapshot,
 } from "./status.js";
+export { resolveWebApprovalDecision } from "./web-approval.js";
 export type {
   DaemonActionAck,
   DaemonAdapter,
@@ -56,5 +57,11 @@ export type {
   DaemonWebStatusView,
   DaemonWebStatusViewOptions,
 } from "./status.js";
+export type {
+  WebApprovalDecisionBroker,
+  WebApprovalDecisionDenyReason,
+  WebApprovalDecisionInput,
+  WebApprovalDecisionResult,
+} from "./web-approval.js";
 export { Supervisor } from "./supervisor.js";
 export type { SupervisorAudit, SupervisorOptions } from "./types.js";
