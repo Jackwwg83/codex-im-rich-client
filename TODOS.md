@@ -297,3 +297,16 @@ Live status: `docs/handoffs/phase7-live-status.md`. Phase 6 -> Phase 7 handoff:
 - [x] **JAC-107 / T7** — web console approval UI, gated by team/operator policy. Implemented injected daemon helper that only calls broker resolve after operator policy and messageRef/target proof pass.
 - [x] **JAC-108 / T8** — multi-channel session handoff, gated by policy-bound target transition. Implemented pure core handoff helper that requires source and destination policy allow and writes only through `SessionRouter.bind()`.
 - [x] **JAC-165 / T9** — Phase 7 review, handoff, and tag gate. Final implementation review returned APPROVE_WITH_CHANGES; `6269d99` closed the P1/P2/P3 findings; follow-up review returned GO_WITH_LOW_NITS; release tag `phase-7-extended-platforms-web-console-complete` closes the phase.
+
+## Release readiness progress (active, 2026-05-03)
+
+Active branch: `codex/release-readiness`. Plan-of-record:
+`docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
+Live status: `docs/handoffs/release-readiness-live-status.md`.
+Linear parent: JAC-166.
+
+- [x] **JAC-167 / RR T0** — release readiness plan and live status.
+- [ ] **JAC-168 / RR T1** — GitHub Actions CI for mandatory non-live gates. Current next issue.
+- [ ] **JAC-169 / RR T2** — production ops preflight command.
+- [ ] **JAC-170 / RR T3** — operator launch checklist and rollback runbook.
+- [ ] **JAC-171 / RR T4** — final release readiness review, tag, and handoff.

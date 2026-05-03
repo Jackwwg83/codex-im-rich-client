@@ -21,6 +21,8 @@
 
 **Phase 7 状态**：✅ 完成（2026-05-03）。Extended platforms / web console slice 已通过 JAC-165 review/handoff/tag gate；Satori/Koishi 与 Chat SDK 保持 spike-only，fallback renderer、loopback-only read-only web status、team/operator policy、web approval decision gate、multi-channel session handoff 均已落地。**Phase 7 closeout：[`docs/handoffs/phase7-live-status.md`](docs/handoffs/phase7-live-status.md)，Phase 7 → future 交接见 [`docs/handoffs/2026-05-03-phase7-to-future.md`](docs/handoffs/2026-05-03-phase7-to-future.md)。**
 
+**Release Readiness 状态**：🟡 进行中（2026-05-03）。目标是把 Phase 7 完成态提升到 Mac mini 上线运行标准：CI、release preflight、launchd/Keychain dry-run、smoke matrix、rollback 和最终 review/tag。SOT：[`docs/handoffs/release-readiness-live-status.md`](docs/handoffs/release-readiness-live-status.md)，计划：[`docs/superpowers/plans/2026-05-03-release-readiness-plan.md`](docs/superpowers/plans/2026-05-03-release-readiness-plan.md)。
+
 **Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
 - `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
 - `@codex-im/channel-core` — closed `ChannelAdapter` 接口 (D14) + `TelegramShapeFakeChannelAdapter` (callback_data ≤62B + 60s answerCallbackQuery deadline + parse_mode unsupported, all cited from Telegram Bot API)
