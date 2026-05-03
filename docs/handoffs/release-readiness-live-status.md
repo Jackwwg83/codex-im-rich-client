@@ -2,8 +2,8 @@
 
 > Single source of truth while bringing Codex IM Rich Client from Phase 7
 > complete to上线运行标准.
-> **Last updated:** 2026-05-03 - JAC-167 plan/live-status complete; JAC-168
-> CI is next.
+> **Last updated:** 2026-05-03 - JAC-168 CI workflow added; JAC-169 production
+> ops preflight command is next.
 
 ---
 
@@ -13,12 +13,11 @@
 - **Plan:** `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
 - **Linear project:** Codex IM Rich Client Release Readiness.
 - **Parent Linear issue:** JAC-166 - Release readiness parent -上线运行标准.
-- **Current Linear issue:** JAC-168 - RR T1 GitHub Actions CI for mandatory gates.
+- **Current Linear issue:** JAC-169 - RR T2 production ops preflight command.
 - **Branch:** `codex/release-readiness`.
 - **Base tag:** `phase-7-extended-platforms-web-console-complete`.
 - **Version:** `0.1.0-phase7`.
-- **Next exact action:** implement `.github/workflows/ci.yml` for mandatory
-  non-live gates.
+- **Next exact action:** implement local release-readiness preflight command.
 
 ## 2. Production Readiness Target
 
@@ -48,8 +47,8 @@
 |---|---|---|
 | JAC-166 | release readiness parent | in progress |
 | JAC-167 | plan + live status | complete |
-| JAC-168 | GitHub Actions CI | current |
-| JAC-169 | production ops preflight command | todo |
+| JAC-168 | GitHub Actions CI | complete |
+| JAC-169 | production ops preflight command | current |
 | JAC-170 | operator launch checklist + rollback runbook | todo |
 | JAC-171 | final review, handoff, tag | todo |
 
@@ -74,6 +73,14 @@ Latest JAC-167 docs gate:
 |---|---|
 | `pnpm lint` | green: 308 files checked |
 | `git diff --check` | green |
+
+Latest JAC-168 CI gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm lint` | green: 308 files checked |
+| `git diff --check` | green |
+| CI content review | `.github/workflows/ci.yml` uses Node 24, pnpm 10.33.2, pinned `@openai/codex@0.128.0`, and non-live gates only |
 
 ## 6. Compact / Resume
 

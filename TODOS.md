@@ -306,7 +306,7 @@ Live status: `docs/handoffs/release-readiness-live-status.md`.
 Linear parent: JAC-166.
 
 - [x] **JAC-167 / RR T0** — release readiness plan and live status.
-- [ ] **JAC-168 / RR T1** — GitHub Actions CI for mandatory non-live gates. Current next issue.
-- [ ] **JAC-169 / RR T2** — production ops preflight command.
+- [x] **JAC-168 / RR T1** — GitHub Actions CI for mandatory non-live gates.
+- [ ] **JAC-169 / RR T2** — production ops preflight command. Current next issue.
 - [ ] **JAC-170 / RR T3** — operator launch checklist and rollback runbook.
 - [ ] **JAC-171 / RR T4** — final release readiness review, tag, and handoff.

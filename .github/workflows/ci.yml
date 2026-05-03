@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+      - "phase-**"
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: Non-live release gates
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install pinned Codex CLI
+        run: npm install --global @openai/codex@0.128.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Codex version pin
+        run: pnpm check:codex-version
+
+      - name: Typecheck source
+        run: pnpm typecheck
+
+      - name: Typecheck tests
+        run: pnpm typecheck:tests
+
+      - name: Unit and contract tests
+        run: pnpm test
+
+      - name: CLI smoke tests
+        run: pnpm test:cli-smoke
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Protocol generation check
+        run: pnpm protocol:check
+
+      - name: Verify captured fixtures
+        run: pnpm exec tsx scripts/verify-phase1-fixtures.mts
