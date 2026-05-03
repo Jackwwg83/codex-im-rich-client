@@ -14,6 +14,14 @@ export interface ReleaseReadinessStep {
   readonly env?: Record<string, string | undefined>;
   readonly unsetEnv?: readonly string[];
   readonly safeOutputPattern?: RegExp;
+  readonly prepare?: () => ReleaseReadinessStepPrepared;
+}
+
+export interface ReleaseReadinessStepPrepared {
+  readonly command?: string;
+  readonly args?: readonly string[];
+  readonly env?: Record<string, string | undefined>;
+  readonly unsetEnv?: readonly string[];
 }
 
 export interface ReleaseReadinessOptions {
@@ -183,9 +191,24 @@ export function runReleaseReadinessCheck(
 }
 
 function runStep(stepDef: ReleaseReadinessStep): ReleaseReadinessStepResult {
-  const result = spawnSync(stepDef.command, stepDef.args, {
+  let effectiveStep: ReleaseReadinessStep;
+  try {
+    effectiveStep = prepareStep(stepDef);
+  } catch (error) {
+    const stderr = error instanceof Error ? error.message : String(error);
+    return {
+      id: stepDef.id,
+      title: stepDef.title,
+      command: [stepDef.command, ...stepDef.args].join(" "),
+      exitCode: 1,
+      ok: false,
+      stdout: "",
+      stderr,
+    };
+  }
+  const result = spawnSync(effectiveStep.command, effectiveStep.args, {
     cwd: process.cwd(),
-    env: buildStepEnv(stepDef),
+    env: buildStepEnv(effectiveStep),
     encoding: "utf8",
   });
   const exitCode = result.status ?? 1;
@@ -203,11 +226,25 @@ function runStep(stepDef: ReleaseReadinessStep): ReleaseReadinessStepResult {
   return {
     id: stepDef.id,
     title: stepDef.title,
-    command: [stepDef.command, ...stepDef.args].join(" "),
+    command: [effectiveStep.command, ...effectiveStep.args].join(" "),
     exitCode,
     ok,
     stdout,
     stderr,
+  };
+}
+
+function prepareStep(stepDef: ReleaseReadinessStep): ReleaseReadinessStep {
+  const prepared = stepDef.prepare?.();
+  if (prepared === undefined) {
+    return stepDef;
+  }
+  return {
+    ...stepDef,
+    command: prepared.command ?? stepDef.command,
+    args: prepared.args ?? stepDef.args,
+    env: { ...(stepDef.env ?? {}), ...(prepared.env ?? {}) },
+    unsetEnv: [...(stepDef.unsetEnv ?? []), ...(prepared.unsetEnv ?? [])],
   };
 }
 
@@ -244,6 +281,7 @@ function step(
     readonly env?: Record<string, string | undefined>;
     readonly unsetEnv?: readonly string[];
     readonly safeOutputPattern?: RegExp;
+    readonly prepare?: () => ReleaseReadinessStepPrepared;
   } = {},
 ): ReleaseReadinessStep {
   return {
@@ -257,71 +295,70 @@ function step(
     ...(options.safeOutputPattern === undefined
       ? {}
       : { safeOutputPattern: options.safeOutputPattern }),
+    ...(options.prepare === undefined ? {} : { prepare: options.prepare }),
   };
 }
 
 function loadAndRunDryRunStep(): ReleaseReadinessStep {
-  const shimDir = mkdtempSync(join(tmpdir(), "codex-im-release-security-"));
-  writeFileSync(
-    join(shimDir, "security"),
-    ["#!/usr/bin/env bash", 'printf "%s" "$FAKE_SECURITY_TOKEN"'].join("\n"),
-    { mode: 0o700 },
-  );
   return step(
     "load-and-run-dry-run",
     "Keychain wrapper dry-run",
     "bash",
     ["bin/load-and-run.sh", "--dry-run"],
     {
-      env: {
-        PATH: `${shimDir}${delimiter}${process.env.PATH ?? ""}`,
-        USER: process.env.USER ?? "codex",
-        NODE_BIN: process.execPath,
-        DAEMON_ENTRY: join(process.cwd(), "packages/daemon/src/index.ts"),
-        FAKE_SECURITY_TOKEN: FAKE_KEYCHAIN_TOKEN,
+      prepare: () => {
+        const shimDir = mkdtempSync(join(tmpdir(), "codex-im-release-security-"));
+        writeFileSync(
+          join(shimDir, "security"),
+          ["#!/usr/bin/env bash", 'printf "%s" "$FAKE_SECURITY_TOKEN"'].join("\n"),
+          { mode: 0o700 },
+        );
+        return {
+          env: {
+            PATH: `${shimDir}${delimiter}${process.env.PATH ?? ""}`,
+            USER: process.env.USER ?? "codex",
+            NODE_BIN: process.execPath,
+            DAEMON_ENTRY: join(process.cwd(), "packages/daemon/src/index.ts"),
+            FAKE_SECURITY_TOKEN: FAKE_KEYCHAIN_TOKEN,
+          },
+        };
       },
     },
   );
 }
 
 function sqliteBackupProofStep(): ReleaseReadinessStep {
-  const root = mkdtempSync(join(tmpdir(), "codex-im-release-db-"));
-  const sourcePath = join(root, "state.db");
-  const backupDir = join(root, "backups");
-  const create = spawnSync(
-    "pnpm",
-    [
-      "--filter",
-      "@codex-im/cli",
-      "exec",
-      "node",
-      "-e",
-      [
-        'const Database = require("better-sqlite3");',
-        "const db = new Database(process.argv[1]);",
-        "db.exec(\"CREATE TABLE readiness(id INTEGER PRIMARY KEY, ok TEXT); INSERT INTO readiness(ok) VALUES ('yes');\");",
-        "db.close();",
-      ].join(" "),
-      sourcePath,
-    ],
-    { cwd: process.cwd(), encoding: "utf8" },
-  );
-  if ((create.status ?? 1) !== 0) {
-    return step("db-backup-proof-setup", "SQLite backup proof setup", "node", [
-      "-e",
-      'process.exitCode = 1; console.error("sqlite setup failed")',
-    ]);
-  }
-  return step("db-backup-proof", "SQLite backup proof", "pnpm", [
-    "db:backup",
-    "--",
-    "--source",
-    sourcePath,
-    "--backup-dir",
-    backupDir,
-    "--keep",
-    "1",
-  ]);
+  return step("db-backup-proof", "SQLite backup proof", "pnpm", ["db:backup", "--"], {
+    prepare: () => {
+      const root = mkdtempSync(join(tmpdir(), "codex-im-release-db-"));
+      const sourcePath = join(root, "state.db");
+      const backupDir = join(root, "backups");
+      const create = spawnSync(
+        "pnpm",
+        [
+          "--filter",
+          "@codex-im/cli",
+          "exec",
+          "node",
+          "-e",
+          [
+            'const Database = require("better-sqlite3");',
+            "const db = new Database(process.argv[1]);",
+            "db.exec(\"CREATE TABLE readiness(id INTEGER PRIMARY KEY, ok TEXT); INSERT INTO readiness(ok) VALUES ('yes');\");",
+            "db.close();",
+          ].join(" "),
+          sourcePath,
+        ],
+        { cwd: process.cwd(), encoding: "utf8" },
+      );
+      if ((create.status ?? 1) !== 0) {
+        throw new Error(`sqlite setup failed\n${create.stderr ?? ""}`);
+      }
+      return {
+        args: ["db:backup", "--", "--source", sourcePath, "--backup-dir", backupDir, "--keep", "1"],
+      };
+    },
+  });
 }
 
 function parseArgs(argv: readonly string[]): ReleaseReadinessOptions {

@@ -33,6 +33,17 @@ describe("release-readiness-check (JAC-169)", () => {
     expect(ids[0]).toBe("launchd-install-dry-run");
   });
 
+  it("keeps operational temp fixture setup lazy until a step runs", () => {
+    const steps = buildReleaseReadinessSteps({ includeFullGates: false });
+    const keychain = steps.find((step) => step.id === "load-and-run-dry-run");
+    const backup = steps.find((step) => step.id === "db-backup-proof");
+
+    expect(keychain?.env).toBeUndefined();
+    expect(keychain?.prepare).toEqual(expect.any(Function));
+    expect(backup?.args).toEqual(["db:backup", "--"]);
+    expect(backup?.prepare).toEqual(expect.any(Function));
+  });
+
   it("treats Telegram live smokes as explicit default gates, not default live calls", () => {
     const telegram = buildReleaseReadinessSteps({ includeFullGates: false }).filter((step) =>
       step.id.startsWith("smoke-telegram"),
