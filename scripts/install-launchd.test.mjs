@@ -46,6 +46,9 @@ describe("install-launchd (T29)", () => {
     const mkdir = vi.fn(async () => undefined);
     const writeFile = vi.fn(async () => undefined);
     const runLaunchctl = vi.fn(async () => undefined);
+    const access = vi.fn(async () => undefined);
+    const lstat = vi.fn(async () => ({ isSymbolicLink: () => false }));
+    const stat = vi.fn(async () => ({ isFile: () => true }));
 
     const result = await installLaunchd({
       dryRun: true,
@@ -53,6 +56,9 @@ describe("install-launchd (T29)", () => {
       user: USER,
       nodeBin: NODE_BIN,
       daemonEntry: DAEMON_ENTRY,
+      access,
+      lstat,
+      stat,
       mkdir,
       writeFile,
       runLaunchctl,
@@ -61,6 +67,46 @@ describe("install-launchd (T29)", () => {
     expect(result.dryRun).toBe(true);
     expect(result.wrotePlist).toBe(false);
     expect(result.loaded).toBe(false);
+    expect(lstat).toHaveBeenCalledWith("/Users/tester/.codex-im-bridge/bin/load-and-run.sh");
+    expect(lstat).toHaveBeenCalledWith(DAEMON_ENTRY);
+    expect(stat).toHaveBeenCalledWith("/Users/tester/.codex-im-bridge/bin/load-and-run.sh");
+    expect(stat).toHaveBeenCalledWith(NODE_BIN);
+    expect(stat).toHaveBeenCalledWith(DAEMON_ENTRY);
+    expect(access).toHaveBeenCalledTimes(3);
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(runLaunchctl).not.toHaveBeenCalled();
+  });
+
+  it("dry-run mode fails closed when runtime paths are missing", async () => {
+    const mkdir = vi.fn(async () => undefined);
+    const writeFile = vi.fn(async () => undefined);
+    const runLaunchctl = vi.fn(async () => undefined);
+    const access = vi.fn(async () => undefined);
+    const lstat = vi.fn(async (path) => {
+      if (path.endsWith("load-and-run.sh")) {
+        throw new Error("missing wrapper");
+      }
+      return { isSymbolicLink: () => false };
+    });
+    const stat = vi.fn(async () => ({ isFile: () => true }));
+
+    await expect(
+      installLaunchd({
+        dryRun: true,
+        home: HOME,
+        user: USER,
+        nodeBin: NODE_BIN,
+        daemonEntry: DAEMON_ENTRY,
+        access,
+        lstat,
+        stat,
+        mkdir,
+        writeFile,
+        runLaunchctl,
+      }),
+    ).rejects.toThrow(/WRAPPER_ENTRY.*does not exist/);
+
     expect(mkdir).not.toHaveBeenCalled();
     expect(writeFile).not.toHaveBeenCalled();
     expect(runLaunchctl).not.toHaveBeenCalled();
@@ -71,6 +117,7 @@ describe("install-launchd (T29)", () => {
     const writeFile = vi.fn(async () => undefined);
     const runLaunchctl = vi.fn(async () => undefined);
     const access = vi.fn(async () => undefined);
+    const lstat = vi.fn(async () => ({ isSymbolicLink: () => false }));
     const stat = vi.fn(async () => ({ isFile: () => true }));
     const prepareRuntime = vi.fn(async () => undefined);
 
@@ -81,6 +128,7 @@ describe("install-launchd (T29)", () => {
       daemonEntry: DAEMON_ENTRY,
       prepareRuntime,
       access,
+      lstat,
       stat,
       mkdir,
       writeFile,
@@ -94,6 +142,8 @@ describe("install-launchd (T29)", () => {
       daemonEntry: DAEMON_ENTRY,
       wrapperEntry: "/Users/tester/.codex-im-bridge/bin/load-and-run.sh",
     });
+    expect(lstat).toHaveBeenCalledWith("/Users/tester/.codex-im-bridge/bin/load-and-run.sh");
+    expect(lstat).toHaveBeenCalledWith(DAEMON_ENTRY);
     expect(stat).toHaveBeenCalledWith("/Users/tester/.codex-im-bridge/bin/load-and-run.sh");
     expect(stat).toHaveBeenCalledWith(NODE_BIN);
     expect(stat).toHaveBeenCalledWith(DAEMON_ENTRY);
@@ -117,6 +167,7 @@ describe("install-launchd (T29)", () => {
     const writeFile = vi.fn(async () => undefined);
     const runLaunchctl = vi.fn(async () => undefined);
     const access = vi.fn(async () => undefined);
+    const lstat = vi.fn(async () => ({ isSymbolicLink: () => false }));
     const stat = vi.fn(async (path) => {
       if (path.endsWith("load-and-run.sh")) {
         throw new Error("missing wrapper");
@@ -132,6 +183,7 @@ describe("install-launchd (T29)", () => {
         daemonEntry: DAEMON_ENTRY,
         prepareRuntime: false,
         access,
+        lstat,
         stat,
         mkdir,
         writeFile,
@@ -152,15 +204,67 @@ describe("install-launchd (T29)", () => {
       daemonEntry: DAEMON_ENTRY,
     });
     const access = vi.fn(async () => undefined);
+    const lstat = vi.fn(async () => ({ isSymbolicLink: () => false }));
     const stat = vi.fn(async () => ({ isFile: () => true }));
 
-    await verifyLaunchdRuntimePaths(plan, { access, stat });
+    await verifyLaunchdRuntimePaths(plan, { access, lstat, stat });
 
+    expect(lstat.mock.calls).toEqual([
+      ["/Users/tester/.codex-im-bridge/bin/load-and-run.sh"],
+      [DAEMON_ENTRY],
+    ]);
     expect(access.mock.calls).toEqual([
       ["/Users/tester/.codex-im-bridge/bin/load-and-run.sh", 1],
       [NODE_BIN, 1],
       [DAEMON_ENTRY, 4],
     ]);
+  });
+
+  it("rejects symlinked installed wrapper and daemon targets but allows node symlinks", async () => {
+    const plan = await planLaunchdInstall({
+      home: HOME,
+      user: USER,
+      nodeBin: NODE_BIN,
+      daemonEntry: DAEMON_ENTRY,
+    });
+    const access = vi.fn(async () => undefined);
+    const stat = vi.fn(async () => ({ isFile: () => true }));
+    const lstat = vi.fn(async (path) => {
+      if (path.endsWith("load-and-run.sh")) {
+        return { isSymbolicLink: () => true };
+      }
+      if (path === NODE_BIN) {
+        throw new Error("node lstat should not be called");
+      }
+      return { isSymbolicLink: () => false };
+    });
+
+    await expect(verifyLaunchdRuntimePaths(plan, { access, lstat, stat })).rejects.toThrow(
+      /WRAPPER_ENTRY must not be a symlink/,
+    );
+
+    const daemonSymlinkLstat = vi.fn(async (path) => {
+      if (path === DAEMON_ENTRY) {
+        return { isSymbolicLink: () => true };
+      }
+      if (path === NODE_BIN) {
+        throw new Error("node lstat should not be called");
+      }
+      return { isSymbolicLink: () => false };
+    });
+    await expect(
+      verifyLaunchdRuntimePaths(plan, { access, lstat: daemonSymlinkLstat, stat }),
+    ).rejects.toThrow(/DAEMON_ENTRY must not be a symlink/);
+
+    const nodeSymlinkCompatibleLstat = vi.fn(async (path) => {
+      if (path === NODE_BIN) {
+        throw new Error("node lstat should not be called");
+      }
+      return { isSymbolicLink: () => false };
+    });
+    await expect(
+      verifyLaunchdRuntimePaths(plan, { access, lstat: nodeSymlinkCompatibleLstat, stat }),
+    ).resolves.toBeUndefined();
   });
 
   it("fails closed if rendered output contains token-shaped or forbidden secret material", () => {

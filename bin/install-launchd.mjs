@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -78,6 +78,11 @@ export async function planLaunchdInstall(options = {}) {
 export async function installLaunchd(options = {}) {
   const plan = await planLaunchdInstall(options);
   if (options.dryRun === true) {
+    await verifyLaunchdRuntimePaths(plan, {
+      access: options.access ?? access,
+      lstat: options.lstat ?? lstat,
+      stat: options.stat ?? stat,
+    });
     return { dryRun: true, plan, wrotePlist: false, loaded: false };
   }
 
@@ -91,6 +96,7 @@ export async function installLaunchd(options = {}) {
   }
   await verifyLaunchdRuntimePaths(plan, {
     access: options.access ?? access,
+    lstat: options.lstat ?? lstat,
     stat: options.stat ?? stat,
   });
   await (options.mkdir ?? mkdir)(dirname(plan.plistPath), { recursive: true });
@@ -101,10 +107,38 @@ export async function installLaunchd(options = {}) {
 
 export async function verifyLaunchdRuntimePaths(plan, options = {}) {
   const accessFn = options.access ?? access;
+  const lstatFn = options.lstat ?? lstat;
   const statFn = options.stat ?? stat;
-  await requireFileAccess(statFn, accessFn, plan.wrapperEntry, "WRAPPER_ENTRY", constants.X_OK);
+  await requireInstallFileAccess(
+    lstatFn,
+    statFn,
+    accessFn,
+    plan.wrapperEntry,
+    "WRAPPER_ENTRY",
+    constants.X_OK,
+  );
   await requireFileAccess(statFn, accessFn, plan.nodeBin, "NODE_BIN", constants.X_OK);
-  await requireFileAccess(statFn, accessFn, plan.daemonEntry, "DAEMON_ENTRY", constants.R_OK);
+  await requireInstallFileAccess(
+    lstatFn,
+    statFn,
+    accessFn,
+    plan.daemonEntry,
+    "DAEMON_ENTRY",
+    constants.R_OK,
+  );
+}
+
+async function requireInstallFileAccess(lstatFn, statFn, accessFn, path, label, mode) {
+  let linkStats;
+  try {
+    linkStats = await lstatFn(path);
+  } catch (error) {
+    throw new Error(`install-launchd: ${label} does not exist or is not accessible: ${path}`);
+  }
+  if (typeof linkStats.isSymbolicLink === "function" && linkStats.isSymbolicLink()) {
+    throw new Error(`install-launchd: ${label} must not be a symlink: ${path}`);
+  }
+  await requireFileAccess(statFn, accessFn, path, label, mode);
 }
 
 async function requireFileAccess(statFn, accessFn, path, label, mode) {

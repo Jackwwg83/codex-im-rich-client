@@ -2,12 +2,12 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - GPT Pro returned
-> `APPROVE_WITH_CHANGES`; P0 plan edits are being applied before implementation.
+> **Last updated:** 2026-05-03 - Block 1 A1 complete; launchd dry-run now
+> verifies runtime paths before returning.
 
 ## 1. Current State
 
-- **Mode:** Planning/source-of-truth update in progress.
+- **Mode:** Block 1 production launch chain in progress.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
@@ -15,9 +15,12 @@
 - **Baseline HEAD:** `a641159`.
 - **Linear:** create a new parent/milestone named
   `Direct Use Completion / Phase 8 - Production usability hardening`.
-- **Current implementation block:** Block 0 - docs/source-of-truth.
-- **Next exact action:** finish docs-only plan v2, run gates, then start Block 1
-  production launch chain.
+- **Current implementation block:** Block 1 - truthful production launch chain.
+- **Completed in this effort:**
+  - `3bcdcd0` - docs-only Direct Use / Phase 8 plan v2 and live-status anchor.
+  - pending commit - A1 launchd dry-run runtime verification.
+- **Next exact action:** A2 build daemon bundle with `better-sqlite3` external
+  and installed-runtime dependency strategy.
 
 ## 2. Why This Exists
 
@@ -58,8 +61,8 @@ Required P0 plan edits:
 
 | Block | Scope | Status |
 |---|---|---|
-| Block 0 | plan v2 + live-status + Linear parent | in progress |
-| Block 1 | truthful production launch chain | next |
+| Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
+| Block 1 | truthful production launch chain | in progress: A1 complete |
 | Block 2 | IM command control plane | blocked on Block 1 |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
@@ -92,21 +95,36 @@ Last known full local gates at baseline `a641159`:
 | `pnpm protocol:check` | green |
 | `pnpm test` | green: 141 files, 1261 passing, 1 skipped |
 
-Block 0 docs-only gates to run before commit:
+Latest Block 0 docs-only gates:
 
-```bash
-pnpm typecheck
-pnpm test
-pnpm lint
-pnpm protocol:check
-```
+| Gate | Result |
+|---|---|
+| `pnpm typecheck` | green |
+| `pnpm test` | green: 141 files, 1261 passing, 1 skipped |
+| `pnpm lint` | green: 316 files checked |
+| `pnpm protocol:check` | green |
+
+Latest A1 targeted gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --project unit scripts/install-launchd.test.mjs` | green: 1 file, 8 passing |
+
+Latest A1 full gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm typecheck` | green |
+| `pnpm test` | green: 141 files, 1263 passing, 1 skipped |
+| `pnpm lint` | green: 316 files checked |
+| `pnpm protocol:check` | green |
 
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
 
-1. `fix(launchd): verify runtime paths during dry-run`
-2. `feat(bridge): build daemon bundle`
+1. Done: `fix(launchd): verify runtime paths during dry-run`
+2. Next: `feat(bridge): build daemon bundle`
 3. `feat(bridge): install runtime app artifacts and dependencies`
 4. `test(bridge): prove installed daemon preflight from temp HOME`
 5. `test(release): prove bridge install -> launchd dry-run chain`
