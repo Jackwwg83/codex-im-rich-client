@@ -104,6 +104,8 @@ export {
   type ThreadSessionListOptions,
   type ThreadSessionRecord,
   type ThreadSessionStatus,
+  type ThreadSessionSwitchCurrent,
+  type ThreadSessionSwitchResult,
   type ThreadSessionTarget,
   type ThreadSessionUpsert,
 } from "./thread-sessions.js";

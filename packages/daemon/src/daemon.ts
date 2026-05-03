@@ -48,6 +48,8 @@ import {
   type ThreadSessionListOptions,
   type ThreadSessionRecord,
   ThreadSessionRepository,
+  type ThreadSessionSwitchCurrent,
+  type ThreadSessionSwitchResult,
   type ThreadSessionUpsert,
   hashCallbackToken,
 } from "@codex-im/storage-sqlite";
@@ -176,6 +178,7 @@ export interface DaemonThreadSessionRepository {
     options?: ThreadSessionListOptions,
   ): readonly ThreadSessionRecord[];
   touch?(target: Target, codexThreadId: string, now?: string): ThreadSessionRecord | undefined;
+  switchCurrent?(input: ThreadSessionSwitchCurrent): ThreadSessionSwitchResult;
 }
 
 export interface DaemonPruneTerminalRecordsOptions {
@@ -219,6 +222,7 @@ interface DaemonSessionRouter {
   resolve(target: Target): SessionRoute;
   bind?(target: Target, input: SessionBindingInput): SessionRoute;
   bindThread?(target: Target, codexThreadId: string): SessionRoute;
+  replaceCachedBinding?(target: Target, input: SessionBindingInput): SessionRoute;
 }
 
 interface DaemonTextInput {
@@ -232,6 +236,7 @@ interface DaemonCodexRuntime {
     events(): AsyncIterableIterator<CodexRichEvent>;
   };
   threadStart(params: DaemonThreadStartParams): MaybePromise<DaemonThreadStartResult>;
+  threadResume?(params: DaemonThreadResumeParams): MaybePromise<unknown>;
   turnStart(params: DaemonTurnStartParams): MaybePromise<DaemonTurnStartResult>;
   turnSteer(params: DaemonTurnSteerParams): MaybePromise<unknown>;
   turnInterrupt?(params: DaemonTurnInterruptParams): MaybePromise<unknown>;
@@ -260,6 +265,13 @@ interface DaemonThreadStartParams {
 
 interface DaemonThreadStartResult {
   readonly thread?: { readonly id?: string };
+}
+
+interface DaemonThreadResumeParams {
+  readonly threadId: string;
+  readonly cwd?: string | null;
+  readonly model?: string | null;
+  readonly excludeTurns?: boolean;
 }
 
 interface DaemonTurnStartParams {
@@ -1686,12 +1698,17 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "switch") {
+      await this.#routeSwitchCommand(inbound, command);
+      return;
+    }
+
     if (command.name === "stop") {
       await this.#routeStopCommand(inbound);
       return;
     }
 
-    if (command.name === "switch" || command.name === "fork") {
+    if (command.name === "fork") {
       await this.#editInboundMessage(
         inbound.messageRef,
         `/${command.name} is not implemented yet.`,
@@ -1709,6 +1726,7 @@ export class Daemon {
         "/status - Show current Codex IM status.",
         "/new [title] - Start a new Codex thread.",
         "/threads [project] - List known Codex threads.",
+        "/switch <thread> - Resume and switch to a known Codex thread.",
         "/stop - Interrupt the active Codex turn.",
       ].join("\n"),
     );
@@ -1780,6 +1798,114 @@ export class Daemon {
         "Threads:",
         ...records.map((record, index) => this.#formatThreadListLine(index + 1, record, route)),
       ].join("\n"),
+    );
+  }
+
+  async #routeSwitchCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const [selector] = command.args;
+    if (selector === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Usage: /switch <thread>");
+      return;
+    }
+
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const runtime = this.#currentRuntime();
+    const repository = this.#threadSessionRepository();
+    if (
+      sessionRouter?.replaceCachedBinding === undefined ||
+      repository?.listForTarget === undefined ||
+      repository.switchCurrent === undefined
+    ) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread switch store unavailable.");
+      return;
+    }
+    if (runtime?.threadResume === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread resume unavailable.");
+      return;
+    }
+
+    const records = repository
+      .listForTarget(inbound.target, { limit: 20 })
+      .filter((record) => this.#projectAllowed(record.projectId, inbound.target, inbound.sender));
+    const selected = this.#selectThreadRecord(records, selector);
+    if (selected.kind === "missing") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Unknown thread selector. Send /threads first.",
+      );
+      return;
+    }
+    if (selected.kind === "ambiguous") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Ambiguous thread selector. Use the number from /threads.",
+      );
+      return;
+    }
+
+    const project = this.#projectConfig(selected.record.projectId);
+    if (project === undefined) {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `Unknown project: ${selected.record.projectId}`,
+      );
+      return;
+    }
+    if (!this.#projectAllowed(selected.record.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+
+    try {
+      await runtime.threadResume({
+        threadId: selected.record.codexThreadId,
+        cwd: project.cwd,
+        ...(project.defaultModel === undefined ? {} : { model: project.defaultModel }),
+        excludeTurns: true,
+      });
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_resume_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: selected.record.codexThreadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to resume.");
+      return;
+    }
+
+    try {
+      repository.switchCurrent({
+        target: inbound.target,
+        projectId: selected.record.projectId,
+        codexThreadId: selected.record.codexThreadId,
+        cwd: project.cwd,
+        ...(project.defaultModel === undefined ? {} : { defaultModel: project.defaultModel }),
+        now: this.#nowIso(),
+      });
+      sessionRouter.replaceCachedBinding(inbound.target, {
+        projectId: selected.record.projectId,
+        cwd: project.cwd,
+        codexThreadId: selected.record.codexThreadId,
+        ...(project.defaultModel === undefined ? {} : { defaultModel: project.defaultModel }),
+      });
+    } catch (error) {
+      this.#emitAuditEvent("thread_session.switch_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: selected.record.codexThreadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to switch.");
+      return;
+    }
+
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      `Switched to ${selected.index + 1} ${selected.record.projectId} (${this.#shortId(
+        selected.record.codexThreadId,
+      )})`,
     );
   }
 
@@ -1904,6 +2030,39 @@ export class Daemon {
     return `${marker} ${selector} ${record.projectId}${title} (${this.#shortId(
       record.codexThreadId,
     )}) last ${record.lastUsedAt}`;
+  }
+
+  #selectThreadRecord(
+    records: readonly ThreadSessionRecord[],
+    selector: string,
+  ):
+    | { kind: "selected"; record: ThreadSessionRecord; index: number }
+    | { kind: "missing" }
+    | { kind: "ambiguous" } {
+    if (/^\d+$/.test(selector)) {
+      const index = Number.parseInt(selector, 10) - 1;
+      const record = records[index];
+      return record === undefined ? { kind: "missing" } : { kind: "selected", record, index };
+    }
+
+    const prefix = selector.endsWith("...") ? selector.slice(0, -3) : selector;
+    const matches = records
+      .map((record, index) => ({ record, index }))
+      .filter(
+        ({ record }) =>
+          record.codexThreadId === selector || record.codexThreadId.startsWith(prefix),
+      );
+    if (matches.length === 0) {
+      return { kind: "missing" };
+    }
+    if (matches.length > 1) {
+      return { kind: "ambiguous" };
+    }
+    const [match] = matches;
+    if (match === undefined) {
+      return { kind: "missing" };
+    }
+    return { kind: "selected", record: match.record, index: match.index };
   }
 
   #sanitizeThreadTitle(value: string): string {

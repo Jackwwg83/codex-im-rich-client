@@ -2,8 +2,8 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 2 B4 in progress; `/threads [project]`
-> lists known Codex threads with redacted selectors and project filtering.
+> **Last updated:** 2026-05-03 - Block 2 B5 in progress; `/switch <thread>`
+> resumes a known Codex thread before atomically switching current binding.
 
 ## 1. Current State
 
@@ -26,9 +26,10 @@
   - `6057714` - B1 `/help`, `/projects`, `/status` IM-safe controls.
   - `7892bed` - B2 `thread_sessions` migration + repository.
   - `0e631d0` - B3 `/new [title]` durable thread creation.
-  - pending commit - B4 `/threads [project]` thread listing.
-- **Next exact action:** finish B4 gates/commit, then implement `/switch`
-  with `thread/resume` before binding mutation.
+  - `e11d4ff` - B4 `/threads [project]` thread listing.
+  - pending commit - B5 `/switch <thread>` resume-before-bind flow.
+- **Next exact action:** finish B5 gates/commit, then implement `/alias`
+  local thread display metadata.
 
 ## 2. Why This Exists
 
@@ -71,7 +72,7 @@ Required P0 plan edits:
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
-| Block 2 | IM command control plane | in progress: B4 `/threads` implemented, gates pending |
+| Block 2 | IM command control plane | in progress: B5 `/switch` implemented, gates pending |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
@@ -194,7 +195,8 @@ Block 2:
 2. Next: `feat(daemon): implement help projects and status commands`
 3. `feat(storage): add thread_sessions migration and repository` (done)
 4. `feat(daemon): implement /new with durable thread session persistence` (done)
-5. `feat(daemon): implement /threads` (in progress)
+5. `feat(daemon): implement /threads` (done)
+6. `feat(daemon): implement /switch with thread/resume-before-bind` (in progress)
 
 ## 8. Compact / Resume
 

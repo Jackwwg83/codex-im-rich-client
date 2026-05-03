@@ -159,6 +159,37 @@ describe("SessionRouter skeleton (T13a / D38)", () => {
     ]);
   });
 
+  it("replaces only the memory cache after an external atomic binding write", () => {
+    const bindings = new FakeBindingRepository();
+    const router = new SessionRouter({ bindings });
+
+    expect(
+      router.replaceCachedBinding(TARGET, {
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread_switched",
+        defaultModel: "gpt-test",
+      }),
+    ).toEqual({
+      kind: "bound",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread_switched",
+      defaultModel: "gpt-test",
+    } satisfies SessionRoute);
+
+    expect(bindings.writes).toEqual([]);
+    expect(router.resolve(TARGET)).toEqual({
+      kind: "bound",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread_switched",
+      defaultModel: "gpt-test",
+    } satisfies SessionRoute);
+  });
+
   it("resolves from memory cache without hitting the repository", () => {
     const bindings = new FakeBindingRepository();
     const router = new SessionRouter({ bindings });

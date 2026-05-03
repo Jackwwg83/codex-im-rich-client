@@ -61,6 +61,21 @@ function routeFromRecord(record: SessionThreadBindingRecord): SessionRoute {
   };
 }
 
+function routeFromBinding(
+  target: Target,
+  input: SessionBindingInput,
+): Extract<SessionRoute, { kind: "bound" }> {
+  return {
+    kind: "bound",
+    target,
+    projectId: input.projectId,
+    cwd: input.cwd,
+    ...(input.codexThreadId !== undefined ? { codexThreadId: input.codexThreadId } : {}),
+    ...(input.defaultModel !== undefined ? { defaultModel: input.defaultModel } : {}),
+    ...(input.activeTurnId !== undefined ? { activeTurnId: input.activeTurnId } : {}),
+  };
+}
+
 export class SessionRouter {
   readonly #bindings: SessionBindingRepository | undefined;
   readonly #cache = new Map<string, SessionRoute>();
@@ -92,6 +107,12 @@ export class SessionRouter {
   bind(target: Target, input: SessionBindingInput): SessionRoute {
     const bindings = this.#requireBindings();
     const route = routeFromRecord(bindings.upsert({ target, ...input }));
+    this.#cache.set(targetKey(target), route);
+    return route;
+  }
+
+  replaceCachedBinding(target: Target, input: SessionBindingInput): SessionRoute {
+    const route = routeFromBinding(target, input);
     this.#cache.set(targetKey(target), route);
     return route;
   }

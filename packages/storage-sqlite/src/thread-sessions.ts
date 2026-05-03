@@ -1,3 +1,4 @@
+import { BindingRepository, type ThreadBindingRecord } from "./bindings.js";
 import type { DatabaseHandle } from "./database.js";
 
 export interface ThreadSessionTarget {
@@ -23,6 +24,20 @@ export interface ThreadSessionListOptions {
   projectId?: string;
   includeArchived?: boolean;
   limit?: number;
+}
+
+export interface ThreadSessionSwitchCurrent {
+  target: ThreadSessionTarget;
+  projectId: string;
+  codexThreadId: string;
+  cwd: string;
+  defaultModel?: string;
+  now?: string;
+}
+
+export interface ThreadSessionSwitchResult {
+  binding: ThreadBindingRecord;
+  session: ThreadSessionRecord;
 }
 
 export interface ThreadSessionRecord {
@@ -315,5 +330,24 @@ export class ThreadSessionRepository {
       });
 
     return this.findByTargetAndThread(target, codexThreadId);
+  }
+
+  switchCurrent(input: ThreadSessionSwitchCurrent): ThreadSessionSwitchResult {
+    const now = input.now ?? new Date().toISOString();
+    return this.db.transaction(() => {
+      const binding = new BindingRepository(this.db).upsert({
+        target: input.target,
+        projectId: input.projectId,
+        codexThreadId: input.codexThreadId,
+        cwd: input.cwd,
+        ...(input.defaultModel === undefined ? {} : { defaultModel: input.defaultModel }),
+        now,
+      });
+      const session = this.touch(input.target, input.codexThreadId, now);
+      if (session === undefined) {
+        throw new Error("Cannot switch current thread to an unknown thread session");
+      }
+      return { binding, session };
+    })();
   }
 }

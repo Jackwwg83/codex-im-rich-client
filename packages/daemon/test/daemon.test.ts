@@ -1478,6 +1478,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("/status");
     expect(body).toContain("/new [title]");
     expect(body).toContain("/threads [project]");
+    expect(body).toContain("/switch <thread>");
     expect(body).toContain("/stop");
     expect(body).not.toContain("/fork");
     expect(body).not.toContain("-100secret-chat");
@@ -2133,6 +2134,310 @@ describe("Daemon skeleton (T14)", () => {
       "Project access denied",
     );
     expect(threadSessionRepository.listForTarget).not.toHaveBeenCalled();
+  });
+
+  it("routes /switch through threadResume before atomic storage switch and cache update", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const order: string[] = [];
+    const now = new Date("2026-05-03T12:30:00.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const selectedThread = {
+      id: "ts-selected",
+      target,
+      projectId: "web",
+      codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      title: "Selected thread",
+      status: "open" as const,
+      createdAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T11:00:00.000Z",
+      lastUsedAt: "2026-05-03T11:00:00.000Z",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-old",
+      })),
+      replaceCachedBinding: vi.fn(() => {
+        order.push("cache.replace");
+        return {
+          kind: "bound" as const,
+          target,
+          projectId: "web",
+          cwd: "/repo/web",
+          defaultModel: "gpt-test",
+          codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+        };
+      }),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadResume: vi.fn(() => {
+        order.push("runtime.resume");
+        return { thread: { id: "thread-selected-abcdefghijklmnopqrstuvwxyz" } };
+      }),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      listForTarget: vi.fn(() => [selectedThread]),
+      switchCurrent: vi.fn(() => {
+        order.push("storage.switch");
+        return {
+          binding: {
+            id: "tb-selected",
+            target,
+            projectId: "web",
+            cwd: "/repo/web",
+            defaultModel: "gpt-test",
+            codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+          },
+          session: {
+            ...selectedThread,
+            lastUsedAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+          },
+        };
+      }),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web", defaultModel: "gpt-test" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/switch 1",
+      messageRef: { target, messageId: "msg-switch" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(order).toEqual(["runtime.resume", "storage.switch", "cache.replace"]);
+    expect(runtime.threadResume).toHaveBeenCalledWith({
+      threadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      cwd: "/repo/web",
+      model: "gpt-test",
+      excludeTurns: true,
+    });
+    expect(threadSessionRepository.switchCurrent).toHaveBeenCalledWith({
+      target,
+      projectId: "web",
+      codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      cwd: "/repo/web",
+      defaultModel: "gpt-test",
+      now: "2026-05-03T12:30:00.000Z",
+    });
+    expect(sessionRouter.replaceCachedBinding).toHaveBeenCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      defaultModel: "gpt-test",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-switch" },
+      "Switched to 1 web (thread-selec...)",
+    );
+  });
+
+  it("keeps current binding unchanged when /switch threadResume fails", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const selectedThread = {
+      id: "ts-selected",
+      target,
+      projectId: "web",
+      codexThreadId: "thread-selected",
+      status: "open" as const,
+      createdAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T11:00:00.000Z",
+      lastUsedAt: "2026-05-03T11:00:00.000Z",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-old",
+      })),
+      replaceCachedBinding: vi.fn(),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadResume: vi.fn(() => {
+        throw new Error("not found");
+      }),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      listForTarget: vi.fn(() => [selectedThread]),
+      switchCurrent: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/switch 1",
+      messageRef: { target, messageId: "msg-switch-fail" },
+      receivedAt: new Date("2026-05-03T12:30:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(threadSessionRepository.switchCurrent).not.toHaveBeenCalled();
+    expect(sessionRouter.replaceCachedBinding).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-switch-fail" },
+      "Codex thread failed to resume.",
+    );
+  });
+
+  it("rejects ambiguous /switch thread id prefixes", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const records = ["thread-same-1", "thread-same-2"].map((codexThreadId, index) => ({
+      id: `ts-${index}`,
+      target,
+      projectId: "web",
+      codexThreadId,
+      status: "open" as const,
+      createdAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T11:00:00.000Z",
+      lastUsedAt: "2026-05-03T11:00:00.000Z",
+    }));
+    const runtime = {
+      threadStart: vi.fn(),
+      threadResume: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      listForTarget: vi.fn(() => records),
+      switchCurrent: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({
+        resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
+        replaceCachedBinding: vi.fn(),
+      }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/switch thread-same",
+      messageRef: { target, messageId: "msg-switch-ambiguous" },
+      receivedAt: new Date("2026-05-03T12:30:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadResume).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-switch-ambiguous" },
+      "Ambiguous thread selector. Use the number from /threads.",
+    );
   });
 
   it("routes /stop to turnInterrupt when the session has an active turn", async () => {

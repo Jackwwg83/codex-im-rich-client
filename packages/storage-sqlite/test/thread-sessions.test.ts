@@ -189,6 +189,74 @@ describe("ThreadSessionRepository (Direct Use B2)", () => {
     }
   });
 
+  it("switches the current binding and last-used timestamp in one transaction", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new ThreadSessionRepository(db);
+      const target = { platform: "telegram", chatId: "-100123456" };
+      repo.upsert({
+        target,
+        projectId: "project-web",
+        codexThreadId: "thread_123",
+        title: "Release thread",
+        now: "2026-05-03T10:00:00.000Z",
+      });
+
+      const result = repo.switchCurrent({
+        target,
+        projectId: "project-web",
+        codexThreadId: "thread_123",
+        cwd: "/tmp/codex-im/project-web",
+        defaultModel: "gpt-test",
+        now: "2026-05-03T12:00:00.000Z",
+      });
+
+      expect(result.binding).toMatchObject({
+        target,
+        projectId: "project-web",
+        codexThreadId: "thread_123",
+        cwd: "/tmp/codex-im/project-web",
+        defaultModel: "gpt-test",
+      });
+      expect(result.session).toMatchObject({
+        target,
+        projectId: "project-web",
+        codexThreadId: "thread_123",
+        title: "Release thread",
+        lastUsedAt: "2026-05-03T12:00:00.000Z",
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("rolls back current binding when switchCurrent cannot touch the thread session", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new ThreadSessionRepository(db);
+      const target = { platform: "telegram", chatId: "-100123456" };
+
+      expect(() =>
+        repo.switchCurrent({
+          target,
+          projectId: "project-web",
+          codexThreadId: "missing-thread",
+          cwd: "/tmp/codex-im/project-web",
+          now: "2026-05-03T12:00:00.000Z",
+        }),
+      ).toThrow(/unknown thread session/);
+
+      const row = db.prepare("SELECT * FROM thread_bindings").all();
+      expect(row).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("surfaces SQLite write failure without creating optimistic repository state", () => {
     const db = openDatabase(":memory:");
     try {
