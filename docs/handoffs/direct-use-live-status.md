@@ -2,12 +2,14 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 2 B7 in progress; production
-> daemon-run now injects `ThreadSessionRepository` for live control commands.
+> **Last updated:** 2026-05-03 - Block 2 B8 in progress; `/fork` maps IM
+> control to Codex App Server `thread/fork` without adding an IM-only task
+> model.
 
 ## 1. Current State
 
-- **Mode:** Block 2 IM command control plane in progress.
+- **Mode:** Block 2 IM command control plane closing; Block 3 repeatable smoke
+  is next.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
@@ -15,7 +17,7 @@
 - **Baseline HEAD:** `a641159`.
 - **Linear:** create a new parent/milestone named
   `Direct Use Completion / Phase 8 - Production usability hardening`.
-- **Current implementation block:** Block 1 - truthful production launch chain.
+- **Current implementation block:** Block 2 - IM command control plane.
 - **Completed in this effort:**
   - `3bcdcd0` - docs-only Direct Use / Phase 8 plan v2 and live-status anchor.
   - `15dfba6` - A1 launchd dry-run runtime verification.
@@ -29,9 +31,10 @@
   - `e11d4ff` - B4 `/threads [project]` thread listing.
   - `71d346d` - B5 `/switch <thread>` resume-before-bind flow.
   - `1479a37` - B6 `/alias <title>` local display metadata.
-  - pending commit - B7 production daemon-run thread session repository wire-up.
-- **Next exact action:** finish B7 gates/commit, then run release check and
-  live Telegram control-plane smoke.
+  - `9a7f9da` - B7 production daemon-run thread session repository wire-up.
+  - pending commit - B8 `/fork [thread]` Codex thread fork control.
+- **Next exact action:** finish B8 gates/commit, then start Block 3 repeatable
+  smoke layers.
 
 ## 2. Why This Exists
 
@@ -74,8 +77,8 @@ Required P0 plan edits:
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
-| Block 2 | IM command control plane | in progress: B7 production wire-up implemented, gates pending |
-| Block 3 | repeatable smoke layers | blocked on Block 1 |
+| Block 2 | IM command control plane | in progress: B8 `/fork` implemented, gates pending |
+| Block 3 | repeatable smoke layers | next after B8 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
 ## 5. Active Redlines
@@ -178,6 +181,16 @@ Latest B0 targeted gate:
 | `pnpm lint` | green: 324 files checked |
 | `pnpm protocol:check` | green |
 
+Latest B8 targeted gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/daemon/test/daemon.test.ts` | green: 1 file, 107 passing |
+| `pnpm typecheck` | green |
+| `pnpm test` | green: 145 files, 1317 passing, 1 skipped |
+| `pnpm lint` | green: 326 files checked |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -200,7 +213,8 @@ Block 2:
 5. `feat(daemon): implement /threads` (done)
 6. `feat(daemon): implement /switch with thread/resume-before-bind` (done)
 7. `feat(daemon): implement /alias` (done)
-8. `fix(cli): wire thread sessions into production daemon-run` (in progress)
+8. `fix(cli): wire thread sessions into production daemon-run` (done)
+9. `feat(daemon): implement /fork with thread/fork semantics` (in progress)
 
 ## 8. Compact / Resume
 

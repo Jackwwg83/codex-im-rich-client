@@ -1480,8 +1480,8 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("/threads [project]");
     expect(body).toContain("/switch <thread>");
     expect(body).toContain("/alias <title>");
+    expect(body).toContain("/fork [thread]");
     expect(body).toContain("/stop");
-    expect(body).not.toContain("/fork");
     expect(body).not.toContain("-100secret-chat");
     expect(body).not.toContain("u-secret-user");
     expect(body).not.toContain("/Users/alice/private/project");
@@ -2508,6 +2508,307 @@ describe("Daemon skeleton (T14)", () => {
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-switch-ambiguous" },
       "Ambiguous thread selector. Use the number from /threads.",
+    );
+  });
+
+  it("routes /fork for the current thread through threadFork before durable bind", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const order: string[] = [];
+    const now = new Date("2026-05-03T12:45:00.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
+      })),
+      bind: vi.fn(() => {
+        order.push("session.bind");
+        return {
+          kind: "bound" as const,
+          target,
+          projectId: "web",
+          cwd: "/repo/web",
+          defaultModel: "gpt-test",
+          codexThreadId: "thread-forked-abcdefghijklmnopqrstuvwxyz",
+        };
+      }),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadFork: vi.fn(() => {
+        order.push("runtime.fork");
+        return { thread: { id: "thread-forked-abcdefghijklmnopqrstuvwxyz" } };
+      }),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(() => {
+        order.push("threadSessions.upsert");
+        return {
+          id: "ts-forked",
+          target,
+          projectId: "web",
+          codexThreadId: "thread-forked-abcdefghijklmnopqrstuvwxyz",
+          status: "open" as const,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+          lastUsedAt: now.toISOString(),
+        };
+      }),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web", defaultModel: "gpt-test" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/fork",
+      messageRef: { target, messageId: "msg-fork-current" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(order).toEqual(["runtime.fork", "threadSessions.upsert", "session.bind"]);
+    expect(runtime.threadFork).toHaveBeenCalledWith({
+      threadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
+      cwd: "/repo/web",
+      model: "gpt-test",
+      excludeTurns: true,
+    });
+    expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
+      target,
+      projectId: "web",
+      codexThreadId: "thread-forked-abcdefghijklmnopqrstuvwxyz",
+      now: "2026-05-03T12:45:00.000Z",
+    });
+    expect(sessionRouter.bind).toHaveBeenCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      defaultModel: "gpt-test",
+      codexThreadId: "thread-forked-abcdefghijklmnopqrstuvwxyz",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-fork-current" },
+      "Forked Codex thread thread-forke... from thread-curre...",
+    );
+  });
+
+  it("routes /fork selector with optional title to the selected known thread", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-03T12:50:00.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const selectedThread = {
+      id: "ts-selected",
+      target,
+      projectId: "api",
+      codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      title: "Selected",
+      status: "open" as const,
+      createdAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T11:00:00.000Z",
+      lastUsedAt: "2026-05-03T11:00:00.000Z",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
+      bind: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "api",
+        cwd: "/repo/api",
+        codexThreadId: "thread-forked-api-abcdefghijklmnopqrstuvwxyz",
+      })),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadFork: vi.fn(() => ({ thread: { id: "thread-forked-api-abcdefghijklmnopqrstuvwxyz" } })),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(() => ({
+        id: "ts-forked",
+        target,
+        projectId: "api",
+        codexThreadId: "thread-forked-api-abcdefghijklmnopqrstuvwxyz",
+        title: "Spike title",
+        status: "open" as const,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        lastUsedAt: now.toISOString(),
+      })),
+      listForTarget: vi.fn(() => [selectedThread]),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          api: { cwd: "/repo/api" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/fork 1 Spike title",
+      messageRef: { target, messageId: "msg-fork-selected" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(threadSessionRepository.listForTarget).toHaveBeenCalledWith(target, { limit: 20 });
+    expect(runtime.threadFork).toHaveBeenCalledWith({
+      threadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      cwd: "/repo/api",
+      excludeTurns: true,
+    });
+    expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
+      target,
+      projectId: "api",
+      codexThreadId: "thread-forked-api-abcdefghijklmnopqrstuvwxyz",
+      title: "Spike title",
+      now: "2026-05-03T12:50:00.000Z",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-fork-selected" },
+      "Forked Codex thread thread-forke... from thread-selec... - Spike title",
+    );
+  });
+
+  it("keeps the current binding unchanged when /fork fails", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-current",
+      })),
+      bind: vi.fn(),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadFork: vi.fn(() => {
+        throw new Error("fork unavailable");
+      }),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/fork",
+      messageRef: { target, messageId: "msg-fork-fail" },
+      receivedAt: new Date("2026-05-03T12:55:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(threadSessionRepository.upsert).not.toHaveBeenCalled();
+    expect(sessionRouter.bind).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-fork-fail" },
+      "Codex thread failed to fork.",
     );
   });
 

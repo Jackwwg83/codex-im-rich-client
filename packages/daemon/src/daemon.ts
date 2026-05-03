@@ -244,6 +244,7 @@ interface DaemonCodexRuntime {
   };
   threadStart(params: DaemonThreadStartParams): MaybePromise<DaemonThreadStartResult>;
   threadResume?(params: DaemonThreadResumeParams): MaybePromise<unknown>;
+  threadFork?(params: DaemonThreadForkParams): MaybePromise<DaemonThreadStartResult>;
   turnStart(params: DaemonTurnStartParams): MaybePromise<DaemonTurnStartResult>;
   turnSteer(params: DaemonTurnSteerParams): MaybePromise<unknown>;
   turnInterrupt?(params: DaemonTurnInterruptParams): MaybePromise<unknown>;
@@ -275,6 +276,13 @@ interface DaemonThreadStartResult {
 }
 
 interface DaemonThreadResumeParams {
+  readonly threadId: string;
+  readonly cwd?: string | null;
+  readonly model?: string | null;
+  readonly excludeTurns?: boolean;
+}
+
+interface DaemonThreadForkParams {
   readonly threadId: string;
   readonly cwd?: string | null;
   readonly model?: string | null;
@@ -1715,16 +1723,14 @@ export class Daemon {
       return;
     }
 
-    if (command.name === "stop") {
-      await this.#routeStopCommand(inbound);
+    if (command.name === "fork") {
+      await this.#routeForkCommand(inbound, command);
       return;
     }
 
-    if (command.name === "fork") {
-      await this.#editInboundMessage(
-        inbound.messageRef,
-        `/${command.name} is not implemented yet.`,
-      );
+    if (command.name === "stop") {
+      await this.#routeStopCommand(inbound);
+      return;
     }
   }
 
@@ -1740,6 +1746,7 @@ export class Daemon {
         "/threads [project] - List known Codex threads.",
         "/switch <thread> - Resume and switch to a known Codex thread.",
         "/alias <title> - Rename current thread for IM display.",
+        "/fork [thread] - Fork the current or selected Codex thread.",
         "/stop - Interrupt the active Codex turn.",
       ].join("\n"),
     );
@@ -2080,6 +2087,162 @@ export class Daemon {
       inbound.messageRef,
       `New Codex thread ${this.#shortId(threadId)}${title === undefined ? "" : ` - ${title}`}`,
     );
+  }
+
+  async #routeForkCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const runtime = this.#currentRuntime();
+    const threadSessions = this.#threadSessionRepository();
+    if (sessionRouter?.bind === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Binding store unavailable");
+      return;
+    }
+    if (runtime?.threadFork === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread fork unavailable.");
+      return;
+    }
+    if (threadSessions === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+      return;
+    }
+
+    const source = this.#forkSource(inbound, command, threadSessions);
+    if (source.kind === "no_current") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "No current Codex thread. Send /new first or fork a selector from /threads.",
+      );
+      return;
+    }
+    if (source.kind === "missing") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Unknown thread selector. Send /threads first.",
+      );
+      return;
+    }
+    if (source.kind === "ambiguous") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Ambiguous thread selector. Use the number from /threads.",
+      );
+      return;
+    }
+    if (!this.#projectAllowed(source.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+
+    const project = this.#projectConfig(source.projectId);
+    if (project === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, `Unknown project: ${source.projectId}`);
+      return;
+    }
+
+    let forkedThreadId: string | undefined;
+    try {
+      forkedThreadId = this.#threadId(
+        await runtime.threadFork({
+          threadId: source.codexThreadId,
+          cwd: project.cwd,
+          ...(project.defaultModel === undefined ? {} : { model: project.defaultModel }),
+          excludeTurns: true,
+        }),
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_fork_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: source.codexThreadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to fork.");
+      return;
+    }
+    if (forkedThreadId === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to fork.");
+      return;
+    }
+
+    const title = this.#threadTitleFromArgs(source.titleArgs);
+    try {
+      threadSessions.upsert({
+        target: inbound.target,
+        projectId: source.projectId,
+        codexThreadId: forkedThreadId,
+        ...(title === undefined ? {} : { title }),
+        now: this.#nowIso(),
+      });
+      const rebound = sessionRouter.bind(inbound.target, {
+        projectId: source.projectId,
+        cwd: project.cwd,
+        ...(project.defaultModel === undefined ? {} : { defaultModel: project.defaultModel }),
+        codexThreadId: forkedThreadId,
+      });
+      if (rebound.kind !== "bound" || rebound.codexThreadId === undefined) {
+        await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to bind.");
+        return;
+      }
+    } catch (error) {
+      this.#emitAuditEvent("thread_session.fork_write_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: forkedThreadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to save.");
+      return;
+    }
+
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      `Forked Codex thread ${this.#shortId(forkedThreadId)} from ${this.#shortId(
+        source.codexThreadId,
+      )}${title === undefined ? "" : ` - ${title}`}`,
+    );
+  }
+
+  #forkSource(
+    inbound: { target: Target; sender: SecurityPolicySender },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+    repository: DaemonThreadSessionRepository,
+  ):
+    | { kind: "source"; projectId: string; codexThreadId: string; titleArgs: readonly string[] }
+    | { kind: "no_current" }
+    | { kind: "missing" }
+    | { kind: "ambiguous" } {
+    const [selector, ...titleArgs] = command.args;
+    if (selector !== undefined) {
+      const unfiltered = repository.listForTarget?.(inbound.target, { limit: 20 });
+      if (unfiltered === undefined) {
+        return { kind: "missing" };
+      }
+      const records = unfiltered.filter((record) =>
+        this.#projectAllowed(record.projectId, inbound.target, inbound.sender),
+      );
+      const selected = this.#selectThreadRecord(records, selector);
+      if (selected.kind === "missing" || selected.kind === "ambiguous") {
+        return selected;
+      }
+      return {
+        kind: "source",
+        projectId: selected.record.projectId,
+        codexThreadId: selected.record.codexThreadId,
+        titleArgs,
+      };
+    }
+
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    if (route?.kind !== "bound" || route.codexThreadId === undefined) {
+      return { kind: "no_current" };
+    }
+    return {
+      kind: "source",
+      projectId: route.projectId,
+      codexThreadId: route.codexThreadId,
+      titleArgs: [],
+    };
   }
 
   #threadTitleFromArgs(args: readonly string[]): string | undefined {
