@@ -1,7 +1,7 @@
 # Phase 6 Live Status
 
 > Single source of truth for Phase 6 while Computer Use work is active.
-> **Last updated:** 2026-05-03 - JAC-98 Computer Use audit events complete; JAC-99 Chrome-only fake/manual smoke docs are next.
+> **Last updated:** 2026-05-03 - JAC-99 Chrome-only fake/manual smoke docs complete; JAC-100 live smoke harness/default skip is next.
 
 ---
 
@@ -10,12 +10,13 @@
 - **Phase:** Phase 6 - explicit Computer Use flow.
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
 - **Parent Linear issue:** JAC-11 - Phase 6 backlog / explicit Computer Use flow.
-- **Current Linear issue:** JAC-99 - Chrome-only fake/manual smoke docs.
+- **Current Linear issue:** JAC-100 - operator-gated live Computer Use smoke harness/default skip.
 - **Branch:** `codex/phase-6-computer-use`.
 - **Base tag:** `phase-5-dingtalk-adapter-complete`.
 - **Version:** `0.1.0-phase5`; do not bump until Phase 6 tag gate.
-- **Next exact action:** implement JAC-99 Chrome-only fake/manual smoke docs.
-  Keep real desktop execution manual/operator-gated and default-off.
+- **Next exact action:** implement JAC-100 live Computer Use smoke harness
+  default skip. It must not run real desktop control unless explicitly
+  env-gated.
 
 ## 2. Current Decision State
 
@@ -67,8 +68,8 @@
 | JAC-163 | capability evidence / provider boundary + broker typed API | complete |
 | JAC-97 | dynamic tool gate + sensitive-step approval model | complete |
 | JAC-98 | audit event for Computer Use trigger | complete |
-| JAC-99 | Chrome-only fake/manual smoke docs | current |
-| JAC-100 | operator-gated live Computer Use smoke | pending |
+| JAC-99 | Chrome-only fake/manual smoke docs | complete |
+| JAC-100 | operator-gated live Computer Use smoke | current |
 | JAC-101 | review / handoff / tag | pending |
 
 ## 6. Gate Status

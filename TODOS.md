@@ -275,6 +275,6 @@ Active branch: `codex/phase-6-computer-use`. Plan-of-record:
 - [x] **JAC-163 / T6** — Computer Use capability evidence and fake/unsupported provider boundary.
 - [x] **JAC-97 / T7** — dynamic tool gate + sensitive-step approval model.
 - [x] **JAC-98 / T8** — audit events for Computer Use trigger/tool-call outcomes.
-- [ ] **JAC-99 / T9** — Chrome-only fake/manual smoke docs. **Current.**
-- [ ] **JAC-100 / T10** — operator-gated live Computer Use smoke harness/default skip.
+- [x] **JAC-99 / T9** — Chrome-only fake/manual smoke docs.
+- [ ] **JAC-100 / T10** — operator-gated live Computer Use smoke harness/default skip. **Current.**
 - [ ] **JAC-101 / T11** — final review/handoff/tag.
