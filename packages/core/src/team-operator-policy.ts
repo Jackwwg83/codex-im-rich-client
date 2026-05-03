@@ -75,6 +75,7 @@ const PROJECT_SCOPED_ACTIONS = new Set<TeamOperatorAction>([
   "view_approval",
   "resolve_approval",
   "view_computer_use_status",
+  "view_audit",
   "handoff_session",
 ]);
 
@@ -83,6 +84,7 @@ const TARGET_SCOPED_ACTIONS = new Set<TeamOperatorAction>([
   "view_approval",
   "resolve_approval",
   "view_computer_use_status",
+  "view_audit",
   "handoff_session",
 ]);
 

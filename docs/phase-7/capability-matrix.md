@@ -1,8 +1,8 @@
 # Phase 7 Capability Matrix
 
-Generated: 2026-05-03  
-Linear issue: JAC-104  
-Branch: `codex/phase-7-planning`  
+Generated: 2026-05-03
+Linear issue: JAC-104
+Branch: `codex/phase-7-planning`
 Plan: `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
 
 This matrix gates Phase 7 work. It does not change runtime behavior and does

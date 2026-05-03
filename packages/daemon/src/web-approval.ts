@@ -13,20 +13,31 @@ export interface WebApprovalDecisionBroker {
   resolve(input: ResolveApprovalInput): ResolveApprovalResult | Promise<ResolveApprovalResult>;
 }
 
+export interface WebApprovalBoundApproval {
+  readonly approvalId: string;
+  readonly target: Target;
+  readonly messageRef?: DaemonMessageRef;
+  readonly callbackNonce: string;
+}
+
 export interface WebApprovalDecisionInput {
   readonly broker: WebApprovalDecisionBroker;
   readonly operatorPolicy: TeamOperatorPolicy;
   readonly actor: TeamOperatorActor;
   readonly projectId: string;
-  readonly target: Target;
-  readonly messageRef?: DaemonMessageRef;
-  readonly approvalId: string;
+  /**
+   * Server-side binding record for the approval card being resolved.
+   * UI/request payloads must not be treated as proof of messageRef,
+   * target, approvalId, or callbackNonce.
+   */
+  readonly boundApproval?: WebApprovalBoundApproval;
   readonly decision: ApprovalUiAction;
-  readonly callbackNonce: string;
 }
 
 export type WebApprovalDecisionDenyReason =
   | "operator_policy_denied"
+  | "bound_approval_required"
+  | "approval_id_required"
   | "message_ref_required"
   | "message_ref_target_mismatch"
   | "callback_nonce_required";
@@ -46,11 +57,16 @@ export type WebApprovalDecisionResult =
 export async function resolveWebApprovalDecision(
   input: WebApprovalDecisionInput,
 ): Promise<WebApprovalDecisionResult> {
+  const boundApproval = input.boundApproval;
+  if (boundApproval === undefined) {
+    return { kind: "deny", reason: "bound_approval_required" };
+  }
+
   const policyDecision = input.operatorPolicy.check({
     actor: input.actor,
     action: "resolve_approval",
     projectId: input.projectId,
-    target: input.target,
+    target: boundApproval.target,
   });
   if (policyDecision.kind === "deny") {
     return {
@@ -60,22 +76,25 @@ export async function resolveWebApprovalDecision(
     };
   }
 
-  if (input.messageRef === undefined || input.messageRef.messageId.length === 0) {
+  if (boundApproval.approvalId.length === 0) {
+    return { kind: "deny", reason: "approval_id_required" };
+  }
+  if (boundApproval.messageRef === undefined || boundApproval.messageRef.messageId.length === 0) {
     return { kind: "deny", reason: "message_ref_required" };
   }
-  if (!targetEqual(input.messageRef.target, input.target)) {
+  if (!targetEqual(boundApproval.messageRef.target, boundApproval.target)) {
     return { kind: "deny", reason: "message_ref_target_mismatch" };
   }
-  if (input.callbackNonce.length === 0) {
+  if (boundApproval.callbackNonce.length === 0) {
     return { kind: "deny", reason: "callback_nonce_required" };
   }
 
   const resolveInput: ResolveApprovalInput = {
-    approvalId: input.approvalId,
+    approvalId: boundApproval.approvalId,
     decision: input.decision,
     actor: input.actor,
-    target: input.target,
-    callbackNonce: input.callbackNonce,
+    target: boundApproval.target,
+    callbackNonce: boundApproval.callbackNonce,
   };
   return { kind: "resolved", result: await input.broker.resolve(resolveInput) };
 }

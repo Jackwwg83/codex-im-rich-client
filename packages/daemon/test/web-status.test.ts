@@ -12,7 +12,7 @@ const SNAPSHOT: DaemonStatusSnapshot = {
   lastFatal: {
     at: "2026-05-03T00:02:00.000Z",
     message:
-      "boom IM_TELEGRAM_BOT_TOKEN=1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd LARK_APP_SECRET=sk-testsecret1234567890 standalone sk-standalonesecret1234567890 <script>alert(1)</script>",
+      "boom IM_TELEGRAM_BOT_TOKEN=1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi LARK_APP_SECRET=sk-testsecret1234567890 standalone sk-standalonesecret1234567890 ghp_1234567890abcdefghij xoxb-1234567890-abcdefghij Authorization: Bearer bearer-token-1234567890abcdef /Users/jackwu/private <script>alert(1)</script>",
   },
 };
 
@@ -30,6 +30,10 @@ describe("daemon web status read-only surface (JAC-106)", () => {
     expect(view.body).not.toContain("1234567890:");
     expect(view.body).not.toContain("sk-testsecret1234567890");
     expect(view.body).not.toContain("sk-standalonesecret1234567890");
+    expect(view.body).not.toContain("ghp_1234567890abcdefghij");
+    expect(view.body).not.toContain("xoxb-1234567890-abcdefghij");
+    expect(view.body).not.toContain("bearer-token-1234567890abcdef");
+    expect(view.body).not.toContain("/Users/jackwu/");
     expect(view.body).not.toContain("<script>");
     expect(view.body).not.toMatch(/<form\b|<button\b|method=|data-action=|\/approve|\/deny/i);
   });

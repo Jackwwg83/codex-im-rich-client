@@ -1,8 +1,8 @@
 # Satori/Koishi Feasibility Spike
 
-Generated: 2026-05-03  
-Linear issue: JAC-102  
-Branch: `codex/phase-7-planning`  
+Generated: 2026-05-03
+Linear issue: JAC-102
+Branch: `codex/phase-7-planning`
 Verdict from JAC-104: `spike-only`
 
 This is a docs/static-analysis spike. It does not create an adapter package,

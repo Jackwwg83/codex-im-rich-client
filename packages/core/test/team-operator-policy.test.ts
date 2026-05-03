@@ -125,6 +125,19 @@ describe("TeamOperatorPolicy (JAC-109)", () => {
       policy.check({
         actor: ADA,
         action: "view_audit",
+      }),
+    ).toEqual({ kind: "deny", reason: "project_required" });
+    expect(
+      policy.check({
+        actor: ADA,
+        action: "view_audit",
+        projectId: "infra",
+      }),
+    ).toEqual({ kind: "deny", reason: "target_required" });
+    expect(
+      policy.check({
+        actor: ADA,
+        action: "view_audit",
         projectId: "infra",
         target: OTHER_TARGET,
       }),

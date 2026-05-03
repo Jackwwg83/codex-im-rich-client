@@ -51,7 +51,7 @@ describe("daemon status snapshot writer (JAC-147)", () => {
       supervisorFailureCount: 0,
       lastFatal: {
         at: "2026-05-02T20:00:02.000Z",
-        message: "boom IM_TELEGRAM_BOT_TOKEN=<redacted>",
+        message: "boom IM_TELEGRAM_BOT_TOKEN=***REDACTED:env-value***",
       },
     });
     expect(readFileSync(statusPath, "utf8")).not.toContain("1234567890:");

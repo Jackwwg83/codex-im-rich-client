@@ -58,6 +58,7 @@ export type {
   DaemonWebStatusViewOptions,
 } from "./status.js";
 export type {
+  WebApprovalBoundApproval,
   WebApprovalDecisionBroker,
   WebApprovalDecisionDenyReason,
   WebApprovalDecisionInput,

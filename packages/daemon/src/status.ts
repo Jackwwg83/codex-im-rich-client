@@ -1,5 +1,6 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { redact } from "@codex-im/core";
 
 export interface DaemonStatusFatal {
   readonly at: string;
@@ -144,13 +145,7 @@ function redactSnapshot(snapshot: DaemonStatusSnapshot): DaemonStatusSnapshot {
 }
 
 function redactStatusText(value: string): string {
-  return value
-    .replace(
-      /\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)=([^\s]+)/gi,
-      "$1=<redacted>",
-    )
-    .replace(/\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g, "<redacted:telegram-token>")
-    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, "<redacted:secret>");
+  return redact(value);
 }
 
 function isLoopbackHost(host: string): boolean {

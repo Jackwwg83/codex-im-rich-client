@@ -11,6 +11,12 @@ const MESSAGE_REF: DaemonMessageRef = {
   target: TARGET,
   messageId: "msg-approval-1",
 };
+const BOUND_APPROVAL = {
+  approvalId: "approval-1",
+  target: TARGET,
+  messageRef: MESSAGE_REF,
+  callbackNonce: "nonce-web-approval",
+} as const;
 
 function makePolicy(): TeamOperatorPolicy {
   return new TeamOperatorPolicy({
@@ -44,11 +50,8 @@ describe("web approval decision helper (JAC-107)", () => {
         operatorPolicy: makePolicy(),
         actor: OTHER_ACTOR,
         projectId: "web",
-        target: TARGET,
-        messageRef: MESSAGE_REF,
-        approvalId: "approval-1",
+        boundApproval: BOUND_APPROVAL,
         decision: { kind: "allow_once" },
-        callbackNonce: "nonce-web-approval",
       }),
     ).resolves.toEqual({
       kind: "deny",
@@ -58,7 +61,7 @@ describe("web approval decision helper (JAC-107)", () => {
     expect(broker.resolve).not.toHaveBeenCalled();
   });
 
-  it("does not call ApprovalBroker.resolve without messageRef/target proof", async () => {
+  it("does not call ApprovalBroker.resolve without server-side bound approval proof", async () => {
     const broker = makeBroker();
 
     await expect(
@@ -67,11 +70,25 @@ describe("web approval decision helper (JAC-107)", () => {
         operatorPolicy: makePolicy(),
         actor: ACTOR,
         projectId: "web",
-        target: TARGET,
-        messageRef: { target: OTHER_TARGET, messageId: "msg-approval-1" },
-        approvalId: "approval-1",
         decision: { kind: "allow_once" },
-        callbackNonce: "nonce-web-approval",
+      }),
+    ).resolves.toEqual({
+      kind: "deny",
+      reason: "bound_approval_required",
+    });
+    expect(broker.resolve).not.toHaveBeenCalled();
+
+    await expect(
+      resolveWebApprovalDecision({
+        broker,
+        operatorPolicy: makePolicy(),
+        actor: ACTOR,
+        projectId: "web",
+        boundApproval: {
+          ...BOUND_APPROVAL,
+          messageRef: { target: OTHER_TARGET, messageId: "msg-approval-1" },
+        },
+        decision: { kind: "allow_once" },
       }),
     ).resolves.toEqual({
       kind: "deny",
@@ -89,11 +106,8 @@ describe("web approval decision helper (JAC-107)", () => {
         operatorPolicy: makePolicy(),
         actor: ACTOR,
         projectId: "web",
-        target: TARGET,
-        messageRef: MESSAGE_REF,
-        approvalId: "approval-1",
+        boundApproval: BOUND_APPROVAL,
         decision: { kind: "allow_once" },
-        callbackNonce: "nonce-web-approval",
       }),
     ).resolves.toEqual({
       kind: "resolved",
