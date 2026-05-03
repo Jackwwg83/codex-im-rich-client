@@ -84,6 +84,7 @@ export interface DaemonBroker {
   failPendingApprovalAsTransportLost?(approvalId: string): void;
   expirePending?(maxAgeMs?: number): number;
   pruneTerminalRecords?(options: DaemonPruneTerminalRecordsOptions): number;
+  listPending?(): readonly PendingApprovalSnapshot[];
   approvalRecordCount?(): number;
 }
 
@@ -1609,6 +1610,12 @@ export class Daemon {
     inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
+    const blocked = this.#controlPlaneBlockMessage(inbound.target, command.name);
+    if (blocked !== undefined) {
+      await this.#editInboundMessage(inbound.messageRef, blocked);
+      return;
+    }
+
     if (command.name === "use") {
       await this.#routeUseCommand(inbound, command);
       return;
@@ -1616,7 +1623,45 @@ export class Daemon {
 
     if (command.name === "stop") {
       await this.#routeStopCommand(inbound);
+      return;
     }
+
+    if (command.name === "new" || command.name === "switch" || command.name === "fork") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `/${command.name} is not implemented yet.`,
+      );
+    }
+  }
+
+  #controlPlaneBlockMessage(target: Target, commandName: string): string | undefined {
+    if (
+      commandName !== "use" &&
+      commandName !== "new" &&
+      commandName !== "switch" &&
+      commandName !== "fork"
+    ) {
+      return undefined;
+    }
+
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(target);
+    if (route?.kind === "bound" && route.activeTurnId !== undefined) {
+      return "Cannot change project or thread while a Codex turn is active. Send /stop first or wait for it to finish.";
+    }
+
+    if (this.#pendingApprovalCount() > 0) {
+      return "Cannot change project or thread while an approval is pending. Resolve or decline the approval first.";
+    }
+
+    return undefined;
+  }
+
+  #pendingApprovalCount(): number {
+    const pending = this.#broker?.listPending?.();
+    if (pending !== undefined) {
+      return pending.length;
+    }
+    return this.#broker?.approvalRecordCount?.() ?? 0;
   }
 
   async #routeStopCommand(inbound: {

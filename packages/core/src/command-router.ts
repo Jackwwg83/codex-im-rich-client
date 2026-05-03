@@ -10,6 +10,8 @@ export const COMMAND_ROUTER_COMMANDS = Object.freeze([
   "projects",
   "new",
   "use",
+  "switch",
+  "fork",
   "status",
   "stop",
 ] as const);

@@ -12,6 +12,8 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
       "projects",
       "new",
       "use",
+      "switch",
+      "fork",
       "status",
       "stop",
     ];

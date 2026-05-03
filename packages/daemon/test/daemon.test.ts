@@ -1273,6 +1273,166 @@ describe("Daemon skeleton (T14)", () => {
     );
   });
 
+  for (const [commandName, text] of [
+    ["use", "/use web"],
+    ["new", "/new release check"],
+    ["switch", "/switch 1"],
+    ["fork", "/fork"],
+  ] as const) {
+    it(`refuses /${commandName} while the IM target has an active turn`, async () => {
+      let messageHandler: ((message: unknown) => void) | undefined;
+      const target = { platform: "telegram", chatId: "-allowed" };
+      const sender = { userId: "u-alice" };
+      const sessionRouter = {
+        resolve: vi.fn(() => ({
+          kind: "bound" as const,
+          target,
+          projectId: "web",
+          cwd: "/repo/web",
+          codexThreadId: "thread-1",
+          activeTurnId: "turn-1",
+        })),
+        bind: vi.fn(),
+        bindThread: vi.fn(),
+      };
+      const runtime = {
+        threadStart: vi.fn(),
+        turnStart: vi.fn(),
+        turnSteer: vi.fn(),
+        turnInterrupt: vi.fn(),
+      };
+      const adapter = {
+        onAction: vi.fn(() => () => {}),
+        onMessage: vi.fn((handler: (message: unknown) => void) => {
+          messageHandler = handler;
+          return () => {};
+        }),
+        editText: vi.fn(),
+      };
+
+      const daemon = new Daemon({
+        loadConfig: () => ({
+          projects: {
+            web: { cwd: "/repo/web" },
+          },
+        }),
+        openStorage: () => ({}),
+        createBroker: () => ({
+          attach: vi.fn(),
+          enablePendingMode: vi.fn(),
+          listPending: vi.fn(() => []),
+        }),
+        createSecurityPolicy: () => ({
+          checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+          checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+        }),
+        createSessionRouter: () => sessionRouter,
+        createSupervisor: () => ({ currentRuntime: () => runtime }),
+        createAdapter: () => adapter,
+      });
+
+      await daemon.start();
+      messageHandler?.({
+        target,
+        sender,
+        text,
+        messageRef: { target, messageId: `msg-${commandName}-active` },
+        receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+      });
+      await flushDaemonHandlers();
+
+      expect(adapter.editText).toHaveBeenCalledWith(
+        { target, messageId: `msg-${commandName}-active` },
+        "Cannot change project or thread while a Codex turn is active. Send /stop first or wait for it to finish.",
+      );
+      expect(sessionRouter.bind).not.toHaveBeenCalled();
+      expect(sessionRouter.bindThread).not.toHaveBeenCalled();
+      expect(runtime.threadStart).not.toHaveBeenCalled();
+      expect(runtime.turnStart).not.toHaveBeenCalled();
+      expect(runtime.turnSteer).not.toHaveBeenCalled();
+    });
+
+    it(`refuses /${commandName} while any approval is pending`, async () => {
+      let messageHandler: ((message: unknown) => void) | undefined;
+      const target = { platform: "telegram", chatId: "-allowed" };
+      const sender = { userId: "u-alice" };
+      const pending: PendingApprovalSnapshot = {
+        id: "approval-1",
+        appServerRequestId: 1,
+        method: "item/commandExecution/requestApproval",
+        params: { command: "touch /tmp/file" },
+        createdAt: new Date("2026-05-03T00:00:00.000Z"),
+        expiresAt: new Date("2026-05-03T00:10:00.000Z"),
+      };
+      const sessionRouter = {
+        resolve: vi.fn(() => ({
+          kind: "bound" as const,
+          target,
+          projectId: "web",
+          cwd: "/repo/web",
+          codexThreadId: "thread-1",
+        })),
+        bind: vi.fn(),
+        bindThread: vi.fn(),
+      };
+      const runtime = {
+        threadStart: vi.fn(),
+        turnStart: vi.fn(),
+        turnSteer: vi.fn(),
+        turnInterrupt: vi.fn(),
+      };
+      const adapter = {
+        onAction: vi.fn(() => () => {}),
+        onMessage: vi.fn((handler: (message: unknown) => void) => {
+          messageHandler = handler;
+          return () => {};
+        }),
+        editText: vi.fn(),
+      };
+
+      const daemon = new Daemon({
+        loadConfig: () => ({
+          projects: {
+            web: { cwd: "/repo/web" },
+          },
+        }),
+        openStorage: () => ({}),
+        createBroker: () => ({
+          attach: vi.fn(),
+          enablePendingMode: vi.fn(),
+          listPending: vi.fn(() => [pending]),
+        }),
+        createSecurityPolicy: () => ({
+          checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+          checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+        }),
+        createSessionRouter: () => sessionRouter,
+        createSupervisor: () => ({ currentRuntime: () => runtime }),
+        createAdapter: () => adapter,
+      });
+
+      await daemon.start();
+      messageHandler?.({
+        target,
+        sender,
+        text,
+        messageRef: { target, messageId: `msg-${commandName}-pending` },
+        receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+      });
+      await flushDaemonHandlers();
+
+      expect(adapter.editText).toHaveBeenCalledWith(
+        { target, messageId: `msg-${commandName}-pending` },
+        "Cannot change project or thread while an approval is pending. Resolve or decline the approval first.",
+      );
+      expect(sessionRouter.bind).not.toHaveBeenCalled();
+      expect(sessionRouter.bindThread).not.toHaveBeenCalled();
+      expect(runtime.threadStart).not.toHaveBeenCalled();
+      expect(runtime.turnStart).not.toHaveBeenCalled();
+      expect(runtime.turnSteer).not.toHaveBeenCalled();
+    });
+  }
+
   it("routes /stop to turnInterrupt when the session has an active turn", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };

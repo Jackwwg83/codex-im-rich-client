@@ -2,8 +2,8 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 1 A4 complete; `release:check` now
-> proves the bridge build/install/preflight/launchd dry-run/redaction chain.
+> **Last updated:** 2026-05-03 - Block 2 B0 complete; IM control-plane
+> context-changing commands now refuse during active turns or pending approvals.
 
 ## 1. Current State
 
@@ -21,8 +21,10 @@
   - `15dfba6` - A1 launchd dry-run runtime verification.
   - `42098fb` - A2 daemon bundle build artifact.
   - `3752f01` - A3 bridge install app layout + installed daemon preflight.
-  - pending commit - A4 release-readiness bridge chain + ops doc convergence.
-- **Next exact action:** Start Block 2 IM command control plane.
+  - `90ff7ec` - A4 release-readiness bridge chain + ops doc convergence.
+  - pending commit - B0 IM command control-plane hard gates.
+- **Next exact action:** B1 implement `/help`, `/projects`, `/status`, then
+  `/new` only after durable thread session storage exists.
 
 ## 2. Why This Exists
 
@@ -65,7 +67,7 @@ Required P0 plan edits:
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
-| Block 2 | IM command control plane | next |
+| Block 2 | IM command control plane | in progress: B0 complete |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
@@ -159,6 +161,16 @@ Latest A4 gates:
 | `pnpm lint` | green: 324 files checked |
 | `pnpm protocol:check` | green |
 
+Latest B0 targeted gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/core/test/command-router.test.ts packages/daemon/test/daemon.test.ts` | green: 2 files, 92 passing |
+| `pnpm typecheck` | green |
+| `pnpm test` | green: 144 files, 1287 passing, 1 skipped |
+| `pnpm lint` | green: 324 files checked |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
@@ -171,6 +183,13 @@ Start with Block 1 only:
 6. Done in A4: `docs(ops): update production launch docs to remove false-green wording`
 
 Do not start Track B commands until Block 1 is green.
+
+Block 2:
+
+1. Done: `fix(daemon): refuse context switches during active work`
+2. Next: `feat(daemon): implement help projects and status commands`
+3. `feat(storage): add thread_sessions migration and repository`
+4. `feat(daemon): implement /new with durable thread session persistence`
 
 ## 8. Compact / Resume
 
