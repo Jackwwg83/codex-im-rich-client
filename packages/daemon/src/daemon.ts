@@ -1838,6 +1838,7 @@ export class Daemon {
       inbound.messageRef,
       [
         "Commands:",
+        "Send any non-command message as a Codex prompt for the current project/thread.",
         "/start - Show these commands.",
         "/projects - List available projects.",
         "/use <project> - Bind this chat to a project.",
@@ -1848,6 +1849,7 @@ export class Daemon {
         "/alias <title> - Rename current thread for IM display.",
         "/fork [thread] - Fork the current or selected Codex thread.",
         "/stop - Interrupt the active Codex turn.",
+        "Completed file, command, and tool activity may appear as Codex items.",
       ].join("\n"),
     );
   }

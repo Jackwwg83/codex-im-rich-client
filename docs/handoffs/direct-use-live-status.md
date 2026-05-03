@@ -3,9 +3,8 @@
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
 > **Last updated:** 2026-05-03 - Block 4 production acceptance prep in
-> progress; C8 fixes production launchd install/runtime packaging and proves the
-> installed bridge daemon is running under launchd with redacted Telegram token
-> logging.
+> progress; C9 clarifies `/start` around native Codex prompt/thread/item usage
+> while launchd soak evidence remains green.
 
 ## 1. Current State
 
@@ -45,9 +44,12 @@
   - `92c5c5e` - C6 Telegram `/start` bootstrap maps to existing help.
   - `6b7df19` - C7 Telegram turn output streams progress, chunks long
     output, and summarizes native Codex development/tool-call items.
-  - latest commit - C8 production launchd install defaults to the installed
+  - `da34eaf` - C8 production launchd install defaults to the installed
     `app/daemon.mjs`, copies the daemon runtime dependency closure, and verifies
     the real LaunchAgent reaches `state = running`.
+  - latest commit - C9 `/start` help states that non-command messages are
+    Codex prompts for the current project/thread and that native file/command/tool
+    activity may appear as `Codex items`.
 - **Next exact action:** continue launchd soak evidence and run a live Telegram
   roundtrip when a user/browser driver can send the nonce prompt.
 
@@ -296,7 +298,19 @@ Latest C8 targeted and live launchd evidence:
 | `pnpm test` | green: 148 files, 1334 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 | `pnpm release:check -- --skip-full-gates` | green; bridge install, launchd dry-run, redaction scan, daemon roundtrip, fake IM smokes, and default live gates passed |
+| `pnpm launchd:uninstall || true && pnpm bridge:build && pnpm bridge:install && pnpm launchd:install && pnpm launchd:status` | green; reinstalled C9 bundle, `daemon status: present pid=70626`, `launchctl` `state = running`, token log redacted |
 | follow-up `pnpm launchd:status` | still green; `daemon status: present pid=44886`, `launchctl` still `state = running`, `last exit code = (never exited)` |
+
+Latest C9 targeted gate:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/daemon/test/daemon.test.ts` | green: 1 file, 107 passing |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 332 files checked |
+| `pnpm test` | green: 148 files, 1334 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+| `pnpm release:check -- --skip-full-gates` | green; bridge install, launchd dry-run, redaction scan, daemon roundtrip, fake IM smokes, and default live gates passed |
 
 ## 7. Next Implementation Order
 
@@ -336,6 +350,7 @@ Block 4:
 2. `fix(telegram): map /start to help` (done)
 3. `feat(daemon): stream and chunk Codex turn output for IM` (done)
 4. `fix(launchd): run installed app daemon with packaged runtime deps` (done)
+5. `fix(daemon): clarify native prompt and Codex item help` (done)
 
 ## 8. Compact / Resume
 

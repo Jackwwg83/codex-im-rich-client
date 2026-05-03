@@ -1473,6 +1473,9 @@ describe("Daemon skeleton (T14)", () => {
     await flushDaemonHandlers();
 
     const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain(
+      "Send any non-command message as a Codex prompt for the current project/thread.",
+    );
     expect(body).toContain("/start");
     expect(body).toContain("/projects");
     expect(body).toContain("/use <project>");
@@ -1483,6 +1486,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("/alias <title>");
     expect(body).toContain("/fork [thread]");
     expect(body).toContain("/stop");
+    expect(body).toContain("Completed file, command, and tool activity may appear as Codex items.");
     expect(body).not.toContain("-100secret-chat");
     expect(body).not.toContain("u-secret-user");
     expect(body).not.toContain("/Users/alice/private/project");
