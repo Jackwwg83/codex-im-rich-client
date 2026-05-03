@@ -3,13 +3,14 @@
 > Single source of truth while bringing Codex IM Rich Client from Phase 7
 > complete to上线运行标准.
 > **Last updated:** 2026-05-03 - JAC-171 complete; release-readiness
-> handoff/tag packet ready for `production-readiness-2026-05-03-r2`.
+> handoff/tag packet ready for `production-readiness-2026-05-03-r2`; real IM
+> live acceptance continues in `docs/handoffs/live-im-acceptance-status.md`.
 
 ---
 
 ## 1. Current State
 
-- **Mode:** Release readiness / production hardening complete.
+- **Mode:** Release candidate complete; live IM acceptance pending.
 - **Plan:** `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
 - **Linear project:** Codex IM Rich Client Release Readiness.
 - **Parent Linear issue:** JAC-166 - Release readiness parent -上线运行标准.
@@ -19,8 +20,9 @@
 - **Version:** `0.1.0-phase7`.
 - **Release tag:** `production-readiness-2026-05-03-r2`.
 - **Handoff:** `docs/handoffs/2026-05-03-production-readiness.md`.
-- **Next exact action:** run operator-chosen live IM smokes with real
-  credentials when the Mac mini environment is ready.
+- **Next exact action:** run live IM acceptance from
+  `docs/handoffs/live-im-acceptance-status.md` and
+  `docs/ops/live-im-acceptance.md`.
 
 ## 2. Production Readiness Target
 

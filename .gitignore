@@ -10,4 +10,5 @@ packages/*/dist/
 
 # Local automation and outside-voice review artifacts.
 .claude/scheduled_tasks.lock
+.codex/environments/environment.toml
 docs/phase-*/*.stderr

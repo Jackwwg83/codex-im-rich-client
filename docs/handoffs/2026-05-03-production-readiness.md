@@ -1,6 +1,6 @@
 # 2026-05-03 Production Readiness Handoff
 
-Status: release-ready local Mac mini candidate.
+Status: release-ready local Mac mini candidate; real IM live acceptance pending.
 
 ## 1. Release Pointer
 
@@ -16,9 +16,10 @@ Status: release-ready local Mac mini candidate.
 
 ## 2. What This Release Means
 
-The repository is ready for private local operation on the operator's Mac mini.
-It is not a public SaaS deployment and does not expose Codex App Server to the
-internet by default.
+The repository is ready as a private local Mac mini release candidate. It is not
+a public SaaS deployment and does not expose Codex App Server to the internet by
+default. Real Telegram/Lark/DingTalk/Codex live acceptance is tracked
+separately in `docs/handoffs/live-im-acceptance-status.md`.
 
 The runnable path is:
 
