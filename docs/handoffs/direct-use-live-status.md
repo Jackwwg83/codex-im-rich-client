@@ -1,0 +1,125 @@
+# Direct Use Live Status
+
+> Single source of truth for Direct Use Completion / Phase 8 production
+> usability hardening.
+> **Last updated:** 2026-05-03 - GPT Pro returned
+> `APPROVE_WITH_CHANGES`; P0 plan edits are being applied before implementation.
+
+## 1. Current State
+
+- **Mode:** Planning/source-of-truth update in progress.
+- **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
+- **Prior release baseline:** `production-readiness-2026-05-03-r2`.
+- **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
+- **Branch:** `codex/live-im-acceptance`.
+- **Baseline HEAD:** `a641159`.
+- **Linear:** create a new parent/milestone named
+  `Direct Use Completion / Phase 8 - Production usability hardening`.
+- **Current implementation block:** Block 0 - docs/source-of-truth.
+- **Next exact action:** finish docs-only plan v2, run gates, then start Block 1
+  production launch chain.
+
+## 2. Why This Exists
+
+Telegram live acceptance proved the real adapter and approval path with an
+operator-driven foreground daemon. That is not yet enough for direct daily use.
+
+The direct-use blocker is:
+
+```text
+installed bridge artifact
+-> launchd-loaded daemon
+-> repeatable non-live daemon round-trip
+-> operator-gated live Telegram round-trip
+-> launchd soak evidence
+```
+
+## 3. GPT Pro Verdict
+
+Verdict: `APPROVE_WITH_CHANGES`.
+
+Required P0 plan edits:
+
+- Treat this as Direct Use Completion / Phase 8, not Phase 7 tail work.
+- Add this live-status anchor.
+- Prove `better-sqlite3` and other runtime dependencies work from the installed
+  bridge artifact, not just the repo checkout.
+- Make `release:check` prove build -> temp HOME install -> installed daemon
+  preflight -> launchd dry-run -> redaction scan.
+- Split Telegram smoke into injected daemon round-trip, operator-gated live
+  Telegram round-trip, and launchd soak.
+- Make `/use`, `/new`, `/switch`, and `/fork` refuse while an active turn or
+  pending approval exists.
+- Require `/switch` to call `thread/resume` before mutating the current binding.
+- Keep `thread_bindings` as current pointer and add `thread_sessions` for known
+  real Codex threads.
+
+## 4. Block Queue
+
+| Block | Scope | Status |
+|---|---|---|
+| Block 0 | plan v2 + live-status + Linear parent | in progress |
+| Block 1 | truthful production launch chain | next |
+| Block 2 | IM command control plane | blocked on Block 1 |
+| Block 3 | repeatable smoke layers | blocked on Block 1 |
+| Block 4 | real production acceptance + 24h soak | operator-gated |
+
+## 5. Active Redlines
+
+- No OpenClaw plugin.
+- No Codex CLI/TUI output parsing as product protocol.
+- No generic chat abstraction replacing Codex App Server rich semantics.
+- No public App Server listener.
+- No approval bypass.
+- No raw callback token persistence, display, docs, logs, or Linear leakage.
+- `messageRef` and server-side callback/approval binding remain required before
+  `ApprovalBroker.resolve()`.
+- No command may switch project/thread while an active turn or pending approval
+  exists.
+- No live external call by default.
+- No Keychain write by default.
+- No launchd install/uninstall by default.
+- No implicit Computer Use.
+
+## 6. Latest Gate Evidence
+
+Last known full local gates at baseline `a641159`:
+
+| Gate | Result |
+|---|---|
+| `pnpm typecheck` | green |
+| `pnpm lint` | green |
+| `pnpm protocol:check` | green |
+| `pnpm test` | green: 141 files, 1261 passing, 1 skipped |
+
+Block 0 docs-only gates to run before commit:
+
+```bash
+pnpm typecheck
+pnpm test
+pnpm lint
+pnpm protocol:check
+```
+
+## 7. Next Implementation Order
+
+Start with Block 1 only:
+
+1. `fix(launchd): verify runtime paths during dry-run`
+2. `feat(bridge): build daemon bundle`
+3. `feat(bridge): install runtime app artifacts and dependencies`
+4. `test(bridge): prove installed daemon preflight from temp HOME`
+5. `test(release): prove bridge install -> launchd dry-run chain`
+6. `docs(ops): update production launch docs to remove false-green wording`
+
+Do not start Track B commands until Block 1 is green.
+
+## 8. Compact / Resume
+
+If resuming this work:
+
+1. Read this file first.
+2. Read `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
+3. Read `AGENTS.md`.
+4. Run `git status --short` and `git log --oneline -8`.
+5. Continue from the current block only when branch/HEAD/scope are clear.
