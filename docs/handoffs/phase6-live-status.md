@@ -1,7 +1,7 @@
 # Phase 6 Live Status
 
 > Single source of truth for Phase 6 while Computer Use work is active.
-> **Last updated:** 2026-05-03 - JAC-95 prompt wrapper complete; JAC-96 normal-prompt intent invariant is next.
+> **Last updated:** 2026-05-03 - JAC-96 normal-prompt intent invariant complete; JAC-163 capability evidence / provider boundary is next.
 
 ---
 
@@ -10,13 +10,13 @@
 - **Phase:** Phase 6 - explicit Computer Use flow.
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
 - **Parent Linear issue:** JAC-11 - Phase 6 backlog / explicit Computer Use flow.
-- **Current Linear issue:** JAC-96 - normal prompt cannot create Computer Use intent.
+- **Current Linear issue:** JAC-163 - capability evidence / provider boundary + broker typed API.
 - **Branch:** `codex/phase-6-computer-use`.
 - **Base tag:** `phase-5-dingtalk-adapter-complete`.
 - **Version:** `0.1.0-phase5`; do not bump until Phase 6 tag gate.
-- **Next exact action:** implement JAC-96 parser/daemon invariant tests proving
-  normal prompts cannot create a Computer Use intent or session. Do not implement
-  the full dynamic-tool gate; that is JAC-97 after JAC-163.
+- **Next exact action:** implement JAC-163 capability evidence, provider
+  boundary, fake/unsupported provider shape, and broker-owned typed dynamic-tool
+  registration API. Do not add real desktop control.
 
 ## 2. Current Decision State
 
@@ -64,8 +64,8 @@
 | JAC-93 | ComputerUsePolicy schema | complete |
 | JAC-94 | allowed_apps / deny_apps config | complete |
 | JAC-95 | explicit `/cu` prompt wrapper | complete |
-| JAC-96 | normal prompt cannot create Computer Use intent | current |
-| JAC-163 | capability evidence / provider boundary + broker typed API | pending |
+| JAC-96 | normal prompt cannot create Computer Use intent | complete |
+| JAC-163 | capability evidence / provider boundary + broker typed API | current |
 | JAC-97 | dynamic tool gate + sensitive-step approval model | pending |
 | JAC-98 | audit event for Computer Use trigger | pending |
 | JAC-99 | Chrome-only fake/manual smoke docs | pending |
@@ -78,9 +78,9 @@ Latest Phase 6 JAC-91 closeout gates:
 
 | Gate | Result |
 |---|---|
-| `pnpm typecheck` | green on 2026-05-03 after JAC-95 |
-| `pnpm typecheck:tests` | green on 2026-05-03 after JAC-95 |
-| `pnpm test` | green: 128 files, 1195 passing, 1 skipped |
+| `pnpm typecheck` | green on 2026-05-03 after JAC-96 |
+| `pnpm typecheck:tests` | green on 2026-05-03 after JAC-96 |
+| `pnpm test` | green: 128 files, 1196 passing, 1 skipped |
 | `pnpm lint` | green: 293 files checked |
 | `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
 

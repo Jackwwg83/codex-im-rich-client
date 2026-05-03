@@ -59,6 +59,11 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
       text: "open Chrome",
       attachments: [],
     });
+    expect(routeInboundCommand("open Chrome and click the login button")).toEqual({
+      kind: "prompt",
+      text: "open Chrome and click the login button",
+      attachments: [],
+    });
   });
 
   it("parses /cu status and rejects empty Computer Use commands", () => {
