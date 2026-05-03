@@ -71,7 +71,10 @@ export type AuditEventKind =
   | "approval.unknown_approval_id"
   | "approval.unsupported_method"
   | "approval.unsupported_decision"
-  | "computer_use.provider_unavailable";
+  | "computer_use.provider_unavailable"
+  | "computer_use.tool_denied"
+  | "computer_use.sensitive_step_blocked"
+  | "computer_use.tool_executed";
 
 /**
  * Minimal structural type for the optional structured-log sink.

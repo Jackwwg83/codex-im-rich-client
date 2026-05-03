@@ -5,7 +5,7 @@ Generated: 2026-05-03
 Base tag: `phase-5-dingtalk-adapter-complete`
 Branch: `codex/phase-6-computer-use`
 Linear parent: JAC-11
-Current gate: JAC-97 dynamic tool gate + sensitive-step approval model
+Current gate: JAC-98 Computer Use audit events
 
 ## 1. Mission
 

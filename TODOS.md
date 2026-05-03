@@ -273,8 +273,8 @@ Active branch: `codex/phase-6-computer-use`. Plan-of-record:
 - [x] **JAC-95 / T4** — explicit `/cu` prompt wrapper.
 - [x] **JAC-96 / T5** — normal prompt cannot create Computer Use intent; full dynamic-tool gate is JAC-97.
 - [x] **JAC-163 / T6** — Computer Use capability evidence and fake/unsupported provider boundary.
-- [ ] **JAC-97 / T7** — dynamic tool gate + sensitive-step approval model. **Current.**
-- [ ] **JAC-98 / T8** — audit events for Computer Use trigger/tool-call outcomes.
+- [x] **JAC-97 / T7** — dynamic tool gate + sensitive-step approval model.
+- [ ] **JAC-98 / T8** — audit events for Computer Use trigger/tool-call outcomes. **Current.**
 - [ ] **JAC-99 / T9** — Chrome-only fake/manual smoke docs.
 - [ ] **JAC-100 / T10** — operator-gated live Computer Use smoke harness/default skip.
 - [ ] **JAC-101 / T11** — final review/handoff/tag.
