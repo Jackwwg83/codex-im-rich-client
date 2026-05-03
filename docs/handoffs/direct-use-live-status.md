@@ -2,8 +2,8 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 2 B1 in progress; `/help`,
-> `/projects`, and `/status` are implemented with redacted IM-safe output.
+> **Last updated:** 2026-05-03 - Block 2 B2 in progress; durable
+> `thread_sessions` storage is implemented and under gate verification.
 
 ## 1. Current State
 
@@ -23,9 +23,10 @@
   - `3752f01` - A3 bridge install app layout + installed daemon preflight.
   - `90ff7ec` - A4 release-readiness bridge chain + ops doc convergence.
   - `48e85c5` - B0 IM command control-plane hard gates.
-  - pending commit - B1 `/help`, `/projects`, `/status` IM-safe controls.
-- **Next exact action:** finish B1 gates/commit, then implement durable
-  `thread_sessions` before `/new`, `/threads`, `/switch`, `/alias`.
+  - `6057714` - B1 `/help`, `/projects`, `/status` IM-safe controls.
+  - pending commit - B2 `thread_sessions` migration + repository.
+- **Next exact action:** finish B2 gates/commit, then implement `/new` with
+  durable thread session persistence.
 
 ## 2. Why This Exists
 
@@ -68,7 +69,7 @@ Required P0 plan edits:
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
-| Block 2 | IM command control plane | in progress: B1 controls implemented, gates pending |
+| Block 2 | IM command control plane | in progress: B2 storage implemented, gates pending |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
@@ -189,7 +190,7 @@ Block 2:
 
 1. Done: `fix(daemon): refuse context switches during active work`
 2. Next: `feat(daemon): implement help projects and status commands`
-3. `feat(storage): add thread_sessions migration and repository`
+3. `feat(storage): add thread_sessions migration and repository` (in progress)
 4. `feat(daemon): implement /new with durable thread session persistence`
 
 ## 8. Compact / Resume

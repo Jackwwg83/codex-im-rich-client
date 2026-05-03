@@ -19,6 +19,7 @@
 //   T6d  007-callback_tokens migration + CallbackTokenRepository (D34)
 //   T6e  callback_tokens hash-only assertion (raw token never persisted)
 //   T6f  callback_tokens action enum round-trip (D34 'abort' not 'cancel')
+//   B2   008-thread_sessions migration + ThreadSessionRepository
 //
 // Boundary (D27 + plan §16.2 T1.1 boundary): storage-sqlite has NO
 // upward import of:
@@ -44,6 +45,7 @@
 //   ApprovalRepository          — durable audit copy of approval lifecycle (T5a-b)
 //   AuditRepository             — write-through audit ring (D31)         (T6a-c)
 //   CallbackTokenRepository     — D34 callback_tokens with Target hydration (T6d-f)
+//   ThreadSessionRepository     — known real Codex threads per IM target (B2)
 //   EventLogRepository          — codex notification log (deferred to Phase 4)
 
 // T2a + T2b (Phase 3) — database lifecycle exports.
@@ -95,3 +97,13 @@ export {
   type CallbackTokenStatus,
   type CallbackTokenTarget,
 } from "./callback-tokens.js";
+
+// Direct Use Completion B2 — known real Codex thread sessions.
+export {
+  ThreadSessionRepository,
+  type ThreadSessionListOptions,
+  type ThreadSessionRecord,
+  type ThreadSessionStatus,
+  type ThreadSessionTarget,
+  type ThreadSessionUpsert,
+} from "./thread-sessions.js";
