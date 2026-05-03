@@ -23,6 +23,8 @@
 
 **Release Readiness 状态**：🟡 进行中（2026-05-03）。目标是把 Phase 7 完成态提升到 Mac mini 上线运行标准：CI、release preflight、launchd/Keychain dry-run、smoke matrix、rollback 和最终 review/tag。SOT：[`docs/handoffs/release-readiness-live-status.md`](docs/handoffs/release-readiness-live-status.md)，计划：[`docs/superpowers/plans/2026-05-03-release-readiness-plan.md`](docs/superpowers/plans/2026-05-03-release-readiness-plan.md)。
 
+上线运行操作手册：[`docs/ops/production-launch.md`](docs/ops/production-launch.md)。上线前先跑 `pnpm release:check`；默认路径不写 Keychain、不 load/unload launchd、不发起 live IM/Codex/Computer Use。
+
 **Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
 - `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
 - `@codex-im/channel-core` — closed `ChannelAdapter` 接口 (D14) + `TelegramShapeFakeChannelAdapter` (callback_data ≤62B + 60s answerCallbackQuery deadline + parse_mode unsupported, all cited from Telegram Bot API)
