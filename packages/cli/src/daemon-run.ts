@@ -1,0 +1,293 @@
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  AppServerClient,
+  StdioTransport,
+  type Transport,
+  performInitializeHandshake,
+} from "@codex-im/app-server-client";
+import { CodexRuntime } from "@codex-im/codex-runtime";
+import {
+  type CodexImConfig,
+  parseConfigToml,
+  resolveConfigSecrets,
+  resolveEnvReferences,
+} from "@codex-im/config";
+import {
+  type ApprovalActor,
+  ApprovalBroker,
+  type PendingApprovalSnapshot,
+  SecurityPolicy,
+  SessionRouter,
+  type Target,
+} from "@codex-im/core";
+import { Daemon, Supervisor, createDaemonLogger } from "@codex-im/daemon";
+import { TelegramChannelAdapter } from "@codex-im/im-telegram";
+import {
+  AuditRepository,
+  BindingRepository,
+  CallbackTokenRepository,
+  type DatabaseHandle,
+  openDatabase,
+  runMigrations,
+} from "@codex-im/storage-sqlite";
+import pino, { type Logger } from "pino";
+
+interface DaemonRunFlags {
+  readonly configPath: string;
+  readonly statusPath?: string;
+  readonly migrationsDir: string;
+}
+
+interface RuntimeStorage {
+  readonly db: DatabaseHandle;
+  readonly bindings: BindingRepository;
+  readonly audit: AuditRepository;
+  readonly callbackTokens: CallbackTokenRepository;
+  close(): void;
+}
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const DEFAULT_CONFIG_PATH = join(homedir(), ".codex-im-bridge", "config.toml");
+const DEFAULT_MIGRATIONS_DIR = join(REPO_ROOT, "packages", "storage-sqlite", "src", "migrations");
+
+export async function run(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  const flags = parseDaemonRunArgs(argv);
+  const logger = pino({ name: "codex-im-daemon-run", level: process.env.LOG_LEVEL ?? "info" });
+  const config = await loadConfig(flags.configPath);
+  const secrets = resolveConfigSecrets(config, { env: process.env, logger });
+  const daemonLogger = createDaemonLogger<Logger>({ logDir: config.daemon.logDir });
+  const storageBox: { current?: RuntimeStorage } = {};
+
+  const daemon = new Daemon({
+    loadConfig: () => config,
+    openStorage: () => {
+      const storage = openRuntimeStorage(config, flags.migrationsDir);
+      storageBox.current = storage;
+      return storage;
+    },
+    createBroker: () => createBroker(config, daemonLogger),
+    createSecurityPolicy: () => createSecurityPolicy(config),
+    createSessionRouter: ({ storage }) => {
+      const runtimeStorage = asRuntimeStorage(storage);
+      return new SessionRouter({ bindings: runtimeStorage.bindings });
+    },
+    createSupervisor: async ({ broker }) => {
+      const approvalBroker = broker as ApprovalBroker;
+      const supervisor = new Supervisor({
+        transportFactory: () => createCodexTransport(config, daemonLogger),
+        clientFactory: (transport: Transport) => new AppServerClient(transport, { logger }),
+        runtimeFactory: (client: AppServerClient) => new CodexRuntime(client),
+        broker: approvalBroker,
+        performHandshake: (client: AppServerClient) =>
+          performInitializeHandshake(client, {
+            name: "codex-im-rich-client",
+            title: "Codex IM Rich Client",
+            version: config.codex.versionPin,
+          }),
+        audit: {
+          emit: (message: string) => logger.info({ event: "supervisor", message }),
+          emitFatal: (message: string) => logger.fatal({ event: "supervisor", message }),
+        },
+      });
+      await supervisor.start();
+      return supervisor;
+    },
+    createAdapter: () => {
+      if (!config.adapters.telegram.enabled) {
+        throw new Error("daemon run requires adapters.telegram.enabled=true");
+      }
+      if (secrets.telegramBotToken === undefined) {
+        throw new Error("daemon run requires resolved Telegram bot token");
+      }
+      return new TelegramChannelAdapter({ botToken: secrets.telegramBotToken });
+    },
+    resolveApprovalTarget: (snapshot) =>
+      approvalTargetForSnapshot(snapshot, config, storageBox.current?.bindings),
+    resolveApprovalAllowedActors: (_snapshot, target) => allowedActorsForTarget(config, target),
+    callbackTokenRepository: {
+      insert: (input) => asRuntimeStorage(storageBox.current).callbackTokens.insert(input),
+      findByHash: (hash) => asRuntimeStorage(storageBox.current).callbackTokens.findByHash(hash),
+      casUpdate: (hash, from, to, fields) =>
+        asRuntimeStorage(storageBox.current).callbackTokens.casUpdate(hash, from, to, fields),
+      forceMarkUsed: (hash, fields) =>
+        asRuntimeStorage(storageBox.current).callbackTokens.forceMarkUsed(hash, fields),
+      revokeBoundSiblings: (approvalId, exceptHash) =>
+        asRuntimeStorage(storageBox.current).callbackTokens.revokeBoundSiblings(
+          approvalId,
+          exceptHash,
+        ),
+      pruneExpired: (now, limit) =>
+        asRuntimeStorage(storageBox.current).callbackTokens.pruneExpired(now, limit),
+      revokeStuckIssued: (cutoff, approvalIds, limit) =>
+        asRuntimeStorage(storageBox.current).callbackTokens.revokeStuckIssued(
+          cutoff,
+          approvalIds,
+          limit,
+        ),
+    },
+    auditRepository: {
+      insertBestEffort: (input) =>
+        asRuntimeStorage(storageBox.current).audit.insertBestEffort(input),
+    },
+    statusPath: flags.statusPath ?? join(config.daemon.dataDir, "daemon-status.json"),
+  });
+
+  await daemon.start();
+  logger.info({ configPath: flags.configPath }, "codex-im daemon started");
+  await waitForStopSignal();
+  await daemon.stop();
+  logger.info("codex-im daemon stopped");
+}
+
+function parseDaemonRunArgs(argv: readonly string[]): DaemonRunFlags {
+  let configPath = DEFAULT_CONFIG_PATH;
+  let statusPath: string | undefined;
+  let migrationsDir = DEFAULT_MIGRATIONS_DIR;
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--config") {
+      i += 1;
+      configPath = requiredValue(argv, i, arg);
+    } else if (arg === "--status-file") {
+      i += 1;
+      statusPath = requiredValue(argv, i, arg);
+    } else if (arg === "--migrations-dir") {
+      i += 1;
+      migrationsDir = requiredValue(argv, i, arg);
+    } else {
+      throw new Error(`unknown daemon run argument: ${arg}`);
+    }
+  }
+  return {
+    configPath: resolve(configPath),
+    ...(statusPath === undefined ? {} : { statusPath }),
+    migrationsDir: resolve(migrationsDir),
+  };
+}
+
+async function loadConfig(path: string): Promise<CodexImConfig> {
+  const source = await readFile(path, "utf8");
+  return resolveEnvReferences(parseConfigToml(source), { env: process.env });
+}
+
+function openRuntimeStorage(config: CodexImConfig, migrationsDir: string): RuntimeStorage {
+  const db = openDatabase(config.storage.sqlitePath);
+  if (config.storage.autoMigrate) {
+    runMigrations(db, migrationsDir);
+  }
+  return {
+    db,
+    bindings: new BindingRepository(db),
+    audit: new AuditRepository(db),
+    callbackTokens: new CallbackTokenRepository(db),
+    close: () => db.close(),
+  };
+}
+
+function createBroker(config: CodexImConfig, logger: Logger): ApprovalBroker {
+  const placeholderTransport = createCodexTransport(config, logger);
+  const placeholderClient = new AppServerClient(placeholderTransport, { logger });
+  return new ApprovalBroker(placeholderClient);
+}
+
+function createCodexTransport(config: CodexImConfig, logger: Logger): StdioTransport {
+  return new StdioTransport({
+    command: config.codex.binary,
+    args: ["app-server", "--listen", "stdio://"],
+    configOverrides: { approval_policy: "on-request" },
+    logger,
+  });
+}
+
+function createSecurityPolicy(config: CodexImConfig): SecurityPolicy {
+  return new SecurityPolicy({
+    allowedUsers: config.security.allowedUsers,
+    allowedChats: config.security.allowedChats,
+    commands: config.security.commands,
+    projects: Object.entries(config.projects).map(([projectId, project]) => {
+      return {
+        projectId,
+        allowedUsers: project.allowedUsers,
+        allowedChats: project.allowedChats,
+      };
+    }),
+  });
+}
+
+function approvalTargetForSnapshot(
+  snapshot: PendingApprovalSnapshot,
+  config: CodexImConfig,
+  bindings?: BindingRepository,
+): Target | undefined {
+  const threadId = readStringField(snapshot.params, "threadId");
+  if (threadId !== undefined && bindings !== undefined) {
+    const match = bindings.list().find((binding) => binding.codexThreadId === threadId);
+    if (match !== undefined) {
+      return match.target;
+    }
+  }
+  const firstAllowedChat = config.security.allowedChats.find((entry) =>
+    entry.startsWith("telegram:"),
+  );
+  if (firstAllowedChat === undefined) {
+    return undefined;
+  }
+  return { platform: "telegram", chatId: firstAllowedChat.slice("telegram:".length) };
+}
+
+function allowedActorsForTarget(
+  config: CodexImConfig,
+  target: Target,
+): readonly NonNullable<ApprovalActor>[] {
+  return config.security.allowedUsers
+    .map(parseScopedId)
+    .filter((entry): entry is { platform: string; id: string } => entry !== undefined)
+    .filter((entry) => entry.platform === target.platform)
+    .map((entry) => ({ kind: "im" as const, platform: entry.platform, userId: entry.id }));
+}
+
+function parseScopedId(value: string): { platform: string; id: string } | undefined {
+  const index = value.indexOf(":");
+  if (index <= 0 || index === value.length - 1) {
+    return undefined;
+  }
+  return { platform: value.slice(0, index), id: value.slice(index + 1) };
+}
+
+function readStringField(value: unknown, key: string): string | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" ? field : undefined;
+}
+
+function asRuntimeStorage(value: unknown): RuntimeStorage {
+  if (value === undefined) {
+    throw new Error("runtime storage is not initialized");
+  }
+  return value as RuntimeStorage;
+}
+
+function requiredValue(argv: readonly string[], index: number, flag: string): string {
+  const value = argv[index];
+  if (value === undefined || value.length === 0) {
+    throw new Error(`${flag} requires a value`);
+  }
+  return value;
+}
+
+function waitForStopSignal(): Promise<void> {
+  return new Promise((resolveSignal) => {
+    const stop = () => {
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+      resolveSignal();
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  });
+}

@@ -92,6 +92,7 @@ unset IM_TELEGRAM_BOT_TOKEN
 Run:
 
 ```bash
+pnpm launchd:prepare --dry-run
 pnpm launchd:install --dry-run
 bash bin/load-and-run.sh --dry-run
 ```
@@ -100,6 +101,7 @@ Expected:
 
 - plist path is under `~/Library/LaunchAgents/io.codex-im-bridge.plist`;
 - wrapper is `~/.codex-im-bridge/bin/load-and-run.sh`;
+- daemon entry is `~/.codex-im-bridge/bin/daemon.mjs`;
 - token output is only `<set from Keychain, length=N>`;
 - no token bytes appear.
 
@@ -108,6 +110,7 @@ Expected:
 Only after non-live preflight and dry-run pass:
 
 ```bash
+pnpm launchd:prepare
 pnpm launchd:install
 launchctl print "gui/$(id -u)/io.codex-im-bridge"
 ```
@@ -115,7 +118,7 @@ launchctl print "gui/$(id -u)/io.codex-im-bridge"
 Expected:
 
 - LaunchAgent loads under the current GUI user;
-- daemon starts through `bin/load-and-run.sh`;
+- daemon starts through `~/.codex-im-bridge/bin/load-and-run.sh`;
 - token is passed only through process environment after Keychain lookup;
 - plist does not contain token bytes or token-looking literals.
 

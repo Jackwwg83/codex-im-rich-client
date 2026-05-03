@@ -30,6 +30,7 @@ function usage(): void {
       "  smoke telegram-real  — live Telegram + real Codex smoke (requires both gates)",
       "  smoke real-turn      — full lifecycle smoke (requires CODEX_REAL_SMOKE=1)",
       "  runtime send         — runtime kernel smoke (requires CODEX_REAL_SMOKE=1)",
+      "  daemon run           — foreground production daemon (Telegram adapter)",
       "  daemon status        — local daemon status snapshot",
       "  db backup            — local SQLite state backup",
       "",
@@ -62,6 +63,10 @@ if (cmd === "smoke" && sub === "app-server") {
   // Same passthrough convention: argv[0]="runtime", argv[1]="send",
   // argv[2..] = flag passthrough; strip a stray "--" forwarded by
   // pnpm/npm.
+  const passthrough = argv.slice(2).filter((a) => a !== "--");
+  await run(passthrough);
+} else if (cmd === "daemon" && sub === "run") {
+  const { run } = await import("./daemon-run.js");
   const passthrough = argv.slice(2).filter((a) => a !== "--");
   await run(passthrough);
 } else if (cmd === "daemon" && sub === "status") {

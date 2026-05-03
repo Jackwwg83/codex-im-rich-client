@@ -36,6 +36,9 @@
 //                     capability limits; throws synchronously on
 //                     encoding overflow so the daemon wire-up sees the
 //                     bug locally instead of as a remote 400.
+//   sendText(t, body) — optional bot-owned plain-text send. Adapters that
+//                     support it return a MessageRef so daemon can edit
+//                     the bot-owned output message later.
 //   updateCard(r,c) — re-render an existing card (typically status flip).
 //   editText(r, t)  — edit an existing message body (text-only).
 //   answerAction(handle, ack) — ack a callback_query within the
@@ -94,6 +97,13 @@ export interface ChannelAdapter {
    * back to their internal callbackNonce encoding.
    */
   sendCard(target: Target, card: ApprovalCard): Promise<SendCardResult>;
+
+  /**
+   * Send a bot-owned plain-text message. Optional because earlier
+   * non-Telegram slices added text helpers before this core surface
+   * evolved; daemon checks presence before using it.
+   */
+  sendText?(target: Target, body: string): Promise<MessageRef>;
 
   /** Re-render an existing card (typically a status flip). */
   updateCard(ref: MessageRef, card: ApprovalCard): Promise<void>;

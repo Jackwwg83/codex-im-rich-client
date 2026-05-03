@@ -5,6 +5,7 @@ import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { prepareLaunchdRuntime } from "./prepare-launchd-runtime.mjs";
 
 const LABEL = "io.codex-im-bridge";
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -80,6 +81,14 @@ export async function installLaunchd(options = {}) {
     return { dryRun: true, plan, wrotePlist: false, loaded: false };
   }
 
+  if (options.prepareRuntime !== false) {
+    await (options.prepareRuntime ?? prepareLaunchdRuntime)({
+      home: plan.home,
+      nodeBin: plan.nodeBin,
+      daemonEntry: plan.daemonEntry,
+      wrapperEntry: plan.wrapperEntry,
+    });
+  }
   await verifyLaunchdRuntimePaths(plan, {
     access: options.access ?? access,
     stat: options.stat ?? stat,
@@ -136,12 +145,14 @@ async function runLaunchctl(args) {
 
 async function main() {
   const { values } = parseArgs({
+    args: process.argv.slice(2).filter((arg) => arg !== "--"),
     options: {
       "dry-run": { type: "boolean", default: false },
       home: { type: "string" },
       user: { type: "string" },
       "node-bin": { type: "string" },
       "daemon-entry": { type: "string" },
+      "wrapper-entry": { type: "string" },
       "plist-path": { type: "string" },
     },
   });
@@ -151,6 +162,7 @@ async function main() {
     user: values.user,
     nodeBin: values["node-bin"],
     daemonEntry: values["daemon-entry"],
+    wrapperEntry: values["wrapper-entry"],
     plistPath: values["plist-path"],
   });
   const lines = [

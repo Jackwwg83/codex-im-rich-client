@@ -19,6 +19,7 @@ describe("release-readiness-check (JAC-169)", () => {
       "protocol-check",
       "verify-fixtures",
     ]);
+    expect(ids).toContain("launchd-runtime-prepare-proof");
     expect(ids).toContain("launchd-install-dry-run");
     expect(ids).toContain("load-and-run-dry-run");
     expect(ids).toContain("db-backup-proof");
@@ -30,14 +31,16 @@ describe("release-readiness-check (JAC-169)", () => {
     const ids = buildReleaseReadinessSteps({ includeFullGates: false }).map((step) => step.id);
 
     expect(ids).not.toContain("typecheck");
-    expect(ids[0]).toBe("launchd-install-dry-run");
+    expect(ids[0]).toBe("launchd-runtime-prepare-proof");
   });
 
   it("keeps operational temp fixture setup lazy until a step runs", () => {
     const steps = buildReleaseReadinessSteps({ includeFullGates: false });
+    const runtime = steps.find((step) => step.id === "launchd-runtime-prepare-proof");
     const keychain = steps.find((step) => step.id === "load-and-run-dry-run");
     const backup = steps.find((step) => step.id === "db-backup-proof");
 
+    expect(runtime?.prepare).toEqual(expect.any(Function));
     expect(keychain?.env).toBeUndefined();
     expect(keychain?.prepare).toEqual(expect.any(Function));
     expect(backup?.args).toEqual(["db:backup", "--"]);

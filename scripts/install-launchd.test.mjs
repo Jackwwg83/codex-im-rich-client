@@ -72,12 +72,14 @@ describe("install-launchd (T29)", () => {
     const runLaunchctl = vi.fn(async () => undefined);
     const access = vi.fn(async () => undefined);
     const stat = vi.fn(async () => ({ isFile: () => true }));
+    const prepareRuntime = vi.fn(async () => undefined);
 
     const result = await installLaunchd({
       home: HOME,
       user: USER,
       nodeBin: NODE_BIN,
       daemonEntry: DAEMON_ENTRY,
+      prepareRuntime,
       access,
       stat,
       mkdir,
@@ -86,6 +88,12 @@ describe("install-launchd (T29)", () => {
     });
 
     expect(result.dryRun).toBe(false);
+    expect(prepareRuntime).toHaveBeenCalledWith({
+      home: HOME,
+      nodeBin: NODE_BIN,
+      daemonEntry: DAEMON_ENTRY,
+      wrapperEntry: "/Users/tester/.codex-im-bridge/bin/load-and-run.sh",
+    });
     expect(stat).toHaveBeenCalledWith("/Users/tester/.codex-im-bridge/bin/load-and-run.sh");
     expect(stat).toHaveBeenCalledWith(NODE_BIN);
     expect(stat).toHaveBeenCalledWith(DAEMON_ENTRY);
@@ -122,6 +130,7 @@ describe("install-launchd (T29)", () => {
         user: USER,
         nodeBin: NODE_BIN,
         daemonEntry: DAEMON_ENTRY,
+        prepareRuntime: false,
         access,
         stat,
         mkdir,

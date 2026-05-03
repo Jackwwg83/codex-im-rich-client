@@ -33,6 +33,7 @@
 //     a programmer error.
 //
 // Test affordances (`_…ForTest`):
+//   - `_textsForTest()` returns recorded sendText calls.
 //   - `_editsForTest()` returns recorded editText calls.
 //   - `_acksForTest()` returns recorded answerAction calls.
 //   - `_callbackDataForTest(ref)` returns the encoded callback_data
@@ -99,6 +100,7 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
   readonly #onAction = new Set<(action: InboundAction) => void>();
   readonly #cards = new Map<string, StoredCard>(); // keyed by messageId
   readonly #callbacks = new Map<string, StoredCallback>(); // keyed by callbackHandle
+  readonly #texts: Array<{ messageRef: MessageRef; text: string }> = [];
   readonly #edits: Array<{ messageRef: MessageRef; text: string }> = [];
   readonly #acks: Array<{ callbackHandle: string; ack: ActionAck }> = [];
   // T24 Codex review P1 — instance-scoped messageId sequence so tests
@@ -153,6 +155,13 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
     const messageRef: MessageRef = { target, messageId };
     this.#cards.set(messageId, { callbackNonce, callbackData });
     return { messageRef, callbackNonce };
+  }
+
+  async sendText(target: Target, body: string): Promise<MessageRef> {
+    this.#assertRunning("sendText");
+    const messageRef: MessageRef = { target, messageId: this.#nextMessageId() };
+    this.#texts.push({ messageRef, text: body });
+    return messageRef;
   }
 
   async updateCard(ref: MessageRef, card: ApprovalCard): Promise<void> {
@@ -237,6 +246,10 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
 
   _editsForTest(): ReadonlyArray<{ messageRef: MessageRef; text: string }> {
     return this.#edits;
+  }
+
+  _textsForTest(): ReadonlyArray<{ messageRef: MessageRef; text: string }> {
+    return this.#texts;
   }
 
   _acksForTest(): ReadonlyArray<{ callbackHandle: string; ack: ActionAck }> {

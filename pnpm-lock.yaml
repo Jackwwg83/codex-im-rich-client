@@ -60,6 +60,9 @@ importers:
       '@codex-im/codex-runtime':
         specifier: workspace:*
         version: link:../codex-runtime
+      '@codex-im/config':
+        specifier: workspace:*
+        version: link:../config
       '@codex-im/core':
         specifier: workspace:*
         version: link:../core
@@ -72,6 +75,9 @@ importers:
       '@codex-im/protocol':
         specifier: workspace:*
         version: link:../codex-protocol
+      '@codex-im/storage-sqlite':
+        specifier: workspace:*
+        version: link:../storage-sqlite
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0

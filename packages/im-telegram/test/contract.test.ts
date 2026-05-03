@@ -28,6 +28,7 @@ const CLOSED_CHANNEL_ADAPTER_METHODS = [
   "pauseInbound",
   "sendCard",
   "sendFile",
+  "sendText",
   "start",
   "stop",
   "updateCard",

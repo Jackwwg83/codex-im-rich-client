@@ -14,11 +14,13 @@
   },
   "dependencies": {
     "@codex-im/app-server-client": "workspace:*",
+    "@codex-im/config": "workspace:*",
     "@codex-im/codex-runtime": "workspace:*",
     "@codex-im/core": "workspace:*",
     "@codex-im/daemon": "workspace:*",
     "@codex-im/im-telegram": "workspace:*",
     "@codex-im/protocol": "workspace:*",
+    "@codex-im/storage-sqlite": "workspace:*",
     "better-sqlite3": "^12.9.0",
     "pino": "^9"
   },

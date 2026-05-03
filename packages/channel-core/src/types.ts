@@ -49,8 +49,9 @@ export type Sender = {
 
 /**
  * Stable cross-message reference an adapter returns from `sendCard` /
- * `editText`. Daemon wire-up keeps it so `updateCard` / `editText` /
- * `answerAction` can target the right rendered message later.
+ * `sendText` / `editText`. Daemon wire-up keeps it so `updateCard` /
+ * `editText` / `answerAction` can target the right rendered message
+ * later.
  *
  * Opaque — adapters typically encode (chatId, messageId) or whatever
  * their platform needs. The daemon doesn't introspect.

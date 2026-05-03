@@ -9,10 +9,12 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../app-server-client" },
+    { "path": "../config" },
     { "path": "../codex-protocol" },
     { "path": "../codex-runtime" },
     { "path": "../core" },
     { "path": "../daemon" },
-    { "path": "../im-telegram" }
+    { "path": "../im-telegram" },
+    { "path": "../storage-sqlite" }
   ]
 }

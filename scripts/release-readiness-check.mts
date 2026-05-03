@@ -97,6 +97,7 @@ export function buildReleaseReadinessSteps(
   const includeFullGates = options.includeFullGates !== false;
   return [
     ...(includeFullGates ? FULL_GATE_STEPS : []),
+    launchdRuntimePrepareProofStep(),
     step("launchd-install-dry-run", "launchd install dry-run", "pnpm", [
       "launchd:install",
       "--dry-run",
@@ -297,6 +298,23 @@ function step(
       : { safeOutputPattern: options.safeOutputPattern }),
     ...(options.prepare === undefined ? {} : { prepare: options.prepare }),
   };
+}
+
+function launchdRuntimePrepareProofStep(): ReleaseReadinessStep {
+  return step(
+    "launchd-runtime-prepare-proof",
+    "launchd runtime prepare proof",
+    "node",
+    ["bin/prepare-launchd-runtime.mjs"],
+    {
+      prepare: () => ({
+        env: {
+          HOME: mkdtempSync(join(tmpdir(), "codex-im-release-runtime-home-")),
+          PNPM_BIN: process.env.npm_execpath ?? "pnpm",
+        },
+      }),
+    },
+  );
 }
 
 function loadAndRunDryRunStep(): ReleaseReadinessStep {

@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import type { CodexRichEvent } from "@codex-im/codex-runtime";
 import {
   type ActorPolicy,
   type ApprovalActor,
@@ -70,6 +71,7 @@ const DEFAULT_COMPUTER_USE_ALLOWED_TOOLS = Object.freeze([
   { namespace: null, tool: "computer_use.synthetic" },
 ] as const satisfies readonly ComputerUseAllowedTool[]);
 const EAGER_PRUNE_RATIO = 0.8;
+const MAX_IM_TEXT_CHARS = 3_800;
 
 export interface DaemonBroker {
   attach(): void;
@@ -114,6 +116,7 @@ export interface DaemonAdapter {
   sendCard?(target: Target, card: ApprovalCard): MaybePromise<DaemonSendCardResult>;
   updateCard?(ref: DaemonMessageRef, card: ApprovalCard): MaybePromise<void>;
   editText?(ref: DaemonMessageRef, body: string): MaybePromise<void>;
+  sendText?(target: Target, body: string): MaybePromise<DaemonMessageRef>;
   start?(): MaybePromise<void>;
   stop?(): MaybePromise<void>;
 }
@@ -210,6 +213,9 @@ interface DaemonTextInput {
 }
 
 interface DaemonCodexRuntime {
+  readonly events?: {
+    events(): AsyncIterableIterator<CodexRichEvent>;
+  };
   threadStart(params: DaemonThreadStartParams): MaybePromise<DaemonThreadStartResult>;
   turnStart(params: DaemonTurnStartParams): MaybePromise<DaemonTurnStartResult>;
   turnSteer(params: DaemonTurnSteerParams): MaybePromise<unknown>;
@@ -218,6 +224,13 @@ interface DaemonCodexRuntime {
 
 interface DaemonRuntimeProvider {
   currentRuntime(): DaemonCodexRuntime | null | undefined;
+}
+
+interface DaemonTurnOutputState {
+  readonly target: Target;
+  readonly turnId: string;
+  messageRef?: DaemonMessageRef;
+  text: string;
 }
 
 interface DaemonProjectConfig {
@@ -319,6 +332,8 @@ export class Daemon {
   readonly #stuckIssuedApprovalIds = new Set<string>();
   readonly #transportLostStuckIssuedApprovalIds = new Set<string>();
   readonly #unsubscribers: Unsubscribe[] = [];
+  readonly #runtimeEventPumps = new WeakSet<object>();
+  readonly #turnOutputs = new Map<string, DaemonTurnOutputState>();
 
   constructor(options: DaemonOptions = {}) {
     this.options = options;
@@ -422,6 +437,7 @@ export class Daemon {
     this.#config = undefined;
     this.#stuckIssuedApprovalIds.clear();
     this.#transportLostStuckIssuedApprovalIds.clear();
+    this.#turnOutputs.clear();
   }
 
   isStarted(): boolean {
@@ -484,6 +500,7 @@ export class Daemon {
     this.#config = undefined;
     this.#stuckIssuedApprovalIds.clear();
     this.#transportLostStuckIssuedApprovalIds.clear();
+    this.#turnOutputs.clear();
   }
 
   #runSyncCleanup(cleanup: CleanupMethod): void {
@@ -1187,6 +1204,7 @@ export class Daemon {
     if (sessionRouter === undefined || runtime === undefined) {
       return;
     }
+    this.#ensureRuntimeEventPump(runtime);
 
     let route = sessionRouter.resolve(inbound.target);
     if (route.kind !== "bound") {
@@ -1229,7 +1247,123 @@ export class Daemon {
     const activeTurnId = this.#turnId(startedTurn);
     if (activeTurnId !== undefined) {
       this.#bindActiveTurn(sessionRouter, route, activeTurnId);
+      await this.#openTurnOutput(inbound.target, route.codexThreadId, activeTurnId);
     }
+  }
+
+  #ensureRuntimeEventPump(runtime: DaemonCodexRuntime): void {
+    const events = runtime.events?.events;
+    if (events === undefined || typeof events !== "function" || typeof runtime !== "object") {
+      return;
+    }
+    if (this.#runtimeEventPumps.has(runtime)) {
+      return;
+    }
+    this.#runtimeEventPumps.add(runtime);
+    void this.#consumeRuntimeEvents(events.call(runtime.events)).catch((error: unknown) => {
+      this.#emitAuditEvent("runtime.event_pump_failed", {
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+    });
+  }
+
+  async #consumeRuntimeEvents(events: AsyncIterable<CodexRichEvent>): Promise<void> {
+    for await (const event of events) {
+      await this.#handleRuntimeEvent(event);
+    }
+  }
+
+  async #handleRuntimeEvent(event: CodexRichEvent): Promise<void> {
+    if (event.type === "agent_message_delta") {
+      const state = this.#turnOutputs.get(turnOutputKey(event.threadId, event.turnId));
+      if (state !== undefined) {
+        state.text = truncateImText(`${state.text}${event.deltaText}`);
+      }
+      return;
+    }
+
+    if (
+      event.type !== "turn_completed" &&
+      event.type !== "turn_failed" &&
+      event.type !== "turn_interrupted"
+    ) {
+      return;
+    }
+
+    const key = turnOutputKey(event.threadId, event.turnId);
+    const state = this.#turnOutputs.get(key);
+    if (state === undefined) {
+      return;
+    }
+    this.#turnOutputs.delete(key);
+    this.#clearTerminalActiveTurn(state.target, event.threadId, event.turnId);
+    await this.#editTurnOutput(state, this.#terminalTurnOutputBody(event, state.text));
+  }
+
+  #clearTerminalActiveTurn(target: Target, threadId: string, turnId: string): void {
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    if (sessionRouter?.bind === undefined) {
+      return;
+    }
+
+    const route = sessionRouter.resolve(target);
+    if (
+      route.kind !== "bound" ||
+      route.codexThreadId !== threadId ||
+      route.activeTurnId !== turnId
+    ) {
+      return;
+    }
+
+    sessionRouter.bind(target, {
+      projectId: route.projectId,
+      cwd: route.cwd,
+      codexThreadId: route.codexThreadId,
+      ...(route.defaultModel === undefined ? {} : { defaultModel: route.defaultModel }),
+    });
+  }
+
+  async #openTurnOutput(target: Target, threadId: string, turnId: string): Promise<void> {
+    const state: DaemonTurnOutputState = { target, turnId, text: "" };
+    this.#turnOutputs.set(turnOutputKey(threadId, turnId), state);
+    if (this.#adapter?.sendText === undefined) {
+      return;
+    }
+    try {
+      state.messageRef = await this.#adapter.sendText(target, "Codex is working...");
+    } catch (error) {
+      this.#emitAuditEvent("runtime.turn_output_send_failed", {
+        target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+    }
+  }
+
+  async #editTurnOutput(state: DaemonTurnOutputState, body: string): Promise<void> {
+    if (state.messageRef === undefined || this.#adapter?.editText === undefined) {
+      return;
+    }
+    try {
+      await this.#adapter.editText(state.messageRef, body);
+    } catch (error) {
+      this.#emitAuditEvent("runtime.turn_output_edit_failed", {
+        target: state.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), turnId: state.turnId },
+      });
+    }
+  }
+
+  #terminalTurnOutputBody(event: CodexRichEvent, text: string): string {
+    if (event.type === "turn_completed") {
+      return text.length === 0 ? "Codex turn completed." : text;
+    }
+    if (event.type === "turn_interrupted") {
+      return text.length === 0 ? "Codex turn interrupted." : `${text}\n\n[turn interrupted]`;
+    }
+    return text.length === 0 ? "Codex turn failed." : `${text}\n\n[turn failed]`;
   }
 
   async #routeComputerUse(
@@ -1906,6 +2040,17 @@ function generateRawCallbackToken(): string {
 
 function textInput(text: string): DaemonTextInput[] {
   return [{ type: "text", text, text_elements: [] }];
+}
+
+function turnOutputKey(threadId: string, turnId: string): string {
+  return `${threadId}\u0000${turnId}`;
+}
+
+function truncateImText(text: string): string {
+  if (text.length <= MAX_IM_TEXT_CHARS) {
+    return text;
+  }
+  return `${text.slice(0, MAX_IM_TEXT_CHARS - 24)}\n\n[truncated for IM]`;
 }
 
 function readStringField(value: unknown, key: string): string | undefined {

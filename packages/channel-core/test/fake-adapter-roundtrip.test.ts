@@ -8,6 +8,7 @@
 //   - injectAction(action) → onAction subscribers fire with action
 //   - sendCard(card) → returns MessageRef + nonce; the SAME nonce is
 //     surfaced on a subsequent injectAction tied to that approvalId
+//   - sendText(target, body) → adapter records the bot-owned text send
 //   - updateCard(ref, card) → second sendCard for same approvalId
 //     succeeds (e.g. status flip from pending → resolved)
 //   - editText(ref, body) → adapter records the edit
@@ -95,6 +96,21 @@ describe("TelegramShapeFakeChannelAdapter — round-trip (T19)", () => {
     expect(adapter._editsForTest()).toContainEqual({
       messageRef: sent.messageRef,
       text: "edited body",
+    });
+    await adapter.stop();
+  });
+
+  it("sendText returns a bot-owned MessageRef and records the text body", async () => {
+    const adapter = new TelegramShapeFakeChannelAdapter();
+    await adapter.start();
+    const target = { platform: "fake-telegram", chatId: "c-1" };
+
+    const messageRef = await adapter.sendText(target, "Codex is working...");
+
+    expect(messageRef).toEqual({ target, messageId: "fake-msg-1" });
+    expect(adapter._textsForTest()).toContainEqual({
+      messageRef,
+      text: "Codex is working...",
     });
     await adapter.stop();
   });

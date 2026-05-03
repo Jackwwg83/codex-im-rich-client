@@ -72,7 +72,7 @@ export interface TelegramReplyMarkup {
 
 export interface TelegramSendMessageOptions {
   message_thread_id?: number;
-  reply_markup: {
+  reply_markup?: {
     inline_keyboard: TelegramInlineKeyboardButton[][];
   };
 }
@@ -223,6 +223,9 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     const api = this.#api("updateCard");
     const messageId = parseTelegramMessageId(ref.messageId);
     const replyMarkup = sendMessageOptions(ref.target, card).reply_markup;
+    if (replyMarkup === undefined) {
+      throw new Error("TelegramChannelAdapter.updateCard requires approval reply_markup");
+    }
     try {
       await api.editMessageReplyMarkup(ref.target.chatId, messageId, { reply_markup: replyMarkup });
       await api.editMessageText(ref.target.chatId, messageId, formatApprovalCard(card), {
@@ -241,6 +244,17 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       await api.editMessageText(ref.target.chatId, messageId, body, {});
     } catch (error) {
       throw new Error(`TelegramChannelAdapter.editText failed: ${describeTelegramError(error)}`);
+    }
+  }
+
+  async sendText(target: Target, body: string): Promise<MessageRef> {
+    this.#assertStarted("sendText");
+    const api = this.#api("sendText");
+    try {
+      const sent = await api.sendMessage(target.chatId, body, sendTextOptions(target));
+      return { target, messageId: String(sent.message_id) };
+    } catch (error) {
+      throw new Error(`TelegramChannelAdapter.sendText failed: ${describeTelegramError(error)}`);
     }
   }
 
@@ -370,6 +384,13 @@ function sendMessageOptions(target: Target, card: ApprovalCardInput): TelegramSe
   return {
     ...(messageThreadId !== undefined ? { message_thread_id: messageThreadId } : {}),
     reply_markup: { inline_keyboard: inlineKeyboard },
+  };
+}
+
+function sendTextOptions(target: Target): TelegramSendMessageOptions {
+  const messageThreadId = parseTelegramTopicId(target.topicId);
+  return {
+    ...(messageThreadId !== undefined ? { message_thread_id: messageThreadId } : {}),
   };
 }
 

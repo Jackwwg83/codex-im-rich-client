@@ -141,6 +141,7 @@ Commands:
 
 ```bash
 security find-generic-password -s codex-im-bridge -a "$USER" >/dev/null
+pnpm launchd:prepare --dry-run
 pnpm launchd:install --dry-run
 bash bin/load-and-run.sh --dry-run
 pnpm launchd:install
@@ -150,6 +151,8 @@ launchctl print "gui/$(id -u)/io.codex-im-bridge"
 Passing criteria:
 
 - Keychain item exists but token bytes are never printed;
+- runtime files are generated under `~/.codex-im-bridge/bin/` before live
+  install;
 - dry-run shows token as `<set from Keychain, length=N>`;
 - plist path is under current user's `~/Library/LaunchAgents`;
 - daemon starts through the wrapper;

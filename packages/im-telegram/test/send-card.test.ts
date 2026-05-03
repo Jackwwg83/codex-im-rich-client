@@ -112,6 +112,23 @@ describe("TelegramChannelAdapter.sendCard (T22b/T22c)", () => {
     await adapter.stop();
   });
 
+  it("sends daemon turn output as a bot-owned text message without inline buttons", async () => {
+    const sendMessage = makeSendMessage();
+    const adapter = new TelegramChannelAdapter({ bot: makeBot(sendMessage) });
+    await adapter.start();
+
+    const result = await adapter.sendText({ ...TARGET, topicId: "42" }, "Codex is working...");
+
+    expect(sendMessage).toHaveBeenCalledWith("-100123456", "Codex is working...", {
+      message_thread_id: 42,
+    });
+    expect(result).toEqual({
+      target: { ...TARGET, topicId: "42" },
+      messageId: "42",
+    });
+    await adapter.stop();
+  });
+
   it("fails closed for non-numeric Telegram topicId", async () => {
     const sendMessage = makeSendMessage();
     const adapter = new TelegramChannelAdapter({ bot: makeBot(sendMessage) });
