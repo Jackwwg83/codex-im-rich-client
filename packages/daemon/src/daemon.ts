@@ -1601,7 +1601,29 @@ export class Daemon {
     if (messageRef === undefined) {
       return;
     }
-    await this.#adapter?.editText?.(messageRef, body);
+    try {
+      await this.#adapter?.editText?.(messageRef, body);
+      return;
+    } catch (error) {
+      this.#emitAuditEvent("inbound.reply_edit_failed", {
+        target: messageRef.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+    }
+
+    if (this.#adapter?.sendText === undefined) {
+      return;
+    }
+    try {
+      await this.#adapter.sendText(messageRef.target, body);
+    } catch (error) {
+      this.#emitAuditEvent("inbound.reply_send_failed", {
+        target: messageRef.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+    }
   }
 
   #schedulePruneSweep(): Unsubscribe | undefined {

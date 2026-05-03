@@ -38,6 +38,69 @@ class EventQueue implements AsyncIterableIterator<CodexRichEvent> {
 }
 
 describe("daemon turn output projection", () => {
+  it("falls back to a bot-owned text reply when an inbound command message cannot be edited", async () => {
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-reply-1",
+    }));
+    const editText = vi.fn(async () => {
+      throw new Error("message can't be edited");
+    });
+    let messageHandler: ((message: unknown) => void) | undefined;
+    let route: SessionRoute = { kind: "unbound", target: TARGET };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+        bind: (target: Target, input: SessionBindingInput) => {
+          route = { kind: "bound", target, ...input };
+          return route;
+        },
+      }),
+      createSupervisor: () => ({}),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "/use codex-im",
+      messageRef: { target: TARGET, messageId: "user-command-1" },
+    });
+
+    await waitFor(() => sendText.mock.calls.length === 1);
+    expect(editText).toHaveBeenCalledWith(
+      { target: TARGET, messageId: "user-command-1" },
+      "Using project codex-im",
+    );
+    expect(sendText).toHaveBeenCalledWith(TARGET, "Using project codex-im");
+    expect(route).toMatchObject({ kind: "bound", projectId: "codex-im" });
+
+    await daemon.stop();
+  });
+
   it("sends a bot-owned placeholder and edits it with the terminal Codex text", async () => {
     const queue = new EventQueue();
     const sendText = vi.fn(async (target: Target, _body: string) => ({
