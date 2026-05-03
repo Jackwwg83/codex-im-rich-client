@@ -1479,6 +1479,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("/new [title]");
     expect(body).toContain("/threads [project]");
     expect(body).toContain("/switch <thread>");
+    expect(body).toContain("/alias <title>");
     expect(body).toContain("/stop");
     expect(body).not.toContain("/fork");
     expect(body).not.toContain("-100secret-chat");
@@ -1669,6 +1670,76 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("binding: unbound");
     expect(body).toContain("pending approvals: 1");
     expect(body).not.toContain("-100secret-chat");
+  });
+
+  it("routes /status with the current thread alias when available", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-100secret-chat" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/Users/alice/private/web",
+        codexThreadId: "thread-with-title-abcdefghijklmnopqrstuvwxyz",
+      })),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      findByTargetAndThread: vi.fn(() => ({
+        id: "ts-title",
+        target,
+        projectId: "web",
+        codexThreadId: "thread-with-title-abcdefghijklmnopqrstuvwxyz",
+        title: "Release\nstatus",
+        status: "open" as const,
+        createdAt: "2026-05-03T10:00:00.000Z",
+        updatedAt: "2026-05-03T11:00:00.000Z",
+        lastUsedAt: "2026-05-03T11:00:00.000Z",
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/status",
+      messageRef: { target, messageId: "msg-status-title" },
+      receivedAt: new Date("2026-05-03T12:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(threadSessionRepository.findByTargetAndThread).toHaveBeenCalledWith(
+      target,
+      "thread-with-title-abcdefghijklmnopqrstuvwxyz",
+    );
+    expect(body).toContain("title: Release status");
+    expect(body).not.toContain("Release\nstatus");
+    expect(body).not.toContain("thread-with-title-abcdefghijklmnopqrstuvwxyz");
+    expect(body).not.toContain("/Users/alice/private/web");
   });
 
   it("routes /new to threadStart, durable thread session upsert, and current binding update", async () => {
@@ -2437,6 +2508,216 @@ describe("Daemon skeleton (T14)", () => {
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-switch-ambiguous" },
       "Ambiguous thread selector. Use the number from /threads.",
+    );
+  });
+
+  it("routes /alias to local thread-session metadata only", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-03T13:00:00.000Z");
+    const target = { platform: "telegram", chatId: "-100secret-chat" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/Users/alice/private/web",
+        codexThreadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
+      })),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadResume: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      rename: vi.fn(() => ({
+        id: "ts-current",
+        target,
+        projectId: "web",
+        codexThreadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
+        title: "Release alias",
+        status: "open" as const,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        lastUsedAt: now.toISOString(),
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/alias Release\nalias",
+      messageRef: { target, messageId: "msg-alias" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(threadSessionRepository.rename).toHaveBeenCalledWith(
+      target,
+      "thread-current-abcdefghijklmnopqrstuvwxyz",
+      "Release alias",
+      "2026-05-03T13:00:00.000Z",
+    );
+    expect(threadSessionRepository.upsert).not.toHaveBeenCalled();
+    expect(runtime.threadStart).not.toHaveBeenCalled();
+    expect(runtime.threadResume).not.toHaveBeenCalled();
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-alias" },
+      "Thread alias set: Release alias",
+    );
+  });
+
+  it("upserts /alias metadata when the current thread was not in thread_sessions yet", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-03T13:05:00.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-current",
+      })),
+    };
+    const threadSessionRepository = {
+      rename: vi.fn(() => undefined),
+      upsert: vi.fn(() => ({
+        id: "ts-current",
+        target,
+        projectId: "web",
+        codexThreadId: "thread-current",
+        title: "Recovered alias",
+        status: "open" as const,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        lastUsedAt: now.toISOString(),
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/alias Recovered alias",
+      messageRef: { target, messageId: "msg-alias-upsert" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
+      target,
+      projectId: "web",
+      codexThreadId: "thread-current",
+      title: "Recovered alias",
+      now: "2026-05-03T13:05:00.000Z",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-alias-upsert" },
+      "Thread alias set: Recovered alias",
+    );
+  });
+
+  it("refuses /alias without a current Codex thread", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      rename: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({
+        resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
+      }),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/alias Missing",
+      messageRef: { target, messageId: "msg-alias-missing" },
+      receivedAt: new Date("2026-05-03T13:10:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(threadSessionRepository.rename).not.toHaveBeenCalled();
+    expect(threadSessionRepository.upsert).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-alias-missing" },
+      "No current Codex thread.",
     );
   });
 

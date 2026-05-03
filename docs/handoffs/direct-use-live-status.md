@@ -2,8 +2,8 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 2 B5 in progress; `/switch <thread>`
-> resumes a known Codex thread before atomically switching current binding.
+> **Last updated:** 2026-05-03 - Block 2 B6 in progress; `/alias <title>`
+> stores local IM display metadata and `/status` shows the current alias.
 
 ## 1. Current State
 
@@ -27,9 +27,10 @@
   - `7892bed` - B2 `thread_sessions` migration + repository.
   - `0e631d0` - B3 `/new [title]` durable thread creation.
   - `e11d4ff` - B4 `/threads [project]` thread listing.
-  - pending commit - B5 `/switch <thread>` resume-before-bind flow.
-- **Next exact action:** finish B5 gates/commit, then implement `/alias`
-  local thread display metadata.
+  - `71d346d` - B5 `/switch <thread>` resume-before-bind flow.
+  - pending commit - B6 `/alias <title>` local display metadata.
+- **Next exact action:** finish B6 gates/commit, then run release check and
+  refresh live Telegram smoke coverage for the completed control plane.
 
 ## 2. Why This Exists
 
@@ -72,7 +73,7 @@ Required P0 plan edits:
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
-| Block 2 | IM command control plane | in progress: B5 `/switch` implemented, gates pending |
+| Block 2 | IM command control plane | in progress: B6 `/alias` implemented, gates pending |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
 
@@ -196,7 +197,8 @@ Block 2:
 3. `feat(storage): add thread_sessions migration and repository` (done)
 4. `feat(daemon): implement /new with durable thread session persistence` (done)
 5. `feat(daemon): implement /threads` (done)
-6. `feat(daemon): implement /switch with thread/resume-before-bind` (in progress)
+6. `feat(daemon): implement /switch with thread/resume-before-bind` (done)
+7. `feat(daemon): implement /alias` (in progress)
 
 ## 8. Compact / Resume
 

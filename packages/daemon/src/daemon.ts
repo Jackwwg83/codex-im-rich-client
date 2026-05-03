@@ -177,7 +177,14 @@ export interface DaemonThreadSessionRepository {
     target: Target,
     options?: ThreadSessionListOptions,
   ): readonly ThreadSessionRecord[];
+  findByTargetAndThread?(target: Target, codexThreadId: string): ThreadSessionRecord | undefined;
   touch?(target: Target, codexThreadId: string, now?: string): ThreadSessionRecord | undefined;
+  rename?(
+    target: Target,
+    codexThreadId: string,
+    title: string | undefined,
+    now?: string,
+  ): ThreadSessionRecord | undefined;
   switchCurrent?(input: ThreadSessionSwitchCurrent): ThreadSessionSwitchResult;
 }
 
@@ -1703,6 +1710,11 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "alias") {
+      await this.#routeAliasCommand(inbound, command);
+      return;
+    }
+
     if (command.name === "stop") {
       await this.#routeStopCommand(inbound);
       return;
@@ -1727,6 +1739,7 @@ export class Daemon {
         "/new [title] - Start a new Codex thread.",
         "/threads [project] - List known Codex threads.",
         "/switch <thread> - Resume and switch to a known Codex thread.",
+        "/alias <title> - Rename current thread for IM display.",
         "/stop - Interrupt the active Codex turn.",
       ].join("\n"),
     );
@@ -1925,9 +1938,68 @@ export class Daemon {
     lines.push("binding: bound");
     lines.push(`project: ${route.projectId}`);
     lines.push(`thread: ${this.#shortId(route.codexThreadId)}`);
+    const title = this.#threadTitleForRoute(inbound.target, route);
+    if (title !== undefined) {
+      lines.push(`title: ${title}`);
+    }
     lines.push(`active turn: ${this.#shortId(route.activeTurnId)}`);
     lines.push(`pending approvals: ${this.#pendingApprovalCount()}`);
     await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
+  }
+
+  async #routeAliasCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const title = this.#threadTitleFromArgs(command.args);
+    if (title === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Usage: /alias <title>");
+      return;
+    }
+
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    if (route?.kind !== "bound" || route.codexThreadId === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "No current Codex thread.");
+      return;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+
+    const repository = this.#threadSessionRepository();
+    if (repository === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+      return;
+    }
+
+    try {
+      const renamed = repository.rename?.(
+        inbound.target,
+        route.codexThreadId,
+        title,
+        this.#nowIso(),
+      );
+      if (renamed === undefined) {
+        repository.upsert({
+          target: inbound.target,
+          projectId: route.projectId,
+          codexThreadId: route.codexThreadId,
+          title,
+          now: this.#nowIso(),
+        });
+      }
+    } catch (error) {
+      this.#emitAuditEvent("thread_session.alias_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: route.codexThreadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Thread alias failed to save.");
+      return;
+    }
+
+    await this.#editInboundMessage(inbound.messageRef, `Thread alias set: ${title}`);
   }
 
   async #routeNewCommand(
@@ -2013,6 +2085,29 @@ export class Daemon {
   #threadTitleFromArgs(args: readonly string[]): string | undefined {
     const title = this.#sanitizeThreadTitle(args.join(" "));
     return title.length === 0 ? undefined : title.slice(0, 120);
+  }
+
+  #threadTitleForRoute(
+    target: Target,
+    route: Extract<SessionRoute, { kind: "bound" }>,
+  ): string | undefined {
+    if (route.codexThreadId === undefined) {
+      return undefined;
+    }
+    try {
+      const title = this.#threadSessionRepository()?.findByTargetAndThread?.(
+        target,
+        route.codexThreadId,
+      )?.title;
+      return title === undefined ? undefined : this.#sanitizeThreadTitle(title).slice(0, 120);
+    } catch (error) {
+      this.#emitAuditEvent("thread_session.status_title_failed", {
+        target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: route.codexThreadId },
+      });
+      return undefined;
+    }
   }
 
   #formatThreadListLine(
