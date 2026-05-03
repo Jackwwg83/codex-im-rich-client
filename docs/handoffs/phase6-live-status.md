@@ -1,7 +1,7 @@
 # Phase 6 Live Status
 
 > Single source of truth for Phase 6 while Computer Use work is active.
-> **Last updated:** 2026-05-03 - JAC-97 dynamic tool gate + sensitive-step approval model complete; JAC-98 Computer Use audit events are next.
+> **Last updated:** 2026-05-03 - JAC-98 Computer Use audit events complete; JAC-99 Chrome-only fake/manual smoke docs are next.
 
 ---
 
@@ -10,13 +10,12 @@
 - **Phase:** Phase 6 - explicit Computer Use flow.
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
 - **Parent Linear issue:** JAC-11 - Phase 6 backlog / explicit Computer Use flow.
-- **Current Linear issue:** JAC-98 - audit event for Computer Use trigger/tool-call outcomes.
+- **Current Linear issue:** JAC-99 - Chrome-only fake/manual smoke docs.
 - **Branch:** `codex/phase-6-computer-use`.
 - **Base tag:** `phase-5-dingtalk-adapter-complete`.
 - **Version:** `0.1.0-phase5`; do not bump until Phase 6 tag gate.
-- **Next exact action:** implement JAC-98 redacted Computer Use audit actions
-  for trigger/tool-call outcomes. Do not include raw args, tokens, target ids, or
-  private chat ids.
+- **Next exact action:** implement JAC-99 Chrome-only fake/manual smoke docs.
+  Keep real desktop execution manual/operator-gated and default-off.
 
 ## 2. Current Decision State
 
@@ -67,8 +66,8 @@
 | JAC-96 | normal prompt cannot create Computer Use intent | complete |
 | JAC-163 | capability evidence / provider boundary + broker typed API | complete |
 | JAC-97 | dynamic tool gate + sensitive-step approval model | complete |
-| JAC-98 | audit event for Computer Use trigger | current |
-| JAC-99 | Chrome-only fake/manual smoke docs | pending |
+| JAC-98 | audit event for Computer Use trigger | complete |
+| JAC-99 | Chrome-only fake/manual smoke docs | current |
 | JAC-100 | operator-gated live Computer Use smoke | pending |
 | JAC-101 | review / handoff / tag | pending |
 
@@ -78,10 +77,10 @@ Latest Phase 6 JAC-91 closeout gates:
 
 | Gate | Result |
 |---|---|
-| `pnpm typecheck` | green on 2026-05-03 after JAC-97 |
-| `pnpm typecheck:tests` | green on 2026-05-03 after JAC-97 |
-| `pnpm test` | green: 130 files, 1203 passing, 1 skipped |
-| `pnpm lint` | green: 297 files checked |
+| `pnpm typecheck` | green on 2026-05-03 after JAC-98 |
+| `pnpm typecheck:tests` | green on 2026-05-03 after JAC-98 |
+| `pnpm test` | green: 131 files, 1204 passing, 1 skipped |
+| `pnpm lint` | green: 299 files checked |
 | `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
 
 ## 7. Compact / Resume

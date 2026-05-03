@@ -72,6 +72,7 @@ export type AuditEventKind =
   | "approval.unsupported_method"
   | "approval.unsupported_decision"
   | "computer_use.provider_unavailable"
+  | "computer_use.intent_created"
   | "computer_use.tool_denied"
   | "computer_use.sensitive_step_blocked"
   | "computer_use.tool_executed";

@@ -132,6 +132,11 @@ export type {
   ComputerUseToolGateInput,
   ComputerUseToolGateOptions,
 } from "./computer-use-session.js";
+export { emitComputerUseTriggerAudit } from "./computer-use-audit.js";
+export type {
+  ComputerUseAuditEmitter,
+  EmitComputerUseTriggerAuditOptions,
+} from "./computer-use-audit.js";
 
 // Phase 3 T13 — platform-neutral session routing between an IM target,
 // project config, and the persistent Codex thread binding. Storage is
