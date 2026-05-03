@@ -5,7 +5,7 @@ Generated: 2026-05-03
 Base tag: `phase-5-dingtalk-adapter-complete`
 Branch: `codex/phase-6-computer-use`
 Linear parent: JAC-11
-Current gate: JAC-100 operator-gated live Computer Use smoke harness
+Current gate: JAC-101 final review / handoff / tag
 
 ## 1. Mission
 

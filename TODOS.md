@@ -276,5 +276,5 @@ Active branch: `codex/phase-6-computer-use`. Plan-of-record:
 - [x] **JAC-97 / T7** — dynamic tool gate + sensitive-step approval model.
 - [x] **JAC-98 / T8** — audit events for Computer Use trigger/tool-call outcomes.
 - [x] **JAC-99 / T9** — Chrome-only fake/manual smoke docs.
-- [ ] **JAC-100 / T10** — operator-gated live Computer Use smoke harness/default skip. **Current.**
-- [ ] **JAC-101 / T11** — final review/handoff/tag.
+- [x] **JAC-100 / T10** — operator-gated live Computer Use smoke harness/default skip; default command skips, dry-run readiness is explicit, and real desktop execution remains blocked until provider capability is verified.
+- [ ] **JAC-101 / T11** — final review/handoff/tag. **Current.**

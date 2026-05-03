@@ -1,7 +1,7 @@
 # Phase 6 Live Status
 
 > Single source of truth for Phase 6 while Computer Use work is active.
-> **Last updated:** 2026-05-03 - JAC-99 Chrome-only fake/manual smoke docs complete; JAC-100 live smoke harness/default skip is next.
+> **Last updated:** 2026-05-03 - JAC-100 live smoke harness/default skip complete; JAC-101 final review / handoff / tag is current.
 
 ---
 
@@ -10,13 +10,12 @@
 - **Phase:** Phase 6 - explicit Computer Use flow.
 - **Plan:** `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
 - **Parent Linear issue:** JAC-11 - Phase 6 backlog / explicit Computer Use flow.
-- **Current Linear issue:** JAC-100 - operator-gated live Computer Use smoke harness/default skip.
+- **Current Linear issue:** JAC-101 - final review / handoff / tag.
 - **Branch:** `codex/phase-6-computer-use`.
 - **Base tag:** `phase-5-dingtalk-adapter-complete`.
 - **Version:** `0.1.0-phase5`; do not bump until Phase 6 tag gate.
-- **Next exact action:** implement JAC-100 live Computer Use smoke harness
-  default skip. It must not run real desktop control unless explicitly
-  env-gated.
+- **Next exact action:** run the Phase 6 final Computer Use security review,
+  patch any P0/P1 findings, then close the Phase 6 handoff/tag gate if green.
 
 ## 2. Current Decision State
 
@@ -52,8 +51,8 @@
 |---|---|
 | Phase 6 plan v1 Codex review | APPROVE_WITH_CHANGES: 2 P1 + 3 P2; v1.1 patch applied |
 | Phase 6 plan v1.1 Codex re-review | GO: no remaining P0/P1/P2; JAC-92 may start |
-| Phase 6 implementation review | pending |
-| Phase 6 final tag-gate review | pending |
+| Phase 6 implementation review | covered by per-issue gates through JAC-100 |
+| Phase 6 final tag-gate review | pending at JAC-101 |
 
 ## 5. Linear Execution Queue
 
@@ -69,19 +68,19 @@
 | JAC-97 | dynamic tool gate + sensitive-step approval model | complete |
 | JAC-98 | audit event for Computer Use trigger | complete |
 | JAC-99 | Chrome-only fake/manual smoke docs | complete |
-| JAC-100 | operator-gated live Computer Use smoke | current |
-| JAC-101 | review / handoff / tag | pending |
+| JAC-100 | operator-gated live Computer Use smoke | complete |
+| JAC-101 | review / handoff / tag | current |
 
 ## 6. Gate Status
 
-Latest Phase 6 JAC-91 closeout gates:
+Latest Phase 6 JAC-100 closeout gates:
 
 | Gate | Result |
 |---|---|
-| `pnpm typecheck` | green on 2026-05-03 after JAC-98 |
-| `pnpm typecheck:tests` | green on 2026-05-03 after JAC-98 |
-| `pnpm test` | green: 131 files, 1204 passing, 1 skipped |
-| `pnpm lint` | green: 299 files checked |
+| `pnpm typecheck` | green on 2026-05-03 after JAC-100 |
+| `pnpm typecheck:tests` | green on 2026-05-03 after JAC-100 |
+| `pnpm test` | green: 132 files, 1207 passing, 1 skipped |
+| `pnpm lint` | green: 301 files checked |
 | `pnpm protocol:check` | green: codex 0.128.0, 234 schema files canonical |
 
 ## 7. Compact / Resume
