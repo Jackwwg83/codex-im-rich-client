@@ -268,8 +268,8 @@ Active branch: `codex/phase-6-computer-use`. Plan-of-record:
 
 - [x] **JAC-91 / T0** — Computer Use plan review gate. Plan v1 returned APPROVE_WITH_CHANGES; v1.1 Codex re-review returned GO with no remaining P0/P1/P2.
 - [x] **JAC-92 / T1** — explicit `/cu` command parser only; no desktop action/provider.
-- [ ] **JAC-93 / T2** — ComputerUsePolicy schema/evaluator. **Current.**
-- [ ] **JAC-94 / T3** — `allowed_apps` / `deny_apps` config.
+- [x] **JAC-93 / T2** — ComputerUsePolicy schema/evaluator.
+- [ ] **JAC-94 / T3** — `allowed_apps` / `deny_apps` config. **Current.**
 - [ ] **JAC-95 / T4** — explicit `/cu` prompt wrapper.
 - [ ] **JAC-96 / T5** — normal prompt cannot create Computer Use intent; full dynamic-tool gate is JAC-97.
 - [ ] **JAC-163 / T6** — Computer Use capability evidence and fake/unsupported provider boundary.

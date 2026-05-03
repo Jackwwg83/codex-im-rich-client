@@ -88,6 +88,21 @@ export type {
   ComputerUseCommandRejectedResult,
   ComputerUseCommandResult,
 } from "./computer-use-command.js";
+export {
+  ComputerUsePolicy,
+  DEFAULT_COMPUTER_USE_APPROVAL_KEYWORDS,
+  DEFAULT_COMPUTER_USE_DENY_APPS,
+} from "./computer-use-policy.js";
+export type {
+  ComputerUsePolicyAllowDecision,
+  ComputerUsePolicyCheckInput,
+  ComputerUsePolicyConfig,
+  ComputerUsePolicyDecision,
+  ComputerUsePolicyDenyDecision,
+  ComputerUsePolicyDenyReason,
+  ComputerUsePolicySnapshot,
+  ComputerUseUnknownAppPolicy,
+} from "./computer-use-policy.js";
 
 // Phase 3 T13 — platform-neutral session routing between an IM target,
 // project config, and the persistent Codex thread binding. Storage is
