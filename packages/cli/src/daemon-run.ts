@@ -28,6 +28,7 @@ import { TelegramChannelAdapter } from "@codex-im/im-telegram";
 import {
   AuditRepository,
   BindingRepository,
+  type CallbackTokenRecord,
   CallbackTokenRepository,
   type DatabaseHandle,
   openDatabase,
@@ -52,6 +53,10 @@ interface RuntimeStorage {
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_CONFIG_PATH = join(homedir(), ".codex-im-bridge", "config.toml");
 const DEFAULT_MIGRATIONS_DIR = join(REPO_ROOT, "packages", "storage-sqlite", "src", "migrations");
+export const DAEMON_CODEX_CONFIG_OVERRIDES = {
+  sandbox_mode: "read-only",
+  approval_policy: "on-request",
+} as const;
 
 export async function run(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const flags = parseDaemonRunArgs(argv);
@@ -132,6 +137,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
       insertBestEffort: (input) =>
         asRuntimeStorage(storageBox.current).audit.insertBestEffort(input),
     },
+    renderResolvedApprovalCard: renderResolvedCallbackApprovalCard,
     statusPath: flags.statusPath ?? join(config.daemon.dataDir, "daemon-status.json"),
   });
 
@@ -197,7 +203,7 @@ function createCodexTransport(config: CodexImConfig, logger: Logger): StdioTrans
   return new StdioTransport({
     command: config.codex.binary,
     args: ["app-server", "--listen", "stdio://"],
-    configOverrides: { approval_policy: "on-request" },
+    configOverrides: DAEMON_CODEX_CONFIG_OVERRIDES,
     logger,
   });
 }
@@ -215,6 +221,34 @@ function createSecurityPolicy(config: CodexImConfig): SecurityPolicy {
       };
     }),
   });
+}
+
+export function renderResolvedCallbackApprovalCard(record: CallbackTokenRecord) {
+  return {
+    schemaVersion: "approval-card.v1",
+    kind: "unknown",
+    approvalId: record.approvalId,
+    summary: `Decision recorded: ${approvalActionLabel(record.action)}`,
+    target: { riskLevel: "low" },
+    actions: [],
+    status: "resolved",
+    createdAt: new Date(record.createdAt),
+  } as const;
+}
+
+function approvalActionLabel(action: CallbackTokenRecord["action"]): string {
+  switch (action) {
+    case "allow_once":
+      return "allow once";
+    case "allow_session":
+      return "allow session";
+    case "decline":
+      return "decline";
+    case "abort":
+      return "abort";
+  }
+  const _exhaustive: never = action;
+  return _exhaustive;
 }
 
 function approvalTargetForSnapshot(

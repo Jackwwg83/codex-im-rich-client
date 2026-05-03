@@ -2,7 +2,16 @@
 set -euo pipefail
 
 : "${USER:?load-and-run: USER is required}"
-: "${NODE_BIN:?load-and-run: NODE_BIN is required}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -z "${NODE_BIN:-}" ]; then
+  NODE_BIN="$(command -v node || true)"
+fi
+if [ -z "${DAEMON_ENTRY:-}" ]; then
+  DAEMON_ENTRY="$SCRIPT_DIR/daemon.mjs"
+fi
+
+: "${NODE_BIN:?load-and-run: NODE_BIN is required or node must be on PATH}"
 : "${DAEMON_ENTRY:?load-and-run: DAEMON_ENTRY is required}"
 
 TOKEN="$(security find-generic-password -s codex-im-bridge -a "$USER" -w 2>/dev/null || true)"

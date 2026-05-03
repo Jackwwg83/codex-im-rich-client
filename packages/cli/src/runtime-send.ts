@@ -5,7 +5,7 @@
  *
  * Exercises the full runtime kernel (CodexRuntime + EventNormalizer +
  * ApprovalBroker) against real codex via JSONL stdio, mirroring the
- * `smoke:real-turn` safety rails (sandbox=read-only, approval_policy=
+ * `smoke:real-turn` safety rails (sandbox_mode=read-only, approval_policy=
  * on-request, default-reject every server request through the broker).
  * Phase 1 dev tooling: lets an operator drive one turn end-to-end and
  * see the normalized event stream as JSONL, useful for ad-hoc validation
@@ -26,7 +26,7 @@
  *     runRuntimeSendCore.
  *
  * Safety rails (matching plan §1964):
- *   - sandbox=read-only             (no shell side effects)
+ *   - sandbox_mode=read-only        (no shell side effects)
  *   - approval_policy=on-request    (every approval funnels through us)
  *   - ApprovalBroker default-deny   (T9b: handler=null per method →
  *                                    per-method default-reject response;
@@ -301,7 +301,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
     args: ["app-server", "--listen", "stdio://"],
     ...(flags.subprocessCwd !== undefined ? { cwd: flags.subprocessCwd } : {}),
     configOverrides: {
-      sandbox: "read-only",
+      sandbox_mode: "read-only",
       approval_policy: "on-request",
     },
     logger: log,

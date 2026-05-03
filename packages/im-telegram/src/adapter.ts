@@ -149,6 +149,8 @@ export class TelegramChannelAdapter implements ChannelAdapter {
 
   readonly #options: TelegramChannelAdapterOptions;
   #bot: TelegramBotLike | undefined;
+  #startError: unknown;
+  #startPromise: Promise<void> | undefined;
   #started = false;
   #inboundPaused = true;
   #messageHandlerInstalled = false;
@@ -168,10 +170,27 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     const bot = this.#bot ?? this.#createBot();
     this.#installMessageHandler(bot);
     this.#installActionHandler(bot);
-    await bot.start();
     this.#bot = bot;
     this.#started = true;
     this.#inboundPaused = false;
+    this.#startError = undefined;
+    try {
+      this.#startPromise = Promise.resolve(bot.start()).catch((error: unknown) => {
+        this.#startError = error;
+        this.#inboundPaused = true;
+        this.#started = false;
+      });
+    } catch (error) {
+      this.#startError = error;
+      this.#inboundPaused = true;
+      this.#started = false;
+      throw error;
+    }
+    await Promise.resolve();
+    if (this.#startError !== undefined) {
+      this.#bot = undefined;
+      throw describeTelegramStartError(this.#startError);
+    }
   }
 
   async stop(): Promise<void> {
@@ -181,6 +200,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     this.#inboundPaused = true;
     this.#started = false;
     await this.#bot?.stop();
+    this.#startPromise = undefined;
   }
 
   async pauseInbound(): Promise<void> {
@@ -298,6 +318,13 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   }
 
   #assertStarted(method: string): void {
+    if (this.#startError !== undefined) {
+      throw new Error(
+        `TelegramChannelAdapter.${method} requires healthy bot polling: ${describeTelegramError(
+          this.#startError,
+        )}`,
+      );
+    }
     if (!this.#started) {
       throw new Error(`TelegramChannelAdapter.${method} requires start() first`);
     }
@@ -551,6 +578,10 @@ function describeTelegramError(error: unknown): string {
     return error.message;
   }
   return "unknown error";
+}
+
+function describeTelegramStartError(error: unknown): Error {
+  return new Error(`TelegramChannelAdapter.start failed: ${describeTelegramError(error)}`);
 }
 
 function isTelegramApiError(error: unknown): error is {

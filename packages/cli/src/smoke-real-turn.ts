@@ -40,7 +40,7 @@
  *                          repo-relative paths still resolve).
  *
  * Safety rails (per user rule #5 + plan D4):
- *   - sandbox=read-only           (no shell side effects)
+ *   - sandbox_mode=read-only      (no shell side effects)
  *   - approval_policy=on-request  (everything funnels through approvals)
  *   - ApprovalBroker default-deny (T9b: per-method default-reject for
  *     all 9 generated ServerRequest methods; auth-refresh throws
@@ -327,7 +327,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
     args: ["app-server", "--listen", "stdio://"],
     ...(flags.subprocessCwd !== undefined ? { cwd: flags.subprocessCwd } : {}),
     configOverrides: {
-      sandbox: "read-only",
+      sandbox_mode: "read-only",
       approval_policy: "on-request",
     },
     logger: log,

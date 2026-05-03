@@ -66,7 +66,7 @@ describe("StdioTransport — configOverrides translation (Task 6.2)", () => {
       command: "node",
       args: [argvFixture],
       configOverrides: {
-        sandbox: "read-only",
+        sandbox_mode: "read-only",
         approval_policy: "on-request",
         retries: 3,
         debug: true,
@@ -81,7 +81,7 @@ describe("StdioTransport — configOverrides translation (Task 6.2)", () => {
     // argv-print emits process.argv.slice(2), so it starts with the fixture path
     // followed by our injected -c args.
     const cArgs = out.argv.filter((_, i, arr) => i > 0 && arr[i - 1] === "-c");
-    expect(cArgs).toContain('sandbox="read-only"');
+    expect(cArgs).toContain('sandbox_mode="read-only"');
     expect(cArgs).toContain('approval_policy="on-request"');
     expect(cArgs).toContain("retries=3");
     expect(cArgs).toContain("debug=true");

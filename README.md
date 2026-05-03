@@ -69,7 +69,7 @@ pnpm smoke:computer-use-live   # Phase 6 live harness default skip unless COMPUT
 
 - 默认 `pnpm test` 永不 spawn `codex app-server` 子进程
 - `pnpm smoke:*` 全部 env-gated，明确开关后才跑
-- `smoke:real-turn` 锁死 `sandbox=read-only` + `approval_policy=on-request` + 客户端 default-reject 所有 server request
+- `smoke:real-turn` 锁死 `sandbox_mode=read-only` + `approval_policy=on-request` + 客户端 default-reject 所有 server request
 - `pnpm check:codex-version` 在 codex 升级时 fail-stop，强制 review 生成产物 + 重新捕获 wire fixtures
 
 ## Repo 结构

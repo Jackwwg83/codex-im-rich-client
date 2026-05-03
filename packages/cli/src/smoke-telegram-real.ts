@@ -141,7 +141,7 @@ export async function runTelegramRealSmokeWithLiveServices(
     command: "codex",
     args: ["app-server", "--listen", "stdio://"],
     configOverrides: {
-      sandbox: "read-only",
+      sandbox_mode: "read-only",
       approval_policy: "on-request",
     },
     logger: log,

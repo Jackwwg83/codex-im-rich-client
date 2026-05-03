@@ -58,11 +58,14 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
     expect(result.stdout).not.toContain(TOKEN);
   });
 
-  it("fails closed before Keychain lookup when NODE_BIN is unset", () => {
-    const result = runWrapper(["--dry-run"], { NODE_BIN: undefined });
+  it("defaults NODE_BIN from PATH and DAEMON_ENTRY next to the wrapper when unset", () => {
+    const result = runWrapper(["--dry-run"], { NODE_BIN: undefined, DAEMON_ENTRY: undefined });
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("NODE_BIN");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("NODE_BIN: ");
+    expect(result.stdout).toContain("/node");
+    expect(result.stdout).toContain("DAEMON_ENTRY: ");
+    expect(result.stdout).toContain("/bin/daemon.mjs");
     expect(result.stdout).not.toContain(TOKEN);
   });
 

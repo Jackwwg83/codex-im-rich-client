@@ -67,7 +67,7 @@ TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN=... \
 ```
 
 Runs the live Telegram adapter token/start/stop smoke, then runs the existing
-real Codex harmless-turn path with `sandbox=read-only` and
+real Codex harmless-turn path with `sandbox_mode=read-only` and
 `approval_policy=on-request`. This command can call Telegram and trigger one
 real Codex model turn, so it refuses to run unless **both** gates are present.
 
@@ -132,7 +132,7 @@ errors instead of silently treating `--cwd` as the capture path). Tests live in
 
 ```ts
 configOverrides: {
-  sandbox: "read-only",          // no shell side effects
+  sandbox_mode: "read-only",     // no shell side effects
   approval_policy: "on-request", // every approval funnels through us
 }
 
@@ -188,7 +188,7 @@ If neither `--prompt` nor `--prompt-file` is given, the default
 ### Safety rails
 
 Identical to `smoke:real-turn`:
-- `sandbox=read-only`, `approval_policy=on-request` config overrides
+- `sandbox_mode=read-only`, `approval_policy=on-request` config overrides
 - `ApprovalBroker.attach()` covers `client.setServerRequestHandler` —
   T9b's per-method default-reject responses fire for every approval
   the model triggers (`item/fileChange/requestApproval`,

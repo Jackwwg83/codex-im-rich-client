@@ -93,7 +93,7 @@ export class TelegramLiveSmokeBot implements TelegramBotLike {
     const pollingError = this.#pollingError;
     this.#polling = undefined;
     this.#pollingError = undefined;
-    if (pollingError !== undefined) {
+    if (pollingError !== undefined && !isExpectedPollingStopError(pollingError)) {
       throw describeLiveSmokeError(pollingError);
     }
   }
@@ -125,4 +125,8 @@ function describeLiveSmokeError(error: unknown): Error {
     return error;
   }
   return new Error(String(error));
+}
+
+function isExpectedPollingStopError(error: unknown): boolean {
+  return error instanceof Error && error.message === "Aborted delay";
 }

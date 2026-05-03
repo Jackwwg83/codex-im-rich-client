@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { TelegramChannelAdapter } from "../src/index.js";
+import type { TelegramBotLike, TelegramMessageHandlerLike } from "../src/index.js";
 
 const SRC_DIR = "packages/im-telegram/src";
 
@@ -53,6 +54,45 @@ describe("TelegramChannelAdapter lifecycle (T21)", () => {
 
     expect(bot.start).toHaveBeenCalledTimes(1);
     expect(bot.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens inbound handling without waiting for a long-polling start promise to settle", async () => {
+    const handlers: TelegramMessageHandlerLike[] = [];
+    const bot: TelegramBotLike = {
+      start: vi.fn(() => new Promise<void>(() => undefined)),
+      stop: vi.fn(() => undefined),
+      on: vi.fn((filter, handler) => {
+        expect(filter).toBe("message:text");
+        handlers.push(handler as TelegramMessageHandlerLike);
+      }),
+    };
+    const adapter = new TelegramChannelAdapter({ bot });
+    const seen = vi.fn();
+
+    adapter.onMessage(seen);
+    await adapter.start();
+    await handlers[0]?.({
+      message: {
+        message_id: 7,
+        date: 1_710_000_000,
+        chat: { id: 123 },
+        from: { id: 456, username: "operator" },
+        text: "/use codex-im",
+      },
+      chat: { id: 123 },
+      from: { id: 456, username: "operator" },
+    });
+    await adapter.stop();
+
+    expect(bot.start).toHaveBeenCalledTimes(1);
+    expect(bot.stop).toHaveBeenCalledTimes(1);
+    expect(seen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: { platform: "telegram", chatId: "123" },
+        sender: { userId: "456", displayName: "operator" },
+        text: "/use codex-im",
+      }),
+    );
   });
 
   it("fails closed before startup when neither bot nor token is configured", async () => {

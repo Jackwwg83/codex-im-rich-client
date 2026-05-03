@@ -58,6 +58,80 @@ Passing criteria:
 - real smoke completes one harmless Codex turn;
 - output does not print the bot token.
 
+### Telegram Web daemon acceptance
+
+For an end-to-end user-visible acceptance pass, run the daemon from the local
+Keychain wrapper, then use Telegram Web with the test bot:
+
+```bash
+bash ~/.codex-im-bridge/bin/load-and-run.sh
+```
+
+In Telegram Web:
+
+```text
+/start
+/use codex-im
+Reply exactly: OK
+Run this shell command touch /tmp/codex-im-live-approval-test.txt
+```
+
+Required observations:
+
+- `/use codex-im` returns `Using project codex-im`;
+- `Reply exactly: OK` returns `OK`;
+- a write command in read-only sandbox renders an approval card with
+  `Allow once`, `Allow session`, `Decline`, and `Abort`;
+- `Allow once` runs the command and edits the card to a resolved card with no
+  action buttons;
+- `Decline` does not run the command and records a resolved decline;
+- `Abort` interrupts the turn and does not run the command;
+- `Allow session` runs the approved command, and a subsequent exact same
+  command can run without a new callback token;
+- a different command/path may still request a new approval, which is acceptable
+  conservative Codex session-grant scoping.
+
+### Telegram scenario coverage plan
+
+Use Telegram Web as the user-visible driver, and verify every scenario with at
+least one non-UI signal: SQLite callback/binding rows, filesystem side effects,
+daemon logs, or the bounded smoke command exit code. Do not rely only on what
+the chat bubble appears to show.
+
+| Area | Telegram input/action | Expected user-visible result | Non-UI assertion |
+|---|---|---|---|
+| Bot bootstrap | `/start` | bot remains reachable; no crash | daemon keeps polling |
+| Project binding | `/use codex-im` | `Using project codex-im` | `thread_bindings` row exists for Telegram target |
+| Invalid project | `/use does-not-exist` | explicit unknown-project reply | no binding overwrite |
+| Basic turn | `Reply exactly: OK` | bot replies `OK` | `active_turn_id` clears after completion |
+| Sequential turns | send two harmless prompts one after another | both complete in order | same target remains bound; no pending turn leak |
+| Long reply/edit | ask for a 20-line numbered list | working message edits to final text | no Telegram edit error in daemon log |
+| Approval render | ask to `touch` a `/tmp/codex-im-live-*` file | approval card with four actions | four callback tokens bound to one `messageRef` |
+| Allow once | tap `Allow once` | command runs; resolved card has no buttons | selected token `used`, siblings `revoked`, file exists |
+| Decline | tap `Decline` | command not run; decline text rendered | selected token `used`, file absent |
+| Abort | tap `Abort` | turn interrupted | selected token `used`, file absent, turn not left active |
+| Allow session exact reuse | approve `printf ... >> file`, then send exact same prompt | second command runs without a new card | file grows twice; no new callback token row |
+| Allow session scoped change | after session approval, send different command/path | fresh approval is requested | new `approvalId` and new callback token group |
+| Duplicate click | click one approval action, then try another action on same card if still possible | second action fails closed or buttons are gone | only one token is `used`; siblings are `revoked` |
+| Pending restart | create a pending card, restart daemon, then click the card | either restored and resolved, or fails closed visibly | no silent execution without token/messageRef validation |
+| Unauthorized private chat | message from non-allowlisted Telegram user | ignored or denied | no thread binding, no turn started |
+| Group mention | message bot in a test group with configured allowlist | only authorized target routes | target includes expected group chat/thread metadata |
+| Telegram API downtime | stop network or use invalid token in smoke | explicit smoke failure | no token bytes printed |
+| Redaction | inspect plist/logs/SQLite/docs after live run | no secret material visible | grep for token-shaped material returns empty |
+
+Suggested execution order for broad live coverage:
+
+1. Run `pnpm release:check` to prove the non-live baseline.
+2. Run `smoke:telegram-live` and `smoke:telegram-real` with the token loaded
+   from Keychain.
+3. Run the Telegram Web private-chat scenarios from bootstrap through approval
+   actions.
+4. Run resilience scenarios: duplicate click, pending restart, and exact-session
+   reuse.
+5. If a disposable group is available, run group and allowlist scenarios.
+6. Finish with redaction checks over generated plist, daemon logs, SQLite, and
+   docs before recording evidence.
+
 Failure localization:
 
 - missing live flag -> operator gate is working;

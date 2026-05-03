@@ -13,7 +13,7 @@
  * Does NOT trigger any model call, thread, or turn — that's smoke:real-turn.
  *
  * Hard rails:
- *   - sandbox=read-only via configOverrides
+ *   - sandbox_mode=read-only via configOverrides
  *   - approval_policy=on-request via configOverrides
  *   - client default-rejects all server-initiated requests (no handler set)
  */
@@ -42,7 +42,7 @@ export async function run(): Promise<void> {
     command: "codex",
     args: ["app-server", "--listen", "stdio://"],
     configOverrides: {
-      sandbox: "read-only",
+      sandbox_mode: "read-only",
       approval_policy: "on-request",
     },
     logger: log,
