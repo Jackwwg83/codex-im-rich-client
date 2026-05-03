@@ -2,8 +2,8 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 1 A2 complete; daemon bundle builds as
-> a launchd-runnable `.mjs` artifact with `better-sqlite3` external.
+> **Last updated:** 2026-05-03 - Block 1 A3 complete; bridge install writes a
+> runnable app layout and proves installed daemon preflight from temp HOME.
 
 ## 1. Current State
 
@@ -19,9 +19,10 @@
 - **Completed in this effort:**
   - `3bcdcd0` - docs-only Direct Use / Phase 8 plan v2 and live-status anchor.
   - `15dfba6` - A1 launchd dry-run runtime verification.
-  - pending commit - A2 daemon bundle build artifact.
-- **Next exact action:** A3 install runtime app artifacts and dependencies under
-  `~/.codex-im-bridge/app`.
+  - `42098fb` - A2 daemon bundle build artifact.
+  - pending commit - A3 bridge install app layout + installed daemon preflight.
+- **Next exact action:** A4 wire `release:check` through
+  `bridge:build -> bridge:install temp HOME -> launchd dry-run`.
 
 ## 2. Why This Exists
 
@@ -63,7 +64,7 @@ Required P0 plan edits:
 | Block | Scope | Status |
 |---|---|---|
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
-| Block 1 | truthful production launch chain | in progress: A2 complete |
+| Block 1 | truthful production launch chain | in progress: A3 complete |
 | Block 2 | IM command control plane | blocked on Block 1 |
 | Block 3 | repeatable smoke layers | blocked on Block 1 |
 | Block 4 | real production acceptance + 24h soak | operator-gated |
@@ -136,15 +137,26 @@ Latest A2 full gates:
 | `pnpm lint` | green: 319 files checked |
 | `pnpm protocol:check` | green |
 
+Latest A3 targeted gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit scripts/build-daemon-bundle.test.mts scripts/install-bridge.test.mjs scripts/uninstall-bridge.test.mjs scripts/load-and-run.test.mjs packages/cli/test/daemon-run.test.ts` | green: 5 files, 21 passing |
+| `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | green; installed app layout with `better-sqlite3@12.9.0`, `bindings@1.5.0`, `file-uri-to-path@1.0.0`; installed daemon preflight `ok` |
+| `pnpm typecheck` | green |
+| `pnpm test` | green: 144 files, 1278 passing, 1 skipped |
+| `pnpm lint` | green: 323 files checked |
+| `pnpm protocol:check` | green |
+
 ## 7. Next Implementation Order
 
 Start with Block 1 only:
 
 1. Done: `fix(launchd): verify runtime paths during dry-run`
 2. Done: `feat(bridge): build daemon bundle`
-3. Next: `feat(bridge): install runtime app artifacts and dependencies`
-4. `test(bridge): prove installed daemon preflight from temp HOME`
-5. `test(release): prove bridge install -> launchd dry-run chain`
+3. Done: `feat(bridge): install runtime app artifacts and dependencies`
+4. Done in A3: `test(bridge): prove installed daemon preflight from temp HOME`
+5. Next: `test(release): prove bridge install -> launchd dry-run chain`
 6. `docs(ops): update production launch docs to remove false-green wording`
 
 Do not start Track B commands until Block 1 is green.

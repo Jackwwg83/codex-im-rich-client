@@ -9,7 +9,11 @@ import { build } from "esbuild";
 export const DAEMON_BUNDLE_ENTRY = "packages/cli/src/daemon-run-bundle-entry.ts";
 export const DAEMON_BUNDLE_OUTFILE = "dist/codex-im-daemon.mjs";
 export const DAEMON_BUNDLE_EXTERNAL = ["better-sqlite3"] as const;
-export const DAEMON_BUNDLE_BANNER = "#!/usr/bin/env node";
+export const DAEMON_BUNDLE_BANNER = [
+  "#!/usr/bin/env node",
+  'import { createRequire as __codexImCreateRequire } from "node:module";',
+  "const require = __codexImCreateRequire(import.meta.url);",
+].join("\n");
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN_SHAPED_RE = /\b\d{5,}:[A-Za-z0-9_-]{20,}\b/;

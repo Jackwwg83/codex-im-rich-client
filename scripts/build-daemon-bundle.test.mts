@@ -51,7 +51,8 @@ describe("build-daemon-bundle", () => {
     expect(result.entryPoint).toBe(join(REPO_ROOT, DAEMON_BUNDLE_ENTRY));
     expect(result.outfile).toBe(outfile);
     expect(bytes.startsWith(`${DAEMON_BUNDLE_BANNER}\n`)).toBe(true);
-    expect(bytes.split("\n")[1]).not.toBe(DAEMON_BUNDLE_BANNER);
+    expect(bytes.split("\n").filter((line) => line === "#!/usr/bin/env node")).toHaveLength(1);
+    expect(bytes).toContain("__codexImCreateRequire");
     expect(bytes).toContain('from "better-sqlite3"');
     expect(fileStats.mode & 0o111).not.toBe(0);
     expect(() => assertNoDaemonBundleSecretMaterial(bytes)).not.toThrow();

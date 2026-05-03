@@ -46,6 +46,8 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
     );
     expect(result.stdout).toContain("NODE_BIN: /fake/node");
     expect(result.stdout).toContain("DAEMON_ENTRY: /fake/daemon.mjs");
+    expect(result.stdout).toContain("CONFIG_PATH: ");
+    expect(result.stdout).toContain("MIGRATIONS_DIR: ");
     expect(result.stdout).not.toContain(TOKEN);
     expect(result.stderr).toBe("");
   });
@@ -65,7 +67,11 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
     expect(result.stdout).toContain("NODE_BIN: ");
     expect(result.stdout).toContain("/node");
     expect(result.stdout).toContain("DAEMON_ENTRY: ");
-    expect(result.stdout).toContain("/bin/daemon.mjs");
+    expect(result.stdout).toContain("/app/daemon.mjs");
+    expect(result.stdout).toContain("CONFIG_PATH: ");
+    expect(result.stdout).toContain("/config.toml");
+    expect(result.stdout).toContain("MIGRATIONS_DIR: ");
+    expect(result.stdout).toContain("/app/migrations");
     expect(result.stdout).not.toContain(TOKEN);
   });
 
@@ -78,6 +84,11 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
       [
         "#!/usr/bin/env bash",
         'echo "daemon-entry:$1"',
+        'echo "config-flag:$2"',
+        'echo "config-path:$3"',
+        'echo "migrations-flag:$4"',
+        'echo "migrations-dir:$5"',
+        'echo "passthrough:$6"',
         'echo "token-length:${#IM_TELEGRAM_BOT_TOKEN}"',
       ].join("\n"),
       { mode: 0o700 },
@@ -99,6 +110,12 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("daemon-entry:/fake/daemon.mjs");
+    expect(result.stdout).toContain("config-flag:--config");
+    expect(result.stdout).toContain("config-path:");
+    expect(result.stdout).toContain("/config.toml");
+    expect(result.stdout).toContain("migrations-flag:--migrations-dir");
+    expect(result.stdout).toContain("migrations-dir:");
+    expect(result.stdout).toContain("/app/migrations");
     expect(result.stdout).toContain(`token-length:${TOKEN.length}`);
     expect(result.stdout).not.toContain(TOKEN);
   });

@@ -40,6 +40,7 @@ interface DaemonRunFlags {
   readonly configPath: string;
   readonly statusPath?: string;
   readonly migrationsDir: string;
+  readonly preflight: boolean;
 }
 
 interface RuntimeStorage {
@@ -62,6 +63,10 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
   const flags = parseDaemonRunArgs(argv);
   const logger = pino({ name: "codex-im-daemon-run", level: process.env.LOG_LEVEL ?? "info" });
   const config = await loadConfig(flags.configPath);
+  if (flags.preflight) {
+    runDaemonPreflight(config, flags);
+    return;
+  }
   const secrets = resolveConfigSecrets(config, { env: process.env, logger });
   const daemonLogger = createDaemonLogger<Logger>({ logDir: config.daemon.logDir });
   const storageBox: { current?: RuntimeStorage } = {};
@@ -153,6 +158,7 @@ function parseDaemonRunArgs(argv: readonly string[]): DaemonRunFlags {
   let configPath = DEFAULT_CONFIG_PATH;
   let statusPath: string | undefined;
   let migrationsDir = DEFAULT_MIGRATIONS_DIR;
+  let preflight = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--config") {
@@ -164,6 +170,8 @@ function parseDaemonRunArgs(argv: readonly string[]): DaemonRunFlags {
     } else if (arg === "--migrations-dir") {
       i += 1;
       migrationsDir = requiredValue(argv, i, arg);
+    } else if (arg === "--preflight") {
+      preflight = true;
     } else {
       throw new Error(`unknown daemon run argument: ${arg}`);
     }
@@ -172,6 +180,7 @@ function parseDaemonRunArgs(argv: readonly string[]): DaemonRunFlags {
     configPath: resolve(configPath),
     ...(statusPath === undefined ? {} : { statusPath }),
     migrationsDir: resolve(migrationsDir),
+    preflight,
   };
 }
 
@@ -194,6 +203,19 @@ function openRuntimeStorage(config: CodexImConfig, migrationsDir: string): Runti
     callbackTokens: new CallbackTokenRepository(db),
     close: () => db.close(),
   };
+}
+
+function runDaemonPreflight(config: CodexImConfig, flags: DaemonRunFlags): void {
+  const db = openDatabase(config.storage.sqlitePath);
+  try {
+    if (config.storage.autoMigrate) {
+      runMigrations(db, flags.migrationsDir);
+    }
+    createSecurityPolicy(config);
+  } finally {
+    db.close();
+  }
+  process.stdout.write("daemon preflight: ok\n");
 }
 
 function createBroker(config: CodexImConfig, logger: Logger): ApprovalBroker {

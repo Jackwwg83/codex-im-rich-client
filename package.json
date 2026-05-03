@@ -30,6 +30,8 @@
     "protocol:generate": "pnpm check:codex-version && rm -rf packages/codex-protocol/src/generated packages/codex-protocol/schema && codex app-server generate-ts --out packages/codex-protocol/src/generated && codex app-server generate-json-schema --out packages/codex-protocol/schema && node scripts/canonicalize-schema.mjs",
     "protocol:check": "pnpm protocol:generate && git diff --exit-code packages/codex-protocol",
     "bridge:build": "tsx scripts/build-daemon-bundle.mts",
+    "bridge:install": "node bin/install-bridge.mjs",
+    "bridge:uninstall": "node bin/uninstall-bridge.mjs",
     "release:check": "tsx scripts/release-readiness-check.mts",
     "launchd:prepare": "node bin/prepare-launchd-runtime.mjs",
     "launchd:install": "node bin/install-launchd.mjs",
