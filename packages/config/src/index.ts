@@ -51,6 +51,9 @@ export interface CodexImConfig {
       enabled: boolean;
       clientId: string;
       clientSecretEnv: string;
+      robotCode?: string;
+      cardTemplateId?: string;
+      callbackRouteKey?: string;
     };
   };
   projects: Record<
@@ -196,6 +199,9 @@ const rawConfigSchema = z
             enabled: z.boolean(),
             client_id: z.string().min(1),
             client_secret_env: envNameSchema,
+            robot_code: configPlainStringSchema.optional(),
+            card_template_id: configPlainStringSchema.optional(),
+            callback_route_key: configPlainStringSchema.optional(),
           })
           .strict()
           .default({
@@ -275,6 +281,15 @@ export function parseConfigToml(source: string): CodexImConfig {
         enabled: parsed.adapters.dingtalk.enabled,
         clientId: parsed.adapters.dingtalk.client_id,
         clientSecretEnv: parsed.adapters.dingtalk.client_secret_env,
+        ...(parsed.adapters.dingtalk.robot_code === undefined
+          ? {}
+          : { robotCode: parsed.adapters.dingtalk.robot_code }),
+        ...(parsed.adapters.dingtalk.card_template_id === undefined
+          ? {}
+          : { cardTemplateId: parsed.adapters.dingtalk.card_template_id }),
+        ...(parsed.adapters.dingtalk.callback_route_key === undefined
+          ? {}
+          : { callbackRouteKey: parsed.adapters.dingtalk.callback_route_key }),
       },
     },
     projects: Object.fromEntries(

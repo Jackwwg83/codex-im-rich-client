@@ -15,7 +15,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Daemon } from "../src/index.js";
 
 const FIXTURE_DIR = "packages/im-dingtalk/test/fixtures";
-const DINGTALK_PROMPT_TARGET = { platform: "dingtalk", chatId: "cid_test_private" };
+const DINGTALK_PROMPT_TARGET = { platform: "dingtalk", chatId: "staff_test_private" };
 const DINGTALK_CARD_TARGET = { platform: "dingtalk", chatId: "cid_card_group" };
 
 class FakeDingTalkStreamClient implements DingTalkStreamClientLike {

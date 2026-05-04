@@ -1,9 +1,5 @@
 export { DingTalkChannelAdapter } from "./adapter.js";
-export type {
-  DingTalkActionClientLike,
-  DingTalkCardClientLike,
-  DingTalkChannelAdapterOptions,
-} from "./adapter.js";
+export type { DingTalkChannelAdapterOptions } from "./adapter.js";
 export {
   decodeDingTalkCallbackHandle,
   dingtalkCardActionIdempotencyKey,
@@ -36,11 +32,17 @@ export { DINGTALK_CAPABILITIES } from "./capabilities.js";
 export {
   DINGTALK_TOPIC_CARD,
   DINGTALK_TOPIC_ROBOT,
+  createDingTalkNoopActionClient,
+  createDingTalkOpenApiCardClient,
   createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
 } from "./client.js";
 export type {
+  DingTalkActionClientLike,
+  DingTalkCardClientLike,
   DingTalkDwClientLike,
+  DingTalkOpenApiCardClientConfig,
+  DingTalkOpenApiCardClientDeps,
   DingTalkSessionReplyTextClientDeps,
   DingTalkSessionReplyTextClientLike,
   DingTalkStreamClientConfig,

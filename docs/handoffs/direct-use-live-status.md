@@ -7,8 +7,9 @@
 > routing, `/status`, `/use codex-im`, real Codex prompt/reply, and live card
 > schema delivery, real `Allow once` callback resolution, and Feishu CardKit
 > terminal-card refresh. DingTalk Stream connects with redacted test
-> credentials; DingTalk real inbound/card direct-use is still pending on a
-> usable client/session.
+> credentials, and production card send/update is now wired behind explicit
+> OpenAPI card-template config; DingTalk real inbound/card direct-use is still
+> pending on a usable client/session plus matching card template.
 
 ## 1. Current State
 
@@ -69,8 +70,13 @@
   - latest patch - Feishu/Lark terminal approval-card refresh now uses CardKit
     `idConvert` + full-card `update`, with sanitized SDK error handling and a
     redacted `LARK_LIVE_CARD_UPDATE` smoke path.
+  - latest patch - DingTalk production `daemon run` now wires a real OpenAPI
+    card client when `robot_code` and `card_template_id` are configured, and
+    private robot chats now use `senderStaffId` targets so card callbacks can
+    satisfy target/messageRef validation.
 - **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
-  once a usable DingTalk client/session can produce real inbound events.
+  once a usable DingTalk client/session can produce real inbound events and the
+  test app has a matching card template configured.
 
 ## 2. Why This Exists
 
@@ -369,6 +375,7 @@ Latest live Feishu/Lark direct-use evidence:
 | Lark card schema + CardKit update | First real approval attempt exposed Feishu error `230099` / unknown root property `elements`; `be41071` moved card content under `body.elements`. The later callback fix sends Card JSON 2.0 button `behaviors` with only `{ token: "v1:..." }` and no approval id / action kind. CardKit `idConvert` + `update` is now covered by `LARK_LIVE=1 LARK_LIVE_CARD=1 LARK_LIVE_CARD_UPDATE=1 pnpm smoke:lark-live` with redacted message-id evidence | fixed/green |
 | Lark approval callback | Fresh Feishu Web write approval was accepted as inbound prompt, rendered a real approval card, and a keyboard-driven click on `Allow once` reached the launchd daemon. SQLite recorded `allow_once=used` with sibling tokens `revoked`, the target `/tmp` file was created, and Codex replied `Ran ...` | fixed/green |
 | Lark terminal approval card visual refresh | After bridge rebuild/install and launchd restart, a fresh Feishu Web write approval resolved through `Allow once`; the target `/tmp` file existed, latest SQLite callback tokens showed `allow_once=used` with siblings `revoked`, `pnpm launchd:status` reported `pendingApprovals=0`, and a Feishu Web reload preserved `Status: resolved` with zero visible `Allow once` buttons | fixed/green |
+| DingTalk production card client | `createDingTalkOpenApiCardClient` now obtains an OpenAPI token, calls card `createAndDeliver`, updates by `outTrackId`, maps group/private targets to `IM_GROUP` / `IM_ROBOT` spaces, and sanitizes failures; production `daemon run` injects it only when `robot_code` + `card_template_id` are configured | fixed/green locally |
 
 Latest Lark hardening gates:
 
@@ -379,7 +386,7 @@ Latest Lark hardening gates:
 | `LARK_LIVE=1 LARK_LIVE_CARD=1 LARK_LIVE_CARD_UPDATE=1 pnpm smoke:lark-live` | green: redacted live card schema + CardKit update smoke sent |
 | `pnpm typecheck` | green |
 | `pnpm lint` | green: 332 files checked |
-| `pnpm test` | green: 148 files, 1352 passing, 1 skipped |
+| `pnpm test` | green: 148 files, 1355 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 | `pnpm release:check -- --skip-full-gates` | green: bridge build/install, launchd dry-run, redaction scan, daemon roundtrip, fake smokes, and default live gates/skips passed |
 | `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon running and `pendingApprovals=0` |

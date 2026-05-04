@@ -36,6 +36,8 @@ import {
 } from "@codex-im/daemon";
 import {
   DingTalkChannelAdapter,
+  createDingTalkNoopActionClient,
+  createDingTalkOpenApiCardClient,
   createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
 } from "@codex-im/im-dingtalk";
@@ -314,6 +316,19 @@ export function createProductionAdapter(
     if (secrets.dingtalkClientSecret === undefined) {
       throw new Error("daemon run requires resolved DingTalk client secret");
     }
+    const dingTalkCardClient =
+      config.adapters.dingtalk.robotCode === undefined ||
+      config.adapters.dingtalk.cardTemplateId === undefined
+        ? undefined
+        : createDingTalkOpenApiCardClient({
+            clientId: config.adapters.dingtalk.clientId,
+            clientSecret: secrets.dingtalkClientSecret,
+            robotCode: config.adapters.dingtalk.robotCode,
+            cardTemplateId: config.adapters.dingtalk.cardTemplateId,
+            ...(config.adapters.dingtalk.callbackRouteKey === undefined
+              ? {}
+              : { callbackRouteKey: config.adapters.dingtalk.callbackRouteKey }),
+          });
     entries.push({
       platform: "dingtalk",
       adapter: new DingTalkChannelAdapter({
@@ -324,6 +339,8 @@ export function createProductionAdapter(
           keepAlive: true,
           debug: false,
         }),
+        ...(dingTalkCardClient === undefined ? {} : { cardClient: dingTalkCardClient }),
+        actionClient: createDingTalkNoopActionClient(),
         textClient: createDingTalkSessionReplyTextClient(),
       }),
     });

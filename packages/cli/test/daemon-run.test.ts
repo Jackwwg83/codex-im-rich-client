@@ -103,6 +103,8 @@ describe("daemon run safety rails", () => {
     expect(source).toContain("new TelegramChannelAdapter");
     expect(source).toContain("createLarkSdkChannelAdapter");
     expect(source).toContain("new DingTalkChannelAdapter");
+    expect(source).toContain("createDingTalkOpenApiCardClient");
+    expect(source).toContain("createDingTalkNoopActionClient");
     expect(source).toContain("createDingTalkSessionReplyTextClient");
     expect(source).toContain("createDingTalkStreamClient");
   });

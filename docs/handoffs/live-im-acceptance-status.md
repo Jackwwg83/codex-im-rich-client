@@ -6,9 +6,10 @@
 > approval callback acceptance + development-task control acceptance passed.
 > Feishu/Lark now also passes launchd daemon inbound, `/status`, `/use`,
 > real Codex prompt/reply, live card schema delivery, CardKit terminal-card
-> refresh, and the real approval `Allow once` callback path. DingTalk live
-> dry-run/Stream acceptance passed with redacted test credentials; DingTalk
-> real inbound/card direct-use remains pending on a usable client/session.
+> refresh, and the real approval `Allow once` callback path. DingTalk production
+> now has a configurable OpenAPI card client for create/update plus Stream
+> action acknowledgement safety; DingTalk real inbound/card direct-use remains
+> pending on a usable client/session and card-template configuration.
 
 ---
 
@@ -22,8 +23,10 @@
 - **Live acceptance status:** Telegram real direct-use acceptance is green.
   Feishu/Lark live-smoke, direct-use prompt paths, and real `Allow once`
   approval callback are green, including terminal approval-card visual refresh
-  through Feishu CardKit. DingTalk live-smoke Stream acceptance is green, with
-  real inbound/card direct-use still pending on a usable DingTalk client/session.
+  through Feishu CardKit. DingTalk live-smoke Stream acceptance is green, and
+  production card send/update is now wired behind explicit `robot_code` +
+  `card_template_id` config; real inbound/card direct-use still needs a usable
+  DingTalk client/session and matching card template.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -35,7 +38,7 @@
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once callback passed. DingTalk Stream live acceptance passed; DingTalk direct-use inbound/card remains pending on a usable client/session.
+Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once callback passed. DingTalk Stream live acceptance passed; DingTalk production card send/update is wired but direct-use inbound/card remains pending on a usable client/session and card-template configuration.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -73,7 +76,8 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
-| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | DingTalk Web was unavailable during this run and no desktop/mobile client session was available; Stream connected but no real inbound event was produced |
+| DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `robot_code` and `card_template_id` are configured; errors are sanitized |
+| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs a usable DingTalk client/session plus a matching card template; Stream connected but no real inbound event was produced |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -204,3 +208,13 @@ Stop and treat as a blocker if:
   permission failure showed that raw Axios errors can include bearer headers if
   left uncaught. The Lark SDK client now uses a silent SDK logger and wraps SDK
   failures in sanitized errors before they can reach smoke or daemon output.
+- 2026-05-04: DingTalk production readiness was tightened locally. `daemon run`
+  now injects a real DingTalk OpenAPI card client when `robot_code` and
+  `card_template_id` are present, using `/v1.0/oauth2/accessToken`,
+  `/v1.0/card/instances/createAndDeliver`, and `/v1.0/card/instances` without
+  adding an SDK dependency. Private DingTalk robot messages now use
+  `senderStaffId` as the target chat id so `IM_ROBOT.<staffId>` card callbacks
+  can satisfy messageRef/target validation. Local gates passed: `pnpm
+  typecheck`, `pnpm lint`, `pnpm protocol:check`, `pnpm exec vitest run
+  packages/im-dingtalk/test`, and `pnpm test` (148 files, 1355 passing, 1
+  skipped).

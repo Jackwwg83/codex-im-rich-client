@@ -240,7 +240,7 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       loadFixtureWithSessionReply("private-text-message.json"),
     );
     const sentText = await adapter.sendText(
-      { platform: "dingtalk", chatId: "cid_test_private" },
+      { platform: "dingtalk", chatId: "staff_test_private" },
       "Codex is working...",
     );
     const sentCard = await adapter.sendCard(TARGET, CARD);
@@ -255,7 +255,7 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
 
     expect(seenMessages).toHaveBeenCalledWith(
       expect.objectContaining({
-        target: { platform: "dingtalk", chatId: "cid_test_private" },
+        target: { platform: "dingtalk", chatId: "staff_test_private" },
         text: "hello from dingtalk",
       }),
     );
@@ -264,7 +264,7 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       callbackNonce: "",
     });
     expect(sentText).toEqual({
-      target: { platform: "dingtalk", chatId: "cid_test_private" },
+      target: { platform: "dingtalk", chatId: "staff_test_private" },
       messageId: "ding_text_private_001",
     });
     expect(seenActions).toHaveBeenCalledWith(

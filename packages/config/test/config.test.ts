@@ -47,9 +47,12 @@ verification_token_env = "LARK_VERIFICATION_TOKEN"
 allowed_chat_ids       = ["oc_test_chat"]
 
 [adapters.dingtalk]
-enabled           = true
-client_id         = "ding_test_client_id"
-client_secret_env = "DINGTALK_CLIENT_SECRET"
+enabled            = true
+client_id          = "ding_test_client_id"
+client_secret_env  = "DINGTALK_CLIENT_SECRET"
+robot_code         = "ding_test_robot_code"
+card_template_id   = "ding_test_card_template"
+callback_route_key = "codex_im"
 
 [projects.web]
 cwd            = "/Users/mini/code/web"
@@ -79,6 +82,9 @@ describe("@codex-im/config (T7-T8)", () => {
       enabled: true,
       clientId: "ding_test_client_id",
       clientSecretEnv: "DINGTALK_CLIENT_SECRET",
+      robotCode: "ding_test_robot_code",
+      cardTemplateId: "ding_test_card_template",
+      callbackRouteKey: "codex_im",
     });
     expect(config.storage.autoMigrate).toBe(false);
     expect(config.computerUse).toEqual({

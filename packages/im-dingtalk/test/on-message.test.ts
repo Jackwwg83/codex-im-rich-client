@@ -46,12 +46,12 @@ describe("DingTalk message receive fixtures (JAC-81)", () => {
     const msg = normalizeDingTalkRawRobotMessage(fixture("private-text-message.json"), 0);
 
     expect(msg).toEqual({
-      target: { platform: "dingtalk", chatId: "cid_test_private" },
+      target: { platform: "dingtalk", chatId: "staff_test_private" },
       sender: { userId: "staff_test_private", displayName: "Ada" },
       text: "hello from dingtalk",
       receivedAt: new Date("2026-05-02T19:43:20.000Z"),
       messageRef: {
-        target: { platform: "dingtalk", chatId: "cid_test_private" },
+        target: { platform: "dingtalk", chatId: "staff_test_private" },
         messageId: "msg_test_private",
       },
       idempotencyKey: "robot:msg_test_private",
@@ -96,7 +96,7 @@ describe("DingTalk message receive fixtures (JAC-81)", () => {
     expect(msg.idempotencyKey).toBe("robot:msg_test_private");
     expect(rawJson).not.toContain("stream_msg_private_001");
     expect(rawJson).not.toContain("msg_test_private");
-    expect(rawJson).not.toContain("cid_test_private");
+    expect(rawJson).not.toContain("staff_test_private");
     expect(rawJson).not.toMatch(/sessionWebhook|access_token|clientSecret|client_secret/i);
   });
 

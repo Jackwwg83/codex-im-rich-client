@@ -62,10 +62,7 @@ export function normalizeDingTalkRawRobotMessage(
     throw new Error("DingTalkChannelAdapter.onMessage received incomplete robot event");
   }
 
-  const target: Target = {
-    platform: "dingtalk",
-    chatId: conversationId,
-  };
+  const target = targetFromRobotMessage(raw);
   const sender: Sender = {
     userId: senderUserId,
     ...(raw.senderNick === undefined ? {} : { displayName: raw.senderNick }),
@@ -107,7 +104,7 @@ export function extractDingTalkRobotSessionReply(
     return undefined;
   }
   return {
-    target: { platform: "dingtalk", chatId: raw.conversationId },
+    target: targetFromRobotMessage(raw),
     url: raw.sessionWebhook,
   };
 }
@@ -140,6 +137,16 @@ function extractRobotText(raw: DingTalkRawRobotMessage): string {
     return `Unsupported DingTalk message type: ${raw.msgtype ?? "<missing>"}`;
   }
   return raw.text?.content ?? "";
+}
+
+function targetFromRobotMessage(raw: DingTalkRawRobotMessage): Target {
+  if (raw.conversationType === "1" && raw.senderStaffId !== undefined) {
+    return { platform: "dingtalk", chatId: raw.senderStaffId };
+  }
+  if (raw.conversationId !== undefined) {
+    return { platform: "dingtalk", chatId: raw.conversationId };
+  }
+  throw new Error("DingTalkChannelAdapter.onMessage missing robot target");
 }
 
 function dingTalkReceivedAt(createAt: number | string | undefined, nowMs: number): Date {

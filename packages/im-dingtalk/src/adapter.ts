@@ -19,6 +19,8 @@ import { type DingTalkApprovalCardJson, renderDingTalkApprovalCard } from "./car
 import {
   DINGTALK_TOPIC_CARD,
   DINGTALK_TOPIC_ROBOT,
+  type DingTalkActionClientLike,
+  type DingTalkCardClientLike,
   type DingTalkSessionReplyTextClientLike,
   type DingTalkStreamClientLike,
   type DingTalkStreamEventLike,
@@ -38,24 +40,6 @@ export interface DingTalkChannelAdapterOptions {
   readonly cardClient?: DingTalkCardClientLike;
   readonly actionClient?: DingTalkActionClientLike;
   readonly textClient?: DingTalkSessionReplyTextClientLike;
-}
-
-export interface DingTalkCardClientLike {
-  sendCard(input: { target: Target; card: DingTalkApprovalCardJson }): Promise<{
-    messageId: string;
-  }>;
-  updateCard(input: { messageRef: MessageRef; card: DingTalkApprovalCardJson }): Promise<void>;
-  editText(input: { messageRef: MessageRef; text: string }): Promise<void>;
-}
-
-export interface DingTalkActionClientLike {
-  answerAction(input: {
-    callbackHandle: string;
-    streamMessageId: string;
-    outTrackId: string;
-    receivedAt: Date;
-    ack: ActionAck;
-  }): Promise<void>;
 }
 
 export class DingTalkChannelAdapter implements ChannelAdapter {
