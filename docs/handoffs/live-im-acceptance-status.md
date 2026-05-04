@@ -6,13 +6,15 @@
 > approval callback acceptance + development-task control acceptance passed.
 > Feishu/Lark now also passes launchd daemon inbound, `/status`, `/use`,
 > real Codex prompt/reply, live card schema delivery, CardKit terminal-card
-> refresh, and the real approval `Allow once` callback path. DingTalk production
+> refresh, and the real approval `Allow once` / `Decline` / `Abort` /
+> `Allow session` reuse matrix. DingTalk production
 > now has a configurable OpenAPI card client for create/update plus Stream
 > action acknowledgement safety, and `smoke:dingtalk-live` now has an explicit
 > redacted `DINGTALK_LIVE_CARD=1` OpenAPI send/update gate with AppKey-derived
 > robot-code fallback and optional target capture from a real inbound robot
-> message; DingTalk real inbound/card direct-use remains pending on a usable
-> client/session and card-template configuration.
+> message; DingTalk `Card.Instance.Write` is now open, but real inbound/card
+> direct-use remains pending on a usable client/session plus an OpenAPI-usable
+> published card template.
 
 ---
 
@@ -24,13 +26,13 @@
 - **Release candidate status:** non-live gates, fake smokes, contract tests,
   outside-voice review, and GitHub Actions CI are green.
 - **Live acceptance status:** Telegram real direct-use acceptance is green.
-  Feishu/Lark live-smoke, direct-use prompt paths, and real `Allow once`
-  approval callback are green, including terminal approval-card visual refresh
-  through Feishu CardKit. DingTalk live-smoke Stream acceptance is green, and
+  Feishu/Lark live-smoke, direct-use prompt paths, and the real approval
+  callback matrix are green, including terminal approval-card visual refresh
+  through Feishu CardKit and `Allow session` reuse for the exact same command.
+  DingTalk live-smoke Stream acceptance is green, and
   production card send/update is now wired behind explicit `card_template_id`
   config with optional `robot_code` override; real inbound/card direct-use still
-  needs `Card.Instance.Write`, a usable DingTalk client/session, and a matching
-  card template.
+  needs a usable DingTalk client/session plus a matching published card template.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -42,7 +44,7 @@
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once callback passed. DingTalk Stream live acceptance passed; DingTalk production card send/update is wired but direct-use inbound/card remains pending on a usable client/session and card-template configuration.
+Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed. DingTalk Stream live acceptance passed; DingTalk production card send/update is wired and Card.Instance.Write is open, but direct-use inbound/card remains pending on a usable client/session and published card-template configuration.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -75,14 +77,17 @@ until the matrix below is complete with real credentials and redacted evidence.
 | Lark project binding | Feishu Web `/use codex-im` | pass | SQLite Lark `thread_bindings` row for `codex-im`; bot replied `Using project codex-im` |
 | Lark real Codex prompt | Feishu Web `Reply exactly: LARK-CODEX-OK` | pass | real Codex thread created; bot replied `LARK-CODEX-OK` |
 | Lark approval card schema + CardKit update | `LARK_LIVE=1 LARK_LIVE_CARD=1 LARK_LIVE_CARD_UPDATE=1 ... pnpm smoke:lark-live` | pass | Feishu accepted Card JSON 2.0 `body.elements`; CardKit `idConvert` + `update` completed with redacted message-id evidence |
-| Lark approval callback | real write command requiring approval from Feishu Web, tap `Allow once` | pass | Feishu Web click reached launchd daemon; callback token `allow_once=used`, sibling tokens revoked, target `/tmp` file created, and Codex returned `Ran ...` |
+| Lark approval allow once | real write command requiring approval from Feishu Web, tap `Allow once` | pass | Feishu Web click reached launchd daemon; callback token `allow_once=used`, sibling tokens revoked, target `/tmp` file created, and Codex returned `Ran ...` |
+| Lark approval decline | real write command requiring approval from Feishu Web, tap `Decline` | pass | target file remained absent; callback token `decline=used`, sibling tokens revoked; terminal card rendered `Decision recorded: decline` with `Status: resolved` |
+| Lark approval abort | real write command requiring approval from Feishu Web, tap `Abort` | pass | target file remained absent; callback token `abort=used`, sibling tokens revoked; Codex turn returned interrupted/declined output and pending approvals returned to zero |
+| Lark approval allow session | exact same shell command sent twice, first tap `Allow session` | pass | first command wrote 13 bytes; second identical prompt ran without a new Lark callback token and the file grew to 26 bytes; `approval-2 allow_session=used`, siblings revoked |
 | Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
 | DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `card_template_id` is configured, deriving robot code from AppKey/client id unless `robot_code` overrides it; errors are sanitized |
-| DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 ... pnpm smoke:dingtalk-live` | ready | explicit redacted live card send/update gate exists; `robot_code` can derive from AppKey/client id; target can be supplied or captured from one real inbound robot message; real pass still needs `card_template_id` |
-| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs `Card.Instance.Write` opened, a matching card template, and one real inbound robot message from a working DingTalk client/session; Stream connected but no real inbound event was produced |
+| DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 ... pnpm smoke:dingtalk-live` | blocked | `Card.Instance.Write` is open and auth reaches OpenAPI, but builder UUID returned `param.templateNotExist` and the saved personal `.schema` template remained `new` / not OpenAPI-deliverable, returning `param.empty` |
+| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs a published OpenAPI-deliverable card template and one real inbound robot message from a working DingTalk client/session; Stream connected but no real inbound event was produced |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |

@@ -8,15 +8,16 @@
 > `pendingApprovals=0`. Feishu/Lark direct-use acceptance now proves launchd
 > daemon inbound
 > routing, `/status`, `/use codex-im`, real Codex prompt/reply, and live card
-> schema delivery, real `Allow once` callback resolution, and Feishu CardKit
-> terminal-card refresh. DingTalk Stream connects with redacted test
+> schema delivery, real `Allow once` / `Decline` / `Abort` /
+> `Allow session` reuse callbacks, and Feishu CardKit terminal-card refresh.
+> DingTalk Stream connects with redacted test
 > credentials, and production card send/update is now wired behind explicit
 > OpenAPI card-template config; an explicit redacted `DINGTALK_LIVE_CARD=1`
 > live smoke gate now exists for OpenAPI card send/update with AppKey-derived
 > robot-code fallback and optional target capture from one real inbound robot
-> message. DingTalk real inbound/card direct-use is still pending on a usable
-> client/session plus `Card.Instance.Write` permission and a matching card
-> template.
+> message. DingTalk `Card.Instance.Write` is now open, but real inbound/card
+> direct-use is still pending on a usable client/session plus a published
+> OpenAPI-deliverable card template.
 
 ## 1. Current State
 
@@ -89,9 +90,24 @@
   - latest patch - DingTalk card live smoke can capture the target from one
     real inbound robot message via `DINGTALK_LIVE_CAPTURE_TARGET=1`, avoiding
     manual staff/group id scraping while keeping the captured id out of output.
-  - latest patch - Read-only DingTalk developer-console check found
-    `Card.Instance.Write` is not open yet; a redacted OpenAPI probe reached live
+  - latest patch - Read-only DingTalk developer-console check originally found
+    `Card.Instance.Write` was not open; a redacted OpenAPI probe reached live
     access-token auth and failed at `createAndDeliver` with HTTP 403.
+  - latest evidence - 2026-05-04 20:55 SGT: Feishu/Lark direct-use approval
+    matrix now matches Telegram for the same acceptance language. Real Feishu
+    Web clicks covered `Decline`, `Abort`, fresh `Allow once`, and
+    `Allow session`; session reuse was verified by sending the exact same
+    command twice and observing the output file grow from 13 to 26 bytes without
+    a new Lark callback token. Terminal cards rendered `Status: resolved` with
+    no remaining action buttons, and launchd stayed healthy with
+    `pendingApprovals=0`.
+  - latest evidence - 2026-05-04 20:55 SGT: DingTalk `Card.Instance.Write` was
+    opened in the test app. A saved card-builder URL template id failed
+    `createAndDeliver` with redacted `param.templateNotExist`; the subsequent
+    personal `.schema` template was still `new` / not published for OpenAPI
+    delivery and failed with redacted `param.empty`. `im.dingtalk.com` opened a
+    maintenance page on this machine, so no real DingTalk inbound target could
+    be captured without a working DingTalk client/session.
   - latest evidence - DingTalk Stream live smoke re-ran with live page
     credentials held only in process environment; Stream connected for 5
     seconds with redacted output and no inbound events.
@@ -125,8 +141,8 @@
     (`0c3304e77d52`), installed bridge redaction scan passed, stdout showed no
     new pid `62312` errors, and stderr contained only Node deprecation warnings.
 - **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
-  once `Card.Instance.Write` is opened, a matching card template is configured,
-  and a usable DingTalk client/session can produce real inbound events.
+  once a published OpenAPI-deliverable card template is available and a usable
+  DingTalk client/session can produce one real inbound robot message.
 
 ## 2. Why This Exists
 
@@ -171,7 +187,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4 plus real Telegram Web and Feishu Web direct-use acceptance evidence |
-| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk direct-use remains pending on platform permission/template/target |
+| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk direct-use remains pending on published card template + usable client/session target |
 
 ## 5. Active Redlines
 
@@ -536,11 +552,11 @@ Block 4:
     allow-session, and stale/revoked click behavior (done)
 11. Feishu/Lark direct-use inbound, `/status`, `/use`, prompt/reply, and card
     schema live acceptance (done)
-12. Lark full approval callback live acceptance (done for `Allow once` plus
-    terminal CardKit refresh).
+12. Lark full approval callback live acceptance (done for `Allow once`,
+    `Decline`, `Abort`, `Allow session` reuse, and terminal CardKit refresh).
 13. Next: DingTalk real inbound/card direct-use acceptance once
-    `Card.Instance.Write` is open, a matching card template exists, and a
-    working DingTalk client/session can produce real inbound events.
+    a published OpenAPI-deliverable card template exists and a working DingTalk
+    client/session can produce real inbound events.
 
 ## 8. Compact / Resume
 
