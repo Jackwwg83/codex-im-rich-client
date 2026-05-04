@@ -89,6 +89,9 @@
   - latest patch - Read-only DingTalk developer-console check found
     `Card.Instance.Write` is not open yet; a redacted OpenAPI probe reached live
     access-token auth and failed at `createAndDeliver` with HTTP 403.
+  - latest evidence - DingTalk Stream live smoke re-ran with live page
+    credentials held only in process environment; Stream connected for 5
+    seconds with redacted output and no inbound events.
 - **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
   once `Card.Instance.Write` is opened, a matching card template is configured,
   and a usable DingTalk client/session can produce real inbound events.

@@ -247,3 +247,7 @@ Stop and treat as a blocker if:
   were recorded. Local gates passed: DingTalk targeted tests, `pnpm typecheck`,
   `pnpm lint`, `pnpm test` (148 files, 1357 passing, 1 skipped), `pnpm
   protocol:check`, and `pnpm release:check -- --skip-full-gates`.
+- 2026-05-04: `DINGTALK_LIVE=1 pnpm smoke:dingtalk-live` re-ran with live page
+  credentials held only in process environment. Stream connected successfully
+  for a bounded 5 seconds, reported `robotEvents=0`, `cardEvents=0`, and printed
+  only redacted presence/status fields.
