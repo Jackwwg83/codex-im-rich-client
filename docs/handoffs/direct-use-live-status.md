@@ -6,8 +6,9 @@
 > Telegram Web `Allow once` through the installed launchd daemon, fixed
 > `/switch` empty-thread resume, `/fork` empty-rollout UX, production IM
 > approval handler timeout, and terminal approval card metadata preservation.
-> Installed launchd daemon is healthy; remaining live matrix work is decline,
-> abort, allow-session, and duplicate/stale-click coverage.
+> Installed launchd daemon is healthy; the real Telegram Web approval button
+> matrix now covers allow once, decline, abort, allow-session, and stale/revoked
+> click fail-closed behavior.
 
 ## 1. Current State
 
@@ -60,8 +61,8 @@
   - latest patch - terminal resolved approval cards preserve original
     `kind`/`risk`/summary while removing buttons and retaining token-free
     rendering.
-- **Next exact action:** continue Telegram Web approval button matrix:
-  decline, abort, allow-session, and duplicate/stale-click coverage.
+- **Next exact action:** Direct Use closeout: refresh Linear/repo status and
+  identify any remaining non-live production-readiness gaps.
 
 ## 2. Why This Exists
 
@@ -342,6 +343,10 @@ Latest live Telegram acceptance evidence:
 | Approval timeout | Real Telegram prompt for a write command produced a pending approval card. After the 31-minute production server-request handler timeout patch, a fresh Telegram Web `Allow once` click created `/tmp/codex-im-live-allow-once-20260504-1147.txt`, returned `Done`, and `pnpm launchd:status` reported pid `10065` with `pendingApprovals=0` | fixed/green |
 | Stale callback fail-closed | Clicking a pre-restart stale `Allow once` button left `/tmp/codex-im-live-allow-once-20260504-1100.txt` absent and audit recorded `approval.callback_not_bound` with `result=revoked` | green |
 | Terminal approval card metadata | Fresh Telegram Web approval after reinstalling the patched daemon bundle created `/tmp/codex-im-live-terminal-card-20260504-1200.txt`; the resolved card now shows `Decision recorded: allow once`, original command summary, `Kind: command_execution`, `Risk: high`, and `Status: resolved` with buttons removed | fixed/green |
+| Decline button | Fresh Telegram Web `Decline` for `/tmp/codex-im-live-decline-20260504-1207.txt` left the file absent, returned "The command was not run because the escalation request was rejected", emitted a `commandExecution declined` item, and resolved the card as `Decision recorded: decline` with `command_execution/high` | green |
+| Abort button | Fresh Telegram Web `Abort` for `/tmp/codex-im-live-abort-20260504-1212.txt` left the file absent, returned `Codex turn interrupted`, emitted a `commandExecution declined` item, and resolved the card as `Decision recorded: abort` with `command_execution/high` | green |
+| Allow-session button | Fresh Telegram Web `Allow session` for `/tmp/codex-im-live-allow-session-20260504-1223.txt` created the file, returned `Ran`, emitted a `commandExecution completed` item, and resolved the card as `Decision recorded: allow session` with `command_execution/high` | green |
+| Callback sibling revocation | SQLite `callback_tokens` after the live matrix shows exactly one `used` token per approval (`approval-1` decline, `approval-2` abort, `approval-3` allow_session) and all sibling action tokens `revoked`; raw callback tokens are not persisted | green |
 | UI driver availability | Computer Use / Chrome Accessibility timed out during this run, but macOS screenshots plus System Events clicks worked against real Telegram Web. Treat Computer Use timeout as a local UI automation issue, not daemon failure | workaround green |
 
 Latest live-acceptance hardening gates:
@@ -367,6 +372,17 @@ Latest terminal-card metadata gates:
 | `pnpm test` | green: 148 files, 1340 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 | `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `21579`; fresh Telegram Web `Allow once` created `/tmp/codex-im-live-terminal-card-20260504-1200.txt` and resolved card preserved `command_execution/high` |
+
+Latest live Telegram approval matrix:
+
+| Case | Result |
+|---|---|
+| `Allow once` | green; `/tmp/codex-im-live-terminal-card-20260504-1200.txt` created; card resolved as `allow once`, `command_execution/high` |
+| `Decline` | green; `/tmp/codex-im-live-decline-20260504-1207.txt` absent; card resolved as `decline`, `command_execution/high` |
+| `Abort` | green; `/tmp/codex-im-live-abort-20260504-1212.txt` absent; card resolved as `abort`, `command_execution/high` |
+| `Allow session` | green; `/tmp/codex-im-live-allow-session-20260504-1223.txt` created; card resolved as `allow session`, `command_execution/high` |
+| stale/revoked click | green; pre-restart stale click left `/tmp/codex-im-live-allow-once-20260504-1100.txt` absent and recorded `approval.callback_not_bound` with `result=revoked` |
+| callback token state | green; SQLite shows one `used` action token per approval and revoked siblings for the other actions |
 
 ## 7. Next Implementation Order
 
@@ -411,8 +427,9 @@ Block 4:
 7. `fix(daemon): make no-rollout /fork actionable in IM` (done)
 8. `fix(cli): keep production IM approval handlers pending beyond 30s` (done)
 9. `fix(telegram): preserve approval kind/risk on resolved cards` (done)
-10. Next: finish real Telegram Web approval button matrix for decline,
-    abort, allow-session, and duplicate/stale-click coverage.
+10. Real Telegram Web approval button matrix for allow once, decline, abort,
+    allow-session, and stale/revoked click behavior (done)
+11. Next: Direct Use closeout and remaining non-live readiness gap inventory.
 
 ## 8. Compact / Resume
 
