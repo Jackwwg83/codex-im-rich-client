@@ -55,6 +55,10 @@ daemon derive the robot code from `DINGTALK_CLIENT_ID` / `client_id`, matching
 the common DingTalk AppKey-as-robotCode setup. Set `DINGTALK_ROBOT_CODE`
 explicitly only if the DingTalk app uses a different robot code.
 
+The DingTalk app must have `Card.Instance.Write` open before this can pass.
+Without that permission DingTalk returns HTTP 403 at `createAndDeliver`, before
+any valid acceptance evidence can be recorded.
+
 If the private staff id or group conversation id is not known, capture it from a
 real inbound robot message instead:
 

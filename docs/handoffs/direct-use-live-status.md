@@ -12,7 +12,8 @@
 > live smoke gate now exists for OpenAPI card send/update with AppKey-derived
 > robot-code fallback and optional target capture from one real inbound robot
 > message. DingTalk real inbound/card direct-use is still pending on a usable
-> client/session plus matching card template.
+> client/session plus `Card.Instance.Write` permission and a matching card
+> template.
 
 ## 1. Current State
 
@@ -74,9 +75,10 @@
     `idConvert` + full-card `update`, with sanitized SDK error handling and a
     redacted `LARK_LIVE_CARD_UPDATE` smoke path.
   - latest patch - DingTalk production `daemon run` now wires a real OpenAPI
-    card client when `robot_code` and `card_template_id` are configured, and
-    private robot chats now use `senderStaffId` targets so card callbacks can
-    satisfy target/messageRef validation.
+    card client when `card_template_id` is configured, derives robot code from
+    client id unless `robot_code` overrides it, and private robot chats now use
+    `senderStaffId` targets so card callbacks can satisfy target/messageRef
+    validation.
   - latest patch - `smoke:dingtalk-live` now has an explicit
     `DINGTALK_LIVE_CARD=1` OpenAPI card send/update gate with redacted
     presence-only status, a no-network missing-env block, and AppKey-derived
@@ -84,9 +86,12 @@
   - latest patch - DingTalk card live smoke can capture the target from one
     real inbound robot message via `DINGTALK_LIVE_CAPTURE_TARGET=1`, avoiding
     manual staff/group id scraping while keeping the captured id out of output.
+  - latest patch - Read-only DingTalk developer-console check found
+    `Card.Instance.Write` is not open yet; a redacted OpenAPI probe reached live
+    access-token auth and failed at `createAndDeliver` with HTTP 403.
 - **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
-  once a usable DingTalk client/session can produce real inbound events and the
-  test app has a matching card template configured.
+  once `Card.Instance.Write` is opened, a matching card template is configured,
+  and a usable DingTalk client/session can produce real inbound events.
 
 ## 2. Why This Exists
 

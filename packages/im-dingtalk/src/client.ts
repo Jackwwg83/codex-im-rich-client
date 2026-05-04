@@ -408,6 +408,11 @@ async function requestJson(
   });
   const body = await readJsonBody(response);
   if (!response.ok) {
+    if (response.status === 403 && options.operation === "createAndDeliver") {
+      throw new Error(
+        "DingTalk OpenAPI createAndDeliver failed with HTTP 403; check Card.Instance.Write permission, card template access, and delivery target",
+      );
+    }
     throw new Error(`DingTalk OpenAPI ${options.operation} failed with HTTP ${response.status}`);
   }
   const errorCode =

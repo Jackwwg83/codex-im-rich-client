@@ -237,7 +237,9 @@ describe("DingTalk OpenAPI card client", () => {
     }
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("DingTalk OpenAPI createAndDeliver failed with HTTP 403");
+    expect((error as Error).message).toBe(
+      "DingTalk OpenAPI createAndDeliver failed with HTTP 403; check Card.Instance.Write permission, card template access, and delivery target",
+    );
     expect((error as Error).message).not.toContain("secret-must-not-leak");
     expect((error as Error).message).not.toContain("token-must-not-leak");
   });

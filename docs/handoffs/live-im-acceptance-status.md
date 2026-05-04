@@ -27,9 +27,10 @@
   Feishu/Lark live-smoke, direct-use prompt paths, and real `Allow once`
   approval callback are green, including terminal approval-card visual refresh
   through Feishu CardKit. DingTalk live-smoke Stream acceptance is green, and
-  production card send/update is now wired behind explicit `robot_code` +
-  `card_template_id` config; real inbound/card direct-use still needs a usable
-  DingTalk client/session and matching card template.
+  production card send/update is now wired behind explicit `card_template_id`
+  config with optional `robot_code` override; real inbound/card direct-use still
+  needs `Card.Instance.Write`, a usable DingTalk client/session, and a matching
+  card template.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -79,9 +80,9 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
-| DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `robot_code` and `card_template_id` are configured; errors are sanitized |
+| DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `card_template_id` is configured, deriving robot code from AppKey/client id unless `robot_code` overrides it; errors are sanitized |
 | DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 ... pnpm smoke:dingtalk-live` | ready | explicit redacted live card send/update gate exists; `robot_code` can derive from AppKey/client id; target can be supplied or captured from one real inbound robot message; real pass still needs `card_template_id` |
-| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs a usable DingTalk client/session plus a matching card template; Stream connected but no real inbound event was produced |
+| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs `Card.Instance.Write` opened, a matching card template, and one real inbound robot message; Stream connected but no real inbound event was produced |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -213,8 +214,9 @@ Stop and treat as a blocker if:
   left uncaught. The Lark SDK client now uses a silent SDK logger and wraps SDK
   failures in sanitized errors before they can reach smoke or daemon output.
 - 2026-05-04: DingTalk production readiness was tightened locally. `daemon run`
-  now injects a real DingTalk OpenAPI card client when `robot_code` and
-  `card_template_id` are present, using `/v1.0/oauth2/accessToken`,
+  now injects a real DingTalk OpenAPI card client when `card_template_id` is
+  present, deriving robot code from AppKey/client id unless `robot_code`
+  overrides it, using `/v1.0/oauth2/accessToken`,
   `/v1.0/card/instances/createAndDeliver`, and `/v1.0/card/instances` without
   adding an SDK dependency. Private DingTalk robot messages now use
   `senderStaffId` as the target chat id so `IM_ROBOT.<staffId>` card callbacks
@@ -237,3 +239,11 @@ Stop and treat as a blocker if:
   robot message during the bounded smoke window, uses that message's normalized
   target for the OpenAPI card send/update, and records only the redacted target
   source (`captured`), not the staff/group id.
+- 2026-05-04: Read-only DingTalk developer-console check found the test app's
+  `Card.Instance.Write` permission is still `未开通`. A redacted negative
+  OpenAPI probe using live page credentials reached `accessToken` successfully
+  and failed at `createAndDeliver` with HTTP 403, matching the missing card
+  permission / template access blocker. No target id, app secret, or token bytes
+  were recorded. Local gates passed: DingTalk targeted tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm test` (148 files, 1357 passing, 1 skipped), `pnpm
+  protocol:check`, and `pnpm release:check -- --skip-full-gates`.
