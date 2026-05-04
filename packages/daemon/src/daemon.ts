@@ -735,18 +735,48 @@ export class Daemon {
   }
 
   async #handleInboundMessage(message: unknown): Promise<void> {
+    let inbound:
+      | {
+          target: Target;
+          sender: SecurityPolicySender;
+          text: string;
+          messageRef?: DaemonMessageRef;
+        }
+      | undefined;
     try {
-      const inbound = this.#inboundMessage(message);
+      inbound = this.#inboundMessage(message);
       if (inbound === undefined) {
+        this.#emitAuditEvent("inbound.message_invalid", {
+          result: "failed",
+          metadata: { reason: "invalid_shape" },
+        });
         return;
       }
 
       const policy = this.#userChatPolicy(this.#securityPolicy);
-      if (policy?.checkUserAndChat(inbound.target, inbound.sender)?.kind !== "allow") {
+      const decision = policy?.checkUserAndChat(inbound.target, inbound.sender);
+      if (decision?.kind !== "allow") {
+        this.#emitAuditEvent("inbound.message_denied", {
+          target: inbound.target,
+          result: "denied",
+          metadata: {
+            actorKey: actorKey(inbound.target, inbound.sender),
+            reason: decision?.reason ?? "policy_unavailable",
+          },
+        });
         return;
       }
 
       const routed = routeInboundCommand(inbound.text);
+      this.#emitAuditEvent("inbound.message_allowed", {
+        target: inbound.target,
+        result: "allowed",
+        metadata: {
+          actorKey: actorKey(inbound.target, inbound.sender),
+          routeKind: routed.kind,
+          textLength: inbound.text.length,
+        },
+      });
       if (routed.kind === "prompt") {
         await this.#routePrompt(inbound, routed.text);
         return;
@@ -765,7 +795,15 @@ export class Daemon {
       if (routed.kind === "rejected") {
         await this.#editInboundMessage(inbound.messageRef, routed.message);
       }
-    } catch {
+    } catch (error) {
+      this.#emitAuditEvent("inbound.message_handler_failed", {
+        target: inbound?.target,
+        result: "failed",
+        metadata: {
+          ...(inbound === undefined ? {} : { actorKey: actorKey(inbound.target, inbound.sender) }),
+          error: errorMessage(error),
+        },
+      });
       // Inbound message handling must fail closed without destabilizing daemon subscriptions.
     }
   }

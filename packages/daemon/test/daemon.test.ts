@@ -619,6 +619,7 @@ describe("Daemon skeleton (T14)", () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
     const sender = { userId: "u-alice" };
+    const auditInserts: unknown[] = [];
     const route = {
       kind: "bound" as const,
       target,
@@ -655,6 +656,7 @@ describe("Daemon skeleton (T14)", () => {
       createSessionRouter: () => sessionRouter,
       createSupervisor: () => ({ currentRuntime: () => runtime }),
       createAdapter: () => adapter,
+      auditRepository: { insertBestEffort: vi.fn((input) => auditInserts.push(input)) },
     });
 
     await daemon.start();
@@ -681,6 +683,24 @@ describe("Daemon skeleton (T14)", () => {
       codexThreadId: "thread-1",
       defaultModel: "gpt-test",
       activeTurnId: "turn-1",
+    });
+    const allowedAudit = auditInserts.find(
+      (input) =>
+        typeof input === "object" &&
+        input !== null &&
+        (input as { action?: unknown }).action === "inbound.message_allowed",
+    ) as { metadataJson?: string } | undefined;
+    expect(allowedAudit).toEqual(
+      expect.objectContaining({
+        action: "inbound.message_allowed",
+        targetKey: JSON.stringify(["telegram", "-allowed", null, null]),
+        result: "allowed",
+      }),
+    );
+    expect(JSON.parse(allowedAudit?.metadataJson ?? "{}")).toMatchObject({
+      actorKey: "telegram:u-alice",
+      routeKind: "prompt",
+      textLength: 18,
     });
   });
 
@@ -920,6 +940,7 @@ describe("Daemon skeleton (T14)", () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-denied" };
     const sender = { userId: "u-mallory" };
+    const auditInserts: unknown[] = [];
     const sessionRouter = { resolve: vi.fn() };
     const runtime = {
       threadStart: vi.fn(),
@@ -945,6 +966,7 @@ describe("Daemon skeleton (T14)", () => {
       createSessionRouter: () => sessionRouter,
       createSupervisor: () => ({ currentRuntime: () => runtime }),
       createAdapter: () => adapter,
+      auditRepository: { insertBestEffort: vi.fn((input) => auditInserts.push(input)) },
     });
 
     await daemon.start();
@@ -961,6 +983,63 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.threadStart).not.toHaveBeenCalled();
     expect(runtime.turnStart).not.toHaveBeenCalled();
     expect(runtime.turnSteer).not.toHaveBeenCalled();
+    const deniedAudit = auditInserts.find(
+      (input) =>
+        typeof input === "object" &&
+        input !== null &&
+        (input as { action?: unknown }).action === "inbound.message_denied",
+    ) as { metadataJson?: string } | undefined;
+    expect(deniedAudit).toEqual(
+      expect.objectContaining({
+        action: "inbound.message_denied",
+        targetKey: JSON.stringify(["telegram", "-denied", null, null]),
+        result: "denied",
+      }),
+    );
+    expect(JSON.parse(deniedAudit?.metadataJson ?? "{}")).toMatchObject({
+      actorKey: "telegram:u-mallory",
+      reason: "user_not_allowed",
+    });
+  });
+
+  it("audits malformed inbound messages before dropping them fail-closed", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const auditInserts: unknown[] = [];
+    const sessionRouter = { resolve: vi.fn() };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => undefined }),
+      createAdapter: () => adapter,
+      auditRepository: { insertBestEffort: vi.fn((input) => auditInserts.push(input)) },
+    });
+
+    await daemon.start();
+    messageHandler?.({ text: "/status" });
+    await flushDaemonHandlers();
+
+    expect(sessionRouter.resolve).not.toHaveBeenCalled();
+    expect(auditInserts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "inbound.message_invalid",
+          result: "failed",
+        }),
+      ]),
+    );
   });
 
   it("routes explicit /cu through prompt wrapping, session creation, audit, and broker tool gate", async () => {
