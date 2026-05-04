@@ -23,13 +23,28 @@ export interface LarkSdkDeps {
   readonly createEventDispatcher?: (config: LarkSdkChannelAdapterConfig) => LarkEventDispatcherLike;
 }
 
+type LarkSdkLogger = {
+  readonly error: (...msg: unknown[]) => void;
+  readonly warn: (...msg: unknown[]) => void;
+  readonly info: (...msg: unknown[]) => void;
+  readonly debug: (...msg: unknown[]) => void;
+  readonly trace: (...msg: unknown[]) => void;
+};
+
 interface LarkSdkClientLike {
   readonly im: {
     readonly message: {
       readonly create: (payload: LarkSdkCreateMessagePayload) => Promise<LarkSdkMessageResult>;
       readonly reply: (payload: LarkSdkReplyMessagePayload) => Promise<LarkSdkMessageResult>;
       readonly update: (payload: LarkSdkUpdateTextPayload) => Promise<LarkSdkMessageResult>;
-      readonly patch: (payload: LarkSdkPatchCardPayload) => Promise<LarkSdkResult>;
+    };
+  };
+  readonly cardkit: {
+    readonly v1: {
+      readonly card: {
+        readonly idConvert: (payload: LarkSdkCardIdConvertPayload) => Promise<LarkSdkCardIdResult>;
+        readonly update: (payload: LarkSdkCardKitUpdatePayload) => Promise<LarkSdkResult>;
+      };
     };
   };
 }
@@ -59,9 +74,23 @@ interface LarkSdkUpdateTextPayload {
   };
 }
 
-interface LarkSdkPatchCardPayload {
-  readonly path: { readonly message_id: string };
-  readonly data: { readonly content: string };
+interface LarkSdkCardIdConvertPayload {
+  readonly data: {
+    readonly message_id: string;
+  };
+}
+
+interface LarkSdkCardKitUpdatePayload {
+  readonly path: {
+    readonly card_id: string;
+  };
+  readonly data: {
+    readonly card: {
+      readonly type: "card_json";
+      readonly data: string;
+    };
+    readonly sequence: number;
+  };
 }
 
 interface LarkSdkResult {
@@ -69,11 +98,25 @@ interface LarkSdkResult {
   readonly msg?: string;
 }
 
+interface LarkSdkCardIdResult extends LarkSdkResult {
+  readonly data?: {
+    readonly card_id?: string;
+  };
+}
+
 interface LarkSdkMessageResult extends LarkSdkResult {
   readonly data?: {
     readonly message_id?: string;
   };
 }
+
+export const SILENT_LARK_SDK_LOGGER: LarkSdkLogger = Object.freeze({
+  error() {},
+  warn() {},
+  info() {},
+  debug() {},
+  trace() {},
+});
 
 export function createLarkSdkChannelAdapter(
   config: LarkSdkChannelAdapterConfig,
@@ -103,6 +146,7 @@ function createDefaultClient(config: LarkSdkChannelAdapterConfig): LarkSdkClient
     appSecret: config.appSecret,
     appType: lark.AppType.SelfBuild,
     domain: larkDomain(config.domain),
+    logger: SILENT_LARK_SDK_LOGGER,
     source: "codex-im",
   }) as unknown as LarkSdkClientLike;
 }
@@ -112,6 +156,7 @@ function createDefaultWsClient(config: LarkSdkChannelAdapterConfig): LarkWsClien
     appId: config.appId,
     appSecret: config.appSecret,
     domain: larkDomain(config.domain),
+    logger: SILENT_LARK_SDK_LOGGER,
     source: "codex-im",
   });
 }
@@ -122,16 +167,19 @@ function createDefaultDispatcher(config: LarkSdkChannelAdapterConfig): LarkEvent
       ? {}
       : { verificationToken: config.verificationToken }),
     ...(config.encryptKey === undefined ? {} : { encryptKey: config.encryptKey }),
+    logger: SILENT_LARK_SDK_LOGGER,
   });
 }
 
 function createSdkMessageClient(client: LarkSdkClientLike): LarkMessageClientLike {
+  const cardIdsByMessageId = new Map<string, string>();
+  let lastCardUpdateSequence = 0;
   return {
     async sendText(input) {
       const content = JSON.stringify({ text: input.text });
-      const result =
+      const result = await callLarkSdk("sendText", () =>
         input.replyToMessageId === undefined
-          ? await client.im.message.create({
+          ? client.im.message.create({
               params: { receive_id_type: "chat_id" },
               data: {
                 receive_id: input.target.chatId,
@@ -139,43 +187,56 @@ function createSdkMessageClient(client: LarkSdkClientLike): LarkMessageClientLik
                 content,
               },
             })
-          : await client.im.message.reply({
+          : client.im.message.reply({
               path: { message_id: input.replyToMessageId },
               data: { msg_type: "text", content },
-            });
+            }),
+      );
       return { messageId: messageIdFromResult(result) };
     },
 
     async editText(input) {
       assertOk(
-        await client.im.message.update({
-          path: { message_id: input.messageRef.messageId },
-          data: {
-            msg_type: "text",
-            content: JSON.stringify({ text: input.text }),
-          },
-        }),
+        await callLarkSdk("editText", () =>
+          client.im.message.update({
+            path: { message_id: input.messageRef.messageId },
+            data: {
+              msg_type: "text",
+              content: JSON.stringify({ text: input.text }),
+            },
+          }),
+        ),
       );
     },
 
     async sendCard(input) {
-      const result = await client.im.message.create({
-        params: { receive_id_type: "chat_id" },
-        data: {
-          receive_id: input.target.chatId,
-          msg_type: "interactive",
-          content: stringifyCard(input.card),
-        },
-      });
+      const result = await callLarkSdk("sendCard", () =>
+        client.im.message.create({
+          params: { receive_id_type: "chat_id" },
+          data: {
+            receive_id: input.target.chatId,
+            msg_type: "interactive",
+            content: stringifyCard(input.card),
+          },
+        }),
+      );
       return { messageId: messageIdFromResult(result) };
     },
 
     async updateCard(input) {
+      const cardId = await cardIdForMessage(client, cardIdsByMessageId, input.messageRef.messageId);
+      const sequence = lastCardUpdateSequence + 1;
+      lastCardUpdateSequence = sequence;
       assertOk(
-        await client.im.message.patch({
-          path: { message_id: input.messageRef.messageId },
-          data: { content: stringifyCard(input.card) },
-        }),
+        await callLarkSdk("updateCard", () =>
+          client.cardkit.v1.card.update({
+            path: { card_id: cardId },
+            data: {
+              card: { type: "card_json", data: stringifyCard(input.card) },
+              sequence,
+            },
+          }),
+        ),
       );
     },
   };
@@ -193,6 +254,50 @@ function stringifyCard(card: LarkApprovalCardJson): string {
   return JSON.stringify(card);
 }
 
+async function cardIdForMessage(
+  client: LarkSdkClientLike,
+  cardIdsByMessageId: Map<string, string>,
+  messageId: string,
+): Promise<string> {
+  const cached = cardIdsByMessageId.get(messageId);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const result = await callLarkSdk("cardIdConvert", () =>
+    client.cardkit.v1.card.idConvert({
+      data: { message_id: messageId },
+    }),
+  );
+  assertOk(result);
+  const cardId = result.data?.card_id;
+  if (cardId === undefined || cardId.length === 0) {
+    throw new Error("Lark SDK response missing card_id");
+  }
+  cardIdsByMessageId.set(messageId, cardId);
+  return cardId;
+}
+
+async function callLarkSdk<T>(operation: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    throw new Error(`Lark SDK ${operation} failed: ${describeLarkSdkError(error)}`);
+  }
+}
+
+function describeLarkSdkError(error: unknown): string {
+  const record = asRecord(error);
+  const response = asRecord(record?.response);
+  const data = asRecord(response?.data);
+  const code = data?.code;
+  const msg = data?.msg;
+  if (typeof code === "number" || typeof code === "string") {
+    return typeof msg === "string" && msg.length > 0 ? `code ${code}: ${msg}` : `code ${code}`;
+  }
+  const message = record?.message;
+  return typeof message === "string" && message.length > 0 ? message : "unknown error";
+}
+
 function messageIdFromResult(result: LarkSdkMessageResult): string {
   assertOk(result);
   const messageId = result.data?.message_id;
@@ -206,6 +311,12 @@ function assertOk(result: LarkSdkResult): void {
   if (result.code !== undefined && result.code !== 0) {
     throw new Error(`Lark SDK returned code ${result.code}`);
   }
+}
+
+function asRecord(input: unknown): Record<string, unknown> | undefined {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : undefined;
 }
 
 function larkDomain(domain: LarkSdkChannelAdapterConfig["domain"]): lark.Domain {

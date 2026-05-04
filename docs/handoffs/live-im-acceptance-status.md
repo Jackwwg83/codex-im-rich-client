@@ -5,10 +5,10 @@
 > **Last updated:** 2026-05-04 - Telegram real bot + real Codex turn +
 > approval callback acceptance + development-task control acceptance passed.
 > Feishu/Lark now also passes launchd daemon inbound, `/status`, `/use`,
-> real Codex prompt/reply, live card schema delivery, and the real approval
-> `Allow once` callback path. DingTalk live dry-run/Stream acceptance passed
-> with redacted test credentials; DingTalk real inbound/card direct-use remains
-> pending.
+> real Codex prompt/reply, live card schema delivery, CardKit terminal-card
+> refresh, and the real approval `Allow once` callback path. DingTalk live
+> dry-run/Stream acceptance passed with redacted test credentials; DingTalk
+> real inbound/card direct-use remains pending on a usable client/session.
 
 ---
 
@@ -21,9 +21,9 @@
   outside-voice review, and GitHub Actions CI are green.
 - **Live acceptance status:** Telegram real direct-use acceptance is green.
   Feishu/Lark live-smoke, direct-use prompt paths, and real `Allow once`
-  approval callback are green; Lark terminal approval-card visual refresh still
-  needs a follow-up pass. DingTalk live-smoke Stream acceptance is green, with
-  real inbound/card direct-use still pending.
+  approval callback are green, including terminal approval-card visual refresh
+  through Feishu CardKit. DingTalk live-smoke Stream acceptance is green, with
+  real inbound/card direct-use still pending on a usable DingTalk client/session.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -35,7 +35,7 @@
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, and real approval Allow-once callback passed; Lark terminal approval-card visual refresh still needs follow-up. DingTalk Stream live acceptance passed; DingTalk direct-use inbound/card remains pending.
+Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once callback passed. DingTalk Stream live acceptance passed; DingTalk direct-use inbound/card remains pending on a usable client/session.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -67,17 +67,17 @@ until the matrix below is complete with real credentials and redacted evidence.
 | Lark launchd inbound | Feishu Web `/status` into installed launchd daemon | pass | SQLite audit recorded `inbound.message_allowed`; bot replied status |
 | Lark project binding | Feishu Web `/use codex-im` | pass | SQLite Lark `thread_bindings` row for `codex-im`; bot replied `Using project codex-im` |
 | Lark real Codex prompt | Feishu Web `Reply exactly: LARK-CODEX-OK` | pass | real Codex thread created; bot replied `LARK-CODEX-OK` |
-| Lark approval card schema | `LARK_LIVE=1 LARK_LIVE_CARD=1 ... pnpm smoke:lark-live` | pass | Feishu accepted Card JSON 2.0 `body.elements`; redacted message-id evidence observed |
+| Lark approval card schema + CardKit update | `LARK_LIVE=1 LARK_LIVE_CARD=1 LARK_LIVE_CARD_UPDATE=1 ... pnpm smoke:lark-live` | pass | Feishu accepted Card JSON 2.0 `body.elements`; CardKit `idConvert` + `update` completed with redacted message-id evidence |
 | Lark approval callback | real write command requiring approval from Feishu Web, tap `Allow once` | pass | Feishu Web click reached launchd daemon; callback token `allow_once=used`, sibling tokens revoked, target `/tmp` file created, and Codex returned `Ran ...` |
-| Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pending | callback and command execution passed, but the visible Feishu card still needs a focused refresh/update verification pass |
+| Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
-| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | DingTalk Web was unavailable during this run; Stream connected but no real inbound event was produced |
+| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | DingTalk Web was unavailable during this run and no desktop/mobile client session was available; Stream connected but no real inbound event was produced |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
-| launchd live start | `pnpm launchd:install` + `launchctl print ...` | pending | daemon starts under user LaunchAgent |
+| launchd live start | `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k ... && pnpm launchd:status` | pass | installed daemon starts under user LaunchAgent with redacted secret presence and `pendingApprovals=0` |
 | Redaction | plist/log grep for token-shaped output | pending | no token-shaped material |
 
 Computer Use remains dry-run readiness only in the current release candidate;
@@ -189,5 +189,18 @@ Stop and treat as a blocker if:
   A fresh Feishu Web write approval then passed: `Allow once` reached the
   launchd daemon, SQLite recorded `allow_once=used` with sibling tokens
   `revoked`, the target `/tmp` file was created, and Codex returned `Ran ...`.
-  The remaining Lark approval UI gap is terminal card visual refresh, not the
-  callback/resolve path.
+- 2026-05-04: Lark terminal approval-card refresh moved from
+  `im.message.patch` to Feishu CardKit `idConvert` + full-card `update`.
+  The test app opened `cardkit:card:read` and `cardkit:card:write` only for the
+  redacted test app. `LARK_LIVE=1 LARK_LIVE_CARD=1 LARK_LIVE_CARD_UPDATE=1
+  pnpm smoke:lark-live` passed. After rebuilding/installing the bridge and
+  restarting launchd, a real Feishu Web write approval resolved through
+  `Allow once`; the target `/tmp` file existed, SQLite showed the latest
+  `allow_once` token as `used` with sibling tokens `revoked`, `pnpm
+  launchd:status` reported `pendingApprovals=0`, and a Feishu Web reload still
+  showed the terminal approval card as `Status: resolved` with no visible
+  `Allow once` button.
+- 2026-05-04: Lark SDK error handling was hardened after a live CardKit
+  permission failure showed that raw Axios errors can include bearer headers if
+  left uncaught. The Lark SDK client now uses a silent SDK logger and wraps SDK
+  failures in sanitized errors before they can reach smoke or daemon output.

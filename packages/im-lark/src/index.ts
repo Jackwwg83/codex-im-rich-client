@@ -1,5 +1,9 @@
 export { LarkChannelAdapter } from "./adapter.js";
-export { createLarkSdkAdapterOptions, createLarkSdkChannelAdapter } from "./client.js";
+export {
+  createLarkSdkAdapterOptions,
+  createLarkSdkChannelAdapter,
+  SILENT_LARK_SDK_LOGGER,
+} from "./client.js";
 export {
   decodeLarkCallbackHandle,
   encodeLarkCallbackHandle,

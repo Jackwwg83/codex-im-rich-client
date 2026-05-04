@@ -57,7 +57,7 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
     ]);
   });
 
-  it("maps text, reply, edit, card send, and card update through SDK message APIs", async () => {
+  it("maps text, reply, edit, card send, and card update through SDK/CardKit APIs", async () => {
     const sdkCalls: unknown[] = [];
     const deps = fakeSdkDeps({ sdkCalls });
     const adapter = createLarkSdkChannelAdapter(CONFIG, deps);
@@ -109,16 +109,65 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
           },
         },
       },
+      { method: "cardIdConvert", payload: { data: { message_id: "om_create" } } },
       {
-        method: "patch",
+        method: "cardKitUpdate",
         payload: {
-          path: { message_id: "om_create" },
+          path: { card_id: "card_from_om_create" },
           data: {
-            content: JSON.stringify(renderLarkApprovalCard({ ...CARD, status: "resolved" })),
+            card: {
+              type: "card_json",
+              data: JSON.stringify(renderLarkApprovalCard({ ...CARD, status: "resolved" })),
+            },
+            sequence: expect.any(Number),
           },
         },
       },
     ]);
+  });
+
+  it("converts each message id to card id once before CardKit updates", async () => {
+    const sdkCalls: unknown[] = [];
+    const deps = fakeSdkDeps({ sdkCalls });
+    const adapter = createLarkSdkChannelAdapter(CONFIG, deps);
+
+    await adapter.start();
+    const cardResult = await adapter.sendCard(TARGET, CARD);
+    await adapter.updateCard(cardResult.messageRef, { ...CARD, status: "resolved" });
+    await adapter.updateCard(cardResult.messageRef, { ...CARD, status: "expired" });
+
+    expect(sdkCalls.filter((call) => isMethodCall(call, "cardIdConvert"))).toHaveLength(1);
+    expect(sdkCalls.filter((call) => isMethodCall(call, "cardKitUpdate"))).toHaveLength(2);
+  });
+
+  it("surfaces sanitized SDK CardKit failures without token-shaped error details", async () => {
+    const adapter = createLarkSdkChannelAdapter(
+      CONFIG,
+      fakeSdkDeps({
+        cardKitUpdateError: {
+          message: "Request failed with status code 400",
+          config: { headers: { Authorization: "Bearer token-must-not-leak" } },
+          response: { data: { code: 99991672, msg: "Access denied" } },
+        },
+      }),
+    );
+
+    await adapter.start();
+    const cardResult = await adapter.sendCard(TARGET, CARD);
+
+    let error: unknown;
+    try {
+      await adapter.updateCard(cardResult.messageRef, { ...CARD, status: "resolved" });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "LarkChannelAdapter.updateCard failed: Lark SDK updateCard failed: code 99991672: Access denied",
+    );
+    expect((error as Error).message).not.toContain("token-must-not-leak");
+    expect((error as Error).message).not.toContain("Authorization");
   });
 
   it("installs an explicit production no-op action ack strategy", async () => {
@@ -137,6 +186,7 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
 
 function fakeSdkDeps(options: {
   readonly dispatcher?: FakeSdkEventDispatcher;
+  readonly cardKitUpdateError?: unknown;
   readonly sdkCalls?: unknown[];
   readonly wsClient?: LarkWsClientLike;
 }): LarkSdkDeps {
@@ -157,9 +207,25 @@ function fakeSdkDeps(options: {
             sdkCalls.push({ method: "update", payload });
             return { code: 0, data: { message_id: "om_update" } };
           },
-          async patch(payload: unknown) {
-            sdkCalls.push({ method: "patch", payload });
-            return { code: 0 };
+        },
+      },
+      cardkit: {
+        v1: {
+          card: {
+            async idConvert(payload: { readonly data?: { readonly message_id?: string } }) {
+              sdkCalls.push({ method: "cardIdConvert", payload });
+              return {
+                code: 0,
+                data: { card_id: `card_from_${payload.data?.message_id ?? "missing"}` },
+              };
+            },
+            async update(payload: unknown) {
+              sdkCalls.push({ method: "cardKitUpdate", payload });
+              if (options.cardKitUpdateError !== undefined) {
+                throw options.cardKitUpdateError;
+              }
+              return { code: 0 };
+            },
           },
         },
       },
@@ -171,4 +237,13 @@ function fakeSdkDeps(options: {
       },
     createEventDispatcher: () => options.dispatcher ?? new FakeSdkEventDispatcher(),
   };
+}
+
+function isMethodCall(call: unknown, method: string): boolean {
+  return (
+    typeof call === "object" &&
+    call !== null &&
+    "method" in call &&
+    (call as { readonly method?: unknown }).method === method
+  );
 }

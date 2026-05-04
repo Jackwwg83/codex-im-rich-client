@@ -77,6 +77,7 @@ function runLiveSmoke(env: Record<string, string>) {
     "LARK_DOMAIN",
     "LARK_LIVE",
     "LARK_LIVE_CARD",
+    "LARK_LIVE_CARD_UPDATE",
     "LARK_LIVE_DRY_RUN",
     "LARK_TARGET_CHAT_ID",
     "LARK_TEST_SECRET",

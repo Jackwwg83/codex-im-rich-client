@@ -1,11 +1,15 @@
 #!/usr/bin/env -S pnpm exec tsx
 
 import * as lark from "@larksuiteoapi/node-sdk";
-import { createLarkSdkAdapterOptions, renderLarkApprovalCard } from "../src/index.js";
+import {
+  SILENT_LARK_SDK_LOGGER,
+  createLarkSdkAdapterOptions,
+  renderLarkApprovalCard,
+} from "../src/index.js";
 
 const REQUIRED_FOR_LIVE = ["LARK_APP_ID", "LARK_APP_SECRET_ENV", "LARK_TARGET_CHAT_ID"] as const;
 
-type SmokeStatus = "skip" | "blocked" | "ready_dry_run" | "sent";
+type SmokeStatus = "skip" | "blocked" | "ready_dry_run" | "sent" | "updated";
 
 interface RedactedStatus {
   readonly status: SmokeStatus;
@@ -88,6 +92,27 @@ async function main(): Promise<void> {
       process.exitCode = 5;
       return;
     }
+    if (process.env.LARK_LIVE_CARD_UPDATE === "1") {
+      await messageClient.updateCard({
+        messageRef: {
+          target: { platform: "lark", chatId: requiredEnv("LARK_TARGET_CHAT_ID") },
+          messageId: result.messageId,
+        },
+        card: renderLarkApprovalCard({
+          schemaVersion: "approval-card.v1",
+          kind: "command_execution",
+          approvalId: "approval-must-not-be-sent",
+          summary: "Live Lark CardKit update smoke",
+          target: { riskLevel: "high" },
+          actions: [{ kind: "decline", wirePayload: "v1:QRSTUVWXYZ234567" }],
+          status: "resolved",
+          createdAt: new Date(0),
+        }),
+      });
+      printStatus({ ...redactedStatus("updated"), messageId: "present" });
+      console.log("[lark-live-smoke] UPDATED: redacted live CardKit update smoke succeeded.");
+      return;
+    }
     printStatus({ ...redactedStatus("sent"), messageId: "present" });
     console.log("[lark-live-smoke] SENT: redacted live card schema smoke succeeded.");
     return;
@@ -98,6 +123,7 @@ async function main(): Promise<void> {
     appSecret: requiredEnv(requiredEnv("LARK_APP_SECRET_ENV")),
     appType: lark.AppType.SelfBuild,
     domain: larkDomain(),
+    logger: SILENT_LARK_SDK_LOGGER,
   });
   const result = await client.im.message.create({
     params: { receive_id_type: "chat_id" },
@@ -168,4 +194,14 @@ function larkDomain(): lark.Domain {
   return larkDomainName() === "lark" ? lark.Domain.Lark : lark.Domain.Feishu;
 }
 
-await main();
+try {
+  await main();
+} catch (error) {
+  printStatus(redactedStatus("blocked"));
+  console.error(`[lark-live-smoke] BLOCKED: ${errorMessage(error)}.`);
+  process.exitCode = 6;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
