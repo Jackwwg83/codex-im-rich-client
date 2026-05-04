@@ -1,13 +1,23 @@
 #!/usr/bin/env -S pnpm exec tsx
 
-import { DingTalkChannelAdapter, createDingTalkStreamClient } from "../src/index.js";
+import {
+  DingTalkChannelAdapter,
+  createDingTalkOpenApiCardClient,
+  createDingTalkStreamClient,
+  renderDingTalkApprovalCard,
+} from "../src/index.js";
 
 const REQUIRED_FOR_LIVE = ["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET_ENV"] as const;
+const REQUIRED_FOR_CARD_LIVE = [
+  "DINGTALK_ROBOT_CODE",
+  "DINGTALK_CARD_TEMPLATE_ID",
+  "DINGTALK_TARGET_CHAT_ID",
+] as const;
 const DEFAULT_DURATION_MS = 5_000;
 const MIN_DURATION_MS = 1_000;
 const MAX_DURATION_MS = 30_000;
 
-type SmokeStatus = "skip" | "blocked" | "ready_dry_run" | "connected";
+type SmokeStatus = "skip" | "blocked" | "ready_dry_run" | "connected" | "card_updated";
 
 interface RedactedStatus {
   readonly status: SmokeStatus;
@@ -18,6 +28,10 @@ interface RedactedStatus {
   readonly durationMs?: number;
   readonly robotEvents?: number;
   readonly cardEvents?: number;
+  readonly robotCode?: "present" | "missing";
+  readonly cardTemplateId?: "present" | "missing";
+  readonly targetChatId?: "present" | "missing";
+  readonly messageId?: "present";
   readonly missing?: readonly string[];
 }
 
@@ -44,6 +58,54 @@ async function main(): Promise<void> {
   if (process.env.DINGTALK_LIVE_DRY_RUN === "1") {
     printStatus({ ...redactedStatus("ready_dry_run"), durationMs });
     console.log("[dingtalk-live-smoke] READY_DRY_RUN: live env is present; no network call made.");
+    return;
+  }
+  if (process.env.DINGTALK_LIVE_CARD === "1") {
+    const cardMissing = missingLiveCardRequirements();
+    if (cardMissing.length > 0) {
+      printStatus({ ...redactedStatus("blocked"), missing: cardMissing });
+      console.error(`[dingtalk-live-smoke] BLOCKED: missing ${cardMissing.join(", ")}.`);
+      process.exitCode = 2;
+      return;
+    }
+    const messageClient = createDingTalkOpenApiCardClient({
+      clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+      clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+      robotCode: requiredEnv("DINGTALK_ROBOT_CODE"),
+      cardTemplateId: requiredEnv("DINGTALK_CARD_TEMPLATE_ID"),
+      ...(process.env.DINGTALK_CALLBACK_ROUTE_KEY === undefined
+        ? {}
+        : { callbackRouteKey: process.env.DINGTALK_CALLBACK_ROUTE_KEY }),
+    });
+    const target = { platform: "dingtalk", chatId: requiredEnv("DINGTALK_TARGET_CHAT_ID") };
+    const result = await messageClient.sendCard({
+      target,
+      card: renderDingTalkApprovalCard({
+        schemaVersion: "approval-card.v1",
+        kind: "command_execution",
+        approvalId: "approval-must-not-be-sent",
+        summary: "Live DingTalk OpenAPI card smoke",
+        target: { riskLevel: "high" },
+        actions: [{ kind: "decline", wirePayload: "v1:QRSTUVWXYZ234567" }],
+        status: "pending",
+        createdAt: new Date(0),
+      }),
+    });
+    await messageClient.updateCard({
+      messageRef: { target, messageId: result.messageId },
+      card: renderDingTalkApprovalCard({
+        schemaVersion: "approval-card.v1",
+        kind: "command_execution",
+        approvalId: "approval-must-not-be-sent",
+        summary: "Live DingTalk OpenAPI card smoke",
+        target: { riskLevel: "high" },
+        actions: [],
+        status: "resolved",
+        createdAt: new Date(0),
+      }),
+    });
+    printStatus({ ...redactedStatus("card_updated"), messageId: "present" });
+    console.log("[dingtalk-live-smoke] CARD_UPDATED: redacted live OpenAPI card smoke completed.");
     return;
   }
 
@@ -88,11 +150,18 @@ function redactedStatus(status: SmokeStatus): RedactedStatus {
     clientId: present("DINGTALK_CLIENT_ID"),
     clientSecretEnv: secretEnvName ?? "missing",
     clientSecret: secretEnvName === undefined ? "missing" : present(secretEnvName),
+    robotCode: present("DINGTALK_ROBOT_CODE"),
+    cardTemplateId: present("DINGTALK_CARD_TEMPLATE_ID"),
+    targetChatId: present("DINGTALK_TARGET_CHAT_ID"),
   };
 }
 
 function printStatus(status: RedactedStatus): void {
   console.log(JSON.stringify(status, undefined, 2));
+}
+
+function missingLiveCardRequirements(): string[] {
+  return REQUIRED_FOR_CARD_LIVE.filter((name) => process.env[name] === undefined);
 }
 
 function missingLiveRequirements(): string[] {
