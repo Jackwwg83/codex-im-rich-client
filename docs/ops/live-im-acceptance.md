@@ -199,6 +199,7 @@ Commands:
 
 ```bash
 pnpm smoke:dingtalk-fake
+pnpm dingtalk:readiness
 DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 DINGTALK_CLIENT_ID="$CLIENT_ID" DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET pnpm smoke:dingtalk-live
 DINGTALK_LIVE=1 DINGTALK_CLIENT_ID="$CLIENT_ID" DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET DINGTALK_LIVE_DURATION_MS=5000 pnpm smoke:dingtalk-live
 ```
@@ -208,15 +209,26 @@ The `DINGTALK_CLIENT_SECRET` variable must be set locally before these commands.
 Passing criteria:
 
 - fake smoke passes;
+- `pnpm dingtalk:readiness` is `ready` before claiming installed direct-use;
 - dry-run prints `ready_dry_run`;
 - live Stream connection reaches `connected` and exits after bounded duration;
 - output does not print client ID, client secret, tokens, user IDs, chat IDs, or
   callback payloads.
 
+Direct-use / card acceptance also requires:
+
+- `Card.Instance.Write` open in the DingTalk app;
+- a matching card template id configured as `card_template_id`;
+- one real inbound robot message to capture or confirm the DingTalk target;
+- global and project allowlist entries for that DingTalk user/chat.
+
 Failure localization:
 
 - missing env -> local credential setup issue;
 - auth/connect failure -> DingTalk app/robot Stream configuration issue;
+- `dingtalk:readiness` blocked -> installed config / allowlist / template issue;
+- HTTP 403 at `createAndDeliver` -> missing card permission, template access, or
+  delivery target;
 - timeout/no connection -> network/proxy/Stream endpoint issue.
 
 ## 6. launchd / Keychain

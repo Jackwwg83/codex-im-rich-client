@@ -9,6 +9,17 @@ Run the deterministic fake smoke:
 pnpm smoke:dingtalk-fake
 ```
 
+Check installed direct-use readiness without network or secret output:
+
+```bash
+pnpm dingtalk:readiness
+```
+
+Exit `0` means installed config has a DingTalk adapter, a non-placeholder
+client id, a secret source, a card template id, and DingTalk allowlist entries.
+Exit `2` means it is locally blocked; the output names only missing presence
+checks, never credential values.
+
 Check live-smoke readiness without network:
 
 ```bash
@@ -58,6 +69,10 @@ explicitly only if the DingTalk app uses a different robot code.
 The DingTalk app must have `Card.Instance.Write` open before this can pass.
 Without that permission DingTalk returns HTTP 403 at `createAndDeliver`, before
 any valid acceptance evidence can be recorded.
+
+For direct-use acceptance, the installed bridge config must also include
+DingTalk-specific global and project allowlist entries captured from a real
+inbound robot message. Do not guess staff ids or conversation ids.
 
 If the private staff id or group conversation id is not known, capture it from a
 real inbound robot message instead:
