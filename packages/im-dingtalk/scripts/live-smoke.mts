@@ -1,5 +1,6 @@
 #!/usr/bin/env -S pnpm exec tsx
 
+import type { Target } from "@codex-im/channel-core";
 import {
   DingTalkChannelAdapter,
   createDingTalkOpenApiCardClient,
@@ -8,7 +9,7 @@ import {
 } from "../src/index.js";
 
 const REQUIRED_FOR_LIVE = ["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET_ENV"] as const;
-const REQUIRED_FOR_CARD_LIVE = ["DINGTALK_CARD_TEMPLATE_ID", "DINGTALK_TARGET_CHAT_ID"] as const;
+const REQUIRED_FOR_CARD_LIVE = ["DINGTALK_CARD_TEMPLATE_ID"] as const;
 const DEFAULT_DURATION_MS = 5_000;
 const MIN_DURATION_MS = 1_000;
 const MAX_DURATION_MS = 30_000;
@@ -27,6 +28,7 @@ interface RedactedStatus {
   readonly robotCode?: "present" | "missing" | "derived_from_client_id";
   readonly cardTemplateId?: "present" | "missing";
   readonly targetChatId?: "present" | "missing";
+  readonly targetSource?: "env" | "captured" | "missing";
   readonly messageId?: "present";
   readonly missing?: readonly string[];
 }
@@ -64,44 +66,64 @@ async function main(): Promise<void> {
       process.exitCode = 2;
       return;
     }
-    const messageClient = createDingTalkOpenApiCardClient({
-      clientId: requiredEnv("DINGTALK_CLIENT_ID"),
-      clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
-      robotCode: process.env.DINGTALK_ROBOT_CODE ?? requiredEnv("DINGTALK_CLIENT_ID"),
-      cardTemplateId: requiredEnv("DINGTALK_CARD_TEMPLATE_ID"),
-      ...(process.env.DINGTALK_CALLBACK_ROUTE_KEY === undefined
-        ? {}
-        : { callbackRouteKey: process.env.DINGTALK_CALLBACK_ROUTE_KEY }),
-    });
-    const target = { platform: "dingtalk", chatId: requiredEnv("DINGTALK_TARGET_CHAT_ID") };
-    const result = await messageClient.sendCard({
-      target,
-      card: renderDingTalkApprovalCard({
-        schemaVersion: "approval-card.v1",
-        kind: "command_execution",
-        approvalId: "approval-must-not-be-sent",
-        summary: "Live DingTalk OpenAPI card smoke",
-        target: { riskLevel: "high" },
-        actions: [{ kind: "decline", wirePayload: "v1:QRSTUVWXYZ234567" }],
-        status: "pending",
-        createdAt: new Date(0),
-      }),
-    });
-    await messageClient.updateCard({
-      messageRef: { target, messageId: result.messageId },
-      card: renderDingTalkApprovalCard({
-        schemaVersion: "approval-card.v1",
-        kind: "command_execution",
-        approvalId: "approval-must-not-be-sent",
-        summary: "Live DingTalk OpenAPI card smoke",
-        target: { riskLevel: "high" },
-        actions: [],
-        status: "resolved",
-        createdAt: new Date(0),
-      }),
-    });
-    printStatus({ ...redactedStatus("card_updated"), messageId: "present" });
-    console.log("[dingtalk-live-smoke] CARD_UPDATED: redacted live OpenAPI card smoke completed.");
+    try {
+      const resolvedTarget = await resolveCardTarget(durationMs);
+      if (resolvedTarget === undefined) {
+        printStatus({ ...redactedStatus("blocked"), durationMs, targetSource: "missing" });
+        console.error(
+          "[dingtalk-live-smoke] BLOCKED: missing DINGTALK_TARGET_CHAT_ID; set it or set DINGTALK_LIVE_CAPTURE_TARGET=1 and send one test message to the bot during the smoke window.",
+        );
+        process.exitCode = 2;
+        return;
+      }
+      const messageClient = createDingTalkOpenApiCardClient({
+        clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+        clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+        robotCode: process.env.DINGTALK_ROBOT_CODE ?? requiredEnv("DINGTALK_CLIENT_ID"),
+        cardTemplateId: requiredEnv("DINGTALK_CARD_TEMPLATE_ID"),
+        ...(process.env.DINGTALK_CALLBACK_ROUTE_KEY === undefined
+          ? {}
+          : { callbackRouteKey: process.env.DINGTALK_CALLBACK_ROUTE_KEY }),
+      });
+      const result = await messageClient.sendCard({
+        target: resolvedTarget.target,
+        card: renderDingTalkApprovalCard({
+          schemaVersion: "approval-card.v1",
+          kind: "command_execution",
+          approvalId: "approval-must-not-be-sent",
+          summary: "Live DingTalk OpenAPI card smoke",
+          target: { riskLevel: "high" },
+          actions: [{ kind: "decline", wirePayload: "v1:QRSTUVWXYZ234567" }],
+          status: "pending",
+          createdAt: new Date(0),
+        }),
+      });
+      await messageClient.updateCard({
+        messageRef: { target: resolvedTarget.target, messageId: result.messageId },
+        card: renderDingTalkApprovalCard({
+          schemaVersion: "approval-card.v1",
+          kind: "command_execution",
+          approvalId: "approval-must-not-be-sent",
+          summary: "Live DingTalk OpenAPI card smoke",
+          target: { riskLevel: "high" },
+          actions: [],
+          status: "resolved",
+          createdAt: new Date(0),
+        }),
+      });
+      printStatus({
+        ...redactedStatus("card_updated"),
+        messageId: "present",
+        targetSource: resolvedTarget.source,
+      });
+      console.log(
+        "[dingtalk-live-smoke] CARD_UPDATED: redacted live OpenAPI card smoke completed.",
+      );
+    } catch (error) {
+      printStatus({ ...redactedStatus("blocked"), durationMs });
+      console.error(`[dingtalk-live-smoke] BLOCKED: ${redactKnownValues(errorMessage(error))}`);
+      process.exitCode = 3;
+    }
     return;
   }
 
@@ -163,6 +185,37 @@ function missingLiveCardRequirements(): string[] {
   return REQUIRED_FOR_CARD_LIVE.filter((name) => process.env[name] === undefined);
 }
 
+async function resolveCardTarget(
+  durationMs: number,
+): Promise<{ target: Target; source: "env" | "captured" } | undefined> {
+  const targetChatId = process.env.DINGTALK_TARGET_CHAT_ID;
+  if (targetChatId !== undefined && targetChatId.length > 0) {
+    return { target: { platform: "dingtalk", chatId: targetChatId }, source: "env" };
+  }
+  if (process.env.DINGTALK_LIVE_CAPTURE_TARGET !== "1") {
+    return undefined;
+  }
+
+  let captured: Target | undefined;
+  const streamClient = createDingTalkStreamClient({
+    clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+    clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+    debug: false,
+  });
+  const adapter = new DingTalkChannelAdapter({ streamClient });
+  const unsubscribe = adapter.onMessage((message) => {
+    captured = message.target;
+  });
+  try {
+    await adapter.start();
+    await waitForTarget(() => captured, durationMs);
+  } finally {
+    unsubscribe();
+    await adapter.stop();
+  }
+  return captured === undefined ? undefined : { target: captured, source: "captured" };
+}
+
 function missingLiveRequirements(): string[] {
   const missing = REQUIRED_FOR_LIVE.filter((name) => process.env[name] === undefined);
   const secretEnvName = process.env.DINGTALK_CLIENT_SECRET_ENV;
@@ -202,6 +255,10 @@ function redactKnownValues(text: string): string {
     process.env.DINGTALK_CLIENT_SECRET_ENV === undefined
       ? undefined
       : process.env[process.env.DINGTALK_CLIENT_SECRET_ENV],
+    process.env.DINGTALK_ROBOT_CODE,
+    process.env.DINGTALK_CARD_TEMPLATE_ID,
+    process.env.DINGTALK_TARGET_CHAT_ID,
+    process.env.DINGTALK_CALLBACK_ROUTE_KEY,
   ]) {
     if (value !== undefined && value.length > 0) {
       out = out.split(value).join("<redacted>");
@@ -216,6 +273,13 @@ function errorMessage(error: unknown): string {
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForTarget(read: () => Target | undefined, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (read() === undefined && Date.now() < deadline) {
+    await sleep(100);
+  }
 }
 
 await main();

@@ -55,6 +55,25 @@ daemon derive the robot code from `DINGTALK_CLIENT_ID` / `client_id`, matching
 the common DingTalk AppKey-as-robotCode setup. Set `DINGTALK_ROBOT_CODE`
 explicitly only if the DingTalk app uses a different robot code.
 
+If the private staff id or group conversation id is not known, capture it from a
+real inbound robot message instead:
+
+```bash
+DINGTALK_LIVE=1 \
+DINGTALK_LIVE_CARD=1 \
+DINGTALK_LIVE_CAPTURE_TARGET=1 \
+DINGTALK_CLIENT_ID=ding_xxx \
+DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET \
+DINGTALK_CLIENT_SECRET=replace_me \
+DINGTALK_CARD_TEMPLATE_ID=replace_me \
+DINGTALK_LIVE_DURATION_MS=30000 \
+pnpm smoke:dingtalk-live
+```
+
+During that bounded window, send one harmless message to the DingTalk bot from
+the real test client. The smoke records only whether the target was captured,
+then sends and updates the approval card against that same target.
+
 Rollback is process-local: interrupt the command with Ctrl-C or wait for the
 bounded duration to finish. The harness reads credentials from environment
 variables only, does not write plist/Keychain/SQLite state, and prints only

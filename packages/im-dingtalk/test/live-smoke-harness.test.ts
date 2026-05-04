@@ -64,6 +64,23 @@ describe("DingTalk live smoke harness gate (JAC-89)", () => {
     expect(output(result)).not.toContain(SECRET);
     expect(output(result)).not.toContain(CLIENT_ID);
   });
+
+  it("blocks explicit card smoke before network when no target is configured or captured", () => {
+    const result = runLiveSmoke({
+      DINGTALK_LIVE: "1",
+      DINGTALK_LIVE_CARD: "1",
+      DINGTALK_CLIENT_ID: CLIENT_ID,
+      DINGTALK_CLIENT_SECRET_ENV: "DINGTALK_TEST_SECRET",
+      DINGTALK_TEST_SECRET: SECRET,
+      DINGTALK_CARD_TEMPLATE_ID: "template-must-not-leak",
+    });
+
+    expect(result.status).toBe(2);
+    expect(output(result)).toContain("missing DINGTALK_TARGET_CHAT_ID");
+    expect(output(result)).not.toContain("template-must-not-leak");
+    expect(output(result)).not.toContain(SECRET);
+    expect(output(result)).not.toContain(CLIENT_ID);
+  });
 });
 
 function runLiveSmoke(env: Record<string, string>) {
@@ -75,6 +92,7 @@ function runLiveSmoke(env: Record<string, string>) {
     "DINGTALK_CALLBACK_ROUTE_KEY",
     "DINGTALK_LIVE",
     "DINGTALK_LIVE_CARD",
+    "DINGTALK_LIVE_CAPTURE_TARGET",
     "DINGTALK_LIVE_DRY_RUN",
     "DINGTALK_LIVE_DURATION_MS",
     "DINGTALK_ROBOT_CODE",
