@@ -317,6 +317,7 @@ Latest soak checks:
 | Time | Result |
 |---|---|
 | 2026-05-04 00:23 SGT | `pnpm launchd:status` still green for pid `70626`; `launchctl print` still reports `state = running`, `runs = 1`, `last exit code = (never exited)`; daemon logs show startup plus Node deprecation warnings only; installed bridge redaction scan passed |
+| 2026-05-04 00:54 SGT | launchd still reports `state = running`, `runs = 1`, `pid = 70626`, and `last exit code = (never exited)`; daemon logs unchanged and redacted. `launchd:status` initially marked the snapshot stale because sandboxed PID probing could not inspect the external process, so `bin/launchd-status.mjs` now also accepts matching `launchctl print` pid evidence; targeted `scripts/launchd-status.test.mjs` passed and `pnpm launchd:status` is green again |
 
 ## 7. Next Implementation Order
 

@@ -69,6 +69,32 @@ describe("launchd-status", () => {
     expect(stdout.join("\n")).toContain("daemon status: stale pid=9999");
   });
 
+  it("uses launchctl pid evidence when process liveness probing is unavailable", async () => {
+    const stdout = [];
+    const exitCode = await runLaunchdStatus({
+      home: "/Users/operator",
+      uid: "501",
+      exists: (path) => path.endsWith(".plist") || path.endsWith("daemon-status.json"),
+      readFile: () =>
+        JSON.stringify({
+          pid: 70626,
+          startedAt: "2026-05-03T15:50:58.198Z",
+          currentCodexThreadCount: 0,
+          pendingApprovalCount: 0,
+        }),
+      pidAlive: () => false,
+      launchctl: vi.fn(async () => ({
+        exitCode: 0,
+        stdout: ["state = running", "pid = 70626", "last exit code = (never exited)"].join("\n"),
+        stderr: "",
+      })),
+      output: (line) => stdout.push(line),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout.join("\n")).toContain("daemon status: present pid=70626");
+  });
+
   it("reports not-loaded without leaking launchctl stderr token-shaped material", async () => {
     const stdout = [];
     const exitCode = await runLaunchdStatus({

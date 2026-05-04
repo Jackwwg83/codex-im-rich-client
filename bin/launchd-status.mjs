@@ -41,8 +41,9 @@ export async function runLaunchdStatus(options = {}) {
   const statusPresent = exists(plan.statusPath);
   const launchctlResult = await launchctl(plan.serviceTarget);
   const launchctlOk = launchctlResult.exitCode === 0;
+  const launchdPid = launchctlOk ? parseLaunchdPid(launchctlResult.stdout) : undefined;
   const statusSummary = statusPresent
-    ? summarizeStatusSnapshot(readFile(plan.statusPath, "utf8"), pidAlive)
+    ? summarizeStatusSnapshot(readFile(plan.statusPath, "utf8"), pidAlive, launchdPid)
     : "missing";
 
   const lines = [
@@ -58,7 +59,7 @@ export async function runLaunchdStatus(options = {}) {
   return launchctlOk && statusPresent ? 0 : 2;
 }
 
-function summarizeStatusSnapshot(raw, pidAlive) {
+function summarizeStatusSnapshot(raw, pidAlive, launchdPid) {
   try {
     const parsed = JSON.parse(raw);
     const pid = typeof parsed.pid === "number" ? parsed.pid : "unknown";
@@ -69,11 +70,22 @@ function summarizeStatusSnapshot(raw, pidAlive) {
       typeof parsed.currentCodexThreadCount === "number"
         ? parsed.currentCodexThreadCount
         : "unknown";
-    const state = typeof pid === "number" && pidAlive(pid) ? "present" : "stale";
+    const aliveByPid = typeof pid === "number" && pidAlive(pid);
+    const aliveByLaunchd = typeof pid === "number" && launchdPid === pid;
+    const state = aliveByPid || aliveByLaunchd ? "present" : "stale";
     return `${state} pid=${pid} startedAt=${startedAt} codexThreads=${threads} pendingApprovals=${pending}`;
   } catch (error) {
     return "invalid";
   }
+}
+
+function parseLaunchdPid(stdout) {
+  const match = stdout.match(/^\s*pid\s*=\s*(\d+)\s*$/mu);
+  if (match === null) {
+    return undefined;
+  }
+  const pid = Number(match[1]);
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
 }
 
 function defaultPidAlive(pid) {
