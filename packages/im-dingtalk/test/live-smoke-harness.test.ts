@@ -60,6 +60,7 @@ describe("DingTalk live smoke harness gate (JAC-89)", () => {
     expect(result.status).toBe(2);
     expect(output(result)).toContain("[dingtalk-live-smoke] BLOCKED");
     expect(result.stdout).toContain("DINGTALK_CARD_TEMPLATE_ID");
+    expect(result.stdout).not.toContain("DINGTALK_ROBOT_CODE");
     expect(output(result)).not.toContain(SECRET);
     expect(output(result)).not.toContain(CLIENT_ID);
   });

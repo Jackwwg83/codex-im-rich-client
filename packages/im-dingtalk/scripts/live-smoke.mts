@@ -8,11 +8,7 @@ import {
 } from "../src/index.js";
 
 const REQUIRED_FOR_LIVE = ["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET_ENV"] as const;
-const REQUIRED_FOR_CARD_LIVE = [
-  "DINGTALK_ROBOT_CODE",
-  "DINGTALK_CARD_TEMPLATE_ID",
-  "DINGTALK_TARGET_CHAT_ID",
-] as const;
+const REQUIRED_FOR_CARD_LIVE = ["DINGTALK_CARD_TEMPLATE_ID", "DINGTALK_TARGET_CHAT_ID"] as const;
 const DEFAULT_DURATION_MS = 5_000;
 const MIN_DURATION_MS = 1_000;
 const MAX_DURATION_MS = 30_000;
@@ -28,7 +24,7 @@ interface RedactedStatus {
   readonly durationMs?: number;
   readonly robotEvents?: number;
   readonly cardEvents?: number;
-  readonly robotCode?: "present" | "missing";
+  readonly robotCode?: "present" | "missing" | "derived_from_client_id";
   readonly cardTemplateId?: "present" | "missing";
   readonly targetChatId?: "present" | "missing";
   readonly messageId?: "present";
@@ -71,7 +67,7 @@ async function main(): Promise<void> {
     const messageClient = createDingTalkOpenApiCardClient({
       clientId: requiredEnv("DINGTALK_CLIENT_ID"),
       clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
-      robotCode: requiredEnv("DINGTALK_ROBOT_CODE"),
+      robotCode: process.env.DINGTALK_ROBOT_CODE ?? requiredEnv("DINGTALK_CLIENT_ID"),
       cardTemplateId: requiredEnv("DINGTALK_CARD_TEMPLATE_ID"),
       ...(process.env.DINGTALK_CALLBACK_ROUTE_KEY === undefined
         ? {}
@@ -150,7 +146,10 @@ function redactedStatus(status: SmokeStatus): RedactedStatus {
     clientId: present("DINGTALK_CLIENT_ID"),
     clientSecretEnv: secretEnvName ?? "missing",
     clientSecret: secretEnvName === undefined ? "missing" : present(secretEnvName),
-    robotCode: present("DINGTALK_ROBOT_CODE"),
+    robotCode:
+      process.env.DINGTALK_ROBOT_CODE === undefined
+        ? "derived_from_client_id"
+        : present("DINGTALK_ROBOT_CODE"),
     cardTemplateId: present("DINGTALK_CARD_TEMPLATE_ID"),
     targetChatId: present("DINGTALK_TARGET_CHAT_ID"),
   };

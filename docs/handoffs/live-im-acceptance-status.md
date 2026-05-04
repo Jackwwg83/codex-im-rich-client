@@ -9,9 +9,9 @@
 > refresh, and the real approval `Allow once` callback path. DingTalk production
 > now has a configurable OpenAPI card client for create/update plus Stream
 > action acknowledgement safety, and `smoke:dingtalk-live` now has an explicit
-> redacted `DINGTALK_LIVE_CARD=1` OpenAPI send/update gate; DingTalk real
-> inbound/card direct-use remains pending on a usable client/session and
-> card-template configuration.
+> redacted `DINGTALK_LIVE_CARD=1` OpenAPI send/update gate with AppKey-derived
+> robot-code fallback; DingTalk real inbound/card direct-use remains pending on
+> a usable client/session and card-template configuration.
 
 ---
 
@@ -79,7 +79,7 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
 | DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `robot_code` and `card_template_id` are configured; errors are sanitized |
-| DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 ... pnpm smoke:dingtalk-live` | ready | explicit redacted live card send/update gate exists; real pass still needs `robot_code`, `card_template_id`, and a target staff/group id |
+| DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 ... pnpm smoke:dingtalk-live` | ready | explicit redacted live card send/update gate exists; `robot_code` can derive from AppKey/client id; real pass still needs `card_template_id` and a target staff/group id |
 | DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs a usable DingTalk client/session plus a matching card template; Stream connected but no real inbound event was produced |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
@@ -224,8 +224,9 @@ Stop and treat as a blocker if:
 - 2026-05-04: `smoke:dingtalk-live` gained an explicit
   `DINGTALK_LIVE_CARD=1` gate for redacted real OpenAPI approval-card
   send/update acceptance. The gate blocks before network access if
-  `DINGTALK_ROBOT_CODE`, `DINGTALK_CARD_TEMPLATE_ID`, or
-  `DINGTALK_TARGET_CHAT_ID` is missing, and records only presence/status
-  evidence. Local gates passed: `pnpm exec vitest run packages/im-dingtalk/test`
-  (12 files, 107 passing), `pnpm typecheck`, `pnpm lint`,
-  `pnpm protocol:check`, and `pnpm test` (148 files, 1356 passing, 1 skipped).
+  `DINGTALK_CARD_TEMPLATE_ID` or `DINGTALK_TARGET_CHAT_ID` is missing, derives
+  `DINGTALK_ROBOT_CODE` from `DINGTALK_CLIENT_ID` when omitted, and records only
+  presence/status evidence. Local gates passed: `pnpm exec vitest run
+  packages/im-dingtalk/test` (12 files, 107 passing), `pnpm typecheck`, `pnpm
+  lint`, `pnpm protocol:check`, and `pnpm test` (148 files, 1356 passing, 1
+  skipped).

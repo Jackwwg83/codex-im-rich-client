@@ -316,14 +316,15 @@ export function createProductionAdapter(
     if (secrets.dingtalkClientSecret === undefined) {
       throw new Error("daemon run requires resolved DingTalk client secret");
     }
+    const dingTalkRobotCode =
+      config.adapters.dingtalk.robotCode ?? config.adapters.dingtalk.clientId;
     const dingTalkCardClient =
-      config.adapters.dingtalk.robotCode === undefined ||
       config.adapters.dingtalk.cardTemplateId === undefined
         ? undefined
         : createDingTalkOpenApiCardClient({
             clientId: config.adapters.dingtalk.clientId,
             clientSecret: secrets.dingtalkClientSecret,
-            robotCode: config.adapters.dingtalk.robotCode,
+            robotCode: dingTalkRobotCode,
             cardTemplateId: config.adapters.dingtalk.cardTemplateId,
             ...(config.adapters.dingtalk.callbackRouteKey === undefined
               ? {}

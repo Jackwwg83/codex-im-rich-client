@@ -107,6 +107,9 @@ describe("daemon run safety rails", () => {
     expect(source).toContain("createDingTalkNoopActionClient");
     expect(source).toContain("createDingTalkSessionReplyTextClient");
     expect(source).toContain("createDingTalkStreamClient");
+    expect(source).toContain(
+      "config.adapters.dingtalk.robotCode ?? config.adapters.dingtalk.clientId",
+    );
   });
 
   it("routes multi-platform daemon sends and callback acknowledgements by platform", async () => {

@@ -9,9 +9,9 @@
 > terminal-card refresh. DingTalk Stream connects with redacted test
 > credentials, and production card send/update is now wired behind explicit
 > OpenAPI card-template config; an explicit redacted `DINGTALK_LIVE_CARD=1`
-> live smoke gate now exists for OpenAPI card send/update. DingTalk real
-> inbound/card direct-use is still pending on a usable client/session plus
-> matching card template.
+> live smoke gate now exists for OpenAPI card send/update with AppKey-derived
+> robot-code fallback. DingTalk real inbound/card direct-use is still pending on
+> a usable client/session plus matching card template.
 
 ## 1. Current State
 
@@ -78,7 +78,8 @@
     satisfy target/messageRef validation.
   - latest patch - `smoke:dingtalk-live` now has an explicit
     `DINGTALK_LIVE_CARD=1` OpenAPI card send/update gate with redacted
-    presence-only status and a no-network missing-env block.
+    presence-only status, a no-network missing-env block, and AppKey-derived
+    robot-code fallback when `DINGTALK_ROBOT_CODE` is omitted.
 - **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
   once a usable DingTalk client/session can produce real inbound events and the
   test app has a matching card template configured.
