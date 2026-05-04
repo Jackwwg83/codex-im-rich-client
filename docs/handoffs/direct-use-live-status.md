@@ -95,9 +95,14 @@
   - latest evidence - Installed bridge redaction scan passed for app bundle,
     wrapper, config, launchd plist rendering, and daemon logs; `launchd:status`
     remains green with `pendingApprovals=0`.
-- **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
-  once `Card.Instance.Write` is opened, a matching card template is configured,
-  and a usable DingTalk client/session can produce real inbound events.
+  - latest evidence - The currently loaded launchd app bundle does not match
+    the freshly built `dist/codex-im-daemon.mjs`; install/restart is the next
+    local operator action before claiming the installed daemon is at latest
+    branch HEAD.
+- **Next exact action:** Operator-gated install/restart of the latest bridge
+  bundle, then finish DingTalk real inbound/card direct-use acceptance once
+  `Card.Instance.Write` is opened, a matching card template is configured, and a
+  usable DingTalk client/session can produce real inbound events.
 
 ## 2. Why This Exists
 

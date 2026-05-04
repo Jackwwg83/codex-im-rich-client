@@ -254,3 +254,7 @@ Stop and treat as a blocker if:
 - 2026-05-04: Installed bridge redaction scan passed against the current local
   app bundle, wrapper, config, launchd plist rendering, and daemon logs.
   `pnpm launchd:status` also remained green with `pendingApprovals=0`.
+- 2026-05-04: Fresh `pnpm bridge:build` produced a daemon bundle that does not
+  match the currently installed launchd app bundle. The running daemon remains
+  healthy, but the installed daemon should be rebuilt/installed/restarted before
+  treating latest HEAD as the active production launchd artifact.
