@@ -71,7 +71,7 @@ const SENSITIVE_LARK_PATTERNS = [
 ] as const;
 
 class FakeLarkEventDispatcher implements LarkEventDispatcherLike {
-  readonly actionHandlers: Array<(event: LarkRawCardActionInput) => void | Promise<void>> = [];
+  readonly actionHandlers: NonNullable<LarkEventHandlerMap["card.action.trigger"]>[] = [];
   readonly messageHandlers: Array<(event: LarkRawMessageEvent) => void | Promise<void>> = [];
 
   register(handlers: LarkEventHandlerMap) {
@@ -84,8 +84,8 @@ class FakeLarkEventDispatcher implements LarkEventDispatcherLike {
     return this;
   }
 
-  async injectAction(event: LarkRawCardActionInput): Promise<void> {
-    await Promise.all(this.actionHandlers.map((handler) => handler(event)));
+  async injectAction(event: LarkRawCardActionInput): Promise<unknown[]> {
+    return Promise.all(this.actionHandlers.map((handler) => handler(event)));
   }
 
   async injectMessage(event: LarkRawMessageEvent): Promise<void> {
@@ -222,7 +222,7 @@ describe("LarkChannelAdapter contract and boundaries (JAC-159)", () => {
     await adapter.editText(REF, "edited");
     const sentCard = await adapter.sendCard(TARGET, CARD);
     await adapter.updateCard(sentCard.messageRef, { ...CARD, status: "resolved" });
-    await dispatcher.injectAction(loadFixture("card-action-private.json"));
+    const actionResponses = await dispatcher.injectAction(loadFixture("card-action-private.json"));
     const inboundAction = seenActions.mock.calls[0]?.[0];
     await adapter.answerAction(inboundAction.callbackHandle, {
       ok: false,
@@ -250,6 +250,7 @@ describe("LarkChannelAdapter contract and boundaries (JAC-159)", () => {
         },
       }),
     );
+    expect(actionResponses).toEqual([{ toast: { type: "info", content: "Decision received" } }]);
     expect(messageCalls).toEqual([
       { method: "sendText", input: { target: TARGET, text: "hello lark" } },
       {

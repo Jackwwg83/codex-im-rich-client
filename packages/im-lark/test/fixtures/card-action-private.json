@@ -9,7 +9,9 @@
       "name": "Ada"
     },
     "action": {
-      "value": "v1:ABCDEFGHIJKLMNOP"
+      "value": {
+        "token": "v1:ABCDEFGHIJKLMNOP"
+      }
     },
     "context": {
       "open_chat_id": "oc_card_private",

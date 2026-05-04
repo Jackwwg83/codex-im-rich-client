@@ -12,6 +12,7 @@ export type {
   LarkRawCardActionInput,
 } from "./action.js";
 export type {
+  LarkCardActionHandlerResult,
   LarkActionClientLike,
   LarkChannelAdapterOptions,
   LarkEventHandlerMap,
@@ -32,6 +33,7 @@ export type {
   LarkApprovalCardJson,
 } from "./card.js";
 export {
+  createLarkActionCallbackValue,
   extractLarkActionWirePayload,
   isLarkActionWirePayload,
   redactLarkActionPayloadForLog,

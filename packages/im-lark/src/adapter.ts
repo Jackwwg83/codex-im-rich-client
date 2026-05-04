@@ -24,9 +24,18 @@ export interface LarkEventDispatcherLike {
   register?(handlers: LarkEventHandlerMap): LarkEventDispatcherLike | undefined;
 }
 
+export interface LarkCardActionHandlerResult {
+  readonly toast: {
+    readonly type: "info" | "success" | "warning" | "error";
+    readonly content: string;
+  };
+}
+
 export interface LarkEventHandlerMap {
   "im.message.receive_v1"?: (event: LarkRawMessageEvent) => void | Promise<void>;
-  "card.action.trigger"?: (event: LarkRawCardActionInput) => void | Promise<void>;
+  "card.action.trigger"?: (
+    event: LarkRawCardActionInput,
+  ) => LarkCardActionHandlerResult | undefined | Promise<LarkCardActionHandlerResult | undefined>;
 }
 
 export interface LarkWsClientLike {
@@ -249,18 +258,18 @@ export class LarkChannelAdapter implements ChannelAdapter {
     }
   }
 
-  #emitRawAction(raw: LarkRawCardActionInput): void {
+  #emitRawAction(raw: LarkRawCardActionInput): LarkCardActionHandlerResult | undefined {
     if (!this.#acceptInbound()) {
-      return;
+      return undefined;
     }
     let action: InboundAction | undefined;
     try {
       action = normalizeLarkRawCardAction(raw, this.#nowMs());
     } catch {
-      return;
+      return undefined;
     }
     if (action === undefined) {
-      return;
+      return undefined;
     }
     for (const handler of this.#onActionHandlers) {
       try {
@@ -269,6 +278,7 @@ export class LarkChannelAdapter implements ChannelAdapter {
         // Keep one subscriber failure from blocking other subscribers.
       }
     }
+    return larkCardActionAcceptedResponse();
   }
 
   #acceptInbound(): boolean {
@@ -309,7 +319,7 @@ export class LarkChannelAdapter implements ChannelAdapter {
     }
     if (this.#onActionHandlers.size > 0) {
       handlers["card.action.trigger"] = (event: LarkRawCardActionInput) => {
-        this.#emitRawAction(event);
+        return this.#emitRawAction(event);
       };
     }
     if (Object.keys(handlers).length === 0) {
@@ -325,4 +335,8 @@ export class LarkChannelAdapter implements ChannelAdapter {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function larkCardActionAcceptedResponse(): LarkCardActionHandlerResult {
+  return { toast: { type: "info", content: "Decision received" } };
 }

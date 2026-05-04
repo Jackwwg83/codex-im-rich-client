@@ -362,21 +362,22 @@ Latest live Feishu/Lark direct-use evidence:
 | Lark `/status` | Feishu Web sent `/status`; SQLite recorded `inbound.message_allowed` with `routeKind=command`; bot replied `Status: target: lark chat`, `binding: unbound`, `pending approvals: 0` | green |
 | Lark `/use codex-im` | Feishu Web sent `/use codex-im`; SQLite `thread_bindings` gained a Lark row for `codex-im`; bot replied `Using project codex-im` | green |
 | Lark prompt -> Codex | Feishu Web prompt `Reply exactly: LARK-CODEX-OK` created a real Codex thread and bot replied `LARK-CODEX-OK` | green |
-| Lark card schema | First real approval attempt exposed Feishu error `230099` / unknown root property `elements`; `be41071` moved card content under `body.elements` and uses callback `behaviors` with opaque v1 token values only. `LARK_LIVE=1 LARK_LIVE_CARD=1 pnpm smoke:lark-live` then succeeded with redacted message-id evidence | fixed/green |
-| Lark approval callback | Post-fix real prompt for a harmless `/tmp` write was accepted as inbound prompt, but no new callback token or approval audit row was created during the observation window and the target file stayed absent. This remains the next Lark live gap | pending |
+| Lark card schema | First real approval attempt exposed Feishu error `230099` / unknown root property `elements`; `be41071` moved card content under `body.elements`. The later callback fix sends Card JSON 2.0 button `behaviors` with only `{ token: "v1:..." }` and no approval id / action kind. `LARK_LIVE=1 LARK_LIVE_CARD=1 pnpm smoke:lark-live` succeeded with redacted message-id evidence | fixed/green |
+| Lark approval callback | Fresh Feishu Web write approval was accepted as inbound prompt, rendered a real approval card, and a keyboard-driven click on `Allow once` reached the launchd daemon. SQLite recorded `allow_once=used` with sibling tokens `revoked`, the target `/tmp` file was created, and Codex replied `Ran ...` | fixed/green |
+| Lark terminal approval card visual refresh | The callback/resolve path is green, but the visible Feishu card refresh still needs a focused verification pass before claiming parity with Telegram terminal card UX | pending |
 
 Latest Lark hardening gates:
 
 | Gate | Result |
 |---|---|
 | `pnpm exec vitest run packages/daemon/test/daemon.test.ts` | green: 111 passing |
-| `pnpm exec vitest run packages/im-lark/test` | green: 13 files, 107 passing |
+| `pnpm exec vitest run packages/im-lark/test` | green: 13 files, 113 passing |
 | `LARK_LIVE=1 LARK_LIVE_CARD=1 pnpm smoke:lark-live` | green: redacted live card schema smoke sent |
 | `pnpm typecheck` | green |
 | `pnpm lint` | green: 332 files checked |
-| `pnpm test` | green: 148 files, 1344 passing, 1 skipped |
+| `pnpm test` | green: 148 files, 1350 passing, 1 skipped |
 | `pnpm protocol:check` | green |
-| `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `13136` |
+| `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `63996` |
 
 Latest live-acceptance hardening gates:
 
@@ -460,7 +461,8 @@ Block 4:
     allow-session, and stale/revoked click behavior (done)
 11. Feishu/Lark direct-use inbound, `/status`, `/use`, prompt/reply, and card
     schema live acceptance (done)
-12. Next: Lark full approval callback live acceptance and DingTalk real
+12. Lark full approval callback live acceptance (done for `Allow once`).
+13. Next: Lark terminal approval card visual refresh and DingTalk real
     inbound/card direct-use acceptance.
 
 ## 8. Compact / Resume

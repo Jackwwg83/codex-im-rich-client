@@ -1,5 +1,9 @@
 import type { ChannelAdapter } from "@codex-im/channel-core";
-import { isLarkActionWirePayload } from "./callback-codec.js";
+import {
+  type LarkActionCallbackValue,
+  createLarkActionCallbackValue,
+  isLarkActionWirePayload,
+} from "./callback-codec.js";
 
 export const LARK_CARD_MAX_CONTENT_BYTES = 30 * 1024;
 export const LARK_CARD_UPDATE_MAX_QPS_PER_MESSAGE = 5;
@@ -45,7 +49,7 @@ export interface LarkApprovalCardButton {
   readonly behaviors: readonly [
     {
       readonly type: "callback";
-      readonly value: string;
+      readonly value: LarkActionCallbackValue;
     },
   ];
 }
@@ -96,7 +100,7 @@ function buttonForAction(action: ApprovalActionInput): LarkApprovalCardButton {
     tag: "button",
     text: { tag: "plain_text", content: labelForAction(action.kind) },
     type: typeForAction(action.kind),
-    behaviors: [{ type: "callback", value: wirePayload }],
+    behaviors: [{ type: "callback", value: createLarkActionCallbackValue(wirePayload) }],
   };
 }
 

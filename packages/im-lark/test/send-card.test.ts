@@ -61,8 +61,8 @@ describe("LarkChannelAdapter.sendCard (JAC-154)", () => {
     expect(serialized).not.toContain("decline");
 
     expect(actionButtons(card).map((button) => button.behaviors[0]?.value)).toEqual([
-      "v1:ABCDEFGHIJKLMNOP",
-      "v1:QRSTUVWXYZ234567",
+      { token: "v1:ABCDEFGHIJKLMNOP" },
+      { token: "v1:QRSTUVWXYZ234567" },
     ]);
   });
 
