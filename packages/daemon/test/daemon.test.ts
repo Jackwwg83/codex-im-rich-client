@@ -2352,6 +2352,116 @@ describe("Daemon skeleton (T14)", () => {
     );
   });
 
+  it("does not resume the selected thread when /switch points at the current binding", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const selectedThread = {
+      id: "ts-selected",
+      target,
+      projectId: "web",
+      codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      title: "Selected thread",
+      status: "open" as const,
+      createdAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T11:00:00.000Z",
+      lastUsedAt: "2026-05-03T11:00:00.000Z",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      })),
+      replaceCachedBinding: vi.fn(),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadResume: vi.fn(() => {
+        throw new Error("resume should not be called");
+      }),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      listForTarget: vi.fn(() => [selectedThread]),
+      switchCurrent: vi.fn(() => ({
+        binding: {
+          id: "tb-selected",
+          target,
+          projectId: "web",
+          cwd: "/repo/web",
+          codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+          createdAt: "2026-05-03T12:30:00.000Z",
+          updatedAt: "2026-05-03T12:30:00.000Z",
+        },
+        session: selectedThread,
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/switch 1",
+      messageRef: { target, messageId: "msg-switch-current" },
+      receivedAt: new Date("2026-05-03T12:30:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadResume).not.toHaveBeenCalled();
+    expect(threadSessionRepository.switchCurrent).toHaveBeenCalledWith({
+      target,
+      projectId: "web",
+      codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+      cwd: "/repo/web",
+      now: expect.any(String),
+    });
+    expect(sessionRouter.replaceCachedBinding).toHaveBeenCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-switch-current" },
+      "Switched to 1 web (thread-selec...)",
+    );
+  });
+
   it("keeps current binding unchanged when /switch threadResume fails", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
@@ -2814,6 +2924,81 @@ describe("Daemon skeleton (T14)", () => {
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-fork-fail" },
       "Codex thread failed to fork.",
+    );
+  });
+
+  it("tells the user to run a prompt before forking a Codex thread with no rollout", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: "thread-empty-abcdefghijklmnopqrstuvwxyz",
+      })),
+      bind: vi.fn(),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadFork: vi.fn(() => {
+        throw new Error("[-32600] no rollout found for thread id thread-empty");
+      }),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/fork",
+      messageRef: { target, messageId: "msg-fork-empty" },
+      receivedAt: new Date("2026-05-03T12:56:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(threadSessionRepository.upsert).not.toHaveBeenCalled();
+    expect(sessionRouter.bind).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-fork-empty" },
+      "Codex thread is not ready to fork yet. Send any prompt in this thread first, then send /fork again.",
     );
   });
 

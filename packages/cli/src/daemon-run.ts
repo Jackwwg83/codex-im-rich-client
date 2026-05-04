@@ -60,6 +60,7 @@ export const DAEMON_CODEX_CONFIG_OVERRIDES = {
   sandbox_mode: "read-only",
   approval_policy: "on-request",
 } as const;
+export const DAEMON_SERVER_REQUEST_HANDLER_TIMEOUT_MS = 31 * 60 * 1000;
 
 export async function run(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const flags = parseDaemonRunArgs(argv);
@@ -90,7 +91,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
       const approvalBroker = broker as ApprovalBroker;
       const supervisor = new Supervisor({
         transportFactory: () => createCodexTransport(config, daemonLogger),
-        clientFactory: (transport: Transport) => new AppServerClient(transport, { logger }),
+        clientFactory: (transport: Transport) => createDaemonAppServerClient(transport, logger),
         runtimeFactory: (client: AppServerClient) => new CodexRuntime(client),
         broker: approvalBroker,
         performHandshake: (client: AppServerClient) =>
@@ -236,8 +237,15 @@ function runDaemonPreflight(config: CodexImConfig, flags: DaemonRunFlags): void 
 
 function createBroker(config: CodexImConfig, logger: Logger): ApprovalBroker {
   const placeholderTransport = createCodexTransport(config, logger);
-  const placeholderClient = new AppServerClient(placeholderTransport, { logger });
+  const placeholderClient = createDaemonAppServerClient(placeholderTransport, logger);
   return new ApprovalBroker(placeholderClient);
+}
+
+function createDaemonAppServerClient(transport: Transport, logger: Logger): AppServerClient {
+  return new AppServerClient(transport, {
+    logger,
+    serverRequestHandlerTimeoutMs: DAEMON_SERVER_REQUEST_HANDLER_TIMEOUT_MS,
+  });
 }
 
 function createCodexTransport(config: CodexImConfig, logger: Logger): StdioTransport {

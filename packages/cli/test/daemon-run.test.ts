@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DAEMON_CODEX_CONFIG_OVERRIDES,
+  DAEMON_SERVER_REQUEST_HANDLER_TIMEOUT_MS,
   renderResolvedCallbackApprovalCard,
 } from "../src/daemon-run.js";
 
@@ -46,5 +47,16 @@ describe("daemon run safety rails", () => {
     expect(source).toContain("new ThreadSessionRepository(db)");
     expect(source).toContain("threadSessionRepository");
     expect(source).toContain("switchCurrent");
+  });
+
+  it("lets IM approval handlers outlive the default 30s client safety timeout", () => {
+    const source = readFileSync(join(import.meta.dirname, "../src/daemon-run.ts"), "utf8");
+
+    expect(DAEMON_SERVER_REQUEST_HANDLER_TIMEOUT_MS).toBeGreaterThan(30 * 60 * 1000);
+    expect(source).toContain(
+      "serverRequestHandlerTimeoutMs: DAEMON_SERVER_REQUEST_HANDLER_TIMEOUT_MS",
+    );
+    expect(source).toContain("createDaemonAppServerClient(transport, logger)");
+    expect(source).toContain("createDaemonAppServerClient(placeholderTransport, logger)");
   });
 });

@@ -1981,21 +1981,28 @@ export class Daemon {
       return;
     }
 
-    try {
-      await runtime.threadResume({
-        threadId: selected.record.codexThreadId,
-        cwd: project.cwd,
-        ...(project.defaultModel === undefined ? {} : { model: project.defaultModel }),
-        excludeTurns: true,
-      });
-    } catch (error) {
-      this.#emitAuditEvent("runtime.thread_resume_failed", {
-        target: inbound.target,
-        result: "failed",
-        metadata: { error: errorMessage(error), threadId: selected.record.codexThreadId },
-      });
-      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to resume.");
-      return;
+    const currentRoute = sessionRouter.resolve(inbound.target);
+    const selectedIsCurrent =
+      currentRoute.kind === "bound" &&
+      currentRoute.projectId === selected.record.projectId &&
+      currentRoute.codexThreadId === selected.record.codexThreadId;
+    if (!selectedIsCurrent) {
+      try {
+        await runtime.threadResume({
+          threadId: selected.record.codexThreadId,
+          cwd: project.cwd,
+          ...(project.defaultModel === undefined ? {} : { model: project.defaultModel }),
+          excludeTurns: true,
+        });
+      } catch (error) {
+        this.#emitAuditEvent("runtime.thread_resume_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(error), threadId: selected.record.codexThreadId },
+        });
+        await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to resume.");
+        return;
+      }
     }
 
     try {
@@ -2260,7 +2267,7 @@ export class Daemon {
         result: "failed",
         metadata: { error: errorMessage(error), threadId: source.codexThreadId },
       });
-      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to fork.");
+      await this.#editInboundMessage(inbound.messageRef, forkFailureMessage(error));
       return;
     }
     if (forkedThreadId === undefined) {
@@ -3280,6 +3287,13 @@ function redactMetadata(metadata: Record<string, unknown> | undefined): Record<s
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function forkFailureMessage(error: unknown): string {
+  if (errorMessage(error).includes("no rollout found for thread id")) {
+    return "Codex thread is not ready to fork yet. Send any prompt in this thread first, then send /fork again.";
+  }
+  return "Codex thread failed to fork.";
 }
 
 async function drainShutdown(): Promise<void> {

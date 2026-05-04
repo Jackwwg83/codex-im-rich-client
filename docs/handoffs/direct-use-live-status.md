@@ -2,13 +2,14 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-03 - Block 4 production acceptance prep in
-> progress; C9 clarifies `/start` around native Codex prompt/thread/item usage
-> while launchd soak evidence remains green.
+> **Last updated:** 2026-05-04 - Block 4 real Telegram acceptance exposed and
+> fixed `/switch` empty-thread resume, `/fork` empty-rollout UX, and production
+> IM approval handler timeout. Installed launchd daemon is healthy; remaining
+> user-visible button retest requires an unlocked Telegram Web session.
 
 ## 1. Current State
 
-- **Mode:** Block 4 real production acceptance prep in progress.
+- **Mode:** Block 4 real production acceptance hardening in progress.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
@@ -50,8 +51,9 @@
   - latest commit - C9 `/start` help states that non-command messages are
     Codex prompts for the current project/thread and that native file/command/tool
     activity may appear as `Codex items`.
-- **Next exact action:** continue launchd soak evidence and run a live Telegram
-  roundtrip when a user/browser driver can send the nonce prompt.
+- **Next exact action:** after the Mac is unlocked, rerun Telegram Web approval
+  button acceptance: allow once, decline, abort, allow session, and duplicate
+  stale click. Until then continue local launchd/log/DB soak only.
 
 ## 2. Why This Exists
 
@@ -318,6 +320,31 @@ Latest soak checks:
 |---|---|
 | 2026-05-04 00:23 SGT | `pnpm launchd:status` still green for pid `70626`; `launchctl print` still reports `state = running`, `runs = 1`, `last exit code = (never exited)`; daemon logs show startup plus Node deprecation warnings only; installed bridge redaction scan passed |
 | 2026-05-04 00:54 SGT | launchd still reports `state = running`, `runs = 1`, `pid = 70626`, and `last exit code = (never exited)`; daemon logs unchanged and redacted. `launchd:status` initially marked the snapshot stale because sandboxed PID probing could not inspect the external process, so `bin/launchd-status.mjs` now also accepts matching `launchctl print` pid evidence; targeted `scripts/launchd-status.test.mjs` passed and `pnpm launchd:status` is green again |
+| 2026-05-04 11:19 SGT | Rebuilt and reinstalled the production daemon bundle after live Telegram findings; `launchctl kickstart -k gui/501/io.codex-im-bridge` started pid `10065`; `pnpm launchd:status` reports `daemon status: present pid=10065 startedAt=2026-05-04T03:19:44.379Z codexThreads=0 pendingApprovals=0`; token log remains `***REDACTED***`; stderr contains only Node deprecation warnings |
+
+Latest live Telegram acceptance evidence:
+
+| Area | Evidence | Status |
+|---|---|---|
+| Bot/API health | Keychain-backed Bot API `getMe` returned `jackcodexbot`; `getWebhookInfo` shows webhook `url=""`, `pending_update_count=0`, and no last error, so the launchd daemon owns long polling and Telegram has no backlog | green |
+| Bootstrap/control plane | Telegram Web showed `/start`, `/status`, `/projects`, `/use codex-im`, `/new <title>`, `/alias <title>`, `/threads`, and `/switch 1` working against the real bot after the `/switch` current-thread fix | green |
+| Native Codex prompt | `Reply exactly: LIVE-AUTO-1053` returned exactly `LIVE-AUTO-1053` through the real Telegram bot and launchd daemon | green |
+| Development-task behavior | A Telegram prompt asking Codex to run read-only `git status --short` and `git log --oneline -3` returned `DEV-STATUS-1056 ...` plus native `commandExecution completed` Codex item summaries | green |
+| Forking | `/fork` fails on an empty no-rollout thread in Codex App Server; daemon now returns an actionable IM message telling the user to run a prompt first. After a turn exists, `/fork` succeeded and rebound the current Telegram target to the forked Codex thread | fixed/green |
+| Approval timeout | Real Telegram prompt for a write command produced a pending approval card, but the previous production AppServerClient default-rejected it after 30s before user action; file stayed absent. Production daemon now uses a 31-minute server-request handler timeout so IM approval pending mode is governed by broker expiry/resolution, not the client safety default | fixed locally; needs unlocked Telegram Web retest |
+| UI driver availability | macOS is currently at the lock screen; Computer Use, Chrome Apple Events, and Safari automation cannot reach Telegram Web. Do not treat this as daemon failure. Browser retest resumes after unlock | blocked by lock screen |
+
+Latest live-acceptance hardening gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/daemon/test/daemon.test.ts` | green: 1 file, 109 passing |
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/cli/test/daemon-run.test.ts` | green: 1 file, 4 passing |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 332 files checked |
+| `pnpm test` | green: 148 files, 1338 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+| `pnpm bridge:build && pnpm bridge:install && pnpm launchd:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `10065`; `launchd:install` still prints expected `Load failed: 5` because the LaunchAgent is already loaded, but exits 0 and `launchd:status` is green |
 
 ## 7. Next Implementation Order
 
@@ -358,6 +385,10 @@ Block 4:
 3. `feat(daemon): stream and chunk Codex turn output for IM` (done)
 4. `fix(launchd): run installed app daemon with packaged runtime deps` (done)
 5. `fix(daemon): clarify native prompt and Codex item help` (done)
+6. `fix(daemon): avoid current-thread resume for empty /new threads` (done)
+7. `fix(daemon): make no-rollout /fork actionable in IM` (done)
+8. `fix(cli): keep production IM approval handlers pending beyond 30s` (done)
+9. Next after unlock: real Telegram Web approval button matrix retest.
 
 ## 8. Compact / Resume
 
