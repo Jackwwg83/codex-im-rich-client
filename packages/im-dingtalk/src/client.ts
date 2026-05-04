@@ -212,6 +212,7 @@ export function createDingTalkOpenApiCardClient(
         "POST",
         body,
       );
+      assertSuccessfulDeliverResults(response, "createAndDeliver");
       const result = asRecord(response.result) ?? {};
       return { messageId: stringField(result, "outTrackId") ?? outTrackId };
     },
@@ -320,6 +321,7 @@ function createAndDeliverCardBody(input: CreateAndDeliverInput): Record<string, 
   return {
     callbackType: "STREAM",
     userIdType: 1,
+    ...(openSpace.kind === "robot" ? { userId: openSpace.userId } : {}),
     ...(input.callbackRouteKey === undefined ? {} : { callbackRouteKey: input.callbackRouteKey }),
     cardTemplateId: input.cardTemplateId,
     outTrackId: input.outTrackId,
@@ -354,17 +356,27 @@ function createAndDeliverCardBody(input: CreateAndDeliverInput): Record<string, 
   };
 }
 
-function openSpaceForTarget(target: Target): { kind: "group" | "robot"; openSpaceId: string } {
+function openSpaceForTarget(
+  target: Target,
+): { kind: "group"; openSpaceId: string } | { kind: "robot"; openSpaceId: string; userId: string } {
   if (target.chatId.startsWith("dtv1.card//IM_GROUP.")) {
     return { kind: "group", openSpaceId: target.chatId };
   }
   if (target.chatId.startsWith("dtv1.card//IM_ROBOT.")) {
-    return { kind: "robot", openSpaceId: target.chatId };
+    return {
+      kind: "robot",
+      openSpaceId: target.chatId,
+      userId: target.chatId.slice("dtv1.card//IM_ROBOT.".length),
+    };
   }
   if (target.chatId.startsWith("cid")) {
     return { kind: "group", openSpaceId: `dtv1.card//IM_GROUP.${target.chatId}` };
   }
-  return { kind: "robot", openSpaceId: `dtv1.card//IM_ROBOT.${target.chatId}` };
+  return {
+    kind: "robot",
+    openSpaceId: `dtv1.card//IM_ROBOT.${target.chatId}`,
+    userId: target.chatId,
+  };
 }
 
 function cardParamMap(card: DingTalkApprovalCardJson): Record<string, string> {
@@ -424,7 +436,40 @@ async function requestJson(
       `DingTalk OpenAPI ${options.operation} failed with code ${formatBareErrorCode(errorCode)}`,
     );
   }
+  if (body.success === false) {
+    throw new Error(
+      `DingTalk OpenAPI ${options.operation} failed with success=false${formatErrorCode(
+        errorCode,
+      )}`,
+    );
+  }
   return body;
+}
+
+function assertSuccessfulDeliverResults(
+  response: Record<string, unknown>,
+  operation: string,
+): void {
+  const result = asRecord(response.result);
+  const deliverResults = result?.deliverResults;
+  if (!Array.isArray(deliverResults)) {
+    return;
+  }
+  const failed = deliverResults.find((entry) => {
+    const record = asRecord(entry);
+    return record !== undefined && record.success === false;
+  });
+  const failedRecord = asRecord(failed);
+  if (failedRecord === undefined) {
+    return;
+  }
+  const spaceType = safeSpaceType(stringField(failedRecord, "spaceType"));
+  const errorCode = errorCodeField(failedRecord);
+  throw new Error(
+    `DingTalk OpenAPI ${operation} failed with deliverResult failure${
+      spaceType === undefined ? "" : ` spaceType ${spaceType}`
+    }${formatErrorCode(errorCode)}`,
+  );
 }
 
 function errorCodeField(record: Record<string, unknown>): number | string | undefined {
@@ -448,6 +493,10 @@ function formatErrorCode(code: number | string | undefined): string {
 function formatBareErrorCode(code: number | string): string {
   const rendered = String(code);
   return /^[A-Za-z0-9._:-]{1,120}$/.test(rendered) ? rendered : "<redacted-code>";
+}
+
+function safeSpaceType(value: string | undefined): string | undefined {
+  return value !== undefined && /^[A-Z_]{1,40}$/.test(value) ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

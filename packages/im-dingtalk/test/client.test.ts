@@ -203,6 +203,7 @@ describe("DingTalk OpenAPI card client", () => {
     });
 
     expect(bodies[0]).toMatchObject({
+      userId: "staff_test_private",
       openSpaceId: "dtv1.card//IM_ROBOT.staff_test_private",
       imRobotOpenDeliverModel: { robotCode: "ding_test_robot", spaceType: "IM_ROBOT" },
     });
@@ -275,6 +276,75 @@ describe("DingTalk OpenAPI card client", () => {
     ).rejects.toThrow(
       "DingTalk OpenAPI createAndDeliver failed with HTTP 400 code param.templateNotExist",
     );
+  });
+
+  it("fails closed when createAndDeliver reports failed delivery results", async () => {
+    const client = createDingTalkOpenApiCardClient(
+      {
+        clientId: "ding_test_client_id",
+        clientSecret: "secret-must-not-leak",
+        robotCode: "ding_test_robot",
+        cardTemplateId: "ding_test_template",
+        baseUrl: "https://dingtalk.example.test",
+      },
+      {
+        fetch: async (url) => {
+          if (String(url).endsWith("/v1.0/oauth2/accessToken")) {
+            return jsonResponse({ accessToken: "token-must-not-leak", expireIn: 7200 });
+          }
+          return jsonResponse({
+            success: true,
+            result: {
+              outTrackId: "codex-im-delivery-failed",
+              deliverResults: [
+                {
+                  success: false,
+                  spaceType: "IM_ROBOT",
+                  errorCode: "spaces.empty",
+                  errorMsg: "message may contain private ids and must not be surfaced",
+                },
+              ],
+            },
+          });
+        },
+      },
+    );
+
+    await expect(
+      client.sendCard({
+        target: { platform: "dingtalk", chatId: "staff_test_private" },
+        card: CARD,
+      }),
+    ).rejects.toThrow(
+      "DingTalk OpenAPI createAndDeliver failed with deliverResult failure spaceType IM_ROBOT code spaces.empty",
+    );
+  });
+
+  it("fails closed when OpenAPI returns success=false without HTTP failure", async () => {
+    const client = createDingTalkOpenApiCardClient(
+      {
+        clientId: "ding_test_client_id",
+        clientSecret: "secret-must-not-leak",
+        robotCode: "ding_test_robot",
+        cardTemplateId: "ding_test_template",
+        baseUrl: "https://dingtalk.example.test",
+      },
+      {
+        fetch: async (url) => {
+          if (String(url).endsWith("/v1.0/oauth2/accessToken")) {
+            return jsonResponse({ accessToken: "token-must-not-leak", expireIn: 7200 });
+          }
+          return jsonResponse({ success: false });
+        },
+      },
+    );
+
+    await expect(
+      client.sendCard({
+        target: { platform: "dingtalk", chatId: "staff_test_private" },
+        card: CARD,
+      }),
+    ).rejects.toThrow("DingTalk OpenAPI createAndDeliver failed with success=false");
   });
 });
 

@@ -12,10 +12,11 @@
 > action acknowledgement safety, and `smoke:dingtalk-live` now has an explicit
 > redacted `DINGTALK_LIVE_CARD=1` OpenAPI send/update gate with AppKey-derived
 > robot-code fallback and optional target capture from a real inbound robot
-> message; DingTalk `Card.Instance.Write` is now open, OpenAPI failures now
-> surface redacted DingTalk error codes, but real inbound/card direct-use
-> remains pending on a usable client/session plus an OpenAPI-usable published
-> card template.
+> message; DingTalk `Card.Instance.Write` is now open, IM_ROBOT delivery now
+> includes DingTalk's top-level `userId` alongside `userIdType=1`, and OpenAPI
+> failures surface redacted DingTalk error codes, but real inbound/card
+> direct-use remains pending on a usable client/session plus an OpenAPI-usable
+> published card template.
 
 ---
 
@@ -32,9 +33,9 @@
   through Feishu CardKit and `Allow session` reuse for the exact same command.
   DingTalk live-smoke Stream acceptance is green, and production card
   send/update is now wired behind explicit `card_template_id` config with
-  optional `robot_code` override and redacted platform error-code diagnostics;
-  real inbound/card direct-use still needs a usable DingTalk client/session plus
-  a matching published card template.
+  optional `robot_code` override, IM_ROBOT `userId` delivery, and redacted
+  platform error-code diagnostics; real inbound/card direct-use still needs a
+  usable DingTalk client/session plus a matching published card template.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -46,7 +47,7 @@
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed. DingTalk Stream live acceptance passed; DingTalk production card send/update is wired and Card.Instance.Write is open; live OpenAPI probes now fail with redacted template-lifecycle codes (`param.templateNotExist` / `param.empty`), so direct-use inbound/card remains pending on a usable client/session and published card-template configuration.
+Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed. DingTalk Stream live acceptance passed; DingTalk production card send/update is wired, Card.Instance.Write is open, and IM_ROBOT delivery now includes top-level userId; live OpenAPI probes still fail with redacted template-lifecycle codes (`param.templateNotExist` / `param.empty`), so direct-use inbound/card remains pending on a usable client/session and published card-template configuration.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -87,7 +88,7 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
-| DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `card_template_id` is configured, deriving robot code from AppKey/client id unless `robot_code` overrides it; create/deliver includes DingTalk `userIdType=1`; errors surface redacted DingTalk code fields without secret bytes |
+| DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `card_template_id` is configured, deriving robot code from AppKey/client id unless `robot_code` overrides it; create/deliver includes DingTalk `userIdType=1` and top-level IM_ROBOT `userId`; HTTP/code/success=false/deliverResults failures all fail closed with redacted diagnostics |
 | DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 ... pnpm smoke:dingtalk-live` | blocked | `Card.Instance.Write` is open and auth reaches OpenAPI with target/template presence; current org saved template id returns `param.templateNotExist`, personal `.schema` returns `param.empty`, and official preset `.schema` returns `param.templateNotExist`, so no OpenAPI-deliverable app template is available yet |
 | DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs a published OpenAPI-deliverable card template and one real inbound robot message from a working DingTalk client/session; Stream connected but no real inbound event was produced |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
@@ -278,6 +279,27 @@ Stop and treat as a blocker if:
   parameter / scene-config errors. This keeps DingTalk direct-use blocked on a
   published OpenAPI-deliverable app template plus a usable DingTalk
   client/session for one real inbound robot message.
+- 2026-05-04: DingTalk IM_ROBOT card delivery was tightened again to include
+  top-level `userId` derived from the same private-target staff id used in
+  `dtv1.card//IM_ROBOT.<id>`, while keeping group delivery unchanged. Targeted
+  package coverage now asserts the emitted OpenAPI body has `userIdType=1`,
+  `userId`, and the matching IM_ROBOT open space without exposing real ids.
+  A redacted personal-template live probe still failed with `param.empty`, so
+  the remaining blocker is still template/target lifecycle rather than local
+  request-body omission.
+- 2026-05-04: DingTalk card delivery false positives were closed. The OpenAPI
+  client no longer treats HTTP 200 as enough: `success=false` and failed
+  `deliverResults[]` entries now throw sanitized errors, so the live card smoke
+  cannot pass unless DingTalk actually accepts and delivers the card instance.
+- 2026-05-04: DingTalk app-bound template probing advanced. The card platform
+  accepted creation of an app-bound template for the test robot app, proving
+  the app can be targeted by card-template management. The same platform still
+  rejected the follow-up content save / build path with redacted platform
+  validation errors, and the created template stayed `new` with no
+  `templateSchema`. A redacted OpenAPI probe with the robot page's template
+  field still returned `param.templateNotExist`. DingTalk therefore remains
+  unaligned with Telegram/Feishu until one app-bound template reaches published
+  OpenAPI-deliverable state.
 - 2026-05-04: Installed bridge redaction scan passed against the current local
   app bundle, wrapper, config, launchd plist rendering, and daemon logs.
   `pnpm launchd:status` also remained green with `pendingApprovals=0`.

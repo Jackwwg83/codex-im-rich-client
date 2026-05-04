@@ -15,10 +15,11 @@
 > OpenAPI card-template config; an explicit redacted `DINGTALK_LIVE_CARD=1`
 > live smoke gate now exists for OpenAPI card send/update with AppKey-derived
 > robot-code fallback and optional target capture from one real inbound robot
-> message. DingTalk `Card.Instance.Write` is now open and OpenAPI card failures
-> now surface redacted DingTalk error codes, but real inbound/card direct-use is
-> still pending on a usable client/session plus a published OpenAPI-deliverable
-> card template.
+> message. DingTalk `Card.Instance.Write` is now open, IM_ROBOT delivery now
+> includes DingTalk's top-level `userId` alongside `userIdType=1`, and OpenAPI
+> card failures surface redacted DingTalk error codes, but real inbound/card
+> direct-use is still pending on a usable client/session plus a published
+> OpenAPI-deliverable card template.
 
 ## 1. Current State
 
@@ -123,6 +124,22 @@
   - latest evidence - DingTalk Stream live smoke re-ran with live page
     credentials held only in process environment; Stream connected for 5
     seconds with redacted output and no inbound events.
+  - latest evidence - 2026-05-04 21:30 SGT: DingTalk IM_ROBOT OpenAPI card
+    delivery now sends top-level `userId` from the same private target used in
+    `dtv1.card//IM_ROBOT.<id>` while preserving group delivery. Targeted tests
+    passed (1 file, 6 passing). A redacted personal-template live probe still
+    returned `param.empty`, keeping the remaining gap at DingTalk template /
+    target lifecycle rather than a missing local request field.
+  - latest patch - DingTalk OpenAPI card send now fails closed on
+    `success=false` and failed `deliverResults[]` entries instead of treating
+    HTTP 200 as sufficient delivery evidence. Targeted tests passed (1 file, 8
+    passing).
+  - latest evidence - DingTalk app-bound card template management advanced but
+    did not clear direct-use acceptance. The card platform accepted creation of
+    an app-bound template for the test robot app, but follow-up save/build still
+    returned redacted platform validation errors and the template remained `new`
+    without `templateSchema`. A redacted live OpenAPI probe using the robot
+    page's template field still returned `param.templateNotExist`.
   - latest evidence - Installed bridge redaction scan passed for app bundle,
     wrapper, config, launchd plist rendering, and daemon logs; `launchd:status`
     remains green with `pendingApprovals=0`.
@@ -432,7 +449,7 @@ Latest DingTalk direct-use readiness evidence:
 |---|---|
 | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 pnpm smoke:dingtalk-live` | green with browser-derived AppKey and Keychain-backed secret; output was redacted and reported `ready_dry_run` |
 | `DINGTALK_LIVE=1 pnpm smoke:dingtalk-live` | green bounded 5-second Stream connection; `robotEvents=0`, `cardEvents=0`, no secret bytes printed |
-| DingTalk developer-console / OpenAPI card check | `Card.Instance.Write` is open; live OpenAPI card probes now reach `createAndDeliver` and fail with redacted template-lifecycle codes (`param.templateNotExist` / `param.empty`) because no published OpenAPI-deliverable app template is available yet |
+| DingTalk developer-console / OpenAPI card check | `Card.Instance.Write` is open; live OpenAPI card probes now reach `createAndDeliver` with `userIdType=1` plus IM_ROBOT `userId`, then fail with redacted template-lifecycle codes (`param.templateNotExist` / `param.empty`) because no published OpenAPI-deliverable app template is available yet; app-bound template creation succeeds, but save/build/publish is still rejected by the card platform |
 | `pnpm dingtalk:readiness` | expected blocked: installed config has DingTalk disabled, client id missing, card template missing, no global/project DingTalk allowlist entries; Keychain secret source is present |
 | 2026-05-04 20:09 SGT local readiness check | still expected blocked with the same local config gaps; no additional launchd/local regression was found |
 
@@ -466,7 +483,7 @@ Latest live Feishu/Lark direct-use evidence:
 | Lark card schema + CardKit update | First real approval attempt exposed Feishu error `230099` / unknown root property `elements`; `be41071` moved card content under `body.elements`. The later callback fix sends Card JSON 2.0 button `behaviors` with only `{ token: "v1:..." }` and no approval id / action kind. CardKit `idConvert` + `update` is now covered by `LARK_LIVE=1 LARK_LIVE_CARD=1 LARK_LIVE_CARD_UPDATE=1 pnpm smoke:lark-live` with redacted message-id evidence | fixed/green |
 | Lark approval callback | Fresh Feishu Web write approval was accepted as inbound prompt, rendered a real approval card, and a keyboard-driven click on `Allow once` reached the launchd daemon. SQLite recorded `allow_once=used` with sibling tokens `revoked`, the target `/tmp` file was created, and Codex replied `Ran ...` | fixed/green |
 | Lark terminal approval card visual refresh | After bridge rebuild/install and launchd restart, a fresh Feishu Web write approval resolved through `Allow once`; the target `/tmp` file existed, latest SQLite callback tokens showed `allow_once=used` with siblings `revoked`, `pnpm launchd:status` reported `pendingApprovals=0`, and a Feishu Web reload preserved `Status: resolved` with zero visible `Allow once` buttons | fixed/green |
-| DingTalk production card client | `createDingTalkOpenApiCardClient` now obtains an OpenAPI token, calls card `createAndDeliver`, updates by `outTrackId`, maps group/private targets to `IM_GROUP` / `IM_ROBOT` spaces, and sanitizes failures; production `daemon run` injects it when `card_template_id` is configured and derives robot code from client id unless `robot_code` overrides it | fixed/green locally |
+| DingTalk production card client | `createDingTalkOpenApiCardClient` now obtains an OpenAPI token, calls card `createAndDeliver`, updates by `outTrackId`, maps group/private targets to `IM_GROUP` / `IM_ROBOT` spaces, includes top-level IM_ROBOT `userId`, and fails closed on HTTP/code/success=false/deliverResults failures with sanitized diagnostics; production `daemon run` injects it when `card_template_id` is configured and derives robot code from client id unless `robot_code` overrides it | fixed/green locally |
 
 Latest Lark hardening gates:
 
