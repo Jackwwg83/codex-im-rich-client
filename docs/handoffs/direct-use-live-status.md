@@ -18,9 +18,9 @@
 > message. DingTalk `Card.Instance.Write` is now open, IM_ROBOT delivery now
 > includes DingTalk's top-level `userId` alongside `userIdType=1`, and redacted
 > OpenAPI card send/update now passes with a contact-discovered enterprise
-> `userid`; real inbound/card direct-use is still pending on a usable
-> client/session plus operator-confirmed DingTalk target/allowlist and callback
-> click validation.
+> `userid`. Installed DingTalk config/readiness is now green under launchd; real
+> inbound/card direct-use is still pending on a usable DingTalk client/session
+> that can produce one real inbound robot message and one real callback click.
 
 ## 1. Current State
 
@@ -157,6 +157,14 @@
   - latest evidence - Installed bridge redaction scan passed for app bundle,
     wrapper, config, launchd plist rendering, and daemon logs; `launchd:status`
     remains green with `pendingApprovals=0`.
+  - latest heartbeat - 2026-05-04 22:31 SGT: `git status --short` was clean at
+    `13f9fdd`; `pnpm launchd:status` reported pid `3294`, startedAt
+    `2026-05-04T13:57:43.488Z`, `codexThreads=0`, and `pendingApprovals=0`.
+    `launchctl print` reported `state = running`; daemon stdout path is
+    `daemon.log`, with latest pid `3294` startup showing redacted Telegram,
+    Lark, and DingTalk secret resolution, DingTalk Stream `connect success`,
+    and `codex-im daemon started`. Stderr contained only Node deprecation
+    warnings. `pnpm dingtalk:readiness` remained ready.
   - `720c586` - launchd heartbeat soak evidence recorded.
   - latest heartbeat - 2026-05-04 18:59 SGT: `git status --short` was clean,
     `pnpm launchd:status` reported pid `27377` with `pendingApprovals=0`, the
@@ -184,8 +192,8 @@
     (`0c3304e77d52`), installed bridge redaction scan passed, stdout showed no
     new pid `62312` errors, and stderr contained only Node deprecation warnings.
 - **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
-  once a published OpenAPI-deliverable card template is available and a usable
-  DingTalk client/session can produce one real inbound robot message.
+  once a usable DingTalk client/session can produce one real inbound robot
+  message and one real callback click.
 
 ## 2. Why This Exists
 
@@ -230,7 +238,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4 plus real Telegram Web and Feishu Web direct-use acceptance evidence |
-| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk direct-use remains pending on published card template + usable client/session target |
+| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk installed readiness and OpenAPI card send/update are green; DingTalk direct-use remains pending on a usable client/session for real inbound and callback-click evidence |
 
 ## 5. Active Redlines
 
@@ -468,6 +476,7 @@ Latest DingTalk direct-use readiness evidence:
 | `pnpm dingtalk:readiness` | ready: adapter enabled, client id present, Keychain secret present, card template id present, and DingTalk global/project allowlist entries present |
 | 2026-05-04 20:09 SGT local readiness check | still expected blocked with the same local config gaps; no additional launchd/local regression was found |
 | 2026-05-04 21:58 SGT installed readiness check | ready after redacted config update; latest bundle installed and launchd restarted to pid `3294` with `pendingApprovals=0`; installed bridge redaction scan passed |
+| 2026-05-04 22:31 SGT heartbeat check | launchd still green for pid `3294` with `pendingApprovals=0`; `launchctl print` still reports `state = running`; `pnpm dingtalk:readiness` remains ready; latest daemon stdout has redacted startup plus DingTalk Stream `connect success`, and stderr has only Node deprecation warnings |
 
 Latest live Telegram acceptance evidence:
 
@@ -600,8 +609,8 @@ Block 4:
 12. Lark full approval callback live acceptance (done for `Allow once`,
     `Decline`, `Abort`, `Allow session` reuse, and terminal CardKit refresh).
 13. Next: DingTalk real inbound/card direct-use acceptance once
-    a published OpenAPI-deliverable card template exists and a working DingTalk
-    client/session can produce real inbound events.
+    a working DingTalk client/session can produce real inbound events and a real
+    card callback click.
 
 ## 8. Compact / Resume
 
