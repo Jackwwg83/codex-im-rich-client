@@ -16,10 +16,11 @@
 > live smoke gate now exists for OpenAPI card send/update with AppKey-derived
 > robot-code fallback and optional target capture from one real inbound robot
 > message. DingTalk `Card.Instance.Write` is now open, IM_ROBOT delivery now
-> includes DingTalk's top-level `userId` alongside `userIdType=1`, and OpenAPI
-> card failures surface redacted DingTalk error codes, but real inbound/card
-> direct-use is still pending on a usable client/session plus a published
-> OpenAPI-deliverable card template.
+> includes DingTalk's top-level `userId` alongside `userIdType=1`, and redacted
+> OpenAPI card send/update now passes with a contact-discovered enterprise
+> `userid`; real inbound/card direct-use is still pending on a usable
+> client/session plus operator-confirmed DingTalk target/allowlist and callback
+> click validation.
 
 ## 1. Current State
 
@@ -140,6 +141,12 @@
     returned redacted platform validation errors and the template remained `new`
     without `templateSchema`. A redacted live OpenAPI probe using the robot
     page's template field still returned `param.templateNotExist`.
+  - latest evidence - DingTalk OpenAPI card send/update gate is green with
+    `DINGTALK_LIVE_DISCOVER_USER=1`. The smoke used the test app to discover one
+    enterprise `userid` through contact APIs without printing it, then completed
+    create/update and printed redacted `card_updated` evidence. This proves the
+    OpenAPI card path, but not real installed inbound routing or card callback
+    clicks.
   - latest evidence - Installed bridge redaction scan passed for app bundle,
     wrapper, config, launchd plist rendering, and daemon logs; `launchd:status`
     remains green with `pendingApprovals=0`.
@@ -449,7 +456,7 @@ Latest DingTalk direct-use readiness evidence:
 |---|---|
 | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 pnpm smoke:dingtalk-live` | green with browser-derived AppKey and Keychain-backed secret; output was redacted and reported `ready_dry_run` |
 | `DINGTALK_LIVE=1 pnpm smoke:dingtalk-live` | green bounded 5-second Stream connection; `robotEvents=0`, `cardEvents=0`, no secret bytes printed |
-| DingTalk developer-console / OpenAPI card check | `Card.Instance.Write` is open; live OpenAPI card probes now reach `createAndDeliver` with `userIdType=1` plus IM_ROBOT `userId`, then fail with redacted template-lifecycle codes (`param.templateNotExist` / `param.empty`) because no published OpenAPI-deliverable app template is available yet; app-bound template creation succeeds, but save/build/publish is still rejected by the card platform |
+| DingTalk developer-console / OpenAPI card check | `Card.Instance.Write` is open; live OpenAPI card probe with contact-discovered enterprise `userid` now reaches redacted `card_updated`; app-bound template creation succeeds, but save/build/publish is still rejected by the card platform, so installed direct-use should keep using explicit configured template evidence until a project-owned template is published |
 | `pnpm dingtalk:readiness` | expected blocked: installed config has DingTalk disabled, client id missing, card template missing, no global/project DingTalk allowlist entries; Keychain secret source is present |
 | 2026-05-04 20:09 SGT local readiness check | still expected blocked with the same local config gaps; no additional launchd/local regression was found |
 

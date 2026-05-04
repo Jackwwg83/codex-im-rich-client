@@ -93,6 +93,24 @@ During that bounded window, send one harmless message to the DingTalk bot from
 the real test client. The smoke records only whether the target was captured,
 then sends and updates the approval card against that same target.
 
+If the test app has enough contact-read permission, the smoke can discover a
+single enterprise `userid` without printing it:
+
+```bash
+DINGTALK_LIVE=1 \
+DINGTALK_LIVE_CARD=1 \
+DINGTALK_LIVE_DISCOVER_USER=1 \
+DINGTALK_CLIENT_ID=ding_xxx \
+DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET \
+DINGTALK_CLIENT_SECRET=replace_me \
+DINGTALK_CARD_TEMPLATE_ID=replace_me \
+pnpm smoke:dingtalk-live
+```
+
+This discovery path is for smoke validation only. Installed direct-use
+configuration should still use explicit DingTalk allowlist entries captured
+from the real operator/client path before claiming daily-use readiness.
+
 Rollback is process-local: interrupt the command with Ctrl-C or wait for the
 bounded duration to finish. The harness reads credentials from environment
 variables only, does not write plist/Keychain/SQLite state, and prints only

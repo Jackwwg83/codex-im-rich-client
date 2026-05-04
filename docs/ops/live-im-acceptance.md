@@ -202,6 +202,7 @@ pnpm smoke:dingtalk-fake
 pnpm dingtalk:readiness
 DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 DINGTALK_CLIENT_ID="$CLIENT_ID" DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET pnpm smoke:dingtalk-live
 DINGTALK_LIVE=1 DINGTALK_CLIENT_ID="$CLIENT_ID" DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET DINGTALK_LIVE_DURATION_MS=5000 pnpm smoke:dingtalk-live
+DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 DINGTALK_CLIENT_ID="$CLIENT_ID" DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET DINGTALK_CARD_TEMPLATE_ID="$CARD_TEMPLATE_ID" pnpm smoke:dingtalk-live
 ```
 
 The `DINGTALK_CLIENT_SECRET` variable must be set locally before these commands.
@@ -212,6 +213,9 @@ Passing criteria:
 - `pnpm dingtalk:readiness` is `ready` before claiming installed direct-use;
 - dry-run prints `ready_dry_run`;
 - live Stream connection reaches `connected` and exits after bounded duration;
+- live card send/update reaches `card_updated` using either explicit
+  `DINGTALK_TARGET_CHAT_ID`, captured target, or redacted
+  `DINGTALK_LIVE_DISCOVER_USER=1`;
 - output does not print client ID, client secret, tokens, user IDs, chat IDs, or
   callback payloads.
 
@@ -219,7 +223,8 @@ Direct-use / card acceptance also requires:
 
 - `Card.Instance.Write` open in the DingTalk app;
 - a matching card template id configured as `card_template_id`;
-- one real inbound robot message to capture or confirm the DingTalk target;
+- one real inbound robot message to capture or confirm the DingTalk target, or
+  a redacted contact-discovered test `userid` for smoke-only card validation;
 - global and project allowlist entries for that DingTalk user/chat.
 
 Failure localization:

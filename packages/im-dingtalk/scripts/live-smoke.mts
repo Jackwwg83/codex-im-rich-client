@@ -28,7 +28,7 @@ interface RedactedStatus {
   readonly robotCode?: "present" | "missing" | "derived_from_client_id";
   readonly cardTemplateId?: "present" | "missing";
   readonly targetChatId?: "present" | "missing";
-  readonly targetSource?: "env" | "captured" | "missing";
+  readonly targetSource?: "env" | "captured" | "discovered" | "missing";
   readonly messageId?: "present";
   readonly missing?: readonly string[];
 }
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
       if (resolvedTarget === undefined) {
         printStatus({ ...redactedStatus("blocked"), durationMs, targetSource: "missing" });
         console.error(
-          "[dingtalk-live-smoke] BLOCKED: missing DINGTALK_TARGET_CHAT_ID; set it or set DINGTALK_LIVE_CAPTURE_TARGET=1 and send one test message to the bot during the smoke window.",
+          "[dingtalk-live-smoke] BLOCKED: missing DINGTALK_TARGET_CHAT_ID; set it, set DINGTALK_LIVE_DISCOVER_USER=1, or set DINGTALK_LIVE_CAPTURE_TARGET=1 and send one test message to the bot during the smoke window.",
         );
         process.exitCode = 2;
         return;
@@ -187,10 +187,16 @@ function missingLiveCardRequirements(): string[] {
 
 async function resolveCardTarget(
   durationMs: number,
-): Promise<{ target: Target; source: "env" | "captured" } | undefined> {
+): Promise<{ target: Target; source: "env" | "captured" | "discovered" } | undefined> {
   const targetChatId = process.env.DINGTALK_TARGET_CHAT_ID;
   if (targetChatId !== undefined && targetChatId.length > 0) {
     return { target: { platform: "dingtalk", chatId: targetChatId }, source: "env" };
+  }
+  if (process.env.DINGTALK_LIVE_DISCOVER_USER === "1") {
+    const userId = await discoverDingTalkUserId();
+    return userId === undefined
+      ? undefined
+      : { target: { platform: "dingtalk", chatId: userId }, source: "discovered" };
   }
   if (process.env.DINGTALK_LIVE_CAPTURE_TARGET !== "1") {
     return undefined;
@@ -214,6 +220,94 @@ async function resolveCardTarget(
     await adapter.stop();
   }
   return captured === undefined ? undefined : { target: captured, source: "captured" };
+}
+
+async function discoverDingTalkUserId(): Promise<string | undefined> {
+  const appKey = requiredEnv("DINGTALK_CLIENT_ID");
+  const appSecret = requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV"));
+  const tokenResponse = await fetch(
+    `https://oapi.dingtalk.com/gettoken?appkey=${encodeURIComponent(
+      appKey,
+    )}&appsecret=${encodeURIComponent(appSecret)}`,
+  );
+  const tokenBody = await readJsonRecord(tokenResponse);
+  const token = stringField(tokenBody, "access_token");
+  if (token === undefined) {
+    throw new Error(
+      `DingTalk user discovery failed: missing access token${formatDingTalkError(tokenBody)}`,
+    );
+  }
+
+  const departmentIds = await discoverDepartmentIds(token);
+  for (const deptId of departmentIds) {
+    const userId = await firstUserIdInDepartment(token, deptId);
+    if (userId !== undefined) {
+      return userId;
+    }
+  }
+  return undefined;
+}
+
+async function discoverDepartmentIds(token: string): Promise<number[]> {
+  const body = await dingtalkTopApi(token, "/topapi/v2/department/listsub", { dept_id: 1 });
+  const result = body.result;
+  const departments = Array.isArray(result) ? result : [];
+  const childIds = departments.flatMap((department) => {
+    const candidate = isRecord(department) ? department.dept_id : undefined;
+    return typeof candidate === "number" && Number.isSafeInteger(candidate) ? [candidate] : [];
+  });
+  return [1, ...childIds.slice(0, 10)];
+}
+
+async function firstUserIdInDepartment(token: string, deptId: number): Promise<string | undefined> {
+  const body = await dingtalkTopApi(token, "/topapi/v2/user/list", {
+    dept_id: deptId,
+    cursor: 0,
+    size: 10,
+  });
+  const result = isRecord(body.result) ? body.result : {};
+  const users = Array.isArray(result.list) ? result.list : [];
+  for (const user of users) {
+    const userId = isRecord(user) ? stringField(user, "userid") : undefined;
+    if (userId !== undefined) {
+      return userId;
+    }
+  }
+  return undefined;
+}
+
+async function dingtalkTopApi(
+  token: string,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `https://oapi.dingtalk.com${path}?access_token=${encodeURIComponent(token)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const parsed = await readJsonRecord(response);
+  const errorCode = parsed.errcode;
+  if (errorCode !== undefined && errorCode !== 0) {
+    throw new Error(`DingTalk user discovery failed${formatDingTalkError(parsed)}`);
+  }
+  return parsed;
+}
+
+async function readJsonRecord(response: Response): Promise<Record<string, unknown>> {
+  const text = await response.text();
+  if (text.length === 0) {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function missingLiveRequirements(): string[] {
@@ -269,6 +363,27 @@ function redactKnownValues(text: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatDingTalkError(record: Record<string, unknown>): string {
+  const code = record.errcode ?? record.code;
+  return typeof code === "number" || typeof code === "string"
+    ? ` code ${safeDiagnosticCode(code)}`
+    : "";
+}
+
+function safeDiagnosticCode(code: number | string): string {
+  const rendered = String(code);
+  return /^[A-Za-z0-9._:-]{1,120}$/.test(rendered) ? rendered : "<redacted-code>";
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function sleep(ms: number): Promise<void> {
