@@ -109,6 +109,16 @@
     hash `0c3304e77d52` matches `dist/codex-im-daemon.mjs`, ran installed
     bridge redaction scan, and re-ran `release:check -- --skip-full-gates`
     green.
+  - latest patch - Added `pnpm dingtalk:readiness`, a local no-network,
+    no-secret diagnostic that reads installed config plus env/Keychain presence
+    and reports whether DingTalk direct-use can start.
+  - latest evidence - 2026-05-04 19:28 SGT: browser-derived DingTalk AppKey
+    plus Keychain-backed secret passed `DINGTALK_LIVE=1
+    DINGTALK_LIVE_DRY_RUN=1 pnpm smoke:dingtalk-live` with redacted
+    `ready_dry_run`, then passed a bounded 5-second Stream connection with
+    `robotEvents=0` and `cardEvents=0`. `pnpm dingtalk:readiness` correctly
+    reports blocked because local installed config still has DingTalk disabled,
+    missing client id, missing card template, and no DingTalk allowlist entries.
 - **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
   once `Card.Instance.Write` is opened, a matching card template is configured,
   and a usable DingTalk client/session can produce real inbound events.
@@ -381,6 +391,15 @@ Latest soak checks:
 | 2026-05-04 11:19 SGT | Rebuilt and reinstalled the production daemon bundle after live Telegram findings; `launchctl kickstart -k gui/501/io.codex-im-bridge` started pid `10065`; `pnpm launchd:status` reports `daemon status: present pid=10065 startedAt=2026-05-04T03:19:44.379Z codexThreads=0 pendingApprovals=0`; token log remains `***REDACTED***`; stderr contains only Node deprecation warnings |
 | 2026-05-04 18:59 SGT | Heartbeat check on branch `codex/live-im-acceptance` at `5f9895d`: `git status --short` clean; `pnpm launchd:status` green with pid `27377`, startedAt `2026-05-04T09:20:47.698Z`, `codexThreads=0`, `pendingApprovals=0`; daemon stdout had no new entries after pid `27377` startup and stderr contained only Node deprecation warnings. Installed daemon hash `82c2641dc818` still differs from built `dist/codex-im-daemon.mjs` hash `0c3304e77d52`, so latest bundle install/restart remains the next local non-external readiness gap. |
 | 2026-05-04 19:19 SGT | Rebuilt, installed, and `launchctl kickstart -k` restarted the latest bridge bundle. `pnpm launchd:status` is green with pid `62312`, startedAt `2026-05-04T11:19:27.726Z`, `codexThreads=0`, `pendingApprovals=0`; installed daemon hash matches `dist/codex-im-daemon.mjs` (`0c3304e77d52`). Installed bridge redaction scan passed, daemon stdout shows redacted secret-resolution plus startup only for pid `62312`, stderr has Node deprecation warnings only, and `pnpm release:check -- --skip-full-gates` passed. |
+
+Latest DingTalk direct-use readiness evidence:
+
+| Check | Result |
+|---|---|
+| `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 pnpm smoke:dingtalk-live` | green with browser-derived AppKey and Keychain-backed secret; output was redacted and reported `ready_dry_run` |
+| `DINGTALK_LIVE=1 pnpm smoke:dingtalk-live` | green bounded 5-second Stream connection; `robotEvents=0`, `cardEvents=0`, no secret bytes printed |
+| DingTalk developer-console read-only check | `Card.Instance.Write` remains `未开通`; opening it requires an explicit cloud permission change |
+| `pnpm dingtalk:readiness` | expected blocked: installed config has DingTalk disabled, client id missing, card template missing, no global/project DingTalk allowlist entries; Keychain secret source is present |
 
 Latest live Telegram acceptance evidence:
 

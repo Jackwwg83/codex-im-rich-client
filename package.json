@@ -37,6 +37,7 @@
     "launchd:install": "node bin/install-launchd.mjs",
     "launchd:status": "node bin/launchd-status.mjs",
     "launchd:uninstall": "node bin/uninstall-launchd.mjs",
+    "dingtalk:readiness": "tsx scripts/dingtalk-readiness.mts",
     "db:backup": "tsx packages/cli/src/index.ts db backup",
     "smoke:app-server": "tsx packages/cli/src/index.ts smoke app-server",
     "smoke:dingtalk-fake": "vitest run --config vitest.config.ts --project unit packages/daemon/test/dingtalk-fake-smoke.test.ts",
