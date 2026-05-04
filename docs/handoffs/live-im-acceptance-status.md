@@ -2,10 +2,10 @@
 
 > Single source of truth for real Telegram/Lark/DingTalk/Codex App live
 > acceptance after `production-readiness-2026-05-03-r2`.
-> **Last updated:** 2026-05-03 - Telegram real bot + real Codex turn +
-> approval callback acceptance + development-task control acceptance passed
-> with redacted Keychain credential; Lark/DingTalk live acceptance remains
-> pending.
+> **Last updated:** 2026-05-04 - Telegram real bot + real Codex turn +
+> approval callback acceptance + development-task control acceptance passed;
+> Lark live dry-run/send and DingTalk live dry-run/Stream acceptance passed
+> with redacted test credentials.
 
 ---
 
@@ -16,18 +16,20 @@
 - **Base release candidate:** `production-readiness-2026-05-03-r2`.
 - **Release candidate status:** non-live gates, fake smokes, contract tests,
   outside-voice review, and GitHub Actions CI are green.
-- **Live acceptance status:** Telegram real acceptance passed; Lark/DingTalk
-  live acceptance pending.
+- **Live acceptance status:** Telegram, Lark, and DingTalk real acceptance
+  passed for the documented live-smoke surface.
 - **Credential status:** Telegram token is present only in local Keychain
-  service `codex-im-bridge`; no token bytes are recorded in repo docs, logs, or
-  Linear. Lark/DingTalk live credentials are not configured for this pass.
+  service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
+  used only through local environment variables / browser session state. No
+  token, app secret, chat id, user id, or message id bytes are recorded in repo
+  docs, logs, or Linear.
 
 ## 2. Correct Acceptance Language
 
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram live acceptance passed; Lark/DingTalk live acceptance pending.
+Release candidate complete; Telegram/Lark/DingTalk live acceptance passed for the documented live-smoke surface.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -54,11 +56,11 @@ until the matrix below is complete with real credentials and redacted evidence.
 | Telegram Web / approval abort | shell command requiring approval, tap `Abort` | pass | Codex turn interrupted; target file absent; token `abort=used` |
 | Telegram Web / approval allow session | exact same shell command sent twice, first tap `Allow session` | pass | first command approved; second exact command ran without a new callback token; output file grew from 13 to 26 bytes |
 | Lark fake | `pnpm smoke:lark-fake` | pass | covered by `pnpm release:check`, exit 0 |
-| Lark live dry-run | `LARK_LIVE=1 LARK_LIVE_DRY_RUN=1 ... pnpm smoke:lark-live` | pending | `ready_dry_run`, redacted |
-| Lark live send | `LARK_LIVE=1 ... pnpm smoke:lark-live` | pending | message/card sent to test chat |
+| Lark live dry-run | `LARK_LIVE=1 LARK_LIVE_DRY_RUN=1 ... pnpm smoke:lark-live` | pass | `ready_dry_run`, redacted |
+| Lark live send | `LARK_LIVE=1 ... pnpm smoke:lark-live` | pass | Feishu test app published, dedicated live-smoke chat created, redacted message send succeeded |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
-| DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pending | `ready_dry_run`, redacted |
-| DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pending | bounded Stream connection completes |
+| DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
+| DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -135,3 +137,15 @@ Stop and treat as a blocker if:
   still running after 1s.` and left no active turn; a subsequent `/stop`
   correctly replied `No active Codex turn.` rather than pretending an IM-owned
   background task existed.
+- 2026-05-04: Feishu/Lark live acceptance passed with a test self-built app.
+  App ID presence, App Secret presence, and tenant token were verified without
+  recording secret bytes. Required IM permissions were opened, the app was
+  published to a limited test scope, a dedicated `Codex IM Live Smoke` chat was
+  created by OpenAPI when the bot had no existing chats, and
+  `pnpm smoke:lark-live` passed both dry-run and real send. Output recorded only
+  redacted presence/status fields.
+- 2026-05-04: DingTalk live acceptance passed with the `机革小虾` test app.
+  AppKey/AppSecret presence was read from the developer console without
+  recording secret bytes. `pnpm smoke:dingtalk-live` passed dry-run and a
+  bounded 5-second Stream connection; redacted status reported
+  `connected`, `robotEvents=0`, and `cardEvents=0`.
