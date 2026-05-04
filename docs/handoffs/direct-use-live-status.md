@@ -165,8 +165,8 @@ Required P0 plan edits:
 | Block 0 | plan v2 + live-status + Linear parent | repo docs complete; Linear parent still to create |
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
-| Block 3 | repeatable smoke layers | complete through C4; live roundtrip command ready, real browser-driver send still pending |
-| Block 4 | real production acceptance + 24h soak | in progress: installed bridge daemon is running under launchd; Telegram bootstrap/help and richer Codex turn output implemented |
+| Block 3 | repeatable smoke layers | complete through C4 plus real Telegram Web and Feishu Web direct-use acceptance evidence |
+| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk direct-use remains pending on platform permission/template/target |
 
 ## 5. Active Redlines
 
