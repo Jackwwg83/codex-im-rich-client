@@ -3,7 +3,11 @@
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
 > **Last updated:** 2026-05-04 - Block 4 real Telegram acceptance remains
-> green. Feishu/Lark direct-use acceptance now proves launchd daemon inbound
+> green. Launchd soak remains healthy at the latest heartbeat, with the loaded
+> daemon alive and `pendingApprovals=0`; the loaded app bundle is still stale
+> versus the latest built daemon artifact, so latest-HEAD install/restart remains
+> the next local operator-gated readiness gap. Feishu/Lark direct-use acceptance
+> now proves launchd daemon inbound
 > routing, `/status`, `/use codex-im`, real Codex prompt/reply, and live card
 > schema delivery, real `Allow once` callback resolution, and Feishu CardKit
 > terminal-card refresh. DingTalk Stream connects with redacted test
@@ -99,6 +103,11 @@
     the freshly built `dist/codex-im-daemon.mjs`; install/restart is the next
     local operator action before claiming the installed daemon is at latest
     branch HEAD.
+  - latest heartbeat - 2026-05-04 18:59 SGT: `git status --short` was clean,
+    `pnpm launchd:status` reported pid `27377` with `pendingApprovals=0`, the
+    daemon stdout tail had no new entries after pid `27377` startup, and stderr
+    contained only Node deprecation warnings. Installed daemon hash
+    `82c2641dc818` still differs from built daemon hash `0c3304e77d52`.
 - **Next exact action:** Operator-gated install/restart of the latest bridge
   bundle, then finish DingTalk real inbound/card direct-use acceptance once
   `Card.Instance.Write` is opened, a matching card template is configured, and a
@@ -370,6 +379,7 @@ Latest soak checks:
 | 2026-05-04 00:23 SGT | `pnpm launchd:status` still green for pid `70626`; `launchctl print` still reports `state = running`, `runs = 1`, `last exit code = (never exited)`; daemon logs show startup plus Node deprecation warnings only; installed bridge redaction scan passed |
 | 2026-05-04 00:54 SGT | launchd still reports `state = running`, `runs = 1`, `pid = 70626`, and `last exit code = (never exited)`; daemon logs unchanged and redacted. `launchd:status` initially marked the snapshot stale because sandboxed PID probing could not inspect the external process, so `bin/launchd-status.mjs` now also accepts matching `launchctl print` pid evidence; targeted `scripts/launchd-status.test.mjs` passed and `pnpm launchd:status` is green again |
 | 2026-05-04 11:19 SGT | Rebuilt and reinstalled the production daemon bundle after live Telegram findings; `launchctl kickstart -k gui/501/io.codex-im-bridge` started pid `10065`; `pnpm launchd:status` reports `daemon status: present pid=10065 startedAt=2026-05-04T03:19:44.379Z codexThreads=0 pendingApprovals=0`; token log remains `***REDACTED***`; stderr contains only Node deprecation warnings |
+| 2026-05-04 18:59 SGT | Heartbeat check on branch `codex/live-im-acceptance` at `5f9895d`: `git status --short` clean; `pnpm launchd:status` green with pid `27377`, startedAt `2026-05-04T09:20:47.698Z`, `codexThreads=0`, `pendingApprovals=0`; daemon stdout had no new entries after pid `27377` startup and stderr contained only Node deprecation warnings. Installed daemon hash `82c2641dc818` still differs from built `dist/codex-im-daemon.mjs` hash `0c3304e77d52`, so latest bundle install/restart remains the next local non-external readiness gap. |
 
 Latest live Telegram acceptance evidence:
 
