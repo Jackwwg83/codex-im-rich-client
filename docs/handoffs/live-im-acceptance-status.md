@@ -87,7 +87,7 @@ until the matrix below is complete with real credentials and redacted evidence.
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
 | launchd live start | `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k ... && pnpm launchd:status` | pass | installed daemon starts under user LaunchAgent with redacted secret presence and `pendingApprovals=0` |
-| Redaction | plist/log grep for token-shaped output | pending | no token-shaped material |
+| Redaction | installed bridge plist/app/config/log scan for token-shaped output | pass | `BRIDGE_HOME=$HOME ... node scripts/bridge-redaction-scan.mjs` returned `redaction scan ok`; launchd plist lint also passed |
 
 Computer Use remains dry-run readiness only in the current release candidate;
 real desktop execution is not part of live IM acceptance until a reviewed real
@@ -251,3 +251,6 @@ Stop and treat as a blocker if:
   credentials held only in process environment. Stream connected successfully
   for a bounded 5 seconds, reported `robotEvents=0`, `cardEvents=0`, and printed
   only redacted presence/status fields.
+- 2026-05-04: Installed bridge redaction scan passed against the current local
+  app bundle, wrapper, config, launchd plist rendering, and daemon logs.
+  `pnpm launchd:status` also remained green with `pendingApprovals=0`.
