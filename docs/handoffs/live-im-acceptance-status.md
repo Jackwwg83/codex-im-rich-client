@@ -35,8 +35,8 @@
   send/update gate is now green with explicit `card_template_id` config,
   optional `robot_code` override, IM_ROBOT `userId` delivery, redacted
   contact-discovered target, and fail-closed delivery-result diagnostics; real
-  inbound/card direct-use still needs a usable DingTalk client/session plus an
-  operator-confirmed DingTalk target/allowlist.
+  installed config/readiness is now green; inbound/card direct-use still needs a
+  usable DingTalk client/session plus real inbound and callback click evidence.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -48,7 +48,7 @@
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed. DingTalk Stream live acceptance passed, Card.Instance.Write is open, and redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid. DingTalk direct-use inbound/card remains pending on a usable client/session, operator-confirmed DingTalk target/allowlist, and real callback click validation.
+Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid, and installed DingTalk readiness is green. DingTalk direct-use inbound/card remains pending on a usable client/session, one real inbound message, and real callback click validation.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -91,7 +91,8 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
 | DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `card_template_id` is configured, deriving robot code from AppKey/client id unless `robot_code` overrides it; create/deliver includes DingTalk `userIdType=1` and top-level IM_ROBOT `userId`; HTTP/code/success=false/deliverResults failures all fail closed with redacted diagnostics |
 | DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 ... pnpm smoke:dingtalk-live` | pass | `Card.Instance.Write` is open; contact-discovered enterprise `userid` plus an OpenAPI-usable card template produced redacted `card_updated` with message id presence only |
-| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs one real inbound robot message from a working DingTalk client/session, installed config/allowlist update, and real callback click validation; Stream connected but no real inbound event was produced |
+| DingTalk installed readiness | `pnpm dingtalk:readiness` + launchd restart | pass | installed config now has DingTalk enabled with present client id, Keychain secret, card template id, and global/project allowlist entries; latest daemon bundle restarted under launchd with `pendingApprovals=0` and redaction scan passed |
+| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | needs one real inbound robot message from a working DingTalk client/session and real callback click validation; Stream connected but no real inbound event was produced |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -309,6 +310,12 @@ Stop and treat as a blocker if:
   `Card.Instance.Write`, target semantics, create/update API shape, and
   fail-closed `deliverResults[]` handling. It does not yet prove installed
   direct-use inbound routing or real card callback clicks.
+- 2026-05-04: Installed DingTalk readiness turned green. The local installed
+  config now has DingTalk enabled with present client id, Keychain-backed secret,
+  card template id, and DingTalk entries in both global and project allowlists.
+  The latest bridge bundle was rebuilt, installed, and restarted through
+  launchd; `pnpm launchd:status` reported the new daemon pid with
+  `pendingApprovals=0`, and installed bridge redaction scan passed.
 - 2026-05-04: Installed bridge redaction scan passed against the current local
   app bundle, wrapper, config, launchd plist rendering, and daemon logs.
   `pnpm launchd:status` also remained green with `pendingApprovals=0`.

@@ -147,6 +147,13 @@
     create/update and printed redacted `card_updated` evidence. This proves the
     OpenAPI card path, but not real installed inbound routing or card callback
     clicks.
+  - latest evidence - Installed DingTalk direct-use configuration is now present
+    and locally ready. The installed config enables DingTalk, points at a
+    present client id / Keychain secret / card template id, and includes
+    DingTalk global + project allowlist entries without printing their values.
+    After `bridge:build`, `bridge:install`, and `launchctl kickstart -k`, the
+    daemon restarted under launchd with `pendingApprovals=0`; installed bridge
+    redaction scan passed.
   - latest evidence - Installed bridge redaction scan passed for app bundle,
     wrapper, config, launchd plist rendering, and daemon logs; `launchd:status`
     remains green with `pendingApprovals=0`.
@@ -456,9 +463,11 @@ Latest DingTalk direct-use readiness evidence:
 |---|---|
 | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 pnpm smoke:dingtalk-live` | green with browser-derived AppKey and Keychain-backed secret; output was redacted and reported `ready_dry_run` |
 | `DINGTALK_LIVE=1 pnpm smoke:dingtalk-live` | green bounded 5-second Stream connection; `robotEvents=0`, `cardEvents=0`, no secret bytes printed |
+| `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 pnpm smoke:dingtalk-live` | green redacted `card_updated`; target source was contact-discovered and no user/chat id was printed |
 | DingTalk developer-console / OpenAPI card check | `Card.Instance.Write` is open; live OpenAPI card probe with contact-discovered enterprise `userid` now reaches redacted `card_updated`; app-bound template creation succeeds, but save/build/publish is still rejected by the card platform, so installed direct-use should keep using explicit configured template evidence until a project-owned template is published |
-| `pnpm dingtalk:readiness` | expected blocked: installed config has DingTalk disabled, client id missing, card template missing, no global/project DingTalk allowlist entries; Keychain secret source is present |
+| `pnpm dingtalk:readiness` | ready: adapter enabled, client id present, Keychain secret present, card template id present, and DingTalk global/project allowlist entries present |
 | 2026-05-04 20:09 SGT local readiness check | still expected blocked with the same local config gaps; no additional launchd/local regression was found |
+| 2026-05-04 21:58 SGT installed readiness check | ready after redacted config update; latest bundle installed and launchd restarted to pid `3294` with `pendingApprovals=0`; installed bridge redaction scan passed |
 
 Latest live Telegram acceptance evidence:
 
