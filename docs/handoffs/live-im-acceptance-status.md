@@ -3,9 +3,12 @@
 > Single source of truth for real Telegram/Lark/DingTalk/Codex App live
 > acceptance after `production-readiness-2026-05-03-r2`.
 > **Last updated:** 2026-05-04 - Telegram real bot + real Codex turn +
-> approval callback acceptance + development-task control acceptance passed;
-> Lark live dry-run/send and DingTalk live dry-run/Stream acceptance passed
-> with redacted test credentials.
+> approval callback acceptance + development-task control acceptance passed.
+> Feishu/Lark now also passes launchd daemon inbound, `/status`, `/use`,
+> real Codex prompt/reply, and live card schema delivery. Lark full approval
+> callback acceptance remains pending. DingTalk live dry-run/Stream acceptance
+> passed with redacted test credentials; DingTalk real inbound/card direct-use
+> remains pending.
 
 ---
 
@@ -16,8 +19,10 @@
 - **Base release candidate:** `production-readiness-2026-05-03-r2`.
 - **Release candidate status:** non-live gates, fake smokes, contract tests,
   outside-voice review, and GitHub Actions CI are green.
-- **Live acceptance status:** Telegram, Lark, and DingTalk real acceptance
-  passed for the documented live-smoke surface.
+- **Live acceptance status:** Telegram real direct-use acceptance is green.
+  Feishu/Lark live-smoke and direct-use prompt paths are green, with full
+  approval callback acceptance still pending. DingTalk live-smoke Stream
+  acceptance is green, with real inbound/card direct-use still pending.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -29,7 +34,7 @@
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram/Lark/DingTalk live acceptance passed for the documented live-smoke surface.
+Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use and card-schema live acceptance passed; Lark approval callback remains pending. DingTalk Stream live acceptance passed; DingTalk direct-use inbound/card remains pending.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -58,9 +63,15 @@ until the matrix below is complete with real credentials and redacted evidence.
 | Lark fake | `pnpm smoke:lark-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | Lark live dry-run | `LARK_LIVE=1 LARK_LIVE_DRY_RUN=1 ... pnpm smoke:lark-live` | pass | `ready_dry_run`, redacted |
 | Lark live send | `LARK_LIVE=1 ... pnpm smoke:lark-live` | pass | Feishu test app published, dedicated live-smoke chat created, redacted message send succeeded |
+| Lark launchd inbound | Feishu Web `/status` into installed launchd daemon | pass | SQLite audit recorded `inbound.message_allowed`; bot replied status |
+| Lark project binding | Feishu Web `/use codex-im` | pass | SQLite Lark `thread_bindings` row for `codex-im`; bot replied `Using project codex-im` |
+| Lark real Codex prompt | Feishu Web `Reply exactly: LARK-CODEX-OK` | pass | real Codex thread created; bot replied `LARK-CODEX-OK` |
+| Lark approval card schema | `LARK_LIVE=1 LARK_LIVE_CARD=1 ... pnpm smoke:lark-live` | pass | Feishu accepted Card JSON 2.0 `body.elements`; redacted message-id evidence observed |
+| Lark approval callback | real write command requiring approval from Feishu Web | pending | post-fix prompt was accepted but produced no new callback token during this run; target file absent |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
+| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | DingTalk Web was unavailable during this run; Stream connected but no real inbound event was produced |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -162,3 +173,16 @@ Stop and treat as a blocker if:
   test app. A short local WS listener reached `ws client ready`, but Feishu Web
   automation did not yet produce an inbound bot message; Lark inbound
   direct-use remains the next live-test gap.
+- 2026-05-04: Feishu/Lark direct-use advanced past the previous gap. Installed
+  launchd daemon received real Feishu Web `/status`, `/use codex-im`, and a
+  real Codex prompt. SQLite audit recorded `inbound.message_allowed` without
+  persisting message bodies, Lark binding was written for `codex-im`, and the
+  bot replied `LARK-CODEX-OK` for a real Codex turn.
+- 2026-05-04: First real Lark approval attempt exposed a platform card payload
+  bug: Feishu rejected root-level `elements` with `230099`. Commit `be41071`
+  changed the renderer to Card JSON 2.0 `body.elements` and callback
+  `behaviors` carrying only opaque v1 token values. `LARK_LIVE=1
+  LARK_LIVE_CARD=1 pnpm smoke:lark-live` succeeded with redacted message-id
+  evidence. Full Lark approval callback remains pending because the post-fix
+  write prompt did not create a new callback token during the observation
+  window and the target file stayed absent.

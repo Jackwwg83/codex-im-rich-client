@@ -2,13 +2,12 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-04 - Block 4 real Telegram acceptance proved fresh
-> Telegram Web `Allow once` through the installed launchd daemon, fixed
-> `/switch` empty-thread resume, `/fork` empty-rollout UX, production IM
-> approval handler timeout, and terminal approval card metadata preservation.
-> Installed launchd daemon is healthy; the real Telegram Web approval button
-> matrix now covers allow once, decline, abort, allow-session, and stale/revoked
-> click fail-closed behavior.
+> **Last updated:** 2026-05-04 - Block 4 real Telegram acceptance remains
+> green. Feishu/Lark direct-use acceptance now proves launchd daemon inbound
+> routing, `/status`, `/use codex-im`, real Codex prompt/reply, and live card
+> schema delivery. Lark full approval callback acceptance is still pending
+> because the post-fix real approval turn did not create a callback token or
+> target file during this run.
 
 ## 1. Current State
 
@@ -61,8 +60,13 @@
   - latest patch - terminal resolved approval cards preserve original
     `kind`/`risk`/summary while removing buttons and retaining token-free
     rendering.
-- **Next exact action:** Direct Use closeout: refresh Linear/repo status and
-  identify any remaining non-live production-readiness gaps.
+  - `deb0151` - daemon inbound message audit for allowed/denied/invalid/failure
+    paths; no IM message body is persisted.
+  - `be41071` - Feishu/Lark approval cards now render Card JSON 2.0
+    `body.elements` with callback button behaviors carrying only opaque v1
+    tokens.
+- **Next exact action:** Complete remaining Lark approval callback live
+  acceptance, then DingTalk real inbound/card direct-use acceptance.
 
 ## 2. Why This Exists
 
@@ -349,6 +353,31 @@ Latest live Telegram acceptance evidence:
 | Callback sibling revocation | SQLite `callback_tokens` after the live matrix shows exactly one `used` token per approval (`approval-1` decline, `approval-2` abort, `approval-3` allow_session) and all sibling action tokens `revoked`; raw callback tokens are not persisted | green |
 | UI driver availability | Computer Use / Chrome Accessibility timed out during this run, but macOS screenshots plus System Events clicks worked against real Telegram Web. Treat Computer Use timeout as a local UI automation issue, not daemon failure | workaround green |
 
+Latest live Feishu/Lark direct-use evidence:
+
+| Area | Evidence | Status |
+|---|---|---|
+| launchd multi-platform start | Installed bridge bundle started under launchd pid `13136`; daemon log resolved Telegram and Lark secrets with `***REDACTED***` values and Lark WS reached `ws client ready` | green |
+| inbound observability | `deb0151` adds daemon audit for `inbound.message_allowed`, `inbound.message_denied`, `inbound.message_invalid`, and `inbound.message_handler_failed`; audit metadata records actor key, route kind, and text length only, never message body | green |
+| Lark `/status` | Feishu Web sent `/status`; SQLite recorded `inbound.message_allowed` with `routeKind=command`; bot replied `Status: target: lark chat`, `binding: unbound`, `pending approvals: 0` | green |
+| Lark `/use codex-im` | Feishu Web sent `/use codex-im`; SQLite `thread_bindings` gained a Lark row for `codex-im`; bot replied `Using project codex-im` | green |
+| Lark prompt -> Codex | Feishu Web prompt `Reply exactly: LARK-CODEX-OK` created a real Codex thread and bot replied `LARK-CODEX-OK` | green |
+| Lark card schema | First real approval attempt exposed Feishu error `230099` / unknown root property `elements`; `be41071` moved card content under `body.elements` and uses callback `behaviors` with opaque v1 token values only. `LARK_LIVE=1 LARK_LIVE_CARD=1 pnpm smoke:lark-live` then succeeded with redacted message-id evidence | fixed/green |
+| Lark approval callback | Post-fix real prompt for a harmless `/tmp` write was accepted as inbound prompt, but no new callback token or approval audit row was created during the observation window and the target file stayed absent. This remains the next Lark live gap | pending |
+
+Latest Lark hardening gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run packages/daemon/test/daemon.test.ts` | green: 111 passing |
+| `pnpm exec vitest run packages/im-lark/test` | green: 13 files, 107 passing |
+| `LARK_LIVE=1 LARK_LIVE_CARD=1 pnpm smoke:lark-live` | green: redacted live card schema smoke sent |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 332 files checked |
+| `pnpm test` | green: 148 files, 1344 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+| `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `13136` |
+
 Latest live-acceptance hardening gates:
 
 | Gate | Result |
@@ -429,7 +458,10 @@ Block 4:
 9. `fix(telegram): preserve approval kind/risk on resolved cards` (done)
 10. Real Telegram Web approval button matrix for allow once, decline, abort,
     allow-session, and stale/revoked click behavior (done)
-11. Next: Direct Use closeout and remaining non-live readiness gap inventory.
+11. Feishu/Lark direct-use inbound, `/status`, `/use`, prompt/reply, and card
+    schema live acceptance (done)
+12. Next: Lark full approval callback live acceptance and DingTalk real
+    inbound/card direct-use acceptance.
 
 ## 8. Compact / Resume
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env -S pnpm exec tsx
 
 import * as lark from "@larksuiteoapi/node-sdk";
+import { createLarkSdkAdapterOptions, renderLarkApprovalCard } from "../src/index.js";
 
 const REQUIRED_FOR_LIVE = ["LARK_APP_ID", "LARK_APP_SECRET_ENV", "LARK_TARGET_CHAT_ID"] as const;
 
@@ -9,6 +10,7 @@ type SmokeStatus = "skip" | "blocked" | "ready_dry_run" | "sent";
 interface RedactedStatus {
   readonly status: SmokeStatus;
   readonly gate: "enabled" | "disabled";
+  readonly mode: "text" | "card";
   readonly domain: "feishu" | "lark";
   readonly appId: "present" | "missing";
   readonly appSecretEnv: string | "missing";
@@ -40,6 +42,54 @@ async function main(): Promise<void> {
   if (process.env.LARK_LIVE_DRY_RUN === "1") {
     printStatus(redactedStatus("ready_dry_run"));
     console.log("[lark-live-smoke] READY_DRY_RUN: live env is present; no network call made.");
+    return;
+  }
+
+  if (process.env.LARK_LIVE_CARD === "1") {
+    const { messageClient } = createLarkSdkAdapterOptions(
+      {
+        appId: requiredEnv("LARK_APP_ID"),
+        appSecret: requiredEnv(requiredEnv("LARK_APP_SECRET_ENV")),
+        domain: larkDomainName(),
+      },
+      {
+        createWsClient: () => ({
+          async start() {},
+          close() {},
+        }),
+      },
+    );
+    if (messageClient?.sendCard === undefined) {
+      printStatus(redactedStatus("blocked"));
+      console.error("[lark-live-smoke] BLOCKED: card message client unavailable.");
+      process.exitCode = 4;
+      return;
+    }
+    const card = renderLarkApprovalCard({
+      schemaVersion: "approval-card.v1",
+      kind: "command_execution",
+      approvalId: "approval-must-not-be-sent",
+      summary: "Live Lark card schema smoke",
+      target: { riskLevel: "high" },
+      actions: [
+        { kind: "allow_once", wirePayload: "v1:ABCDEFGHIJKLMNOP" },
+        { kind: "decline", wirePayload: "v1:QRSTUVWXYZ234567" },
+      ],
+      status: "pending",
+      createdAt: new Date(0),
+    });
+    const result = await messageClient.sendCard({
+      target: { platform: "lark", chatId: requiredEnv("LARK_TARGET_CHAT_ID") },
+      card,
+    });
+    if (result.messageId.length === 0) {
+      printStatus(redactedStatus("blocked"));
+      console.error("[lark-live-smoke] BLOCKED: card send returned an empty message id.");
+      process.exitCode = 5;
+      return;
+    }
+    printStatus({ ...redactedStatus("sent"), messageId: "present" });
+    console.log("[lark-live-smoke] SENT: redacted live card schema smoke succeeded.");
     return;
   }
 
@@ -76,6 +126,7 @@ function redactedStatus(status: SmokeStatus): RedactedStatus {
   return {
     status,
     gate: "enabled",
+    mode: process.env.LARK_LIVE_CARD === "1" ? "card" : "text",
     domain: larkDomainName(),
     appId: present("LARK_APP_ID"),
     appSecretEnv: secretEnvName ?? "missing",
