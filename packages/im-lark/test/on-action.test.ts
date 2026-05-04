@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   LarkChannelAdapter,
   type LarkEventDispatcherLike,
+  type LarkEventHandlerMap,
   type LarkRawCardActionInput,
   type LarkWsClientLike,
   encodeLarkCallbackHandle,
@@ -17,7 +18,7 @@ function loadFixture(name: string): LarkRawCardActionInput {
 }
 
 class FakeLarkEventDispatcher implements LarkEventDispatcherLike {
-  readonly handlers: Array<(event: LarkRawCardActionInput) => void | Promise<void>> = [];
+  readonly handlers: Array<NonNullable<LarkEventHandlerMap["card.action.trigger"]>> = [];
 
   register(handlers: Parameters<NonNullable<LarkEventDispatcherLike["register"]>>[0]) {
     const handler = handlers["card.action.trigger"];

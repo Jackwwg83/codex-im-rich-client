@@ -319,6 +319,7 @@ function createAndDeliverCardBody(input: CreateAndDeliverInput): Record<string, 
   const openSpace = openSpaceForTarget(input.target);
   return {
     callbackType: "STREAM",
+    userIdType: 1,
     ...(input.callbackRouteKey === undefined ? {} : { callbackRouteKey: input.callbackRouteKey }),
     cardTemplateId: input.cardTemplateId,
     outTrackId: input.outTrackId,
@@ -407,20 +408,46 @@ async function requestJson(
     body: JSON.stringify(options.body),
   });
   const body = await readJsonBody(response);
+  const errorCode = errorCodeField(body);
   if (!response.ok) {
     if (response.status === 403 && options.operation === "createAndDeliver") {
       throw new Error(
         "DingTalk OpenAPI createAndDeliver failed with HTTP 403; check Card.Instance.Write permission, card template access, and delivery target",
       );
     }
-    throw new Error(`DingTalk OpenAPI ${options.operation} failed with HTTP ${response.status}`);
+    throw new Error(
+      `DingTalk OpenAPI ${options.operation} failed with HTTP ${response.status}${formatErrorCode(errorCode)}`,
+    );
   }
-  const errorCode =
-    numericField(body, "errcode") ?? numericField(body, "code") ?? numericField(body, "errorCode");
-  if (errorCode !== undefined && errorCode !== 0) {
-    throw new Error(`DingTalk OpenAPI ${options.operation} failed with code ${errorCode}`);
+  if (errorCode !== undefined && errorCode !== 0 && errorCode !== "0") {
+    throw new Error(
+      `DingTalk OpenAPI ${options.operation} failed with code ${formatBareErrorCode(errorCode)}`,
+    );
   }
   return body;
+}
+
+function errorCodeField(record: Record<string, unknown>): number | string | undefined {
+  return (
+    numericField(record, "errcode") ??
+    numericField(record, "code") ??
+    numericField(record, "errorCode") ??
+    stringField(record, "errcode") ??
+    stringField(record, "code") ??
+    stringField(record, "errorCode")
+  );
+}
+
+function formatErrorCode(code: number | string | undefined): string {
+  if (code === undefined) {
+    return "";
+  }
+  return ` code ${formatBareErrorCode(code)}`;
+}
+
+function formatBareErrorCode(code: number | string): string {
+  const rendered = String(code);
+  return /^[A-Za-z0-9._:-]{1,120}$/.test(rendered) ? rendered : "<redacted-code>";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

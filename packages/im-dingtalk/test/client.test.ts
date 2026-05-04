@@ -152,6 +152,7 @@ describe("DingTalk OpenAPI card client", () => {
     ]);
     expect(JSON.parse(String(calls[1]?.init?.body))).toMatchObject({
       callbackType: "STREAM",
+      userIdType: 1,
       callbackRouteKey: "codex_im",
       cardTemplateId: "ding_test_template",
       outTrackId: "codex-im-fixed",
@@ -242,6 +243,38 @@ describe("DingTalk OpenAPI card client", () => {
     );
     expect((error as Error).message).not.toContain("secret-must-not-leak");
     expect((error as Error).message).not.toContain("token-must-not-leak");
+  });
+
+  it("surfaces string OpenAPI error codes for DingTalk platform diagnostics", async () => {
+    const client = createDingTalkOpenApiCardClient(
+      {
+        clientId: "ding_test_client_id",
+        clientSecret: "secret-must-not-leak",
+        robotCode: "ding_test_robot",
+        cardTemplateId: "template-must-not-leak",
+        baseUrl: "https://dingtalk.example.test",
+      },
+      {
+        fetch: async (url) => {
+          if (String(url).endsWith("/v1.0/oauth2/accessToken")) {
+            return jsonResponse({ accessToken: "token-must-not-leak", expireIn: 7200 });
+          }
+          return jsonResponse(
+            { code: "param.templateNotExist", message: "ignored" },
+            { status: 400 },
+          );
+        },
+      },
+    );
+
+    await expect(
+      client.sendCard({
+        target: { platform: "dingtalk", chatId: "cid_card_group" },
+        card: CARD,
+      }),
+    ).rejects.toThrow(
+      "DingTalk OpenAPI createAndDeliver failed with HTTP 400 code param.templateNotExist",
+    );
   });
 });
 

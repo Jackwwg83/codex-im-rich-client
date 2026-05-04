@@ -19,8 +19,8 @@ const LARK_PROMPT_TARGET = { platform: "lark", chatId: "oc_test_private_chat" };
 const LARK_CARD_TARGET = { platform: "lark", chatId: "oc_card_private" };
 
 class FakeLarkEventDispatcher implements LarkEventDispatcherLike {
-  readonly actionHandlers: Array<(event: LarkRawCardActionInput) => void | Promise<void>> = [];
-  readonly messageHandlers: Array<(event: LarkRawMessageEvent) => void | Promise<void>> = [];
+  readonly actionHandlers: Array<NonNullable<LarkEventHandlerMap["card.action.trigger"]>> = [];
+  readonly messageHandlers: Array<NonNullable<LarkEventHandlerMap["im.message.receive_v1"]>> = [];
 
   register(handlers: LarkEventHandlerMap) {
     if (handlers["card.action.trigger"] !== undefined) {
