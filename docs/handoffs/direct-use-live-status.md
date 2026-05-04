@@ -494,9 +494,11 @@ Block 4:
     allow-session, and stale/revoked click behavior (done)
 11. Feishu/Lark direct-use inbound, `/status`, `/use`, prompt/reply, and card
     schema live acceptance (done)
-12. Lark full approval callback live acceptance (done for `Allow once`).
-13. Next: DingTalk real inbound/card direct-use acceptance once a usable
-    DingTalk client/session can produce real inbound events.
+12. Lark full approval callback live acceptance (done for `Allow once` plus
+    terminal CardKit refresh).
+13. Next: DingTalk real inbound/card direct-use acceptance once
+    `Card.Instance.Write` is open, a matching card template exists, and a
+    working DingTalk client/session can produce real inbound events.
 
 ## 8. Compact / Resume
 
