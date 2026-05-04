@@ -16,7 +16,9 @@ export interface LarkApprovalCardJson {
     readonly title: { readonly tag: "plain_text"; readonly content: string };
     readonly template: "blue" | "green" | "orange" | "red";
   };
-  readonly elements: readonly LarkApprovalCardElement[];
+  readonly body: {
+    readonly elements: readonly LarkApprovalCardElement[];
+  };
 }
 
 export type LarkApprovalCardElement =
@@ -25,15 +27,27 @@ export type LarkApprovalCardElement =
       readonly content: string;
     }
   | {
-      readonly tag: "action";
-      readonly actions: readonly LarkApprovalCardButton[];
+      readonly tag: "column_set";
+      readonly horizontal_spacing: "8px";
+      readonly columns: readonly LarkApprovalCardColumn[];
     };
+
+export interface LarkApprovalCardColumn {
+  readonly tag: "column";
+  readonly width: "auto";
+  readonly elements: readonly LarkApprovalCardButton[];
+}
 
 export interface LarkApprovalCardButton {
   readonly tag: "button";
   readonly text: { readonly tag: "plain_text"; readonly content: string };
   readonly type: "default" | "primary" | "danger";
-  readonly value: string;
+  readonly behaviors: readonly [
+    {
+      readonly type: "callback";
+      readonly value: string;
+    },
+  ];
 }
 
 export function renderLarkApprovalCard(card: ApprovalCardInput): LarkApprovalCardJson {
@@ -44,20 +58,27 @@ export function renderLarkApprovalCard(card: ApprovalCardInput): LarkApprovalCar
       title: { tag: "plain_text", content: "Codex approval" },
       template: templateForRisk(card.target.riskLevel),
     },
-    elements: [
-      {
-        tag: "markdown",
-        content: [
-          `**Summary:** ${card.summary}`,
-          `**Risk:** ${card.target.riskLevel}`,
-          `**Status:** ${card.status}`,
-        ].join("\n"),
-      },
-      {
-        tag: "action",
-        actions: card.actions.map(buttonForAction),
-      },
-    ],
+    body: {
+      elements: [
+        {
+          tag: "markdown",
+          content: [
+            `**Summary:** ${card.summary}`,
+            `**Risk:** ${card.target.riskLevel}`,
+            `**Status:** ${card.status}`,
+          ].join("\n"),
+        },
+        {
+          tag: "column_set",
+          horizontal_spacing: "8px",
+          columns: card.actions.map((action) => ({
+            tag: "column",
+            width: "auto",
+            elements: [buttonForAction(action)],
+          })),
+        },
+      ],
+    },
   };
   assertLarkApprovalCardWithinLimits(rendered);
   return rendered;
@@ -75,7 +96,7 @@ function buttonForAction(action: ApprovalActionInput): LarkApprovalCardButton {
     tag: "button",
     text: { tag: "plain_text", content: labelForAction(action.kind) },
     type: typeForAction(action.kind),
-    value: wirePayload,
+    behaviors: [{ type: "callback", value: wirePayload }],
   };
 }
 

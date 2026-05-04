@@ -94,9 +94,12 @@ describe("Lark callback payload codec (JAC-156)", () => {
 type RenderedCard = ReturnType<typeof renderLarkApprovalCard>;
 
 function firstButtonValue(card: RenderedCard): unknown {
-  const actionElement = card.elements.find((element) => element.tag === "action");
-  if (actionElement?.tag !== "action") {
+  const actionElement = card.body.elements.find((element) => element.tag === "column_set");
+  if (actionElement?.tag !== "column_set") {
     return undefined;
   }
-  return actionElement.actions[0]?.value;
+  const firstButton = actionElement.columns
+    .flatMap((column) => column.elements)
+    .find((element) => element.tag === "button");
+  return firstButton?.behaviors[0]?.value;
 }

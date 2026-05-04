@@ -51,13 +51,16 @@ describe("LarkChannelAdapter.sendCard (JAC-154)", () => {
     const card = renderLarkApprovalCard(CARD);
     const serialized = JSON.stringify(card);
 
+    expect(card).not.toHaveProperty("elements");
+    expect(card.body.elements[0]?.tag).toBe("markdown");
+    expect(card.body.elements[1]?.tag).toBe("column_set");
     expect(serialized).toContain("v1:ABCDEFGHIJKLMNOP");
     expect(serialized).toContain("v1:QRSTUVWXYZ234567");
     expect(serialized).not.toContain("approval-must-not-be-sent");
     expect(serialized).not.toContain("allow_once");
     expect(serialized).not.toContain("decline");
 
-    expect(actionButtons(card).map((button) => button.value)).toEqual([
+    expect(actionButtons(card).map((button) => button.behaviors[0]?.value)).toEqual([
       "v1:ABCDEFGHIJKLMNOP",
       "v1:QRSTUVWXYZ234567",
     ]);
@@ -144,6 +147,10 @@ describe("LarkChannelAdapter.sendCard (JAC-154)", () => {
 });
 
 function actionButtons(card: LarkApprovalCardJson) {
-  const actionElement = card.elements.find((element) => element.tag === "action");
-  return actionElement?.tag === "action" ? actionElement.actions : [];
+  const actionElement = card.body.elements.find((element) => element.tag === "column_set");
+  return actionElement?.tag === "column_set"
+    ? actionElement.columns.flatMap((column) =>
+        column.elements.filter((element) => element.tag === "button"),
+      )
+    : [];
 }
