@@ -343,7 +343,10 @@ export interface DaemonOptions {
   readonly computerUseProvider?: ComputerUseProvider;
   readonly computerUseAllowedTools?: readonly ComputerUseAllowedTool[];
   readonly renderApprovalCard?: (snapshot: PendingApprovalSnapshot) => ApprovalCard;
-  readonly renderResolvedApprovalCard?: (record: CallbackTokenRecord) => ApprovalCard;
+  readonly renderResolvedApprovalCard?: (
+    record: CallbackTokenRecord,
+    originalCard?: ApprovalCard,
+  ) => ApprovalCard;
   readonly onApprovalCardReady?: (target: Target, card: ApprovalCard) => MaybePromise<void>;
   readonly generateAuditId?: () => string;
   readonly generateCallbackNonce?: () => string;
@@ -383,6 +386,7 @@ export class Daemon {
   readonly #unsubscribers: Unsubscribe[] = [];
   readonly #runtimeEventPumps = new WeakSet<object>();
   readonly #turnOutputs = new Map<string, DaemonTurnOutputState>();
+  readonly #approvalCardsById = new Map<string, ApprovalCard>();
 
   constructor(options: DaemonOptions = {}) {
     this.options = options;
@@ -630,6 +634,7 @@ export class Daemon {
           const sendResult = await this.#adapter?.sendCard?.(target, card);
           if (sendResult !== undefined) {
             await this.#bindIssuedCallbackTokens(snapshot.id, issued.tokens, sendResult.messageRef);
+            this.#approvalCardsById.set(snapshot.id, baseCard);
           }
         }
         return;
@@ -945,7 +950,10 @@ export class Daemon {
         metadata: { error: errorMessage(error) },
       });
     }
-    const terminalCard = this.options.renderResolvedApprovalCard?.(record);
+    const terminalCard = this.options.renderResolvedApprovalCard?.(
+      record,
+      this.#approvalCardsById.get(record.approvalId),
+    );
     if (terminalCard !== undefined && record.messageRef !== undefined) {
       try {
         await this.#adapter?.updateCard?.(
@@ -971,6 +979,7 @@ export class Daemon {
         metadata: { error: errorMessage(error) },
       });
     }
+    this.#approvalCardsById.delete(record.approvalId);
   }
 
   async #answerAction(callbackHandle: string, userMessage: string, ok = false): Promise<void> {

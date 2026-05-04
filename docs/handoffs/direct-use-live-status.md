@@ -2,10 +2,12 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-04 - Block 4 real Telegram acceptance exposed and
-> fixed `/switch` empty-thread resume, `/fork` empty-rollout UX, and production
-> IM approval handler timeout. Installed launchd daemon is healthy; remaining
-> user-visible button retest requires an unlocked Telegram Web session.
+> **Last updated:** 2026-05-04 - Block 4 real Telegram acceptance proved fresh
+> Telegram Web `Allow once` through the installed launchd daemon, fixed
+> `/switch` empty-thread resume, `/fork` empty-rollout UX, production IM
+> approval handler timeout, and terminal approval card metadata preservation.
+> Installed launchd daemon is healthy; remaining live matrix work is decline,
+> abort, allow-session, and duplicate/stale-click coverage.
 
 ## 1. Current State
 
@@ -51,9 +53,15 @@
   - latest commit - C9 `/start` help states that non-command messages are
     Codex prompts for the current project/thread and that native file/command/tool
     activity may appear as `Codex items`.
-- **Next exact action:** after the Mac is unlocked, rerun Telegram Web approval
-  button acceptance: allow once, decline, abort, allow session, and duplicate
-  stale click. Until then continue local launchd/log/DB soak only.
+  - latest commit - live Telegram acceptance hardening: current-thread
+    `/switch` no longer resumes empty fresh threads, no-rollout `/fork` now
+    returns actionable IM guidance, and production IM approval handlers outlive
+    the previous 30s AppServerClient safety timeout.
+  - latest patch - terminal resolved approval cards preserve original
+    `kind`/`risk`/summary while removing buttons and retaining token-free
+    rendering.
+- **Next exact action:** continue Telegram Web approval button matrix:
+  decline, abort, allow-session, and duplicate/stale-click coverage.
 
 ## 2. Why This Exists
 
@@ -331,8 +339,10 @@ Latest live Telegram acceptance evidence:
 | Native Codex prompt | `Reply exactly: LIVE-AUTO-1053` returned exactly `LIVE-AUTO-1053` through the real Telegram bot and launchd daemon | green |
 | Development-task behavior | A Telegram prompt asking Codex to run read-only `git status --short` and `git log --oneline -3` returned `DEV-STATUS-1056 ...` plus native `commandExecution completed` Codex item summaries | green |
 | Forking | `/fork` fails on an empty no-rollout thread in Codex App Server; daemon now returns an actionable IM message telling the user to run a prompt first. After a turn exists, `/fork` succeeded and rebound the current Telegram target to the forked Codex thread | fixed/green |
-| Approval timeout | Real Telegram prompt for a write command produced a pending approval card, but the previous production AppServerClient default-rejected it after 30s before user action; file stayed absent. Production daemon now uses a 31-minute server-request handler timeout so IM approval pending mode is governed by broker expiry/resolution, not the client safety default | fixed locally; needs unlocked Telegram Web retest |
-| UI driver availability | macOS is currently at the lock screen; Computer Use, Chrome Apple Events, and Safari automation cannot reach Telegram Web. Do not treat this as daemon failure. Browser retest resumes after unlock | blocked by lock screen |
+| Approval timeout | Real Telegram prompt for a write command produced a pending approval card. After the 31-minute production server-request handler timeout patch, a fresh Telegram Web `Allow once` click created `/tmp/codex-im-live-allow-once-20260504-1147.txt`, returned `Done`, and `pnpm launchd:status` reported pid `10065` with `pendingApprovals=0` | fixed/green |
+| Stale callback fail-closed | Clicking a pre-restart stale `Allow once` button left `/tmp/codex-im-live-allow-once-20260504-1100.txt` absent and audit recorded `approval.callback_not_bound` with `result=revoked` | green |
+| Terminal approval card metadata | Fresh Telegram Web approval after reinstalling the patched daemon bundle created `/tmp/codex-im-live-terminal-card-20260504-1200.txt`; the resolved card now shows `Decision recorded: allow once`, original command summary, `Kind: command_execution`, `Risk: high`, and `Status: resolved` with buttons removed | fixed/green |
+| UI driver availability | Computer Use / Chrome Accessibility timed out during this run, but macOS screenshots plus System Events clicks worked against real Telegram Web. Treat Computer Use timeout as a local UI automation issue, not daemon failure | workaround green |
 
 Latest live-acceptance hardening gates:
 
@@ -345,6 +355,18 @@ Latest live-acceptance hardening gates:
 | `pnpm test` | green: 148 files, 1338 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 | `pnpm bridge:build && pnpm bridge:install && pnpm launchd:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `10065`; `launchd:install` still prints expected `Load failed: 5` because the LaunchAgent is already loaded, but exits 0 and `launchd:status` is green |
+
+Latest terminal-card metadata gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/daemon/test/daemon.test.ts` | green: 1 file, 110 passing |
+| `pnpm exec vitest run --config vitest.config.ts --project unit packages/cli/test/daemon-run.test.ts` | green: 1 file, 5 passing |
+| `pnpm typecheck` | green |
+| `pnpm lint` | green: 332 files checked |
+| `pnpm test` | green: 148 files, 1340 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+| `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `21579`; fresh Telegram Web `Allow once` created `/tmp/codex-im-live-terminal-card-20260504-1200.txt` and resolved card preserved `command_execution/high` |
 
 ## 7. Next Implementation Order
 
@@ -388,7 +410,9 @@ Block 4:
 6. `fix(daemon): avoid current-thread resume for empty /new threads` (done)
 7. `fix(daemon): make no-rollout /fork actionable in IM` (done)
 8. `fix(cli): keep production IM approval handlers pending beyond 30s` (done)
-9. Next after unlock: real Telegram Web approval button matrix retest.
+9. `fix(telegram): preserve approval kind/risk on resolved cards` (done)
+10. Next: finish real Telegram Web approval button matrix for decline,
+    abort, allow-session, and duplicate/stale-click coverage.
 
 ## 8. Compact / Resume
 

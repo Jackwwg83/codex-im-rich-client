@@ -41,6 +41,53 @@ describe("daemon run safety rails", () => {
     });
   });
 
+  it("preserves the original approval kind, risk, and summary on resolved cards", () => {
+    const originalCard = {
+      schemaVersion: "approval-card.v1",
+      kind: "command_execution",
+      approvalId: "approval-1",
+      summary: "Run command: touch /tmp/example",
+      target: { riskLevel: "high" },
+      actions: [
+        { kind: "allow_once", wirePayload: "v1:ABCDEFGHIJKLMNOP" },
+        { kind: "decline", wirePayload: "v1:QRSTUVWXYZ234567" },
+      ],
+      status: "pending",
+      createdAt: new Date("2026-05-03T11:28:37.158Z"),
+    } as const;
+
+    const card = renderResolvedCallbackApprovalCard(
+      {
+        tokenHash: "hash",
+        approvalId: "approval-1",
+        action: "allow_once",
+        callbackNonce: "nonce",
+        target: { platform: "telegram", chatId: "123" },
+        actor: { kind: "im", userId: "456", platform: "telegram" },
+        status: "used",
+        messageRef: { chatId: "123", messageId: "9" },
+        createdAt: "2026-05-03T11:28:37.158Z",
+        expiresAt: "2026-05-03T11:58:37.158Z",
+      },
+      originalCard,
+    );
+
+    expect(card).toEqual({
+      schemaVersion: "approval-card.v1",
+      kind: "command_execution",
+      approvalId: "approval-1",
+      summary: "Decision recorded: allow once\nRun command: touch /tmp/example",
+      target: { riskLevel: "high" },
+      actions: [],
+      status: "resolved",
+      createdAt: new Date("2026-05-03T11:28:37.158Z"),
+    });
+    expect(originalCard.actions).toEqual([
+      { kind: "allow_once", wirePayload: "v1:ABCDEFGHIJKLMNOP" },
+      { kind: "decline", wirePayload: "v1:QRSTUVWXYZ234567" },
+    ]);
+  });
+
   it("wires durable thread sessions into the production daemon", () => {
     const source = readFileSync(join(import.meta.dirname, "../src/daemon-run.ts"), "utf8");
 

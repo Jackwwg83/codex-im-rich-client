@@ -4141,6 +4141,150 @@ describe("Daemon skeleton (T14)", () => {
     expect(adapter.sendCard).toHaveBeenCalledWith(target, readyCards[0]?.card);
   });
 
+  it("passes the original token-free approval card to the resolved-card renderer", async () => {
+    let pendingHandler: ((snap: PendingApprovalSnapshot) => void) | undefined;
+    let actionHandler: ((action: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice", displayName: "Alice" };
+    const rawTokens = [
+      "ABCDEFGHIJKLMNOP",
+      "QRSTUVWXYZ234567",
+      "ABCDEFGH234567AA",
+      "QRSTUVWXABCDEFGH",
+    ];
+    const records = new Map<string, CallbackTokenRecord>();
+    const snapshot: PendingApprovalSnapshot = {
+      id: "approval-terminal-card",
+      appServerRequestId: 9006,
+      method: "item/commandExecution/requestApproval",
+      params: { command: "touch /tmp/example" },
+      createdAt: new Date("2026-05-02T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-02T00:30:00.000Z"),
+    };
+    const adapter = {
+      onAction: vi.fn((handler: (action: unknown) => void) => {
+        actionHandler = handler;
+        return () => {};
+      }),
+      onMessage: vi.fn(() => () => {}),
+      start: vi.fn(),
+      sendCard: vi.fn(() => ({
+        messageRef: { target, messageId: "msg-terminal-card" },
+        callbackNonce: "legacy",
+      })),
+      answerAction: vi.fn(),
+      updateCard: vi.fn(),
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      onPendingCreated: vi.fn((handler: (snap: PendingApprovalSnapshot) => void) => {
+        pendingHandler = handler;
+        return () => {};
+      }),
+      bindActorPolicy: vi.fn(() => ({ kind: "ok" as const })),
+      resolve: vi.fn(() => ({ kind: "ok" as const, appliedAt: new Date() })),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn((input: CallbackTokenInsert) => {
+        const record: CallbackTokenRecord = {
+          ...input,
+          status: input.status ?? "issued",
+        };
+        records.set(input.tokenHash, record);
+        return record;
+      }),
+      findByHash: vi.fn((tokenHash: string) => records.get(tokenHash)),
+      casUpdate: vi.fn(
+        (
+          tokenHash: string,
+          from: CallbackTokenRecord["status"],
+          to: CallbackTokenRecord["status"],
+          fields: Partial<Pick<CallbackTokenRecord, "actor" | "messageRef" | "expiresAt">>,
+        ) => {
+          const current = records.get(tokenHash);
+          if (current === undefined || current.status !== from) {
+            return undefined;
+          }
+          const next: CallbackTokenRecord = {
+            ...current,
+            ...fields,
+            status: to,
+          };
+          records.set(tokenHash, next);
+          return next;
+        },
+      ),
+      revokeBoundSiblings: vi.fn(() => []),
+    };
+    const terminalCard: ApprovalCard = {
+      schemaVersion: "approval-card.v1",
+      kind: "command_execution",
+      approvalId: snapshot.id,
+      summary: "Decision recorded: allow once\nRun command: touch /tmp/example",
+      target: { riskLevel: "high" },
+      actions: [],
+      status: "resolved",
+      createdAt: snapshot.createdAt,
+    };
+    const renderResolvedApprovalCard = vi.fn(
+      (record: CallbackTokenRecord, originalCard?: ApprovalCard) => {
+        expect(record.approvalId).toBe(snapshot.id);
+        expect(originalCard).toMatchObject({
+          kind: "command_execution",
+          approvalId: snapshot.id,
+          summary: "Run command: touch /tmp/example",
+          target: { riskLevel: "high" },
+          status: "pending",
+        });
+        expect(JSON.stringify(originalCard)).not.toContain("ABCDEFGHIJKLMNOP");
+        expect(JSON.stringify(originalCard)).not.toContain("QRSTUVWXYZ234567");
+        return terminalCard;
+      },
+    );
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      createSecurityPolicy: () => ({
+        checkApprovalDestination: () => ({ kind: "allow" as const }),
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({}),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+      resolveApprovalTarget: vi.fn(() => target),
+      resolveApprovalAllowedActors: vi.fn(() => [
+        { kind: "im" as const, platform: "telegram", userId: sender.userId },
+      ]),
+      callbackTokenRepository,
+      generateCallbackNonce: () => "nonce-terminal-card",
+      generateRawCallbackToken: () => rawTokens.shift() as string,
+      now: () => new Date("2026-05-02T00:00:02.000Z"),
+      renderResolvedApprovalCard,
+    });
+
+    await daemon.start();
+    pendingHandler?.(snapshot);
+    await flushDaemonHandlers();
+
+    actionHandler?.({
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      callbackHandle: "callback-handle-1",
+      target,
+      sender,
+      messageRef: { target, messageId: "msg-terminal-card" },
+    });
+    await flushDaemonHandlers();
+
+    expect(renderResolvedApprovalCard).toHaveBeenCalledTimes(1);
+    expect(adapter.updateCard).toHaveBeenCalledWith(
+      { target, messageId: "msg-terminal-card" },
+      terminalCard,
+    );
+  });
+
   it("sends the rendered card and binds issued token rows to the returned message ref", async () => {
     const order: string[] = [];
     const target = { platform: "telegram", chatId: "-allowed" };

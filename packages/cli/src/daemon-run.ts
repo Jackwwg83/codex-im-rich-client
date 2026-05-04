@@ -23,7 +23,7 @@ import {
   SessionRouter,
   type Target,
 } from "@codex-im/core";
-import { Daemon, Supervisor, createDaemonLogger } from "@codex-im/daemon";
+import { Daemon, type DaemonOptions, Supervisor, createDaemonLogger } from "@codex-im/daemon";
 import { TelegramChannelAdapter } from "@codex-im/im-telegram";
 import {
   AuditRepository,
@@ -52,6 +52,10 @@ interface RuntimeStorage {
   readonly threadSessions: ThreadSessionRepository;
   close(): void;
 }
+
+type ResolvedOriginalApprovalCard = Parameters<
+  NonNullable<DaemonOptions["renderResolvedApprovalCard"]>
+>[1];
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_CONFIG_PATH = join(homedir(), ".codex-im-bridge", "config.toml");
@@ -272,7 +276,21 @@ function createSecurityPolicy(config: CodexImConfig): SecurityPolicy {
   });
 }
 
-export function renderResolvedCallbackApprovalCard(record: CallbackTokenRecord) {
+export function renderResolvedCallbackApprovalCard(
+  record: CallbackTokenRecord,
+  originalCard?: ResolvedOriginalApprovalCard,
+) {
+  if (originalCard !== undefined) {
+    return {
+      ...originalCard,
+      approvalId: record.approvalId,
+      summary: `Decision recorded: ${approvalActionLabel(record.action)}\n${originalCard.summary}`,
+      actions: [],
+      status: "resolved",
+      createdAt: new Date(originalCard.createdAt.getTime()),
+    } as const;
+  }
+
   return {
     schemaVersion: "approval-card.v1",
     kind: "unknown",
