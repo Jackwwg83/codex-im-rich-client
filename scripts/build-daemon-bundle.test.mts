@@ -20,7 +20,12 @@ describe("build-daemon-bundle", () => {
 
     expect(DAEMON_BUNDLE_ENTRY).toBe("packages/cli/src/daemon-run-bundle-entry.ts");
     expect(DAEMON_BUNDLE_OUTFILE).toBe("dist/codex-im-daemon.mjs");
-    expect(DAEMON_BUNDLE_EXTERNAL).toEqual(["better-sqlite3", "pino"]);
+    expect(DAEMON_BUNDLE_EXTERNAL).toEqual([
+      "@larksuiteoapi/node-sdk",
+      "better-sqlite3",
+      "dingtalk-stream",
+      "pino",
+    ]);
     expect(options.entryPoints).toEqual([join(REPO_ROOT, DAEMON_BUNDLE_ENTRY)]);
     expect(options.outfile).toBe(join(REPO_ROOT, DAEMON_BUNDLE_OUTFILE));
     expect(options.bundle).toBe(true);
@@ -28,7 +33,12 @@ describe("build-daemon-bundle", () => {
     expect(options.format).toBe("esm");
     expect(options.target).toBe("node24");
     expect(options.banner).toEqual({ js: DAEMON_BUNDLE_BANNER });
-    expect(options.external).toEqual(["better-sqlite3", "pino"]);
+    expect(options.external).toEqual([
+      "@larksuiteoapi/node-sdk",
+      "better-sqlite3",
+      "dingtalk-stream",
+      "pino",
+    ]);
   });
 
   it("keeps the bundle entry a thin argv passthrough to daemon-run", async () => {
@@ -53,7 +63,9 @@ describe("build-daemon-bundle", () => {
     expect(bytes.startsWith(`${DAEMON_BUNDLE_BANNER}\n`)).toBe(true);
     expect(bytes.split("\n").filter((line) => line === "#!/usr/bin/env node")).toHaveLength(1);
     expect(bytes).toContain("__codexImCreateRequire");
+    expect(bytes).toContain('from "@larksuiteoapi/node-sdk"');
     expect(bytes).toContain('from "better-sqlite3"');
+    expect(bytes).toContain('from "dingtalk-stream"');
     expect(bytes).toContain('from "pino"');
     expect(fileStats.mode & 0o111).not.toBe(0);
     expect(() => assertNoDaemonBundleSecretMaterial(bytes)).not.toThrow();

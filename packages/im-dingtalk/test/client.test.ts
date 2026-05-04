@@ -4,6 +4,7 @@ import {
   DINGTALK_TOPIC_ROBOT,
   type DingTalkDwClientLike,
   type DingTalkStreamEventHandler,
+  createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
 } from "../src/index.js";
 
@@ -53,5 +54,39 @@ describe("DingTalk Stream client wrapper (JAC-90 P1 fix)", () => {
       { method: "ack", messageId: "stream_msg_ack_001", result: { status: "SUCCESS" } },
       { method: "disconnect" },
     ]);
+  });
+
+  it("sends text through a session reply URL without exposing credentials", async () => {
+    const calls: unknown[] = [];
+    const client = createDingTalkSessionReplyTextClient({
+      fetch: async (url, init) => {
+        calls.push({ url, init });
+        return new Response(JSON.stringify({ errcode: 0, messageId: "ding_reply_msg_001" }), {
+          status: 200,
+        });
+      },
+    });
+
+    await expect(
+      client.sendText({
+        sessionWebhook: "https://dingtalk.example.test/session-reply",
+        text: "Codex is working...",
+      }),
+    ).resolves.toEqual({ messageId: "ding_reply_msg_001" });
+
+    expect(calls).toEqual([
+      {
+        url: "https://dingtalk.example.test/session-reply",
+        init: {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            msgtype: "text",
+            text: { content: "Codex is working..." },
+          }),
+        },
+      },
+    ]);
+    expect(JSON.stringify(calls)).not.toContain("clientSecret");
   });
 });

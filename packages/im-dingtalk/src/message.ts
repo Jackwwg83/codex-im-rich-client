@@ -9,6 +9,7 @@ export interface DingTalkRawRobotMessage {
   readonly senderNick?: string;
   readonly senderStaffId?: string;
   readonly senderId?: string;
+  readonly sessionWebhook?: string;
   readonly createAt?: number | string;
   readonly conversationType?: string;
   readonly msgtype?: string;
@@ -30,6 +31,11 @@ export type DingTalkInboundMessage = InboundMessage & {
   readonly idempotencyKey: string;
   readonly raw: DingTalkSanitizedRobotRaw;
 };
+
+export interface DingTalkRobotSessionReply {
+  readonly target: Target;
+  readonly url: string;
+}
 
 export function normalizeDingTalkRawRobotMessage(
   event: DingTalkStreamEventLike,
@@ -80,6 +86,29 @@ export function normalizeDingTalkRawRobotMessage(
       conversationType,
       msgtype,
     },
+  };
+}
+
+export function extractDingTalkRobotSessionReply(
+  event: DingTalkStreamEventLike,
+): DingTalkRobotSessionReply | undefined {
+  let raw: DingTalkRawRobotMessage;
+  try {
+    raw = parseRobotData(event.data);
+  } catch {
+    return undefined;
+  }
+  if (
+    event.headers?.topic !== DINGTALK_TOPIC_ROBOT ||
+    raw.conversationId === undefined ||
+    raw.sessionWebhook === undefined ||
+    raw.sessionWebhook.length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    target: { platform: "dingtalk", chatId: raw.conversationId },
+    url: raw.sessionWebhook,
   };
 }
 

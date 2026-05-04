@@ -36,10 +36,13 @@ export { DINGTALK_CAPABILITIES } from "./capabilities.js";
 export {
   DINGTALK_TOPIC_CARD,
   DINGTALK_TOPIC_ROBOT,
+  createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
 } from "./client.js";
 export type {
   DingTalkDwClientLike,
+  DingTalkSessionReplyTextClientDeps,
+  DingTalkSessionReplyTextClientLike,
   DingTalkStreamClientConfig,
   DingTalkStreamClientDeps,
   DingTalkStreamClientLike,
@@ -48,10 +51,12 @@ export type {
 } from "./client.js";
 export {
   dingtalkRobotIdempotencyKey,
+  extractDingTalkRobotSessionReply,
   normalizeDingTalkRawRobotMessage,
 } from "./message.js";
 export type {
   DingTalkInboundMessage,
   DingTalkRawRobotMessage,
+  DingTalkRobotSessionReply,
   DingTalkSanitizedRobotRaw,
 } from "./message.js";

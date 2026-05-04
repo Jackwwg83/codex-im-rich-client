@@ -26,8 +26,10 @@ describe("install-bridge", () => {
     expect(plan.migrationsDir).toBe(join(home, ".codex-im-bridge", "app", "migrations"));
     expect(plan.runtimePackages.map((pkg) => `${pkg.name}@${pkg.version}`)).toEqual(
       expect.arrayContaining([
+        "@larksuiteoapi/node-sdk@1.62.1",
         "better-sqlite3@12.9.0",
         "bindings@1.5.0",
+        "dingtalk-stream@v2.1.5",
         "file-uri-to-path@1.0.0",
         "pino@9.14.0",
         "pino-roll@4.0.0",
@@ -262,6 +264,11 @@ app_id = "disabled"
 app_secret_env = "LARK_APP_SECRET"
 domain = "feishu"
 allowed_chat_ids = []
+
+[adapters.dingtalk]
+enabled = false
+client_id = "disabled"
+client_secret_env = "DINGTALK_CLIENT_SECRET"
 
 [projects.default]
 cwd = "${home}"

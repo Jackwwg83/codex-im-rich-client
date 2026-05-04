@@ -42,7 +42,13 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
-      `IM_TELEGRAM_BOT_TOKEN: <set from Keychain, length=${TOKEN.length}>`,
+      `IM_TELEGRAM_BOT_TOKEN: <set from Keychain/env, length=${TOKEN.length}>`,
+    );
+    expect(result.stdout).toContain(
+      `IM_LARK_APP_SECRET: <set from Keychain/env, length=${TOKEN.length}>`,
+    );
+    expect(result.stdout).toContain(
+      `DINGTALK_CLIENT_SECRET: <set from Keychain/env, length=${TOKEN.length}>`,
     );
     expect(result.stdout).toContain("NODE_BIN: /fake/node");
     expect(result.stdout).toContain("DAEMON_ENTRY: /fake/daemon.mjs");
@@ -90,6 +96,8 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
         'echo "migrations-dir:$5"',
         'echo "passthrough:$6"',
         'echo "token-length:${#IM_TELEGRAM_BOT_TOKEN}"',
+        'echo "lark-secret-length:${#IM_LARK_APP_SECRET}"',
+        'echo "dingtalk-secret-length:${#DINGTALK_CLIENT_SECRET}"',
       ].join("\n"),
       { mode: 0o700 },
     );
@@ -117,6 +125,8 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
     expect(result.stdout).toContain("migrations-dir:");
     expect(result.stdout).toContain("/app/migrations");
     expect(result.stdout).toContain(`token-length:${TOKEN.length}`);
+    expect(result.stdout).toContain(`lark-secret-length:${TOKEN.length}`);
+    expect(result.stdout).toContain(`dingtalk-secret-length:${TOKEN.length}`);
     expect(result.stdout).not.toContain(TOKEN);
   });
 });

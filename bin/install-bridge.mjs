@@ -162,8 +162,16 @@ function resolveRuntimePackages(repoRoot) {
   const daemonRequire = createRequire(
     pathToFileURL(join(repoRoot, "packages", "daemon", "package.json")),
   );
+  const larkRequire = createRequire(
+    pathToFileURL(join(repoRoot, "packages", "im-lark", "package.json")),
+  );
+  const dingtalkRequire = createRequire(
+    pathToFileURL(join(repoRoot, "packages", "im-dingtalk", "package.json")),
+  );
   const packages = new Map();
+  addRuntimePackageClosure("@larksuiteoapi/node-sdk", larkRequire, packages);
   addRuntimePackageClosure("better-sqlite3", cliRequire, packages);
+  addRuntimePackageClosure("dingtalk-stream", dingtalkRequire, packages);
   addRuntimePackageClosure("pino", daemonRequire, packages);
   addRuntimePackageClosure("pino-roll", daemonRequire, packages);
   return [...packages.values()];

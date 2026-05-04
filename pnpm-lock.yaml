@@ -72,6 +72,12 @@ importers:
       '@codex-im/daemon':
         specifier: workspace:*
         version: link:../daemon
+      '@codex-im/im-dingtalk':
+        specifier: workspace:*
+        version: link:../im-dingtalk
+      '@codex-im/im-lark':
+        specifier: workspace:*
+        version: link:../im-lark
       '@codex-im/im-telegram':
         specifier: workspace:*
         version: link:../im-telegram

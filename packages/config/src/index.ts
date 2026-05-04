@@ -47,6 +47,11 @@ export interface CodexImConfig {
       verificationTokenEnv?: string;
       allowedChatIds: string[];
     };
+    dingtalk: {
+      enabled: boolean;
+      clientId: string;
+      clientSecretEnv: string;
+    };
   };
   projects: Record<
     string,
@@ -76,6 +81,7 @@ export interface ResolvedConfigSecrets {
   larkAppSecret?: string;
   larkEncryptKey?: string;
   larkVerificationToken?: string;
+  dingtalkClientSecret?: string;
 }
 
 const envNameSchema = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, {
@@ -185,6 +191,18 @@ const rawConfigSchema = z
             allowed_chat_ids: z.array(z.string()),
           })
           .strict(),
+        dingtalk: z
+          .object({
+            enabled: z.boolean(),
+            client_id: z.string().min(1),
+            client_secret_env: envNameSchema,
+          })
+          .strict()
+          .default({
+            enabled: false,
+            client_id: "disabled",
+            client_secret_env: "DINGTALK_CLIENT_SECRET",
+          }),
       })
       .strict(),
     projects: z.record(
@@ -252,6 +270,11 @@ export function parseConfigToml(source: string): CodexImConfig {
         ...(parsed.adapters.lark.verification_token_env === undefined
           ? {}
           : { verificationTokenEnv: parsed.adapters.lark.verification_token_env }),
+      },
+      dingtalk: {
+        enabled: parsed.adapters.dingtalk.enabled,
+        clientId: parsed.adapters.dingtalk.client_id,
+        clientSecretEnv: parsed.adapters.dingtalk.client_secret_env,
       },
     },
     projects: Object.fromEntries(
@@ -322,11 +345,19 @@ export function resolveConfigSecrets(
     }
   }
 
+  if (config.adapters.dingtalk.enabled) {
+    secrets.dingtalkClientSecret = resolveSecretEnv(
+      "dingtalk",
+      config.adapters.dingtalk.clientSecretEnv,
+      opts,
+    );
+  }
+
   return secrets;
 }
 
 function resolveSecretEnv(
-  adapter: "telegram" | "lark",
+  adapter: "telegram" | "lark" | "dingtalk",
   envName: string,
   opts: ConfigSecretResolverOptions,
 ): string {

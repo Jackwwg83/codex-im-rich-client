@@ -558,6 +558,11 @@ app_secret_env = "LARK_APP_SECRET"
 domain = "feishu"
 allowed_chat_ids = []
 
+[adapters.dingtalk]
+enabled = false
+client_id = "disabled"
+client_secret_env = "DINGTALK_CLIENT_SECRET"
+
 [projects.default]
 cwd = "${context.home}"
 allowed_users = []

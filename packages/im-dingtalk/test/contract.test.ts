@@ -10,6 +10,7 @@ import {
   type DingTalkCardClientLike,
   DingTalkChannelAdapter,
   type DingTalkInboundAction,
+  type DingTalkSessionReplyTextClientLike,
   type DingTalkStreamClientLike,
   type DingTalkStreamEventHandler,
   type DingTalkStreamEventLike,
@@ -43,6 +44,7 @@ const REQUIRED_CHANNEL_ADAPTER_METHODS = [
   "onAction",
   "onMessage",
   "sendCard",
+  "sendText",
   "sendFile",
   "start",
   "stop",
@@ -104,12 +106,14 @@ type ContractHarness = {
   readonly streamClient: FakeDingTalkStreamClient;
   readonly cardCalls: unknown[];
   readonly actionCalls: unknown[];
+  readonly textCalls: unknown[];
 };
 
 function makeHarness(): ContractHarness {
   const streamClient = new FakeDingTalkStreamClient();
   const cardCalls: unknown[] = [];
   const actionCalls: unknown[] = [];
+  const textCalls: unknown[] = [];
   const cardClient: DingTalkCardClientLike = {
     async sendCard(input) {
       cardCalls.push({ method: "sendCard", input });
@@ -127,16 +131,24 @@ function makeHarness(): ContractHarness {
       actionCalls.push(input);
     },
   };
+  const textClient: DingTalkSessionReplyTextClientLike = {
+    async sendText(input) {
+      textCalls.push(input);
+      return { messageId: "ding_text_private_001" };
+    },
+  };
   return {
     adapter: new DingTalkChannelAdapter({
       streamClient,
       cardClient,
       actionClient,
+      textClient,
       now: () => NOW,
     }),
     streamClient,
     cardCalls,
     actionCalls,
+    textCalls,
   };
 }
 
@@ -144,6 +156,18 @@ function loadFixture(name: string): DingTalkStreamEventLike {
   return JSON.parse(
     readFileSync(join(IM_DINGTALK_FIXTURE_DIR, name), "utf8"),
   ) as DingTalkStreamEventLike;
+}
+
+function loadFixtureWithSessionReply(name: string): DingTalkStreamEventLike {
+  const event = loadFixture(name);
+  const data = JSON.parse(event.data ?? "{}") as Record<string, unknown>;
+  return {
+    ...event,
+    data: JSON.stringify({
+      ...data,
+      sessionWebhook: "https://dingtalk.example.test/session-reply",
+    }),
+  };
 }
 
 function listFiles(root: string, accept: (file: string) => boolean): string[] {
@@ -204,14 +228,21 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
   });
 
   it("round-trips message, card, update, edit, action, and ack through fake clients", async () => {
-    const { actionCalls, adapter, cardCalls, streamClient } = makeHarness();
+    const { actionCalls, adapter, cardCalls, streamClient, textCalls } = makeHarness();
     const seenMessages = vi.fn();
     const seenActions = vi.fn();
     adapter.onMessage(seenMessages);
     adapter.onAction(seenActions);
 
     await adapter.start();
-    await streamClient.inject(DINGTALK_TOPIC_ROBOT, loadFixture("private-text-message.json"));
+    await streamClient.inject(
+      DINGTALK_TOPIC_ROBOT,
+      loadFixtureWithSessionReply("private-text-message.json"),
+    );
+    const sentText = await adapter.sendText(
+      { platform: "dingtalk", chatId: "cid_test_private" },
+      "Codex is working...",
+    );
     const sentCard = await adapter.sendCard(TARGET, CARD);
     await adapter.updateCard(sentCard.messageRef, { ...CARD, status: "resolved" });
     await adapter.editText(sentCard.messageRef, "edited");
@@ -231,6 +262,10 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
     expect(sentCard).toEqual({
       messageRef: { target: TARGET, messageId: "ding_card_group_001" },
       callbackNonce: "",
+    });
+    expect(sentText).toEqual({
+      target: { platform: "dingtalk", chatId: "cid_test_private" },
+      messageId: "ding_text_private_001",
     });
     expect(seenActions).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -259,6 +294,12 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       },
     ]);
     expect(JSON.stringify(actionCalls)).not.toContain("v1:ABCDEFGHIJKLMNOP");
+    expect(textCalls).toEqual([
+      {
+        sessionWebhook: "https://dingtalk.example.test/session-reply",
+        text: "Codex is working...",
+      },
+    ]);
     expect(actionCalls).toEqual([
       expect.objectContaining({
         streamMessageId: "stream_card_group_001",

@@ -23,15 +23,34 @@ fi
 : "${CONFIG_PATH:?load-and-run: CONFIG_PATH is required}"
 : "${MIGRATIONS_DIR:?load-and-run: MIGRATIONS_DIR is required}"
 
-TOKEN="$(security find-generic-password -s codex-im-bridge -a "$USER" -w 2>/dev/null || true)"
+read_keychain_secret() {
+  local service="$1"
+  security find-generic-password -s "$service" -a "$USER" -w 2>/dev/null || true
+}
 
-if [ -z "$TOKEN" ]; then
+describe_secret() {
+  local name="$1"
+  local value="$2"
+  if [ -z "$value" ]; then
+    echo "$name: <unset>"
+  else
+    echo "$name: <set from Keychain/env, length=${#value}>"
+  fi
+}
+
+TELEGRAM_TOKEN="${IM_TELEGRAM_BOT_TOKEN:-$(read_keychain_secret codex-im-bridge)}"
+LARK_APP_SECRET_VALUE="${IM_LARK_APP_SECRET:-$(read_keychain_secret codex-im-bridge-lark)}"
+DINGTALK_CLIENT_SECRET_VALUE="${DINGTALK_CLIENT_SECRET:-$(read_keychain_secret codex-im-bridge-dingtalk)}"
+
+if [ -z "$TELEGRAM_TOKEN" ]; then
   echo "load-and-run: IM_TELEGRAM_BOT_TOKEN not found in Keychain (-s codex-im-bridge -a $USER)" >&2
   exit 1
 fi
 
 if [ "${1:-}" = "--dry-run" ]; then
-  echo "IM_TELEGRAM_BOT_TOKEN: <set from Keychain, length=${#TOKEN}>"
+  describe_secret "IM_TELEGRAM_BOT_TOKEN" "$TELEGRAM_TOKEN"
+  describe_secret "IM_LARK_APP_SECRET" "$LARK_APP_SECRET_VALUE"
+  describe_secret "DINGTALK_CLIENT_SECRET" "$DINGTALK_CLIENT_SECRET_VALUE"
   echo "NODE_BIN: $NODE_BIN"
   echo "DAEMON_ENTRY: $DAEMON_ENTRY"
   echo "CONFIG_PATH: $CONFIG_PATH"
@@ -39,5 +58,11 @@ if [ "${1:-}" = "--dry-run" ]; then
   exit 0
 fi
 
-export IM_TELEGRAM_BOT_TOKEN="$TOKEN"
+export IM_TELEGRAM_BOT_TOKEN="$TELEGRAM_TOKEN"
+if [ -n "$LARK_APP_SECRET_VALUE" ]; then
+  export IM_LARK_APP_SECRET="$LARK_APP_SECRET_VALUE"
+fi
+if [ -n "$DINGTALK_CLIENT_SECRET_VALUE" ]; then
+  export DINGTALK_CLIENT_SECRET="$DINGTALK_CLIENT_SECRET_VALUE"
+fi
 exec "$NODE_BIN" "$DAEMON_ENTRY" --config "$CONFIG_PATH" --migrations-dir "$MIGRATIONS_DIR" "$@"

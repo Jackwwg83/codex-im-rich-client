@@ -14,6 +14,8 @@
     { "path": "../codex-runtime" },
     { "path": "../core" },
     { "path": "../daemon" },
+    { "path": "../im-dingtalk" },
+    { "path": "../im-lark" },
     { "path": "../im-telegram" },
     { "path": "../storage-sqlite" }
   ]

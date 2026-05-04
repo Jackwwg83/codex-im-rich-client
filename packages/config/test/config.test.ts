@@ -46,6 +46,11 @@ encrypt_key_env        = "LARK_ENCRYPT_KEY"
 verification_token_env = "LARK_VERIFICATION_TOKEN"
 allowed_chat_ids       = ["oc_test_chat"]
 
+[adapters.dingtalk]
+enabled           = true
+client_id         = "ding_test_client_id"
+client_secret_env = "DINGTALK_CLIENT_SECRET"
+
 [projects.web]
 cwd            = "/Users/mini/code/web"
 allowed_users  = ["telegram:123456789"]
@@ -69,6 +74,11 @@ describe("@codex-im/config (T7-T8)", () => {
       encryptKeyEnv: "LARK_ENCRYPT_KEY",
       verificationTokenEnv: "LARK_VERIFICATION_TOKEN",
       allowedChatIds: ["oc_test_chat"],
+    });
+    expect(config.adapters.dingtalk).toEqual({
+      enabled: true,
+      clientId: "ding_test_client_id",
+      clientSecretEnv: "DINGTALK_CLIENT_SECRET",
     });
     expect(config.storage.autoMigrate).toBe(false);
     expect(config.computerUse).toEqual({
@@ -125,6 +135,11 @@ describe("@codex-im/config (T7-T8)", () => {
         app_secret_env = "LARK_APP_SECRET"
         domain = "feishu"
         allowed_chat_ids = []
+
+        [adapters.dingtalk]
+        enabled = false
+        client_id = "disabled"
+        client_secret_env = "DINGTALK_CLIENT_SECRET"
 
         [projects.web]
         cwd = "/tmp/project"
@@ -204,6 +219,7 @@ describe("@codex-im/config (T7-T8)", () => {
     const syntheticLarkSecret = "TEST_LARK_SECRET_NEVER_LOGGED";
     const syntheticLarkEncryptKey = "TEST_LARK_ENCRYPT_KEY_NEVER_LOGGED";
     const syntheticLarkVerificationToken = "TEST_LARK_VERIFY_NEVER_LOGGED";
+    const syntheticDingTalkSecret = "TEST_DINGTALK_SECRET_NEVER_LOGGED";
     const logLines: string[] = [];
 
     const secrets = resolveConfigSecrets(config, {
@@ -212,6 +228,7 @@ describe("@codex-im/config (T7-T8)", () => {
         LARK_APP_SECRET: syntheticLarkSecret,
         LARK_ENCRYPT_KEY: syntheticLarkEncryptKey,
         LARK_VERIFICATION_TOKEN: syntheticLarkVerificationToken,
+        DINGTALK_CLIENT_SECRET: syntheticDingTalkSecret,
       },
       logger: { info: (...args) => logLines.push(JSON.stringify(args)) },
     });
@@ -220,13 +237,16 @@ describe("@codex-im/config (T7-T8)", () => {
     expect(secrets.larkAppSecret).toBe(syntheticLarkSecret);
     expect(secrets.larkEncryptKey).toBe(syntheticLarkEncryptKey);
     expect(secrets.larkVerificationToken).toBe(syntheticLarkVerificationToken);
+    expect(secrets.dingtalkClientSecret).toBe(syntheticDingTalkSecret);
     expect(logLines.length).toBeGreaterThan(0);
     expect(logLines.join("\n")).not.toContain(syntheticToken);
     expect(logLines.join("\n")).not.toContain(syntheticLarkSecret);
     expect(logLines.join("\n")).not.toContain(syntheticLarkEncryptKey);
     expect(logLines.join("\n")).not.toContain(syntheticLarkVerificationToken);
+    expect(logLines.join("\n")).not.toContain(syntheticDingTalkSecret);
     expect(logLines.join("\n")).toContain("IM_TELEGRAM_BOT_TOKEN");
     expect(logLines.join("\n")).toContain("LARK_APP_SECRET");
+    expect(logLines.join("\n")).toContain("DINGTALK_CLIENT_SECRET");
     expect(() => resolveConfigSecrets(config, { env: {} })).toThrow(/IM_TELEGRAM_BOT_TOKEN/);
   });
 });

@@ -19,10 +19,15 @@ import { type DingTalkApprovalCardJson, renderDingTalkApprovalCard } from "./car
 import {
   DINGTALK_TOPIC_CARD,
   DINGTALK_TOPIC_ROBOT,
+  type DingTalkSessionReplyTextClientLike,
   type DingTalkStreamClientLike,
   type DingTalkStreamEventLike,
 } from "./client.js";
-import { type DingTalkInboundMessage, normalizeDingTalkRawRobotMessage } from "./message.js";
+import {
+  type DingTalkInboundMessage,
+  extractDingTalkRobotSessionReply,
+  normalizeDingTalkRawRobotMessage,
+} from "./message.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 const MAX_SEEN_ROBOT_KEYS = 4096;
@@ -32,6 +37,7 @@ export interface DingTalkChannelAdapterOptions {
   readonly streamClient?: DingTalkStreamClientLike;
   readonly cardClient?: DingTalkCardClientLike;
   readonly actionClient?: DingTalkActionClientLike;
+  readonly textClient?: DingTalkSessionReplyTextClientLike;
 }
 
 export interface DingTalkCardClientLike {
@@ -62,6 +68,7 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   #generation = 0;
   readonly #seenRobotKeys = new Set<string>();
   readonly #seenRobotKeyQueue: string[] = [];
+  readonly #sessionReplyUrlsByChatId = new Map<string, string>();
   readonly #onMessageHandlers = new Set<(msg: InboundMessage) => void>();
   readonly #onActionHandlers = new Set<(action: InboundAction) => void>();
 
@@ -150,6 +157,29 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     }
   }
 
+  async sendText(_target: Target, _body: string): Promise<MessageRef> {
+    this.#assertStarted("sendText");
+    const textClient = this.#options.textClient;
+    if (textClient === undefined) {
+      throw new Error("DingTalkChannelAdapter.sendText requires an injected textClient");
+    }
+    const sessionWebhook = this.#sessionReplyUrlsByChatId.get(_target.chatId);
+    if (sessionWebhook === undefined) {
+      throw new Error(
+        "DingTalkChannelAdapter.sendText requires a recent inbound session reply URL",
+      );
+    }
+    try {
+      const sent = await textClient.sendText({ sessionWebhook, text: _body });
+      return {
+        target: _target,
+        messageId: sent.messageId ?? `dingtalk-text:${this.#nowMs()}`,
+      };
+    } catch (error) {
+      throw new Error(`DingTalkChannelAdapter.sendText failed: ${describeError(error)}`);
+    }
+  }
+
   async answerAction(_callbackHandle: string, _ack: ActionAck): Promise<void> {
     this.#assertStarted("answerAction");
     const decoded = decodeDingTalkCallbackHandle(_callbackHandle);
@@ -233,6 +263,10 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     }
     if (!this.#rememberRobotKey(msg.idempotencyKey)) {
       return;
+    }
+    const sessionReply = extractDingTalkRobotSessionReply(_event);
+    if (sessionReply !== undefined) {
+      this.#sessionReplyUrlsByChatId.set(sessionReply.target.chatId, sessionReply.url);
     }
     for (const handler of this.#onMessageHandlers) {
       try {

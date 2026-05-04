@@ -11,6 +11,7 @@ import {
 import { CodexRuntime } from "@codex-im/codex-runtime";
 import {
   type CodexImConfig,
+  type ResolvedConfigSecrets,
   parseConfigToml,
   resolveConfigSecrets,
   resolveEnvReferences,
@@ -23,7 +24,22 @@ import {
   SessionRouter,
   type Target,
 } from "@codex-im/core";
-import { Daemon, type DaemonOptions, Supervisor, createDaemonLogger } from "@codex-im/daemon";
+import {
+  Daemon,
+  type DaemonActionAck,
+  type DaemonAdapter,
+  type DaemonMessageRef,
+  type DaemonOptions,
+  type DaemonSendCardResult,
+  Supervisor,
+  createDaemonLogger,
+} from "@codex-im/daemon";
+import {
+  DingTalkChannelAdapter,
+  createDingTalkSessionReplyTextClient,
+  createDingTalkStreamClient,
+} from "@codex-im/im-dingtalk";
+import { createLarkSdkChannelAdapter } from "@codex-im/im-lark";
 import { TelegramChannelAdapter } from "@codex-im/im-telegram";
 import {
   AuditRepository,
@@ -56,6 +72,7 @@ interface RuntimeStorage {
 type ResolvedOriginalApprovalCard = Parameters<
   NonNullable<DaemonOptions["renderResolvedApprovalCard"]>
 >[1];
+type ApprovalCardInput = Parameters<NonNullable<DaemonAdapter["sendCard"]>>[1];
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_CONFIG_PATH = join(homedir(), ".codex-im-bridge", "config.toml");
@@ -112,15 +129,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
       await supervisor.start();
       return supervisor;
     },
-    createAdapter: () => {
-      if (!config.adapters.telegram.enabled) {
-        throw new Error("daemon run requires adapters.telegram.enabled=true");
-      }
-      if (secrets.telegramBotToken === undefined) {
-        throw new Error("daemon run requires resolved Telegram bot token");
-      }
-      return new TelegramChannelAdapter({ botToken: secrets.telegramBotToken });
-    },
+    createAdapter: () => createProductionAdapter(config, secrets),
     resolveApprovalTarget: (snapshot) =>
       approvalTargetForSnapshot(snapshot, config, storageBox.current?.bindings),
     resolveApprovalAllowedActors: (_snapshot, target) => allowedActorsForTarget(config, target),
@@ -172,6 +181,181 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
   await waitForStopSignal();
   await daemon.stop();
   logger.info("codex-im daemon stopped");
+}
+
+interface PlatformAdapterEntry {
+  readonly platform: string;
+  readonly adapter: DaemonAdapter;
+}
+
+export class MultiPlatformDaemonAdapter implements DaemonAdapter {
+  readonly #entries: readonly PlatformAdapterEntry[];
+
+  constructor(entries: readonly PlatformAdapterEntry[]) {
+    if (entries.length === 0) {
+      throw new Error("MultiPlatformDaemonAdapter requires at least one adapter");
+    }
+    this.#entries = entries;
+  }
+
+  onAction(handler: (action: unknown) => void): () => void {
+    return unsubscribeAll(this.#entries.map((entry) => entry.adapter.onAction(handler)));
+  }
+
+  onMessage(handler: (message: unknown) => void): () => void {
+    return unsubscribeAll(this.#entries.map((entry) => entry.adapter.onMessage(handler)));
+  }
+
+  async pauseInbound(): Promise<void> {
+    await Promise.all(this.#entries.map((entry) => entry.adapter.pauseInbound?.()));
+  }
+
+  async start(): Promise<void> {
+    await Promise.all(this.#entries.map((entry) => entry.adapter.start?.()));
+  }
+
+  async stop(): Promise<void> {
+    await Promise.all([...this.#entries].reverse().map((entry) => entry.adapter.stop?.()));
+  }
+
+  async answerAction(callbackHandle: string, ack: DaemonActionAck): Promise<void> {
+    const adapter = this.#adapterForCallbackHandle(callbackHandle);
+    if (adapter.answerAction === undefined) {
+      throw new Error("selected IM adapter does not support answerAction");
+    }
+    await adapter.answerAction(callbackHandle, ack);
+  }
+
+  async sendCard(target: Target, card: ApprovalCardInput): Promise<DaemonSendCardResult> {
+    const adapter = this.#adapterForTarget(target, "sendCard");
+    if (adapter.sendCard === undefined) {
+      throw new Error(`IM adapter for ${target.platform} does not support sendCard`);
+    }
+    return adapter.sendCard(target, card);
+  }
+
+  async updateCard(ref: DaemonMessageRef, card: ApprovalCardInput): Promise<void> {
+    const adapter = this.#adapterForTarget(ref.target, "updateCard");
+    if (adapter.updateCard === undefined) {
+      throw new Error(`IM adapter for ${ref.target.platform} does not support updateCard`);
+    }
+    await adapter.updateCard(ref, card);
+  }
+
+  async editText(ref: DaemonMessageRef, body: string): Promise<void> {
+    const adapter = this.#adapterForTarget(ref.target, "editText");
+    if (adapter.editText === undefined) {
+      throw new Error(`IM adapter for ${ref.target.platform} does not support editText`);
+    }
+    await adapter.editText(ref, body);
+  }
+
+  async sendText(target: Target, body: string): Promise<DaemonMessageRef> {
+    const adapter = this.#adapterForTarget(target, "sendText");
+    if (adapter.sendText === undefined) {
+      throw new Error(`IM adapter for ${target.platform} does not support sendText`);
+    }
+    return adapter.sendText(target, body);
+  }
+
+  #adapterForTarget(target: Target, method: string): DaemonAdapter {
+    const entry = this.#entries.find((candidate) => candidate.platform === target.platform);
+    if (entry === undefined) {
+      throw new Error(`No ${target.platform} IM adapter configured for ${method}`);
+    }
+    return entry.adapter;
+  }
+
+  #adapterForCallbackHandle(callbackHandle: string): DaemonAdapter {
+    const platform = platformForCallbackHandle(callbackHandle);
+    if (platform !== undefined) {
+      return this.#adapterForTarget({ platform, chatId: "_" }, "answerAction");
+    }
+    const single = this.#entries[0];
+    if (this.#entries.length === 1 && single !== undefined) {
+      return single.adapter;
+    }
+    throw new Error("Cannot route callback handle to a configured IM adapter");
+  }
+}
+
+export function createProductionAdapter(
+  config: CodexImConfig,
+  secrets: ResolvedConfigSecrets,
+): DaemonAdapter {
+  const entries: PlatformAdapterEntry[] = [];
+  if (config.adapters.telegram.enabled) {
+    if (secrets.telegramBotToken === undefined) {
+      throw new Error("daemon run requires resolved Telegram bot token");
+    }
+    entries.push({
+      platform: "telegram",
+      adapter: new TelegramChannelAdapter({ botToken: secrets.telegramBotToken }),
+    });
+  }
+  if (config.adapters.lark.enabled) {
+    if (secrets.larkAppSecret === undefined) {
+      throw new Error("daemon run requires resolved Lark app secret");
+    }
+    entries.push({
+      platform: "lark",
+      adapter: createLarkSdkChannelAdapter({
+        appId: config.adapters.lark.appId,
+        appSecret: secrets.larkAppSecret,
+        domain: config.adapters.lark.domain,
+        ...(secrets.larkEncryptKey === undefined ? {} : { encryptKey: secrets.larkEncryptKey }),
+        ...(secrets.larkVerificationToken === undefined
+          ? {}
+          : { verificationToken: secrets.larkVerificationToken }),
+      }),
+    });
+  }
+  if (config.adapters.dingtalk.enabled) {
+    if (secrets.dingtalkClientSecret === undefined) {
+      throw new Error("daemon run requires resolved DingTalk client secret");
+    }
+    entries.push({
+      platform: "dingtalk",
+      adapter: new DingTalkChannelAdapter({
+        streamClient: createDingTalkStreamClient({
+          clientId: config.adapters.dingtalk.clientId,
+          clientSecret: secrets.dingtalkClientSecret,
+          ua: "codex-im",
+          keepAlive: true,
+          debug: false,
+        }),
+        textClient: createDingTalkSessionReplyTextClient(),
+      }),
+    });
+  }
+  if (entries.length === 0) {
+    throw new Error("daemon run requires at least one enabled IM adapter");
+  }
+  const single = entries[0];
+  return entries.length === 1 && single !== undefined
+    ? single.adapter
+    : new MultiPlatformDaemonAdapter(entries);
+}
+
+function unsubscribeAll(unsubscribes: readonly (() => void)[]): () => void {
+  return () => {
+    for (const unsubscribe of [...unsubscribes].reverse()) {
+      unsubscribe();
+    }
+  };
+}
+
+function platformForCallbackHandle(callbackHandle: string): string | undefined {
+  if (callbackHandle.startsWith("tgcb:v1:")) {
+    return "telegram";
+  }
+  if (callbackHandle.startsWith("lark-card-action:")) {
+    return "lark";
+  }
+  if (callbackHandle.startsWith("dingtalk-card-action:")) {
+    return "dingtalk";
+  }
+  return undefined;
 }
 
 function parseDaemonRunArgs(argv: readonly string[]): DaemonRunFlags {
@@ -330,13 +514,23 @@ function approvalTargetForSnapshot(
       return match.target;
     }
   }
-  const firstAllowedChat = config.security.allowedChats.find((entry) =>
-    entry.startsWith("telegram:"),
-  );
+  const enabledPlatforms = new Set<string>();
+  if (config.adapters.telegram.enabled) {
+    enabledPlatforms.add("telegram");
+  }
+  if (config.adapters.lark.enabled) {
+    enabledPlatforms.add("lark");
+  }
+  if (config.adapters.dingtalk.enabled) {
+    enabledPlatforms.add("dingtalk");
+  }
+  const firstAllowedChat = config.security.allowedChats
+    .map(parseScopedId)
+    .find((entry) => entry !== undefined && enabledPlatforms.has(entry.platform));
   if (firstAllowedChat === undefined) {
     return undefined;
   }
-  return { platform: "telegram", chatId: firstAllowedChat.slice("telegram:".length) };
+  return { platform: firstAllowedChat.platform, chatId: firstAllowedChat.id };
 }
 
 function allowedActorsForTarget(

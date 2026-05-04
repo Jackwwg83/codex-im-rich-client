@@ -149,3 +149,16 @@ Stop and treat as a blocker if:
   recording secret bytes. `pnpm smoke:dingtalk-live` passed dry-run and a
   bounded 5-second Stream connection; redacted status reported
   `connected`, `robotEvents=0`, and `cardEvents=0`.
+- 2026-05-04: Multi-platform daemon entrypoint landed locally: production
+  `daemon run` now instantiates Telegram, Lark, and DingTalk adapters from one
+  platform-routing surface instead of hard-coding Telegram. Installed bridge
+  runtime now ships external Lark/DingTalk SDK packages, and the launchd
+  Keychain wrapper injects Telegram/Lark/DingTalk secrets without writing them
+  to plist or logs. Local gates passed: `pnpm typecheck`, `pnpm test`,
+  `pnpm lint`, and `pnpm protocol:check`. Installed bridge preflight passed,
+  and launchd was kickstarted to the newly installed daemon bundle.
+- 2026-05-04: Feishu/Lark event subscription was changed to long connection,
+  `im.message.receive_v1` was added, and version `1.0.1` was published in the
+  test app. A short local WS listener reached `ws client ready`, but Feishu Web
+  automation did not yet produce an inbound bot message; Lark inbound
+  direct-use remains the next live-test gap.
