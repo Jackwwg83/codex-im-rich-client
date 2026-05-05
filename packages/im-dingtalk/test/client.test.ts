@@ -161,7 +161,12 @@ describe("DingTalk OpenAPI card client", () => {
       cardData: {
         cardParamMap: {
           title: "Codex approval",
+          content: expect.stringContaining("Run pnpm test"),
+          flowStatus: "3",
+          selectedIndex: "",
           action_1_value: "v1:ABCDEFGHIJKLMNOP",
+          action_2_value: "",
+          action_4_value: "",
         },
       },
     });

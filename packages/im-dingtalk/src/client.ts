@@ -380,22 +380,30 @@ function openSpaceForTarget(
 }
 
 function cardParamMap(card: DingTalkApprovalCardJson): Record<string, string> {
+  const actionSlots = Object.fromEntries(
+    [0, 1, 2, 3].flatMap((index) => {
+      const ordinal = String(index + 1);
+      const action = card.actions[index];
+      return [
+        [`action_${ordinal}_text`, action?.text ?? ""],
+        [`action_${ordinal}_value`, action?.value ?? ""],
+        [`action_${ordinal}_type`, action?.type ?? ""],
+      ];
+    }),
+  );
+  const markdown = card.body.map((block) => block.text).join("\n\n");
   return {
     title: card.title,
-    markdown: card.body.map((block) => block.text).join("\n\n"),
+    markdown,
+    content: markdown,
+    lastMessage: card.title,
+    flowStatus: "3",
     status: card.body.map((block) => block.text).join("\n"),
+    imageList: "[]",
+    selectedIndex: "",
     actions_json: JSON.stringify(card.actions),
     card_json: JSON.stringify(card),
-    ...Object.fromEntries(
-      card.actions.flatMap((action, index) => {
-        const ordinal = String(index + 1);
-        return [
-          [`action_${ordinal}_text`, action.text],
-          [`action_${ordinal}_value`, action.value],
-          [`action_${ordinal}_type`, action.type],
-        ];
-      }),
-    ),
+    ...actionSlots,
   };
 }
 

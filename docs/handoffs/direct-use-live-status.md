@@ -2,7 +2,7 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-04 - Block 4 real Telegram acceptance remains
+> **Last updated:** 2026-05-05 - Block 4 real Telegram acceptance remains
 > green. Launchd soak remains healthy at the latest heartbeat, and the latest
 > built daemon artifact is now installed and running under launchd with
 > `pendingApprovals=0`. Feishu/Lark direct-use acceptance now proves launchd
@@ -10,6 +10,8 @@
 > routing, `/status`, `/use codex-im`, real Codex prompt/reply, and live card
 > schema delivery, real `Allow once` / `Decline` / `Abort` /
 > `Allow session` reuse callbacks, and Feishu CardKit terminal-card refresh.
+> A fresh Feishu Web regression on 2026-05-05 returned an exact Codex reply
+> after stale-thread recovery.
 > DingTalk Stream connects with redacted test
 > credentials, and production card send/update is now wired behind explicit
 > OpenAPI card-template config; an explicit redacted `DINGTALK_LIVE_CARD=1`
@@ -18,9 +20,11 @@
 > message. DingTalk `Card.Instance.Write` is now open, IM_ROBOT delivery now
 > includes DingTalk's top-level `userId` alongside `userIdType=1`, and redacted
 > OpenAPI card send/update now passes with a contact-discovered enterprise
-> `userid`. Installed DingTalk config/readiness is now green under launchd; real
-> inbound/card direct-use is still pending on a usable DingTalk client/session
-> that can produce one real inbound robot message and one real callback click.
+> `userid`. The latest DingTalk OpenAPI card gate re-run uses the published
+> template's required parameter shape and remains green. Installed DingTalk
+> config/readiness is now green under launchd; real inbound/card direct-use is
+> still pending on a DingTalk desktop send/click path that is not blocked by
+> macOS Accessibility permission.
 
 ## 1. Current State
 
@@ -479,13 +483,14 @@ Latest DingTalk direct-use readiness evidence:
 |---|---|
 | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 pnpm smoke:dingtalk-live` | green with browser-derived AppKey and Keychain-backed secret; output was redacted and reported `ready_dry_run` |
 | `DINGTALK_LIVE=1 pnpm smoke:dingtalk-live` | green bounded 5-second Stream connection; `robotEvents=0`, `cardEvents=0`, no secret bytes printed |
-| `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 pnpm smoke:dingtalk-live` | green redacted `card_updated`; target source was contact-discovered and no user/chat id was printed |
+| `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 pnpm smoke:dingtalk-live` | green redacted `card_updated`; target source was contact-discovered and no user/chat id was printed. Re-run on 2026-05-05 remained green after published-template parameter alignment |
 | DingTalk developer-console / OpenAPI card check | `Card.Instance.Write` is open; live OpenAPI card probe with contact-discovered enterprise `userid` now reaches redacted `card_updated`; app-bound template creation succeeds, but save/build/publish is still rejected by the card platform, so installed direct-use should keep using explicit configured template evidence until a project-owned template is published |
 | `pnpm dingtalk:readiness` | ready: adapter enabled, client id present, Keychain secret present, card template id present, and DingTalk global/project allowlist entries present |
 | 2026-05-04 20:09 SGT local readiness check | still expected blocked with the same local config gaps; no additional launchd/local regression was found |
 | 2026-05-04 21:58 SGT installed readiness check | ready after redacted config update; latest bundle installed and launchd restarted to pid `3294` with `pendingApprovals=0`; installed bridge redaction scan passed |
 | 2026-05-04 22:31 SGT heartbeat check | launchd still green for pid `3294` with `pendingApprovals=0`; `launchctl print` still reports `state = running`; `pnpm dingtalk:readiness` remains ready; latest daemon stdout has redacted startup plus DingTalk Stream `connect success`, and stderr has only Node deprecation warnings |
 | 2026-05-04 23:05 SGT heartbeat check | launchd still green for pid `3294` with `pendingApprovals=0`; `launchctl print` still reports `state = running`; `pnpm dingtalk:readiness` remains ready; no new current-pid daemon errors were found in stdout/stderr tails |
+| 2026-05-05 12:15 SGT live gate check | `pnpm dingtalk:readiness` ready, launchd green with `pendingApprovals=0`, redacted OpenAPI card smoke returned `card_updated`, `pnpm smoke:dingtalk-fake` passed, and the DingTalk card parameter map now supplies the published template's content/status/action slot keys. Real desktop send/click remains blocked by macOS Accessibility permission; DingTalk Web redirects to maintenance |
 
 Latest live Telegram acceptance evidence:
 
@@ -514,6 +519,7 @@ Latest live Feishu/Lark direct-use evidence:
 | Lark `/status` | Feishu Web sent `/status`; SQLite recorded `inbound.message_allowed` with `routeKind=command`; bot replied `Status: target: lark chat`, `binding: unbound`, `pending approvals: 0` | green |
 | Lark `/use codex-im` | Feishu Web sent `/use codex-im`; SQLite `thread_bindings` gained a Lark row for `codex-im`; bot replied `Using project codex-im` | green |
 | Lark prompt -> Codex | Feishu Web prompt `Reply exactly: LARK-CODEX-OK` created a real Codex thread and bot replied `LARK-CODEX-OK` | green |
+| Lark regression after stale-thread recovery | Feishu Web prompt returned exactly `FEISHU-CODEX-REGRESSION-1207` after the daemon recovered from an old missing Codex thread by rebinding a fresh thread | green |
 | Lark card schema + CardKit update | First real approval attempt exposed Feishu error `230099` / unknown root property `elements`; `be41071` moved card content under `body.elements`. The later callback fix sends Card JSON 2.0 button `behaviors` with only `{ token: "v1:..." }` and no approval id / action kind. CardKit `idConvert` + `update` is now covered by `LARK_LIVE=1 LARK_LIVE_CARD=1 LARK_LIVE_CARD_UPDATE=1 pnpm smoke:lark-live` with redacted message-id evidence | fixed/green |
 | Lark approval callback | Fresh Feishu Web write approval was accepted as inbound prompt, rendered a real approval card, and a keyboard-driven click on `Allow once` reached the launchd daemon. SQLite recorded `allow_once=used` with sibling tokens `revoked`, the target `/tmp` file was created, and Codex replied `Ran ...` | fixed/green |
 | Lark terminal approval card visual refresh | After bridge rebuild/install and launchd restart, a fresh Feishu Web write approval resolved through `Allow once`; the target `/tmp` file existed, latest SQLite callback tokens showed `allow_once=used` with siblings `revoked`, `pnpm launchd:status` reported `pendingApprovals=0`, and a Feishu Web reload preserved `Status: resolved` with zero visible `Allow once` buttons | fixed/green |
@@ -618,8 +624,10 @@ Block 4:
 12. Lark full approval callback live acceptance (done for `Allow once`,
     `Decline`, `Abort`, `Allow session` reuse, and terminal CardKit refresh).
 13. Next: DingTalk real inbound/card direct-use acceptance once
-    a working DingTalk client/session can produce real inbound events and a real
-    card callback click.
+    DingTalk desktop send/click automation is available or a human performs the
+    one remaining desktop send/callback click; Stream, OpenAPI card
+    send/update, fake callback, installed readiness, and launchd are already
+    green with redacted evidence.
 
 ## 8. Compact / Resume
 
