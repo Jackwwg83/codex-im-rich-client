@@ -236,6 +236,14 @@
     template, and DingTalk allowlist entries; stdout/stderr tails showed no new
     regression after pid `3567` startup, and SQLite audit had no events after
     the restart timestamp.
+  - latest heartbeat - 2026-05-05 17:45 SGT: `git status --short` was clean at
+    `367ecef`; `pnpm launchd:status` still reported the same pid `3567` and
+    `pendingApprovals=0`. `daemon-status.json` still had `lastFatal=null`,
+    `supervisorFailureCount=0`, and no active Codex threads. `pnpm
+    dingtalk:readiness` remained `ready`; stdout/stderr tails showed no new
+    regression beyond the existing startup logs and Node deprecation warnings,
+    and SQLite audit still had no events after the pid `3567` restart
+    timestamp.
 - **Next exact action:** Finish DingTalk real approval callback acceptance with
   one real user/client CardKit click that emits Stream
   `/v1.0/card/instances/callback`; synthetic macOS/Computer Use clicks have not
