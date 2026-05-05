@@ -30,7 +30,10 @@
 > DingTalk write prompt reproduced card render + token binding, confirmed the
 > synthetic click still produced no callback, rejected an invalid local
 > `callback_route_key` experiment, and added startup cleanup for both `issued`
-> and `bound` callback tokens left by failed send/bind paths.
+> and `bound` callback tokens left by failed send/bind paths. The explicit
+> `DINGTALK_LIVE_CARD_CALLBACK=1` probe now sends a real card and waits for a
+> Stream card callback; its first run stayed connected but failed with
+> `cardEvents=0` after synthetic desktop click attempts.
 
 ## 1. Current State
 
@@ -167,8 +170,11 @@
     produce a Stream card callback; the adapter was patched to accept the
     official public-template callback shape where `cardPrivateData.params.action`
     carries `accept` / `reject`, and daemon fallback lookup is now scoped by
-    `messageRef + action`. Remaining DingTalk acceptance gap: one real
-    user/client CardKit click reaching `/v1.0/card/instances/callback`.
+    `messageRef + action`. The adapter now also accepts exact
+    `cardPrivateData.params.token = "v1:<opaque>"` callbacks and rejects token
+    callbacks that carry companion approval/action metadata. Remaining DingTalk
+    acceptance gap: one real user/client CardKit click reaching
+    `/v1.0/card/instances/callback`.
   - latest evidence - Installed DingTalk direct-use configuration is now present
     and locally ready. The installed config enables DingTalk, points at a
     present client id / Keychain secret / card template id, and includes
@@ -552,6 +558,7 @@ Latest DingTalk direct-use readiness evidence:
 | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 pnpm smoke:dingtalk-live` | green with browser-derived AppKey and Keychain-backed secret; output was redacted and reported `ready_dry_run` |
 | `DINGTALK_LIVE=1 pnpm smoke:dingtalk-live` | green bounded 5-second Stream connection; `robotEvents=0`, `cardEvents=0`, no secret bytes printed |
 | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 pnpm smoke:dingtalk-live` | green redacted `card_updated`; target source was contact-discovered and no user/chat id was printed. Re-run on 2026-05-05 remained green after published-template parameter alignment |
+| `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_CARD_CALLBACK=1 pnpm smoke:dingtalk-live` | blocked as expected for current desktop automation: sent a real card, reported redacted message-id presence and `targetSource=env`, kept Stream connected for 30 seconds, and failed with `cardEvents=0` after synthetic click attempts |
 | DingTalk developer-console / OpenAPI card check | `Card.Instance.Write` is open; live OpenAPI card probe with contact-discovered enterprise `userid` now reaches redacted `card_updated`; app-bound template creation succeeds, but save/build/publish is still rejected by the card platform, so installed direct-use should keep using explicit configured template evidence until a project-owned template is published |
 | `pnpm dingtalk:readiness` | ready: adapter enabled, client id present, Keychain secret present, card template id present, and DingTalk global/project allowlist entries present |
 | 2026-05-04 20:09 SGT local readiness check | still expected blocked with the same local config gaps; no additional launchd/local regression was found |
@@ -563,6 +570,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-05 13:28 SGT heartbeat check | `git status --short` clean at `2204a17`; `pnpm launchd:status` green with the same pid `59693`, startedAt `2026-05-05T03:54:50.886Z`, `codexThreads=0`, and `pendingApprovals=0`; `launchctl print` still reports `state = running`, `runs = 16`, and pid `59693`; current-pid stdout remains redacted startup + DingTalk Stream `connect success` only, and current-pid stderr has only Node deprecation warnings. Next local non-external gap is unchanged: DingTalk real desktop send/click needs an Accessibility-unblocked path |
 | 2026-05-05 14:00 SGT heartbeat check | `git status --short` clean at `9a6a29a`; `pnpm launchd:status` green with the same pid `59693`, startedAt `2026-05-05T03:54:50.886Z`, `codexThreads=0`, and `pendingApprovals=0`; `launchctl print` still reports `state = running`, `runs = 16`, and pid `59693`. `daemon.log` and `daemon.err.log` mtimes remain at the current-pid startup time, so no new daemon output appeared during this interval. `pnpm dingtalk:readiness` remains ready. Next local non-external gap remains DingTalk desktop send/click behind macOS Accessibility permission |
 | 2026-05-05 19:05 SGT real callback follow-up | Fresh real DingTalk write prompt rendered the approval card and bound callback tokens, but synthetic clicks still produced no Stream callback and the target file stayed absent. A local `callback_route_key = "codex_im"` experiment was rolled back after it produced no delivered card and left `issued` / unbound tokens. Startup cleanup now revokes both `issued` and `bound` callback tokens before adapter input; targeted tests plus full gates passed, the patched bundle was installed, and launchd pid `21702` revoked the live residue on startup. |
+| 2026-05-05 19:33 SGT explicit callback probe | New `DINGTALK_LIVE_CARD_CALLBACK=1` gate sent a real card, remained connected, and failed with `cardEvents=0`; GPT Pro review says do not modify broker/security/token/messageRef logic and keep DingTalk blocked until callback-capable template plus real client click emits Stream `/v1.0/card/instances/callback`. |
 
 Latest live Telegram acceptance evidence:
 

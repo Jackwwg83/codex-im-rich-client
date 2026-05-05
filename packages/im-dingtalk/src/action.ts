@@ -1,5 +1,8 @@
 import type { InboundAction, Target } from "@codex-im/channel-core";
-import { extractDingTalkCardCallbackWirePayload } from "./callback-codec.js";
+import {
+  extractDingTalkCardCallbackWirePayload,
+  hasUnsafeDingTalkCardCallbackCompanionPayload,
+} from "./callback-codec.js";
 import { DINGTALK_TOPIC_CARD, type DingTalkStreamEventLike } from "./client.js";
 
 const DINGTALK_CALLBACK_HANDLE_PREFIX = "dingtalk-card-action:";
@@ -36,6 +39,9 @@ export function normalizeDingTalkRawCardAction(
   const streamMessageId = event.headers.messageId;
   const request = parseCardRequest(event.data);
   const content = parseCardContent(request?.content);
+  if (hasUnsafeDingTalkCardCallbackCompanionPayload(event)) {
+    return undefined;
+  }
   const actionId = singleActionId(content);
   const actionParam = actionParamValue(content);
   const rawCallbackData =

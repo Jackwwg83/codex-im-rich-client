@@ -17,12 +17,30 @@ export function extractDingTalkCardCallbackWirePayload(
     return undefined;
   }
   const data = parseCallbackData(event.data);
-  if (data === undefined || containsUnsafeCompanionPayload(data)) {
+  if (data === undefined || hasUnsafeDingTalkCardCallbackCompanionPayload(event)) {
     return undefined;
   }
   return singlePayload(
     extractDingTalkActionWirePayload(data.value),
+    extractDingTalkActionWirePayload(data.wirePayload),
+    extractDingTalkActionWirePayload(data.token),
     extractContentWirePayload(data.content),
+  );
+}
+
+export function hasUnsafeDingTalkCardCallbackCompanionPayload(
+  event: DingTalkStreamEventLike,
+): boolean {
+  if (event.headers?.topic !== DINGTALK_TOPIC_CARD) {
+    return false;
+  }
+  const data = parseCallbackData(event.data);
+  if (data === undefined) {
+    return false;
+  }
+  return (
+    hasUnsafeOpaquePayloadCompanion(data) ||
+    hasUnsafeOpaquePayloadCompanion(extractContentParams(data.content))
   );
 }
 
@@ -46,27 +64,49 @@ function parseCallbackData(data: string | undefined): Record<string, unknown> | 
 }
 
 function extractContentWirePayload(content: unknown): string | undefined {
+  const params = extractContentParams(content);
+  if (params === undefined) {
+    return undefined;
+  }
+  return singlePayload(
+    extractDingTalkActionWirePayload(params.wirePayload),
+    extractDingTalkActionWirePayload(params.value),
+    extractDingTalkActionWirePayload(params.token),
+  );
+}
+
+function extractContentParams(content: unknown): Record<string, unknown> | undefined {
   if (typeof content !== "string") {
     return undefined;
   }
   const contentRecord = parseCallbackData(content);
   const cardPrivateData = asRecord(contentRecord?.cardPrivateData);
-  const params = asRecord(cardPrivateData?.params);
-  if (params === undefined || containsUnsafeCompanionPayload(params)) {
-    return undefined;
-  }
-  return extractDingTalkActionWirePayload(params.wirePayload ?? params.value);
+  return asRecord(cardPrivateData?.params);
 }
 
-function singlePayload(left: string | undefined, right: string | undefined): string | undefined {
-  if (left !== undefined && right !== undefined && left !== right) {
+function singlePayload(...values: readonly (string | undefined)[]): string | undefined {
+  const present = values.filter((value): value is string => value !== undefined);
+  if (new Set(present).size > 1) {
     return undefined;
   }
-  return left ?? right;
+  return present[0];
 }
 
-function containsUnsafeCompanionPayload(data: Record<string, unknown>): boolean {
-  return "approvalId" in data || "action" in data || "rawCallbackData" in data;
+function hasUnsafeOpaquePayloadCompanion(data: Record<string, unknown> | undefined): boolean {
+  if (data === undefined || !hasOpaquePayloadField(data)) {
+    return false;
+  }
+  return (
+    "approvalId" in data ||
+    "nonce" in data ||
+    "kind" in data ||
+    "rawCallbackData" in data ||
+    "action" in data
+  );
+}
+
+function hasOpaquePayloadField(data: Record<string, unknown>): boolean {
+  return "value" in data || "wirePayload" in data || "token" in data;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

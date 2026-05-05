@@ -14,7 +14,13 @@ const DEFAULT_DURATION_MS = 5_000;
 const MIN_DURATION_MS = 1_000;
 const MAX_DURATION_MS = 30_000;
 
-type SmokeStatus = "skip" | "blocked" | "ready_dry_run" | "connected" | "card_updated";
+type SmokeStatus =
+  | "skip"
+  | "blocked"
+  | "ready_dry_run"
+  | "connected"
+  | "card_updated"
+  | "card_callback_seen";
 
 interface RedactedStatus {
   readonly status: SmokeStatus;
@@ -30,6 +36,8 @@ interface RedactedStatus {
   readonly targetChatId?: "present" | "missing";
   readonly targetSource?: "env" | "captured" | "discovered" | "missing";
   readonly messageId?: "present";
+  readonly callbackMessageRef?: "present";
+  readonly callbackAction?: "present";
   readonly missing?: readonly string[];
 }
 
@@ -74,6 +82,10 @@ async function main(): Promise<void> {
           "[dingtalk-live-smoke] BLOCKED: missing DINGTALK_TARGET_CHAT_ID; set it, set DINGTALK_LIVE_DISCOVER_USER=1, or set DINGTALK_LIVE_CAPTURE_TARGET=1 and send one test message to the bot during the smoke window.",
         );
         process.exitCode = 2;
+        return;
+      }
+      if (process.env.DINGTALK_LIVE_CARD_CALLBACK === "1") {
+        await runLiveCardCallbackSmoke({ durationMs, resolvedTarget });
         return;
       }
       const messageClient = createDingTalkOpenApiCardClient({
@@ -153,6 +165,101 @@ async function main(): Promise<void> {
     console.log("[dingtalk-live-smoke] CONNECTED: redacted Stream connection smoke completed.");
   } catch (error) {
     printStatus({ ...redactedStatus("blocked"), durationMs });
+    console.error(`[dingtalk-live-smoke] BLOCKED: ${redactKnownValues(errorMessage(error))}`);
+    process.exitCode = 3;
+  } finally {
+    await adapter.stop();
+  }
+}
+
+async function runLiveCardCallbackSmoke(input: {
+  readonly durationMs: number;
+  readonly resolvedTarget: { target: Target; source: "env" | "captured" | "discovered" };
+}): Promise<void> {
+  const counters = { cardEvents: 0 };
+  let callbackMessageRef: "present" | undefined;
+  let callbackAction: "present" | undefined;
+  const streamClient = createDingTalkStreamClient({
+    clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+    clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+    debug: false,
+  });
+  const adapter = new DingTalkChannelAdapter({ streamClient });
+  adapter.onAction((action) => {
+    counters.cardEvents++;
+    callbackMessageRef = action.messageRef === undefined ? undefined : "present";
+    callbackAction = action.uiAction === undefined ? undefined : "present";
+  });
+  const messageClient = createDingTalkOpenApiCardClient({
+    clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+    clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+    robotCode: process.env.DINGTALK_ROBOT_CODE ?? requiredEnv("DINGTALK_CLIENT_ID"),
+    cardTemplateId: requiredEnv("DINGTALK_CARD_TEMPLATE_ID"),
+    ...(process.env.DINGTALK_CALLBACK_ROUTE_KEY === undefined
+      ? {}
+      : { callbackRouteKey: process.env.DINGTALK_CALLBACK_ROUTE_KEY }),
+  });
+
+  try {
+    await adapter.start();
+    const sent = await messageClient.sendCard({
+      target: input.resolvedTarget.target,
+      card: renderDingTalkApprovalCard({
+        schemaVersion: "approval-card.v1",
+        kind: "command_execution",
+        approvalId: "approval-must-not-be-sent",
+        summary: "Live DingTalk card callback smoke",
+        target: { riskLevel: "high" },
+        actions: [
+          { kind: "allow_once", wirePayload: "v1:ABCDEFGHIJKLMNOP" },
+          { kind: "decline", wirePayload: "v1:QRSTUVWXYZ234567" },
+        ],
+        status: "pending",
+        createdAt: new Date(0),
+      }),
+    });
+    await waitFor(() => counters.cardEvents > 0, input.durationMs);
+    if (counters.cardEvents === 0) {
+      printStatus({
+        ...redactedStatus("blocked"),
+        durationMs: input.durationMs,
+        messageId: "present",
+        targetSource: input.resolvedTarget.source,
+        cardEvents: 0,
+      });
+      console.error(
+        "[dingtalk-live-smoke] BLOCKED: card sent but no Stream card callback arrived before timeout.",
+      );
+      process.exitCode = 3;
+      return;
+    }
+    printStatus({
+      ...redactedStatus("card_callback_seen"),
+      durationMs: input.durationMs,
+      messageId: "present",
+      targetSource: input.resolvedTarget.source,
+      cardEvents: counters.cardEvents,
+      callbackMessageRef,
+      callbackAction,
+    });
+    console.log(
+      "[dingtalk-live-smoke] CARD_CALLBACK_SEEN: redacted live card callback smoke completed.",
+    );
+    await messageClient.updateCard({
+      messageRef: { target: input.resolvedTarget.target, messageId: sent.messageId },
+      card: renderDingTalkApprovalCard({
+        schemaVersion: "approval-card.v1",
+        kind: "command_execution",
+        approvalId: "approval-must-not-be-sent",
+        summary: "Live DingTalk card callback smoke",
+        target: { riskLevel: "high" },
+        actions: [],
+        status: "resolved",
+        createdAt: new Date(0),
+      }),
+    });
+  } catch (error) {
+    printStatus({ ...redactedStatus("blocked"), durationMs: input.durationMs });
     console.error(`[dingtalk-live-smoke] BLOCKED: ${redactKnownValues(errorMessage(error))}`);
     process.exitCode = 3;
   } finally {
@@ -393,6 +500,13 @@ async function sleep(ms: number): Promise<void> {
 async function waitForTarget(read: () => Target | undefined, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (read() === undefined && Date.now() < deadline) {
+    await sleep(100);
+  }
+}
+
+async function waitFor(read: () => boolean, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!read() && Date.now() < deadline) {
     await sleep(100);
   }
 }

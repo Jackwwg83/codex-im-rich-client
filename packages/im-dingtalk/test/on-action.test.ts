@@ -19,6 +19,30 @@ function fixture(name: string): DingTalkStreamEventLike {
   return JSON.parse(readFileSync(join(FIXTURE_DIR, name), "utf8")) as DingTalkStreamEventLike;
 }
 
+function cardCallbackWithParams(params: Record<string, unknown>): DingTalkStreamEventLike {
+  return {
+    headers: {
+      messageId: "stream_card_token_001",
+      topic: DINGTALK_TOPIC_CARD,
+    },
+    data: JSON.stringify({
+      content: JSON.stringify({
+        cardPrivateData: {
+          actionIds: ["btn_allow"],
+          params,
+        },
+      }),
+      corpId: "corp_test",
+      outTrackId: "ding_card_token_001",
+      spaceId: "dtv1.card//IM_ROBOT.staff_private_target",
+      spaceType: "IM_ROBOT",
+      type: "cardCallback",
+      userId: "staff_action_user",
+      userIdType: 1,
+    }),
+  };
+}
+
 class FakeDingTalkStreamClient implements DingTalkStreamClientLike {
   readonly handlers = new Map<string, DingTalkStreamEventHandler>();
 
@@ -88,6 +112,23 @@ describe("DingTalk card action messageRef validation (JAC-84)", () => {
     });
   });
 
+  it("maps CardKit token params without approval metadata companions", () => {
+    const action = normalizeDingTalkRawCardAction(
+      cardCallbackWithParams({ token: "v1:ABCDEFGHIJKLMNOP" }),
+      NOW.getTime(),
+    );
+
+    expect(action).toMatchObject({
+      rawCallbackData: "v1:ABCDEFGHIJKLMNOP",
+      callbackNonce: "ABCDEFGHIJKLMNOP",
+      target: { platform: "dingtalk", chatId: "staff_private_target" },
+      messageRef: {
+        target: { platform: "dingtalk", chatId: "staff_private_target" },
+        messageId: "ding_card_token_001",
+      },
+    });
+  });
+
   it("maps DingTalk public-template agree callbacks through messageRef-scoped actions", () => {
     const action = normalizeDingTalkRawCardAction(
       fixture("card-action-public-template-agree.json"),
@@ -117,6 +158,15 @@ describe("DingTalk card action messageRef validation (JAC-84)", () => {
       rawCallbackData: "dingtalk-template-action:decline",
       callbackNonce: "dingtalk-template-action:decline",
     });
+  });
+
+  it("rejects token callbacks mixed with action metadata instead of falling back", () => {
+    expect(
+      normalizeDingTalkRawCardAction(
+        cardCallbackWithParams({ token: "v1:ABCDEFGHIJKLMNOP", action: "accept" }),
+        NOW.getTime(),
+      ),
+    ).toBeUndefined();
   });
 
   it.each([

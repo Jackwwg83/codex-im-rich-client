@@ -91,6 +91,22 @@ describe("DingTalk callback payload codec (JAC-83)", () => {
     ).toBe(VALID_WIRE_PAYLOAD);
   });
 
+  it("extracts exact payload from DingTalk CardKit private token params", () => {
+    expect(
+      extractDingTalkCardCallbackWirePayload({
+        headers: { messageId: "stream_card_1", topic: DINGTALK_TOPIC_CARD },
+        data: JSON.stringify({
+          content: JSON.stringify({
+            cardPrivateData: {
+              actionIds: ["btn_allow"],
+              params: { token: VALID_WIRE_PAYLOAD },
+            },
+          }),
+        }),
+      }),
+    ).toBe(VALID_WIRE_PAYLOAD);
+  });
+
   it.each([
     undefined,
     "",
@@ -99,7 +115,17 @@ describe("DingTalk callback payload codec (JAC-83)", () => {
     JSON.stringify({ value: { wirePayload: VALID_WIRE_PAYLOAD } }),
     JSON.stringify({ value: "approval-1|decline|nonce" }),
     JSON.stringify({ value: VALID_WIRE_PAYLOAD, approvalId: "approval-1" }),
+    JSON.stringify({ wirePayload: VALID_WIRE_PAYLOAD, nonce: "nonce-must-not-ride-along" }),
+    JSON.stringify({ token: VALID_WIRE_PAYLOAD, kind: "command_execution" }),
     JSON.stringify({ action: "decline" }),
+    JSON.stringify({
+      content: JSON.stringify({
+        cardPrivateData: {
+          actionIds: ["btn_allow"],
+          params: { token: VALID_WIRE_PAYLOAD, action: "accept" },
+        },
+      }),
+    }),
   ])("fails closed for malformed Stream card callback data %#", (data) => {
     const event: DingTalkStreamEventLike =
       data === undefined
