@@ -227,6 +227,15 @@
     deprecation warnings. SQLite audit since restart shows only startup
     revocation of old DingTalk callback tokens, with no new IM send performed
     during this heartbeat.
+  - latest heartbeat - 2026-05-05 17:14 SGT: `git status --short` was clean at
+    `e85f97e`; `pnpm launchd:status` still reported pid `3567`, startedAt
+    `2026-05-05T08:08:24.081Z`, `codexThreads=0`, and
+    `pendingApprovals=0`. `daemon-status.json` still had `lastFatal=null` and
+    `supervisorFailureCount=0`. `pnpm dingtalk:readiness` remained `ready`
+    with enabled adapter, present Keychain-backed client secret, present card
+    template, and DingTalk allowlist entries; stdout/stderr tails showed no new
+    regression after pid `3567` startup, and SQLite audit had no events after
+    the restart timestamp.
 - **Next exact action:** Finish DingTalk real approval callback acceptance with
   one real user/client CardKit click that emits Stream
   `/v1.0/card/instances/callback`; synthetic macOS/Computer Use clicks have not
