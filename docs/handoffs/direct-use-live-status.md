@@ -217,9 +217,20 @@
     installed daemon hash still matched `dist/codex-im-daemon.mjs`
     (`0c3304e77d52`), installed bridge redaction scan passed, stdout showed no
     new pid `62312` errors, and stderr contained only Node deprecation warnings.
-- **Next exact action:** Finish DingTalk real inbound/card direct-use acceptance
-  once a usable DingTalk client/session can produce one real inbound robot
-  message and one real callback click.
+  - latest heartbeat - 2026-05-05 16:40 SGT: `git status --short` was clean at
+    `4feca87`; `pnpm launchd:status` reported pid `3567`, startedAt
+    `2026-05-05T08:08:24.081Z`, `codexThreads=0`, and
+    `pendingApprovals=0`. `daemon-status.json` had `lastFatal=null` and
+    `supervisorFailureCount=0`. The latest stdout evidence shows redacted
+    Telegram/Lark/DingTalk secret resolution, DingTalk Stream `connect
+    success`, and `codex-im daemon started`; stderr still contains only Node
+    deprecation warnings. SQLite audit since restart shows only startup
+    revocation of old DingTalk callback tokens, with no new IM send performed
+    during this heartbeat.
+- **Next exact action:** Finish DingTalk real approval callback acceptance with
+  one real user/client CardKit click that emits Stream
+  `/v1.0/card/instances/callback`; synthetic macOS/Computer Use clicks have not
+  triggered the current DingTalk desktop client.
 
 ## 2. Why This Exists
 
