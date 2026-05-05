@@ -25,7 +25,8 @@
 > `cardEvents=0` in the current desktop client. A follow-up patch fixed
 > DingTalk terminal text output so text message refs append via the DingTalk
 > session reply path instead of failing CardKit `editText` with
-> `param.cardNotExist`.
+> `param.cardNotExist`; this is append semantics, not true in-place text
+> editing, so long streaming turns may produce multiple DingTalk chat messages.
 
 ---
 
@@ -385,9 +386,10 @@ Stop and treat as a blocker if:
   showed `param.cardNotExist` for CardKit `editText` against text replies.
   `sendText` now returns explicit `dingtalk-text:*` refs, and `editText` for
   those refs appends via the DingTalk session reply path while approval-card
-  `updateCard` remains on CardKit. Targeted DingTalk/daemon tests and
-  `pnpm typecheck` passed; the rebuilt bridge bundle is installed under
-  launchd pid `44722`.
+  `updateCard` remains on CardKit. This is append semantics rather than true
+  in-place editing, so long DingTalk streaming turns may produce multiple chat
+  messages. Targeted DingTalk/daemon tests and `pnpm typecheck` passed; the
+  rebuilt bridge bundle is installed under launchd pid `44722`.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed
