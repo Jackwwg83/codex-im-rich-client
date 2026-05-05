@@ -26,7 +26,11 @@
 > now green for both prompt/reply and `/status`; an approval card renders and
 > binds callback tokens. The remaining DingTalk gap is one real CardKit
 > callback click, because macOS/Computer Use synthetic clicks did not trigger a
-> card callback in the current desktop client.
+> card callback in the current desktop client. A follow-up 2026-05-05 real
+> DingTalk write prompt reproduced card render + token binding, confirmed the
+> synthetic click still produced no callback, rejected an invalid local
+> `callback_route_key` experiment, and added startup cleanup for both `issued`
+> and `bound` callback tokens left by failed send/bind paths.
 
 ## 1. Current State
 
@@ -252,6 +256,20 @@
     dingtalk:readiness` remained `ready`; daemon stdout/stderr tails showed no
     new regression after pid `3567` startup, and SQLite audit still had no
     events after the restart timestamp.
+  - latest evidence - 2026-05-05 19:05 SGT: A fresh real DingTalk write prompt
+    under launchd rendered the approval card and bound four callback tokens to
+    the DingTalk card `messageRef`; the target file remained absent after
+    synthetic macOS/Computer Use clicks on `同意`, and SQLite audit recorded no
+    card callback. A temporary local `callback_route_key = "codex_im"`
+    experiment was rolled back because the current DingTalk app did not emit a
+    new delivered card and left four `issued` / unbound tokens. The daemon now
+    revokes both `issued` and `bound` callback tokens on startup before adapter
+    input, so failed send/bind residue fails closed instead of surviving a
+    restart until expiry. Targeted callback-token and daemon tests passed, then
+    `pnpm test`, `pnpm lint`, `pnpm protocol:check`, and sequential `pnpm
+    typecheck` passed. The patched bundle was rebuilt/installed, launchd
+    restarted to pid `21702`, and the previously issued/unbound DingTalk tokens
+    were observed as `revoked` with fresh startup-revocation audit rows.
 - **Next exact action:** Finish DingTalk real approval callback acceptance with
   one real user/client CardKit click that emits Stream
   `/v1.0/card/instances/callback`; synthetic macOS/Computer Use clicks have not
@@ -300,7 +318,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4 plus real Telegram Web and Feishu Web direct-use acceptance evidence |
-| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk installed readiness and OpenAPI card send/update are green; DingTalk direct-use remains pending on a usable client/session for real inbound and callback-click evidence |
+| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk installed readiness, OpenAPI card send/update, real inbound prompt/status, and approval-card delivery are green; DingTalk direct-use remains pending on one real CardKit callback click |
 
 ## 5. Active Redlines
 
@@ -544,6 +562,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-05 12:55 SGT heartbeat check | `git status --short` clean at `e8f70e8`; `pnpm launchd:status` green with pid `59693`, startedAt `2026-05-05T03:54:50.886Z`, `codexThreads=0`, and `pendingApprovals=0`; `launchctl print` reports `state = running`; current-pid stdout tail contains redacted Telegram/Lark/DingTalk secret resolution, DingTalk Stream `connect success`, and daemon startup only. Current-pid stderr contains only Node deprecation warnings. Next local non-external gap remains DingTalk desktop send/click automation behind macOS Accessibility permission |
 | 2026-05-05 13:28 SGT heartbeat check | `git status --short` clean at `2204a17`; `pnpm launchd:status` green with the same pid `59693`, startedAt `2026-05-05T03:54:50.886Z`, `codexThreads=0`, and `pendingApprovals=0`; `launchctl print` still reports `state = running`, `runs = 16`, and pid `59693`; current-pid stdout remains redacted startup + DingTalk Stream `connect success` only, and current-pid stderr has only Node deprecation warnings. Next local non-external gap is unchanged: DingTalk real desktop send/click needs an Accessibility-unblocked path |
 | 2026-05-05 14:00 SGT heartbeat check | `git status --short` clean at `9a6a29a`; `pnpm launchd:status` green with the same pid `59693`, startedAt `2026-05-05T03:54:50.886Z`, `codexThreads=0`, and `pendingApprovals=0`; `launchctl print` still reports `state = running`, `runs = 16`, and pid `59693`. `daemon.log` and `daemon.err.log` mtimes remain at the current-pid startup time, so no new daemon output appeared during this interval. `pnpm dingtalk:readiness` remains ready. Next local non-external gap remains DingTalk desktop send/click behind macOS Accessibility permission |
+| 2026-05-05 19:05 SGT real callback follow-up | Fresh real DingTalk write prompt rendered the approval card and bound callback tokens, but synthetic clicks still produced no Stream callback and the target file stayed absent. A local `callback_route_key = "codex_im"` experiment was rolled back after it produced no delivered card and left `issued` / unbound tokens. Startup cleanup now revokes both `issued` and `bound` callback tokens before adapter input; targeted tests plus full gates passed, the patched bundle was installed, and launchd pid `21702` revoked the live residue on startup. |
 
 Latest live Telegram acceptance evidence:
 

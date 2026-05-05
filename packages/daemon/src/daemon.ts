@@ -172,6 +172,7 @@ export interface DaemonCallbackTokenRepository {
   forceMarkUsed?(tokenHash: string, fields?: CallbackTokenCasFields): CallbackTokenRecord | unknown;
   revokeBoundSiblings?(approvalId: string, exceptTokenHash: string): readonly CallbackTokenRecord[];
   revokeBound?(): readonly CallbackTokenRecord[];
+  revokeActive?(): readonly CallbackTokenRecord[];
   pruneExpired?(now: string, limit?: number): readonly CallbackTokenRecord[];
   revokeStuckIssued?(
     cutoff: string,
@@ -652,7 +653,10 @@ export class Daemon {
   }
 
   #revokeStartupCallbackTokens(): void {
-    const records = this.options.callbackTokenRepository?.revokeBound?.() ?? [];
+    const records =
+      this.options.callbackTokenRepository?.revokeActive?.() ??
+      this.options.callbackTokenRepository?.revokeBound?.() ??
+      [];
     for (const record of records) {
       this.#emitAuditEvent("approval.callback_startup_revoked", {
         approvalId: record.approvalId,

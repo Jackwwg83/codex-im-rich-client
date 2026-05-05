@@ -149,7 +149,7 @@ describe("Daemon skeleton (T14)", () => {
     );
   });
 
-  it("revokes stale bound callback tokens before accepting adapter input on startup", async () => {
+  it("revokes stale active callback tokens before accepting adapter input on startup", async () => {
     const order: string[] = [];
     const broker = {
       attach: vi.fn(),
@@ -164,8 +164,8 @@ describe("Daemon skeleton (T14)", () => {
     };
     const callbackTokenRepository = {
       insert: vi.fn(),
-      revokeBound: vi.fn(() => {
-        order.push("callbackTokens.revokeBound");
+      revokeActive: vi.fn(() => {
+        order.push("callbackTokens.revokeActive");
         return [
           {
             tokenHash: "hash",
@@ -177,6 +177,17 @@ describe("Daemon skeleton (T14)", () => {
             status: "revoked" as const,
             createdAt: "2026-05-03T12:12:33.946Z",
             expiresAt: "2026-05-03T12:42:33.946Z",
+          },
+          {
+            tokenHash: "issued-hash",
+            approvalId: "approval-stale-issued",
+            action: "decline" as const,
+            callbackNonce: "nonce-issued",
+            target: { platform: "dingtalk", chatId: "staff-1" },
+            actor: { kind: "im" as const },
+            status: "revoked" as const,
+            createdAt: "2026-05-03T12:12:34.946Z",
+            expiresAt: "2026-05-03T12:42:34.946Z",
           },
         ];
       }),
@@ -196,11 +207,18 @@ describe("Daemon skeleton (T14)", () => {
 
     await daemon.start();
 
-    expect(order).toEqual(["callbackTokens.revokeBound", "adapter.start"]);
+    expect(order).toEqual(["callbackTokens.revokeActive", "adapter.start"]);
     expect(audit.insertBestEffort).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "approval.callback_startup_revoked",
         approvalId: "approval-stale",
+        result: "revoked",
+      }),
+    );
+    expect(audit.insertBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "approval.callback_startup_revoked",
+        approvalId: "approval-stale-issued",
         result: "revoked",
       }),
     );

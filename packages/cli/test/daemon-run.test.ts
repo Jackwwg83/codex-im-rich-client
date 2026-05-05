@@ -97,6 +97,13 @@ describe("daemon run safety rails", () => {
     expect(source).toContain("switchCurrent");
   });
 
+  it("wires active callback-token startup cleanup into production daemon storage", () => {
+    const source = readFileSync(join(import.meta.dirname, "../src/daemon-run.ts"), "utf8");
+
+    expect(source).toContain("revokeActive: ()");
+    expect(source).toContain(".callbackTokens.revokeActive()");
+  });
+
   it("wires Telegram, Lark, and DingTalk production adapters behind one daemon surface", () => {
     const source = readFileSync(join(import.meta.dirname, "../src/daemon-run.ts"), "utf8");
 

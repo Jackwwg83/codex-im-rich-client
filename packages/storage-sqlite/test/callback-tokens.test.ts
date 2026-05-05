@@ -329,6 +329,52 @@ describe("CallbackTokenRepository (T6d)", () => {
     }
   });
 
+  it("revokes active issued and bound tokens on daemon startup while preserving terminal rows", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new CallbackTokenRepository(db);
+      const issuedHash = hashCallbackToken("startup-active-issued");
+      const boundHash = hashCallbackToken("startup-active-bound");
+      const usedHash = hashCallbackToken("startup-active-used");
+      const expiredHash = hashCallbackToken("startup-active-expired");
+      for (const [tokenHash, approvalId] of [
+        [issuedHash, "approval-issued"],
+        [boundHash, "approval-bound"],
+        [usedHash, "approval-used"],
+        [expiredHash, "approval-expired"],
+      ] as const) {
+        repo.insert({
+          tokenHash,
+          approvalId,
+          action: "allow_once",
+          callbackNonce: "nonce-startup-active",
+          target: { platform: "dingtalk", chatId: "staff-1" },
+          actor: { kind: "im" },
+          createdAt: "2026-05-02T18:10:00.000Z",
+          expiresAt: "2026-05-02T18:40:00.000Z",
+        });
+      }
+      repo.casUpdate(boundHash, "issued", "bound");
+      repo.casUpdate(usedHash, "issued", "bound");
+      repo.casUpdate(usedHash, "bound", "used");
+      repo.casUpdate(expiredHash, "issued", "expired");
+
+      expect(repo.revokeActive()).toEqual([
+        expect.objectContaining({ tokenHash: issuedHash, status: "revoked" }),
+        expect.objectContaining({ tokenHash: boundHash, status: "revoked" }),
+      ]);
+      expect(repo.findByHash(issuedHash)).toMatchObject({ status: "revoked" });
+      expect(repo.findByHash(boundHash)).toMatchObject({ status: "revoked" });
+      expect(repo.findByHash(usedHash)).toMatchObject({ status: "used" });
+      expect(repo.findByHash(expiredHash)).toMatchObject({ status: "expired" });
+      expect(repo.revokeActive()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("expires stale issued tokens left behind by sendCard failures", () => {
     const db = openDatabase(":memory:");
     try {

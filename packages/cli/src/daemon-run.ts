@@ -147,6 +147,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
           approvalId,
           exceptHash,
         ),
+      revokeActive: () => asRuntimeStorage(storageBox.current).callbackTokens.revokeActive(),
       revokeBound: () => asRuntimeStorage(storageBox.current).callbackTokens.revokeBound(),
       pruneExpired: (now, limit) =>
         asRuntimeStorage(storageBox.current).callbackTokens.pruneExpired(now, limit),
