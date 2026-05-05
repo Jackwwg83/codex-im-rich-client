@@ -29,6 +29,7 @@ describe("dingtalk-readiness", () => {
         "client_secret: pass (present via Keychain service codex-im-bridge-dingtalk)",
         "card_template_id: fail (missing)",
         "robot_code: info (derived_from_client_id)",
+        "approval_callback_roundtrip: info (not checked; requires DINGTALK_LIVE_CARD_CALLBACK=1 with a real client click)",
         "security.allowlist: fail (no dingtalk allowed user/chat)",
         "project.allowlist: fail (no project allows dingtalk user/chat)",
       ].join("\n"),

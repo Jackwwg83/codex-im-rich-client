@@ -68,6 +68,11 @@ export function evaluateDingTalkReadiness(input: DingTalkReadinessInput): DingTa
       detail: adapter.robotCode === undefined ? "derived_from_client_id" : "present",
     },
     {
+      name: "approval_callback_roundtrip",
+      status: "info",
+      detail: "not checked; requires DINGTALK_LIVE_CARD_CALLBACK=1 with a real client click",
+    },
+    {
       name: "security.allowlist",
       status: globalAllowed ? "pass" : "fail",
       detail: globalAllowed ? "dingtalk actor present" : "no dingtalk allowed user/chat",
