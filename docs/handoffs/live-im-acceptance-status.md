@@ -390,6 +390,20 @@ Stop and treat as a blocker if:
   in-place editing, so long DingTalk streaming turns may produce multiple chat
   messages. Targeted DingTalk/daemon tests and `pnpm typecheck` passed; the
   rebuilt bridge bundle is installed under launchd pid `44722`.
+- 2026-05-05 21:00 SGT heartbeat: `git status --short --branch` was clean at
+  `4432414` and synced to `origin/codex/live-im-acceptance`. `pnpm
+  launchd:status` reported launchd pid `44722`, started at
+  `2026-05-05T11:59:46.040Z`, with `pendingApprovals=0`; `pnpm
+  dingtalk:readiness` remained `ready` and still labels the approval callback
+  round-trip as info-only. Current-pid daemon stdout only showed redacted
+  secret resolution, DingTalk Stream `connect success`, and daemon startup;
+  stderr only showed Node/SDK deprecation warnings. SQLite recorded zero
+  callback audit rows after the current pid startup, and the latest DingTalk
+  callback tokens were expired or previously revoked, not `used`. DingTalk
+  Desktop could start a process but exposed zero windows, the screen was empty,
+  DingTalk Web was still on the maintenance page, and the card editor tab was
+  not a chat client; no real client click path was available, so JAC-225
+  remains open.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed

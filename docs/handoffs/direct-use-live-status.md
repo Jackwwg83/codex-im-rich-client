@@ -279,6 +279,20 @@
     typecheck` passed. The patched bundle was rebuilt/installed, launchd
     restarted to pid `21702`, and the previously issued/unbound DingTalk tokens
     were observed as `revoked` with fresh startup-revocation audit rows.
+  - latest heartbeat - 2026-05-05 21:00 SGT: `git status --short --branch`
+    was clean at `4432414` and synced to
+    `origin/codex/live-im-acceptance`. `pnpm launchd:status` reported pid
+    `44722`, startedAt `2026-05-05T11:59:46.040Z`, `codexThreads=0`, and
+    `pendingApprovals=0`; `pnpm dingtalk:readiness` remained `ready` with
+    `approval_callback_roundtrip` explicitly marked info-only. The current-pid
+    daemon stdout tail had only redacted secret resolution, DingTalk Stream
+    `connect success`, and daemon startup; stderr had only Node/SDK
+    deprecation warnings. SQLite showed no callback audit rows after the
+    current pid startup and no `used` DingTalk callback token from a real
+    click. DingTalk Desktop launched a process but exposed zero accessible
+    windows and the screen remained empty; Chrome still had only the DingTalk
+    card editor and the DingTalk Web maintenance page. No real DingTalk client
+    click path was available, so JAC-225 stays open.
 - **Next exact action:** Finish DingTalk real approval callback acceptance with
   one real user/client CardKit click that emits Stream
   `/v1.0/card/instances/callback`; synthetic macOS/Computer Use clicks have not
