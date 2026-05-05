@@ -165,6 +165,14 @@
     Lark, and DingTalk secret resolution, DingTalk Stream `connect success`,
     and `codex-im daemon started`. Stderr contained only Node deprecation
     warnings. `pnpm dingtalk:readiness` remained ready.
+  - latest heartbeat - 2026-05-04 23:05 SGT: `git status --short` was clean at
+    `55060c3`; `pnpm launchd:status` still reported pid `3294`, startedAt
+    `2026-05-04T13:57:43.488Z`, `codexThreads=0`, and `pendingApprovals=0`.
+    `launchctl print` still reported `state = running`; the latest current-pid
+    stdout evidence remains redacted secret resolution, DingTalk Stream
+    `connect success`, and `codex-im daemon started`. Stderr still contained
+    only Node deprecation warnings. `pnpm dingtalk:readiness` remained ready
+    when run outside the sandboxed IPC restriction.
   - `720c586` - launchd heartbeat soak evidence recorded.
   - latest heartbeat - 2026-05-04 18:59 SGT: `git status --short` was clean,
     `pnpm launchd:status` reported pid `27377` with `pendingApprovals=0`, the
@@ -477,6 +485,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-04 20:09 SGT local readiness check | still expected blocked with the same local config gaps; no additional launchd/local regression was found |
 | 2026-05-04 21:58 SGT installed readiness check | ready after redacted config update; latest bundle installed and launchd restarted to pid `3294` with `pendingApprovals=0`; installed bridge redaction scan passed |
 | 2026-05-04 22:31 SGT heartbeat check | launchd still green for pid `3294` with `pendingApprovals=0`; `launchctl print` still reports `state = running`; `pnpm dingtalk:readiness` remains ready; latest daemon stdout has redacted startup plus DingTalk Stream `connect success`, and stderr has only Node deprecation warnings |
+| 2026-05-04 23:05 SGT heartbeat check | launchd still green for pid `3294` with `pendingApprovals=0`; `launchctl print` still reports `state = running`; `pnpm dingtalk:readiness` remains ready; no new current-pid daemon errors were found in stdout/stderr tails |
 
 Latest live Telegram acceptance evidence:
 
