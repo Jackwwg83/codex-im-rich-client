@@ -11,6 +11,10 @@ export interface DingTalkApprovalCardJson {
   readonly schema: "codex-im.dingtalk.approval-card.v1";
   readonly callbackType: typeof DINGTALK_CARD_CALLBACK_TYPE;
   readonly title: string;
+  readonly kind: ApprovalCardInput["kind"];
+  readonly summary: string;
+  readonly riskLevel: ApprovalCardInput["target"]["riskLevel"];
+  readonly status: ApprovalCardInput["status"];
   readonly body: readonly DingTalkApprovalCardBlock[];
   readonly actions: readonly DingTalkApprovalCardButton[];
 }
@@ -31,6 +35,10 @@ export function renderDingTalkApprovalCard(card: ApprovalCardInput): DingTalkApp
     schema: "codex-im.dingtalk.approval-card.v1",
     callbackType: DINGTALK_CARD_CALLBACK_TYPE,
     title: "Codex approval",
+    kind: card.kind,
+    summary: card.summary,
+    riskLevel: card.target.riskLevel,
+    status: card.status,
     body: [
       {
         type: "markdown",

@@ -88,6 +88,37 @@ describe("DingTalk card action messageRef validation (JAC-84)", () => {
     });
   });
 
+  it("maps DingTalk public-template agree callbacks through messageRef-scoped actions", () => {
+    const action = normalizeDingTalkRawCardAction(
+      fixture("card-action-public-template-agree.json"),
+      NOW.getTime(),
+    );
+
+    expect(action).toMatchObject({
+      uiAction: { kind: "allow_once" },
+      rawCallbackData: "dingtalk-template-action:allow_once",
+      callbackNonce: "dingtalk-template-action:allow_once",
+      target: { platform: "dingtalk", chatId: "staff_public_target" },
+      messageRef: {
+        target: { platform: "dingtalk", chatId: "staff_public_target" },
+        messageId: "ding_card_public_001",
+      },
+    });
+  });
+
+  it("maps DingTalk public-template reject callbacks through messageRef-scoped actions", () => {
+    const action = normalizeDingTalkRawCardAction(
+      fixture("card-action-public-template-reject.json"),
+      NOW.getTime(),
+    );
+
+    expect(action).toMatchObject({
+      uiAction: { kind: "decline" },
+      rawCallbackData: "dingtalk-template-action:decline",
+      callbackNonce: "dingtalk-template-action:decline",
+    });
+  });
+
   it.each([
     "card-action-missing-message-ref.json",
     "card-action-ambiguous-action-id.json",

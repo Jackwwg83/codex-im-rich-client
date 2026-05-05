@@ -392,19 +392,36 @@ function cardParamMap(card: DingTalkApprovalCardJson): Record<string, string> {
     }),
   );
   const markdown = card.body.map((block) => block.text).join("\n\n");
+  const templateStatus = dingtalkTemplateStatus(card.status);
   return {
     title: card.title,
+    type: card.kind,
+    amount: card.riskLevel,
+    reason: card.summary,
     markdown,
     content: markdown,
-    lastMessage: card.title,
-    flowStatus: "3",
-    status: card.body.map((block) => block.text).join("\n"),
+    lastMessage: `${card.title}: ${card.summary}`,
+    flowStatus: card.status === "pending" ? "1" : "3",
+    status: templateStatus,
     imageList: "[]",
     selectedIndex: "",
     actions_json: JSON.stringify(card.actions),
     card_json: JSON.stringify(card),
     ...actionSlots,
   };
+}
+
+function dingtalkTemplateStatus(status: DingTalkApprovalCardJson["status"]): string {
+  switch (status) {
+    case "pending":
+      return "待处理";
+    case "resolved":
+      return "已处理";
+    case "expired":
+      return "已过期";
+    case "transport_lost":
+      return "已中断";
+  }
 }
 
 interface JsonRequestOptions {

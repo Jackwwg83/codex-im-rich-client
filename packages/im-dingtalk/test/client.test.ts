@@ -141,7 +141,12 @@ describe("DingTalk OpenAPI card client", () => {
         target: { platform: "dingtalk", chatId: "cid_card_group" },
         messageId: sent.messageId,
       },
-      card: { ...CARD, body: [{ type: "markdown", text: "**Status:** resolved" }], actions: [] },
+      card: {
+        ...CARD,
+        status: "resolved",
+        body: [{ type: "markdown", text: "**Status:** resolved" }],
+        actions: [],
+      },
     });
 
     expect(sent).toEqual({ messageId: "codex-im-fixed" });
@@ -161,8 +166,12 @@ describe("DingTalk OpenAPI card client", () => {
       cardData: {
         cardParamMap: {
           title: "Codex approval",
+          type: "command_execution",
+          amount: "high",
+          reason: "Run pnpm test",
+          status: "待处理",
           content: expect.stringContaining("Run pnpm test"),
-          flowStatus: "3",
+          flowStatus: "1",
           selectedIndex: "",
           action_1_value: "v1:ABCDEFGHIJKLMNOP",
           action_2_value: "",
@@ -175,6 +184,14 @@ describe("DingTalk OpenAPI card client", () => {
       cardUpdateOptions: {
         updateCardDataByKey: true,
         updatePrivateDataByKey: true,
+      },
+    });
+    expect(JSON.parse(String(calls[2]?.init?.body))).toMatchObject({
+      cardData: {
+        cardParamMap: {
+          status: "已处理",
+          flowStatus: "3",
+        },
       },
     });
     expect(String(calls[1]?.init?.headers)).not.toContain("ding_test_secret");

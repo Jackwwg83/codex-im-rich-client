@@ -124,6 +124,52 @@ describe("CallbackTokenRepository (T6d)", () => {
     }
   });
 
+  it("looks up a single bound token by messageRef and action for template-only callbacks", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new CallbackTokenRepository(db);
+      const allowHash = hashCallbackToken("template-allow-token");
+      const declineHash = hashCallbackToken("template-decline-token");
+      for (const [tokenHash, action] of [
+        [allowHash, "allow_once"],
+        [declineHash, "decline"],
+      ] as const) {
+        repo.insert({
+          tokenHash,
+          approvalId: "approval-template",
+          action,
+          callbackNonce: `nonce-${action}`,
+          target: { platform: "dingtalk", chatId: "staff-1" },
+          actor: { kind: "im" },
+          createdAt: "2026-05-02T16:20:00.000Z",
+          expiresAt: "2026-05-02T16:50:00.000Z",
+        });
+        repo.casUpdate(tokenHash, "issued", "bound", {
+          messageRef: { chatId: "staff-1", messageId: "ding-card-1" },
+        });
+      }
+
+      expect(
+        repo.findBoundByMessageRefAction({
+          target: { platform: "dingtalk", chatId: "staff-1" },
+          messageRef: { chatId: "staff-1", messageId: "ding-card-1" },
+          action: "allow_once",
+        }),
+      ).toMatchObject({ tokenHash: allowHash, action: "allow_once", status: "bound" });
+      expect(
+        repo.findBoundByMessageRefAction({
+          target: { platform: "dingtalk", chatId: "staff-1" },
+          messageRef: { chatId: "staff-1", messageId: "ding-card-1" },
+          action: "allow_session",
+        }),
+      ).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
   it("round-trips every allowed callback token action and excludes cancel", () => {
     expect(CALLBACK_ACTIONS).not.toContain("cancel" as CallbackTokenAction);
 

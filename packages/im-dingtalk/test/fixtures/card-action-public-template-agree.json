@@ -1,0 +1,7 @@
+{
+  "headers": {
+    "messageId": "stream_card_public_agree_001",
+    "topic": "/v1.0/card/instances/callback"
+  },
+  "data": "{\"content\":\"{\\\"cardPrivateData\\\":{\\\"actionIds\\\":[\\\"1\\\"],\\\"params\\\":{\\\"action\\\":\\\"accept\\\"}}}\",\"corpId\":\"corp_test\",\"outTrackId\":\"ding_card_public_001\",\"spaceId\":\"dtv1.card//IM_ROBOT.staff_public_target\",\"spaceType\":\"IM_ROBOT\",\"type\":\"cardCallback\",\"userId\":\"staff_action_user\",\"userIdType\":1}"
+}

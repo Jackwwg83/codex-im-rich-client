@@ -37,11 +37,15 @@ export function normalizeDingTalkRawCardAction(
   const request = parseCardRequest(event.data);
   const content = parseCardContent(request?.content);
   const actionId = singleActionId(content);
-  const rawCallbackData = extractDingTalkCardCallbackWirePayload(event);
+  const actionParam = actionParamValue(content);
+  const rawCallbackData =
+    extractDingTalkCardCallbackWirePayload(event) ??
+    templateActionWirePayload(actionParam ?? actionId);
   const outTrackId = stringField(request?.outTrackId);
   const spaceId = stringField(request?.spaceId);
   const spaceType = stringField(request?.spaceType);
   const senderUserId = stringField(request?.userId);
+  const actionKey = actionId ?? actionParam;
 
   if (
     streamMessageId === undefined ||
@@ -51,7 +55,7 @@ export function normalizeDingTalkRawCardAction(
     spaceId === undefined ||
     spaceType === undefined ||
     senderUserId === undefined ||
-    actionId === undefined
+    actionKey === undefined
   ) {
     return undefined;
   }
@@ -61,28 +65,84 @@ export function normalizeDingTalkRawCardAction(
     return undefined;
   }
 
+  const uiAction = templateUiAction(actionParam ?? actionId);
   const target: Target = { platform: "dingtalk", chatId };
   const receivedAt = new Date(nowMs);
   return {
     approvalId: "<opaque>",
-    uiAction: { kind: "decline" },
+    uiAction: uiAction ?? { kind: "decline" },
     target,
     sender: { userId: senderUserId },
     messageRef: { target, messageId: outTrackId },
-    callbackNonce: rawCallbackData.slice("v1:".length),
+    callbackNonce: callbackNonceForRawCallbackData(rawCallbackData),
     rawCallbackData,
     receivedAt,
     callbackHandle: encodeDingTalkCallbackHandle(streamMessageId, outTrackId, receivedAt),
-    idempotencyKey: dingtalkCardActionIdempotencyKey(streamMessageId, outTrackId, actionId),
+    idempotencyKey: dingtalkCardActionIdempotencyKey(streamMessageId, outTrackId, actionKey),
     raw: {
       topic: DINGTALK_TOPIC_CARD,
       streamMessageId: REDACTED_DINGTALK_ID,
       outTrackId: REDACTED_DINGTALK_ID,
       spaceId: REDACTED_DINGTALK_ID,
       spaceType,
-      actionId,
+      actionId: actionKey,
     },
   };
+}
+
+function callbackNonceForRawCallbackData(rawCallbackData: string): string {
+  return rawCallbackData.startsWith("v1:") ? rawCallbackData.slice("v1:".length) : rawCallbackData;
+}
+
+function templateActionWirePayload(actionId: string | undefined): string | undefined {
+  const uiAction = templateUiAction(actionId);
+  if (uiAction === undefined) {
+    return undefined;
+  }
+  return `dingtalk-template-action:${uiAction.kind}`;
+}
+
+function templateUiAction(
+  actionId: string | undefined,
+): { kind: "allow_once" } | { kind: "decline" } | undefined {
+  if (actionId === undefined) {
+    return undefined;
+  }
+  const normalized = actionId.toLowerCase().replaceAll(/[^a-z0-9\u4e00-\u9fff]/g, "");
+  if (
+    [
+      "agree",
+      "accept",
+      "allow",
+      "approve",
+      "confirm",
+      "ok",
+      "yes",
+      "btnagree",
+      "btnaccept",
+      "同意",
+      "通过",
+    ].includes(normalized)
+  ) {
+    return { kind: "allow_once" };
+  }
+  if (
+    [
+      "reject",
+      "refuse",
+      "decline",
+      "deny",
+      "disagree",
+      "notagree",
+      "btnreject",
+      "btnrefuse",
+      "拒绝",
+      "驳回",
+    ].includes(normalized)
+  ) {
+    return { kind: "decline" };
+  }
+  return undefined;
 }
 
 export function encodeDingTalkCallbackHandle(
@@ -165,6 +225,12 @@ function singleActionId(content: Record<string, unknown> | undefined): string | 
   }
   const actionId = actionIds[0];
   return typeof actionId === "string" && actionId.length > 0 ? actionId : undefined;
+}
+
+function actionParamValue(content: Record<string, unknown> | undefined): string | undefined {
+  const cardPrivateData = asRecord(content?.cardPrivateData);
+  const params = asRecord(cardPrivateData?.params);
+  return stringField(params?.action);
 }
 
 function chatIdFromSpace(spaceId: string, spaceType: string): string | undefined {

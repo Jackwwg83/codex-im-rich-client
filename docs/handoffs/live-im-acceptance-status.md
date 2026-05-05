@@ -17,9 +17,10 @@
 > includes DingTalk's top-level `userId` alongside `userIdType=1`, and the
 > redacted live OpenAPI card send/update gate passes with a contact-discovered
 > enterprise `userid`. The latest gate re-run used the published template's
-> required parameter shape. DingTalk real inbound/card direct-use still needs
-> a desktop send plus real callback click; current automation is blocked by
-> macOS Accessibility permission and DingTalk Web redirects to maintenance.
+> required parameter shape. DingTalk real desktop inbound now passes prompt/reply
+> and `/status`; approval card delivery creates bound callback tokens. The
+> remaining DingTalk gap is one real CardKit callback click, because synthetic
+> macOS/Computer Use clicks did not trigger the current desktop client.
 
 ---
 
@@ -42,8 +43,10 @@
   optional `robot_code` override, IM_ROBOT `userId` delivery, redacted
   contact-discovered target, published-template parameter alignment, and
   fail-closed delivery-result diagnostics; real installed config/readiness is
-  now green. Inbound/card direct-use still needs a usable DingTalk desktop
-  click path plus real callback click evidence.
+  now green. Real DingTalk desktop inbound now passes prompt/reply and
+  `/status`; approval card delivery creates bound callback tokens. The
+  remaining DingTalk gap is a real CardKit callback click from a client path
+  that emits Stream `/v1.0/card/instances/callback`.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -55,7 +58,7 @@
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, and installed DingTalk readiness is green. DingTalk direct-use inbound/card remains pending on a desktop-send path, one real inbound message, and real callback click validation.
+Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, installed DingTalk readiness is green, and real DingTalk desktop inbound passes prompt/reply plus /status. DingTalk approval card delivery binds callback tokens, but the final real CardKit callback click remains pending because synthetic macOS/Computer Use clicks did not trigger a Stream card callback in the current desktop client.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -99,7 +102,9 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `card_template_id` is configured, deriving robot code from AppKey/client id unless `robot_code` overrides it; create/deliver includes DingTalk `userIdType=1` and top-level IM_ROBOT `userId`; HTTP/code/success=false/deliverResults failures all fail closed with redacted diagnostics |
 | DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 ... pnpm smoke:dingtalk-live` | pass | `Card.Instance.Write` is open; contact-discovered enterprise `userid` plus an OpenAPI-usable card template produced redacted `card_updated` with message id presence only; re-run on 2026-05-05 after published-template parameter alignment remained green |
 | DingTalk installed readiness | `pnpm dingtalk:readiness` + launchd restart | pass | installed config now has DingTalk enabled with present client id, Keychain secret, card template id, and global/project allowlist entries; latest daemon bundle restarted under launchd with `pendingApprovals=0` and redaction scan passed |
-| DingTalk real inbound/card direct-use | real user message and approval/card round-trip | pending | DingTalk desktop session is visible and configured, but automated send/click is blocked by a macOS Accessibility permission prompt; DingTalk Web redirects to a maintenance page. Needs one real desktop send and one callback click after that local UI permission/path is available |
+| DingTalk real inbound prompt/status | real DingTalk desktop prompt and `/status` through installed launchd daemon | pass | desktop prompt returned exactly `DINGTALK-FRESH-1557`; `/status` returned `target: dingtalk chat`, `binding: bound`, `project: codex-im`, and `pending approvals: 0` |
+| DingTalk approval card delivery | real write prompt renders card and binds callback tokens | partial | real write prompt rendered the published-template approval card and SQLite bound four callback tokens to the DingTalk card `messageRef`; synthetic desktop clicks on `同意` did not emit a Stream card callback |
+| DingTalk real callback click | real user/client approval-card click reaches daemon callback flow | pending | adapter now accepts official public-template `cardPrivateData.params.action = accept/reject` and daemon lookup is scoped by `messageRef + action`; still needs one real CardKit callback click that emits `/v1.0/card/instances/callback` |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -334,12 +339,18 @@ Stop and treat as a blocker if:
   kept in local process environment, contact-discovered target, and the
   configured published template. Output was redacted and returned
   `card_updated`. `pnpm smoke:dingtalk-fake` passed immediately afterward.
-- 2026-05-05: DingTalk desktop automation reached the real client and pasted a
-  new approval prompt into the input box, but automated send/click triggered a
-  macOS Accessibility permission prompt. The agent did not grant that OS
-  privacy permission. DingTalk Web was also attempted and redirected to a
-  maintenance page, so the remaining DingTalk gap is a real desktop send plus
-  real callback click, not Stream/OpenAPI/template readiness.
+- 2026-05-05: DingTalk desktop direct-use inbound passed through the installed
+  launchd daemon. A real DingTalk prompt returned exactly
+  `DINGTALK-FRESH-1557`, and a real `/status` command returned the expected
+  bound `codex-im` state with `pending approvals: 0`. A real write-command
+  prompt rendered the published-template approval card and bound four callback
+  tokens to its DingTalk card `messageRef`. Synthetic macOS/Computer Use clicks
+  on the visible `同意` button did not emit a Stream card callback; the adapter
+  now accepts the official public-template callback shape where
+  `cardPrivateData.params.action` carries `accept` / `reject`, and daemon lookup
+  for that fallback is scoped by `messageRef + action`. The remaining DingTalk
+  gap is a real user/client CardKit click, not Stream/OpenAPI/template/readiness
+  or inbound-routing readiness.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed

@@ -42,6 +42,7 @@ import {
   type CallbackTokenAction,
   type CallbackTokenCasFields,
   type CallbackTokenInsert,
+  type CallbackTokenMessageRefActionLookup,
   type CallbackTokenRecord,
   type CallbackTokenStatus,
   type DatabaseHandle,
@@ -61,6 +62,7 @@ type CleanupMethod = () => MaybePromise<void>;
 export type DaemonSignal = "SIGINT" | "SIGTERM";
 const CALLBACK_TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const CALLBACK_TOKEN_WIRE_RE = /^v1:([A-Z2-7]{16})$/;
+const DINGTALK_TEMPLATE_ACTION_RE = /^dingtalk-template-action:(allow_once|decline)$/;
 const CALLBACK_TOKEN_FAIL_MESSAGES: Partial<Record<CallbackTokenStatus, string>> = {
   expired: "expired",
   revoked: "stale token",
@@ -158,6 +160,9 @@ export interface DaemonAuditRepository {
 export interface DaemonCallbackTokenRepository {
   insert(input: CallbackTokenInsert): CallbackTokenRecord | unknown;
   findByHash?(tokenHash: string): CallbackTokenRecord | unknown;
+  findBoundByMessageRefAction?(
+    input: CallbackTokenMessageRefActionLookup,
+  ): CallbackTokenRecord | unknown;
   casUpdate?(
     tokenHash: string,
     fromStatus: CallbackTokenStatus,
@@ -854,7 +859,27 @@ export class Daemon {
     }
 
     const rawToken = this.#decodeRawCallbackToken(inbound.rawCallbackData);
-    if (rawToken === undefined) {
+    const templateAction =
+      rawToken === undefined
+        ? this.#decodeDingTalkTemplateAction(inbound.rawCallbackData)
+        : undefined;
+    let record: CallbackTokenRecord | unknown;
+    if (rawToken !== undefined) {
+      record = this.options.callbackTokenRepository?.findByHash?.(hashCallbackToken(rawToken));
+    } else if (
+      templateAction !== undefined &&
+      inbound.messageRef !== undefined &&
+      inbound.target !== undefined
+    ) {
+      record = this.options.callbackTokenRepository?.findBoundByMessageRefAction?.({
+        target: inbound.target,
+        messageRef: {
+          chatId: inbound.messageRef.target.chatId,
+          messageId: inbound.messageRef.messageId,
+        },
+        action: templateAction,
+      });
+    } else {
       this.#emitAuditEvent("approval.callback_malformed", {
         result: "failed",
         metadata: { reason: "malformed_wire_payload" },
@@ -862,13 +887,14 @@ export class Daemon {
       await this.#answerAction(inbound.callbackHandle, "stale or unknown");
       return;
     }
-
-    const record = this.options.callbackTokenRepository?.findByHash?.(hashCallbackToken(rawToken));
     const status = this.#callbackTokenStatus(record);
     if (status === undefined) {
       this.#emitAuditEvent("approval.callback_unknown", {
         result: "failed",
-        metadata: { tokenHash: hashCallbackToken(rawToken) },
+        metadata:
+          rawToken === undefined
+            ? { reason: "message_ref_action_not_found" }
+            : { tokenHash: hashCallbackToken(rawToken) },
       });
       await this.#answerAction(inbound.callbackHandle, "stale or unknown");
       return;
@@ -1127,6 +1153,11 @@ export class Daemon {
 
   #decodeRawCallbackToken(rawCallbackData: string): string | undefined {
     return CALLBACK_TOKEN_WIRE_RE.exec(rawCallbackData)?.[1];
+  }
+
+  #decodeDingTalkTemplateAction(rawCallbackData: string): CallbackTokenAction | undefined {
+    const action = DINGTALK_TEMPLATE_ACTION_RE.exec(rawCallbackData)?.[1];
+    return action === "allow_once" || action === "decline" ? action : undefined;
   }
 
   #callbackTokenStatus(record: unknown): CallbackTokenStatus | undefined {

@@ -93,6 +93,7 @@ export {
   type CallbackTokenActor,
   type CallbackTokenCasFields,
   type CallbackTokenInsert,
+  type CallbackTokenMessageRefActionLookup,
   type CallbackTokenRecord,
   type CallbackTokenStatus,
   type CallbackTokenTarget,

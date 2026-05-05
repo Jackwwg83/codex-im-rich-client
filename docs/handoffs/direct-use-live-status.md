@@ -22,9 +22,11 @@
 > OpenAPI card send/update now passes with a contact-discovered enterprise
 > `userid`. The latest DingTalk OpenAPI card gate re-run uses the published
 > template's required parameter shape and remains green. Installed DingTalk
-> config/readiness is now green under launchd; real inbound/card direct-use is
-> still pending on a DingTalk desktop send/click path that is not blocked by
-> macOS Accessibility permission.
+> config/readiness is now green under launchd. Real DingTalk desktop inbound is
+> now green for both prompt/reply and `/status`; an approval card renders and
+> binds callback tokens. The remaining DingTalk gap is one real CardKit
+> callback click, because macOS/Computer Use synthetic clicks did not trigger a
+> card callback in the current desktop client.
 
 ## 1. Current State
 
@@ -151,6 +153,18 @@
     create/update and printed redacted `card_updated` evidence. This proves the
     OpenAPI card path, but not real installed inbound routing or card callback
     clicks.
+  - latest evidence - 2026-05-05 16:02 SGT: DingTalk desktop direct-use inbound
+    is now green under launchd. A real DingTalk prompt returned exactly
+    `DINGTALK-FRESH-1557`, and a real `/status` command returned `target:
+    dingtalk chat`, `binding: bound`, `project: codex-im`, and `pending
+    approvals: 0`. A real write-command prompt rendered an approval card and
+    SQLite bound four callback tokens to the DingTalk card `messageRef`.
+    Automated macOS/Computer Use clicks on the visible `同意` button did not
+    produce a Stream card callback; the adapter was patched to accept the
+    official public-template callback shape where `cardPrivateData.params.action`
+    carries `accept` / `reject`, and daemon fallback lookup is now scoped by
+    `messageRef + action`. Remaining DingTalk acceptance gap: one real
+    user/client CardKit click reaching `/v1.0/card/instances/callback`.
   - latest evidence - Installed DingTalk direct-use configuration is now present
     and locally ready. The installed config enables DingTalk, points at a
     present client id / Keychain secret / card template id, and includes
@@ -626,11 +640,11 @@ Block 4:
     schema live acceptance (done)
 12. Lark full approval callback live acceptance (done for `Allow once`,
     `Decline`, `Abort`, `Allow session` reuse, and terminal CardKit refresh).
-13. Next: DingTalk real inbound/card direct-use acceptance once
-    DingTalk desktop send/click automation is available or a human performs the
-    one remaining desktop send/callback click; Stream, OpenAPI card
-    send/update, fake callback, installed readiness, and launchd are already
-    green with redacted evidence.
+13. DingTalk real inbound direct-use acceptance is green for prompt/reply and
+    `/status`; approval card delivery is green through token binding. Next:
+    one real DingTalk CardKit callback click from a client path that produces a
+    Stream `/v1.0/card/instances/callback` event; synthetic macOS/Computer Use
+    clicks did not trigger the current desktop client.
 
 ## 8. Compact / Resume
 

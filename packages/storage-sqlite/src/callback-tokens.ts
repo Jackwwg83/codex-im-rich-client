@@ -39,6 +39,12 @@ export interface CallbackTokenCasFields {
   expiresAt?: string;
 }
 
+export interface CallbackTokenMessageRefActionLookup {
+  target: CallbackTokenTarget;
+  messageRef: CallbackMessageRef;
+  action: CallbackTokenAction;
+}
+
 export interface CallbackTokenRecord {
   tokenHash: string;
   approvalId: string;
@@ -239,6 +245,39 @@ export class CallbackTokenRepository {
       .get(tokenHash) as CallbackTokenRow | undefined;
 
     return row === undefined ? undefined : hydrate(row);
+  }
+
+  findBoundByMessageRefAction(
+    input: CallbackTokenMessageRefActionLookup,
+  ): CallbackTokenRecord | undefined {
+    const rows = this.db
+      .prepare(
+        `
+          SELECT ${SELECT_COLUMNS}
+            FROM callback_tokens
+           WHERE status = 'bound'
+             AND action = @action
+             AND target_platform = @targetPlatform
+             AND target_chat_id = @targetChatId
+             AND COALESCE(target_thread_key, '') = @targetThreadKey
+             AND COALESCE(target_topic_id, '') = @targetTopicId
+             AND msg_chat_id = @msgChatId
+             AND msg_message_id = @msgMessageId
+           ORDER BY created_at DESC, token_hash ASC
+           LIMIT 2
+        `,
+      )
+      .all({
+        action: input.action,
+        targetPlatform: input.target.platform,
+        targetChatId: input.target.chatId,
+        targetThreadKey: input.target.threadKey ?? "",
+        targetTopicId: input.target.topicId ?? "",
+        msgChatId: input.messageRef.chatId,
+        msgMessageId: input.messageRef.messageId,
+      }) as CallbackTokenRow[];
+
+    return rows.length === 1 ? hydrate(rows[0] as CallbackTokenRow) : undefined;
   }
 
   casUpdate(
