@@ -3,6 +3,7 @@
 import type { Target } from "@codex-im/channel-core";
 import {
   DingTalkChannelAdapter,
+  type DingTalkInboundAction,
   createDingTalkOpenApiCardClient,
   createDingTalkStreamClient,
   renderDingTalkApprovalCard,
@@ -38,6 +39,9 @@ interface RedactedStatus {
   readonly messageId?: "present";
   readonly callbackMessageRef?: "present";
   readonly callbackAction?: "present";
+  readonly callbackRaw?: "present";
+  readonly callbackRawActionId?: "present";
+  readonly callbackRawSpaceType?: "IM_GROUP" | "IM_ROBOT" | "unknown";
   readonly missing?: readonly string[];
 }
 
@@ -179,6 +183,9 @@ async function runLiveCardCallbackSmoke(input: {
   const counters = { cardEvents: 0 };
   let callbackMessageRef: "present" | undefined;
   let callbackAction: "present" | undefined;
+  let callbackRaw: "present" | undefined;
+  let callbackRawActionId: "present" | undefined;
+  let callbackRawSpaceType: "IM_GROUP" | "IM_ROBOT" | "unknown" | undefined;
   const streamClient = createDingTalkStreamClient({
     clientId: requiredEnv("DINGTALK_CLIENT_ID"),
     clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
@@ -189,6 +196,12 @@ async function runLiveCardCallbackSmoke(input: {
     counters.cardEvents++;
     callbackMessageRef = action.messageRef === undefined ? undefined : "present";
     callbackAction = action.uiAction === undefined ? undefined : "present";
+    const raw = (action as DingTalkInboundAction).raw;
+    if (raw !== undefined) {
+      callbackRaw = "present";
+      callbackRawActionId = raw.actionId.length > 0 ? "present" : undefined;
+      callbackRawSpaceType = sanitizedDingTalkSpaceType(raw.spaceType);
+    }
   });
   const messageClient = createDingTalkOpenApiCardClient({
     clientId: requiredEnv("DINGTALK_CLIENT_ID"),
@@ -241,6 +254,9 @@ async function runLiveCardCallbackSmoke(input: {
       cardEvents: counters.cardEvents,
       callbackMessageRef,
       callbackAction,
+      callbackRaw,
+      callbackRawActionId,
+      callbackRawSpaceType,
     });
     console.log(
       "[dingtalk-live-smoke] CARD_CALLBACK_SEEN: redacted live card callback smoke completed.",
@@ -428,6 +444,10 @@ function missingLiveRequirements(): string[] {
 
 function present(name: string): "present" | "missing" {
   return process.env[name] === undefined ? "missing" : "present";
+}
+
+function sanitizedDingTalkSpaceType(value: string): "IM_GROUP" | "IM_ROBOT" | "unknown" {
+  return value === "IM_GROUP" || value === "IM_ROBOT" ? value : "unknown";
 }
 
 function requiredEnv(name: string): string {
