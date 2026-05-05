@@ -33,7 +33,10 @@
 > and `bound` callback tokens left by failed send/bind paths. The explicit
 > `DINGTALK_LIVE_CARD_CALLBACK=1` probe now sends a real card and waits for a
 > Stream card callback; its first run stayed connected but failed with
-> `cardEvents=0` after synthetic desktop click attempts.
+> `cardEvents=0` after synthetic desktop click attempts. A follow-up local
+> patch fixed DingTalk terminal text output so text message refs no longer
+> attempt CardKit `editText` and instead append via the session reply path; the
+> patched bridge bundle is installed under launchd pid `44722`.
 
 ## 1. Current State
 
@@ -571,6 +574,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-05 14:00 SGT heartbeat check | `git status --short` clean at `9a6a29a`; `pnpm launchd:status` green with the same pid `59693`, startedAt `2026-05-05T03:54:50.886Z`, `codexThreads=0`, and `pendingApprovals=0`; `launchctl print` still reports `state = running`, `runs = 16`, and pid `59693`. `daemon.log` and `daemon.err.log` mtimes remain at the current-pid startup time, so no new daemon output appeared during this interval. `pnpm dingtalk:readiness` remains ready. Next local non-external gap remains DingTalk desktop send/click behind macOS Accessibility permission |
 | 2026-05-05 19:05 SGT real callback follow-up | Fresh real DingTalk write prompt rendered the approval card and bound callback tokens, but synthetic clicks still produced no Stream callback and the target file stayed absent. A local `callback_route_key = "codex_im"` experiment was rolled back after it produced no delivered card and left `issued` / unbound tokens. Startup cleanup now revokes both `issued` and `bound` callback tokens before adapter input; targeted tests plus full gates passed, the patched bundle was installed, and launchd pid `21702` revoked the live residue on startup. |
 | 2026-05-05 19:33 SGT explicit callback probe | New `DINGTALK_LIVE_CARD_CALLBACK=1` gate sent a real card, remained connected, and failed with `cardEvents=0`; GPT Pro review says do not modify broker/security/token/messageRef logic and keep DingTalk blocked until callback-capable template plus real client click emits Stream `/v1.0/card/instances/callback`. |
+| 2026-05-05 20:00 SGT DingTalk text output fallback | Fixed DingTalk terminal text output: `sendText` now returns explicit `dingtalk-text:*` refs, and `editText` on those refs appends via DingTalk session reply instead of calling Card OpenAPI and failing with `param.cardNotExist`. Targeted DingTalk/daemon tests passed, `pnpm typecheck` passed, and the rebuilt bridge bundle is installed under launchd pid `44722`; DingTalk Desktop is currently a background process with zero windows, so a fresh real client prompt/click remains blocked by client UI availability, not bridge startup. |
 
 Latest live Telegram acceptance evidence:
 

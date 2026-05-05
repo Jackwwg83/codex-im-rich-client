@@ -243,6 +243,7 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       { platform: "dingtalk", chatId: "staff_test_private" },
       "Codex is working...",
     );
+    await adapter.editText(sentText, "Done");
     const sentCard = await adapter.sendCard(TARGET, CARD);
     await adapter.updateCard(sentCard.messageRef, { ...CARD, status: "resolved" });
     await adapter.editText(sentCard.messageRef, "edited");
@@ -265,7 +266,7 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
     });
     expect(sentText).toEqual({
       target: { platform: "dingtalk", chatId: "staff_test_private" },
-      messageId: "ding_text_private_001",
+      messageId: "dingtalk-text:ding_text_private_001",
     });
     expect(seenActions).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -298,6 +299,10 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       {
         sessionWebhook: "https://dingtalk.example.test/session-reply",
         text: "Codex is working...",
+      },
+      {
+        sessionWebhook: "https://dingtalk.example.test/session-reply",
+        text: "Done",
       },
     ]);
     expect(actionCalls).toEqual([

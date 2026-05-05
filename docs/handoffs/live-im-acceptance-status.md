@@ -22,7 +22,10 @@
 > remaining DingTalk gap is one real CardKit callback click, because the
 > explicit `DINGTALK_LIVE_CARD_CALLBACK=1` live probe sent a real card and kept
 > Stream connected, but synthetic macOS/Computer Use clicks still produced
-> `cardEvents=0` in the current desktop client.
+> `cardEvents=0` in the current desktop client. A follow-up patch fixed
+> DingTalk terminal text output so text message refs append via the DingTalk
+> session reply path instead of failing CardKit `editText` with
+> `param.cardNotExist`.
 
 ---
 
@@ -106,7 +109,7 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `card_template_id` is configured, deriving robot code from AppKey/client id unless `robot_code` overrides it; create/deliver includes DingTalk `userIdType=1` and top-level IM_ROBOT `userId`; HTTP/code/success=false/deliverResults failures all fail closed with redacted diagnostics |
 | DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 ... pnpm smoke:dingtalk-live` | pass | `Card.Instance.Write` is open; contact-discovered enterprise `userid` plus an OpenAPI-usable card template produced redacted `card_updated` with message id presence only; re-run on 2026-05-05 after published-template parameter alignment remained green |
 | DingTalk installed readiness | `pnpm dingtalk:readiness` + launchd restart | pass | installed config now has DingTalk enabled with present client id, Keychain secret, card template id, and global/project allowlist entries; latest daemon bundle restarted under launchd with `pendingApprovals=0` and redaction scan passed |
-| DingTalk real inbound prompt/status | real DingTalk desktop prompt and `/status` through installed launchd daemon | pass | desktop prompt returned exactly `DINGTALK-FRESH-1557`; `/status` returned `target: dingtalk chat`, `binding: bound`, `project: codex-im`, and `pending approvals: 0` |
+| DingTalk real inbound prompt/status | real DingTalk desktop prompt and `/status` through installed launchd daemon | pass | desktop prompt returned exactly `DINGTALK-FRESH-1557`; `/status` returned `target: dingtalk chat`, `binding: bound`, `project: codex-im`, and `pending approvals: 0`; latest local patch also fixes DingTalk text-output edit fallback so terminal output appends through session reply instead of CardKit text edit |
 | DingTalk approval card delivery | real write prompt renders card and binds callback tokens | partial | real write prompt rendered the published-template approval card and SQLite bound four callback tokens to the DingTalk card `messageRef`; synthetic desktop clicks on `同意` did not emit a Stream card callback |
 | DingTalk live callback probe | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_CARD_CALLBACK=1 ... pnpm smoke:dingtalk-live` | blocked | probe sent a real card, reported redacted message-id presence and `targetSource=env`, kept Stream connected for 30 seconds, and failed with `cardEvents=0` after synthetic desktop click attempts |
 | DingTalk failed send/bind token cleanup | restart daemon after issued-only callback token residue | pass | startup now revokes both `issued` and `bound` callback tokens before adapter input; this covers the invalid local `callback_route_key` experiment that left unbound issued tokens after no card delivery |
@@ -378,6 +381,13 @@ Stop and treat as a blocker if:
   storage, or messageRef validation. The adapter now also accepts exact
   `cardPrivateData.params.token = "v1:<opaque>"` callbacks and rejects token
   callbacks that carry companion approval/action metadata.
+- 2026-05-05: DingTalk text terminal output was fixed after live daemon audit
+  showed `param.cardNotExist` for CardKit `editText` against text replies.
+  `sendText` now returns explicit `dingtalk-text:*` refs, and `editText` for
+  those refs appends via the DingTalk session reply path while approval-card
+  `updateCard` remains on CardKit. Targeted DingTalk/daemon tests and
+  `pnpm typecheck` passed; the rebuilt bridge bundle is installed under
+  launchd pid `44722`.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed
