@@ -17,9 +17,11 @@
 > evidence. The fix was to accept DingTalk's real private callback shape:
 > `cardPrivateData.params.action` plus `spaceType=IM` / `userId` target fallback,
 > while keeping callback-token/messageRef validation fail-closed. DingTalk text
-> refs still append through the session reply path instead of true in-place text
-> editing, so long streaming turns may produce multiple DingTalk chat messages.
-> Launchd has been restored with the rebuilt daemon and readiness remains green.
+> refs append through the session reply path instead of true in-place text
+> editing, and JAC-238 now models that as explicit lifecycle semantics: daemon
+> suppresses progress edits for append-only refs and sends one terminal reply
+> for short output. Launchd has been restored with the rebuilt daemon and
+> readiness remains green.
 
 ---
 
@@ -58,7 +60,7 @@
 Use this wording until all enabled live platform smokes pass:
 
 ```text
-Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, installed DingTalk readiness is green, real DingTalk desktop inbound passes prompt/reply plus /status, and the explicit live CardKit callback probe now passes after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs rather than true in-place edit.
+Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, installed DingTalk readiness is green, real DingTalk desktop inbound passes prompt/reply plus /status, and the explicit live CardKit callback probe now passes after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -102,7 +104,7 @@ until the matrix below is complete with real credentials and redacted evidence.
 | DingTalk production card client | `createDingTalkOpenApiCardClient` token + `createAndDeliver` + `updateCard` tests | pass | production `daemon run` now injects a real OpenAPI card client when `card_template_id` is configured, deriving robot code from AppKey/client id unless `robot_code` overrides it; create/deliver includes DingTalk `userIdType=1` and top-level IM_ROBOT `userId`; HTTP/code/success=false/deliverResults failures all fail closed with redacted diagnostics |
 | DingTalk live card OpenAPI gate | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 ... pnpm smoke:dingtalk-live` | pass | `Card.Instance.Write` is open; contact-discovered enterprise `userid` plus an OpenAPI-usable card template produced redacted `card_updated` with message id presence only; re-run on 2026-05-05 after published-template parameter alignment remained green |
 | DingTalk installed readiness | `pnpm dingtalk:readiness` + launchd restart | pass | installed config now has DingTalk enabled with present client id, Keychain secret, card template id, and global/project allowlist entries; readiness output explicitly marks approval callback round-trip as info-only / not checked; latest daemon bundle restarted under launchd with `pendingApprovals=0` and redaction scan passed |
-| DingTalk real inbound prompt/status | real DingTalk desktop prompt and `/status` through installed launchd daemon | pass | desktop prompt returned exactly `DINGTALK-FRESH-1557`; `/status` returned `target: dingtalk chat`, `binding: bound`, `project: codex-im`, and `pending approvals: 0`; latest local patch also fixes DingTalk text-output edit fallback so terminal output appends through session reply instead of CardKit text edit |
+| DingTalk real inbound prompt/status | real DingTalk desktop prompt and `/status` through installed launchd daemon | pass | desktop prompt returned exactly `DINGTALK-FRESH-1557`; `/status` returned `target: dingtalk chat`, `binding: bound`, `project: codex-im`, and `pending approvals: 0`; DingTalk text-output refs are append-only by lifecycle contract, so daemon suppresses progress edits and sends a terminal reply instead of CardKit text edit |
 | DingTalk approval card delivery | real write prompt renders card and binds callback tokens | pass | real write prompt rendered the published-template approval card and SQLite bound callback tokens to the DingTalk card `messageRef`; direct callback acceptance is covered by the live callback probe below |
 | DingTalk live callback probe | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_CARD_CALLBACK=1 ... pnpm smoke:dingtalk-live` | pass | 2026-05-06 real DingTalk Desktop click produced `card_callback_seen` with redacted `messageId=present`, `targetSource=env`, `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`, `callbackMessageRef=present`, `callbackAction=present`, `callbackRaw=present`, and no secret bytes |
 | DingTalk failed send/bind token cleanup | restart daemon after issued-only callback token residue | pass | startup now revokes both `issued` and `bound` callback tokens before adapter input; this covers the invalid local `callback_route_key` experiment that left unbound issued tokens after no card delivery |
@@ -440,6 +442,15 @@ Stop and treat as a blocker if:
   `spaceType=IM` / `userId` target fields; no tokens, secrets, user ids, chat
   ids, or message ids were recorded. Launchd was restored afterward and
   `pnpm dingtalk:readiness` remained ready.
+- 2026-05-06 22:25 SGT message lifecycle contract: JAC-238 made `MessageRef`
+  lifecycle metadata explicit across fake, Telegram, Lark, and DingTalk
+  adapters. DingTalk bot-owned text refs are append-only, while Telegram/Lark
+  text refs and approval-card refs remain edit-capable. Daemon now suppresses
+  progress edits for append-only refs and sends one terminal reply for short
+  output; `pnpm im:doctor` reports the DingTalk text/card edit split as
+  informational instead of an unresolved warning. Full gates passed, then
+  `pnpm bridge:build`, `pnpm bridge:install`, and launchd kickstart installed
+  the rebuilt daemon under launchd pid `15268` with `pendingApprovals=0`.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed

@@ -261,12 +261,19 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       }),
     );
     expect(sentCard).toEqual({
-      messageRef: { target: TARGET, messageId: "ding_card_group_001" },
+      messageRef: {
+        target: TARGET,
+        messageId: "ding_card_group_001",
+        kind: "approval_card",
+        textUpdateMode: "edit",
+      },
       callbackNonce: "",
     });
     expect(sentText).toEqual({
       target: { platform: "dingtalk", chatId: "staff_test_private" },
       messageId: "dingtalk-text:ding_text_private_001",
+      kind: "text",
+      textUpdateMode: "append",
     });
     expect(seenActions).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -274,6 +281,8 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
         messageRef: {
           target: TARGET,
           messageId: "ding_card_group_001",
+          kind: "approval_card",
+          textUpdateMode: "edit",
         },
       }),
     );
@@ -282,14 +291,24 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       {
         method: "updateCard",
         input: {
-          messageRef: { target: TARGET, messageId: "ding_card_group_001" },
+          messageRef: {
+            target: TARGET,
+            messageId: "ding_card_group_001",
+            kind: "approval_card",
+            textUpdateMode: "edit",
+          },
           card: renderDingTalkApprovalCard({ ...CARD, status: "resolved" }),
         },
       },
       {
         method: "editText",
         input: {
-          messageRef: { target: TARGET, messageId: "ding_card_group_001" },
+          messageRef: {
+            target: TARGET,
+            messageId: "ding_card_group_001",
+            kind: "approval_card",
+            textUpdateMode: "edit",
+          },
           text: "edited",
         },
       },

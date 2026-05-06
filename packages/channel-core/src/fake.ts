@@ -152,14 +152,24 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
       callbackData.push(data);
     }
     const messageId = this.#nextMessageId();
-    const messageRef: MessageRef = { target, messageId };
+    const messageRef: MessageRef = {
+      target,
+      messageId,
+      kind: "approval_card",
+      textUpdateMode: "edit",
+    };
     this.#cards.set(messageId, { callbackNonce, callbackData });
     return { messageRef, callbackNonce };
   }
 
   async sendText(target: Target, body: string): Promise<MessageRef> {
     this.#assertRunning("sendText");
-    const messageRef: MessageRef = { target, messageId: this.#nextMessageId() };
+    const messageRef: MessageRef = {
+      target,
+      messageId: this.#nextMessageId(),
+      kind: "text",
+      textUpdateMode: "edit",
+    };
     this.#texts.push({ messageRef, text: body });
     return messageRef;
   }
@@ -211,7 +221,7 @@ export class TelegramShapeFakeChannelAdapter implements ChannelAdapter {
     this.#assertRunning("sendFile");
     requireCapability(this.capabilities, "supportsAttachments");
     void file;
-    return { target, messageId: this.#nextMessageId() };
+    return { target, messageId: this.#nextMessageId(), kind: "file" };
   }
 
   // ─── Test-only injection + inspection ───────────────────────────────

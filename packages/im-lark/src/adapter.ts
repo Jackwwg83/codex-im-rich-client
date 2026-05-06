@@ -137,7 +137,15 @@ export class LarkChannelAdapter implements ChannelAdapter {
     const card = renderLarkApprovalCard(_card);
     try {
       const sent = await messageClient.sendCard({ target: _target, card });
-      return { messageRef: { target: _target, messageId: sent.messageId }, callbackNonce: "" };
+      return {
+        messageRef: {
+          target: _target,
+          messageId: sent.messageId,
+          kind: "approval_card",
+          textUpdateMode: "edit",
+        },
+        callbackNonce: "",
+      };
     } catch (error) {
       throw new Error(`LarkChannelAdapter.sendCard failed: ${describeError(error)}`);
     }
@@ -218,7 +226,7 @@ export class LarkChannelAdapter implements ChannelAdapter {
     const messageClient = this.#messageClient("sendText");
     try {
       const sent = await messageClient.sendText({ target, text });
-      return { target, messageId: sent.messageId };
+      return { target, messageId: sent.messageId, kind: "text", textUpdateMode: "edit" };
     } catch (error) {
       throw new Error(`LarkChannelAdapter.sendText failed: ${describeError(error)}`);
     }
@@ -233,7 +241,12 @@ export class LarkChannelAdapter implements ChannelAdapter {
         text,
         replyToMessageId: ref.messageId,
       });
-      return { target: ref.target, messageId: sent.messageId };
+      return {
+        target: ref.target,
+        messageId: sent.messageId,
+        kind: "text",
+        textUpdateMode: "edit",
+      };
     } catch (error) {
       throw new Error(`LarkChannelAdapter.replyText failed: ${describeError(error)}`);
     }

@@ -61,7 +61,12 @@ describe("TelegramChannelAdapter.sendCard (T22b/T22c)", () => {
         },
       },
     );
-    expect(result.messageRef).toEqual({ target: TARGET, messageId: "42" });
+    expect(result.messageRef).toEqual({
+      target: TARGET,
+      messageId: "42",
+      kind: "approval_card",
+      textUpdateMode: "edit",
+    });
     expect(result.callbackNonce).toMatch(/^[a-f0-9]{32}$/);
     await adapter.stop();
   });
@@ -125,6 +130,8 @@ describe("TelegramChannelAdapter.sendCard (T22b/T22c)", () => {
     expect(result).toEqual({
       target: { ...TARGET, topicId: "42" },
       messageId: "42",
+      kind: "text",
+      textUpdateMode: "edit",
     });
     await adapter.stop();
   });

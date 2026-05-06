@@ -79,7 +79,7 @@ export function normalizeDingTalkRawCardAction(
     uiAction: uiAction ?? { kind: "decline" },
     target,
     sender: { userId: senderUserId },
-    messageRef: { target, messageId: outTrackId },
+    messageRef: { target, messageId: outTrackId, kind: "approval_card", textUpdateMode: "edit" },
     callbackNonce: callbackNonceForRawCallbackData(rawCallbackData),
     rawCallbackData,
     receivedAt,

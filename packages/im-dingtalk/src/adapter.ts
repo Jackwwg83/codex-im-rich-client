@@ -115,7 +115,15 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     const card = renderDingTalkApprovalCard(_card);
     try {
       const sent = await cardClient.sendCard({ target: _target, card });
-      return { messageRef: { target: _target, messageId: sent.messageId }, callbackNonce: "" };
+      return {
+        messageRef: {
+          target: _target,
+          messageId: sent.messageId,
+          kind: "approval_card",
+          textUpdateMode: "edit",
+        },
+        callbackNonce: "",
+      };
     } catch (error) {
       throw new Error(`DingTalkChannelAdapter.sendCard failed: ${describeError(error)}`);
     }
@@ -174,6 +182,8 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     return {
       target: _target,
       messageId: `${DINGTALK_TEXT_MESSAGE_REF_PREFIX}${sent.messageId ?? this.#nowMs()}`,
+      kind: "text",
+      textUpdateMode: "append",
     };
   }
 

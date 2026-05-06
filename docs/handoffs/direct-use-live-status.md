@@ -21,11 +21,13 @@
 > `callbackMessageRef=present`, and `callbackAction=present` with redacted
 > output only. The fix accepts DingTalk's real private callback shape
 > (`cardPrivateData.params.action`, `spaceType=IM`, `userId`) while keeping
-> callback-token/messageRef validation fail-closed. DingTalk text refs still
-> append via session reply rather than true in-place edit. JAC-237 added
-> `pnpm im:doctor` / `pnpm channels:doctor` as the unified no-live-network
-> readiness surface; callback_click is now informational, while DingTalk still
-> reports `attention` for edit-vs-append semantics.
+> callback-token/messageRef validation fail-closed. DingTalk text refs append
+> via session reply rather than true in-place edit, and JAC-238 models that as
+> explicit lifecycle semantics: daemon suppresses progress edits for append-only
+> refs and sends one terminal reply instead of assuming `editText` mutates in
+> place. JAC-237 added `pnpm im:doctor` / `pnpm channels:doctor` as the unified
+> no-live-network readiness surface; callback_click and DingTalk text-append
+> semantics are now informational.
 
 ## 1. Current State
 
@@ -291,9 +293,14 @@
     `callbackMessageRef=present`, and `callbackAction=present`. The rebuilt
     bridge was restored under launchd afterward, with `pendingApprovals=0`, and
     `pnpm dingtalk:readiness` remained ready.
-- **Next exact action:** Keep DingTalk on launchd soak, then close the
-  remaining direct-use parity gap: true in-place text edit or an explicitly
-  accepted append/progress projection for long DingTalk turns.
+  - latest patch - JAC-238 MessageRef lifecycle semantics: adapters label
+    bot-owned text, approval cards, files, and inbound refs. DingTalk text refs
+    are append-only; daemon suppresses progress edits for those refs and sends a
+    single terminal reply while Telegram/Lark keep in-place text edits. Full
+    gates passed, `pnpm im:doctor` reports `ready`, and the rebuilt bridge is
+    installed under launchd pid `15268`.
+- **Next exact action:** Continue launchd soak and identify the next local
+  non-external readiness gap; current `im:doctor` is `ready`.
 
 ## 2. Why This Exists
 
@@ -338,7 +345,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4 plus real Telegram Web and Feishu Web direct-use acceptance evidence |
-| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk installed readiness, OpenAPI card send/update, real inbound prompt/status, approval-card delivery, and real CardKit callback click are green; remaining DingTalk parity gap is append-style text refs vs true in-place edit |
+| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk installed readiness, OpenAPI card send/update, real inbound prompt/status, approval-card delivery, and real CardKit callback click are green; DingTalk text refs are append-only by explicit lifecycle contract with progress edits suppressed |
 
 ## 5. Active Redlines
 
@@ -587,8 +594,9 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-05 19:33 SGT explicit callback probe | New `DINGTALK_LIVE_CARD_CALLBACK=1` gate sent a real card, remained connected, and failed with `cardEvents=0`; GPT Pro review says do not modify broker/security/token/messageRef logic and keep DingTalk blocked until callback-capable template plus real client click emits Stream `/v1.0/card/instances/callback`. |
 | 2026-05-05 20:00 SGT DingTalk text output fallback | Fixed DingTalk terminal text output: `sendText` now returns explicit `dingtalk-text:*` refs, and `editText` on those refs appends via DingTalk session reply instead of calling Card OpenAPI and failing with `param.cardNotExist`. This is append semantics, not true in-place text editing, so long streaming turns may produce multiple DingTalk chat messages while Telegram/Lark keep in-place edits. Targeted DingTalk/daemon tests passed, `pnpm typecheck` passed, and the rebuilt bridge bundle is installed under launchd pid `44722`; DingTalk Desktop is currently a background process with zero windows, so a fresh real client prompt/click remains blocked by client UI availability, not bridge startup. |
 | 2026-05-06 19:05 SGT DingTalk callback follow-up | Found a production daemon crash source in the DingTalk SDK client-side WebSocket ping timer (`WebSocket.ping()` while `CONNECTING`) and changed `daemon run` to pass `keepAlive: false`, matching the live-smoke Stream path. Targeted CLI/DingTalk tests and package typechecks passed; the rebuilt bridge is installed and launchd is healthy under pid `34173`. A fresh explicit callback gate delivered a visible `codex` card-list item in DingTalk Desktop, but the conversation stayed in a loading state and the gate still ended redacted with `messageId=present`, `targetSource=env`, and `cardEvents=0`; SQLite callback-token `used` count did not increase. JAC-225 remains open on one real client click that emits the Stream card callback. |
-| 2026-05-06 19:26 SGT unified IM doctor | JAC-237 added `pnpm im:doctor` with alias `pnpm channels:doctor`. Default output is no-live-network and redacted: installed bridge plist/status, per-platform secret-source presence via env/Keychain, allowlists, capabilities, adapter-start/live-gate status, inbound/outbound/card/callback status, edit-vs-append semantics, and file support. After the real callback pass, callback_click is informational; on the current machine the overall report remains `attention` because DingTalk text refs are append semantics rather than true in-place edit. |
+| 2026-05-06 19:26 SGT unified IM doctor | JAC-237 added `pnpm im:doctor` with alias `pnpm channels:doctor`. Default output is no-live-network and redacted: installed bridge plist/status, per-platform secret-source presence via env/Keychain, allowlists, capabilities, adapter-start/live-gate status, inbound/outbound/card/callback status, edit-vs-append semantics, and file support. After the real callback pass, callback_click is informational. JAC-238 later made DingTalk append-style text refs an explicit lifecycle semantic rather than an unresolved readiness warning. |
 | 2026-05-06 21:50 SGT DingTalk callback acceptance | Compared the local parser with DingTalk/OpenClaw callback behavior, then reran the explicit callback gate against the current DingTalk `thread_bindings` target. A fresh card appeared in DingTalk Desktop, a real `同意` click removed the buttons, and the gate exited 0 with redacted `card_callback_seen`: `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`, `callbackMessageRef=present`, and `callbackAction=present`. The observed callback shape uses `content.cardPrivateData.params.action` and private `spaceType=IM` / `userId` fields; no secret/user/chat/message id bytes were recorded. Launchd was restored afterward and `pnpm dingtalk:readiness` remained ready. |
+| 2026-05-06 22:25 SGT message lifecycle contract | JAC-238 made `MessageRef` lifecycle metadata explicit across fake, Telegram, Lark, and DingTalk adapters. Daemon now treats DingTalk bot-owned text refs as append-only and skips progress edits, then sends exactly one terminal reply for short output. `pnpm im:doctor` now reports DingTalk edit semantics as informational: text refs append by lifecycle contract, card refs update through CardKit. Full gates passed; `pnpm bridge:build`, `pnpm bridge:install`, and `launchctl kickstart -k gui/501/io.codex-im-bridge` installed the rebuilt daemon under launchd pid `15268` with `pendingApprovals=0`. |
 
 Latest live Telegram acceptance evidence:
 
@@ -721,11 +729,10 @@ Block 4:
     schema live acceptance (done)
 12. Lark full approval callback live acceptance (done for `Allow once`,
     `Decline`, `Abort`, `Allow session` reuse, and terminal CardKit refresh).
-13. DingTalk real inbound direct-use acceptance is green for prompt/reply and
-    `/status`; approval card delivery is green through token binding. Next:
-    one real DingTalk CardKit callback click from a client path that produces a
-    Stream `/v1.0/card/instances/callback` event; synthetic macOS/Computer Use
-    clicks did not trigger the current desktop client.
+13. DingTalk real inbound direct-use acceptance is green for prompt/reply,
+    `/status`, approval card delivery, and one real CardKit callback click.
+    DingTalk bot-owned text is append-only by lifecycle contract; daemon
+    suppresses progress edits and sends one terminal reply for short output.
 
 ## 8. Compact / Resume
 

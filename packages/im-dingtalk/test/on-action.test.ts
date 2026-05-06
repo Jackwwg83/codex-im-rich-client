@@ -79,6 +79,8 @@ describe("DingTalk card action messageRef validation (JAC-84)", () => {
       messageRef: {
         target: { platform: "dingtalk", chatId: "cid_card_group" },
         messageId: "ding_card_group_001",
+        kind: "approval_card",
+        textUpdateMode: "edit",
       },
       receivedAt: NOW,
       idempotencyKey: "card:stream_card_group_001:ding_card_group_001:btn_allow",

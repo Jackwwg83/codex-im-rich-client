@@ -65,6 +65,8 @@ describe("LarkChannelAdapter.onAction card.action.trigger mapping (JAC-157)", ()
       messageRef: {
         target: { platform: "lark", chatId: "oc_card_private" },
         messageId: "om_card_private",
+        kind: "approval_card",
+        textUpdateMode: "edit",
       },
       receivedAt: NOW,
     });
@@ -93,6 +95,8 @@ describe("LarkChannelAdapter.onAction card.action.trigger mapping (JAC-157)", ()
         messageRef: {
           target: { platform: "lark", chatId: "oc_card_group" },
           messageId: "om_card_group",
+          kind: "approval_card",
+          textUpdateMode: "edit",
         },
       }),
     );

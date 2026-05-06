@@ -230,7 +230,12 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     try {
       const sent = await api.sendMessage(target.chatId, formatApprovalCard(card), options);
       return {
-        messageRef: { target, messageId: String(sent.message_id) },
+        messageRef: {
+          target,
+          messageId: String(sent.message_id),
+          kind: "approval_card",
+          textUpdateMode: "edit",
+        },
         callbackNonce: generateCallbackNonce(),
       };
     } catch (error) {
@@ -272,7 +277,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     const api = this.#api("sendText");
     try {
       const sent = await api.sendMessage(target.chatId, body, sendTextOptions(target));
-      return { target, messageId: String(sent.message_id) };
+      return { target, messageId: String(sent.message_id), kind: "text", textUpdateMode: "edit" };
     } catch (error) {
       throw new Error(`TelegramChannelAdapter.sendText failed: ${describeTelegramError(error)}`);
     }
@@ -483,7 +488,7 @@ function normalizeTelegramTextMessage(
     },
     text: message.text,
     receivedAt: message.date !== undefined ? new Date(message.date * 1000) : new Date(nowMs),
-    messageRef: { target, messageId: String(message.message_id) },
+    messageRef: { target, messageId: String(message.message_id), kind: "inbound" },
   };
 }
 
@@ -530,6 +535,8 @@ function normalizeTelegramCallbackQuery(
         query.message !== undefined && query.message !== null
           ? String(query.message.message_id)
           : "<unknown>",
+      kind: "approval_card",
+      textUpdateMode: "edit",
     },
     callbackNonce: decodeCallbackData(rawCallbackData) ?? "",
     rawCallbackData,

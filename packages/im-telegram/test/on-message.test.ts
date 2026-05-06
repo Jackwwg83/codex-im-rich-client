@@ -67,6 +67,7 @@ describe("TelegramChannelAdapter.onMessage raw fixtures (T26/T28a-c)", () => {
       messageRef: {
         target: { platform: "telegram", chatId: "123456789" },
         messageId: "11",
+        kind: "inbound",
       },
     });
     await adapter.stop();
@@ -89,6 +90,7 @@ describe("TelegramChannelAdapter.onMessage raw fixtures (T26/T28a-c)", () => {
       messageRef: {
         target: { platform: "telegram", chatId: "-1009876543210" },
         messageId: "22",
+        kind: "inbound",
       },
     });
     await adapter.stop();
@@ -111,6 +113,7 @@ describe("TelegramChannelAdapter.onMessage raw fixtures (T26/T28a-c)", () => {
       messageRef: {
         target: { platform: "telegram", chatId: "-1009876543210", topicId: "42" },
         messageId: "33",
+        kind: "inbound",
       },
     });
     await adapter.stop();

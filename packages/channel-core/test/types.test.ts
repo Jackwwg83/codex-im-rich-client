@@ -33,12 +33,16 @@ describe("channel-core types (T18)", () => {
     expect(cases.length).toBe(2);
   });
 
-  it("MessageRef carries target + opaque messageId", () => {
+  it("MessageRef carries target + opaque messageId plus optional lifecycle metadata", () => {
     const ref: MessageRef = {
       target: { platform: "telegram", chatId: "c-1" },
       messageId: "msg-42",
+      kind: "text",
+      textUpdateMode: "edit",
     };
     expect(ref.messageId).toBe("msg-42");
+    expect(ref.kind).toBe("text");
+    expect(ref.textUpdateMode).toBe("edit");
   });
 
   it("OutboundFile accepts Uint8Array bytes + filename + contentType", () => {

@@ -53,6 +53,7 @@ describe("DingTalk message receive fixtures (JAC-81)", () => {
       messageRef: {
         target: { platform: "dingtalk", chatId: "staff_test_private" },
         messageId: "msg_test_private",
+        kind: "inbound",
       },
       idempotencyKey: "robot:msg_test_private",
       raw: {

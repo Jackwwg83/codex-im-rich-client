@@ -241,8 +241,9 @@ function evaluateDingTalk(
     },
     {
       name: "edit_semantics",
-      status: "warn",
-      detail: "text refs append via DingTalk session reply; card refs update through CardKit",
+      status: "info",
+      detail:
+        "text refs append by lifecycle contract with progress edits suppressed; card refs update through CardKit",
     },
     { name: "file", status: "info", detail: "attachments unsupported" },
   ]);

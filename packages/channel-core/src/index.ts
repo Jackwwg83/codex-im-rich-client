@@ -20,6 +20,8 @@ export type {
   InboundAction,
   InboundMessage,
   MessageRef,
+  MessageRefKind,
+  MessageRefTextUpdateMode,
   OutboundFile,
   Sender,
   Target,

@@ -90,7 +90,12 @@ describe("LarkChannelAdapter.sendCard (JAC-154)", () => {
 
     expect(calls).toEqual([{ target: TARGET, card: renderLarkApprovalCard(CARD) }]);
     expect(result).toEqual({
-      messageRef: { target: TARGET, messageId: "om_lark_card" },
+      messageRef: {
+        target: TARGET,
+        messageId: "om_lark_card",
+        kind: "approval_card",
+        textUpdateMode: "edit",
+      },
       callbackNonce: "",
     });
   });

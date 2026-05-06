@@ -70,6 +70,8 @@ describe("TelegramChannelAdapter.onAction raw fixtures (T27/T28d-f)", () => {
         messageRef: {
           target: { platform: "telegram", chatId: "<unknown>" },
           messageId: "<unknown>",
+          kind: "approval_card",
+          textUpdateMode: "edit",
         },
       }),
     );
@@ -99,6 +101,8 @@ describe("TelegramChannelAdapter.onAction raw fixtures (T27/T28d-f)", () => {
           messageRef: {
             target: { platform: "telegram", chatId: "-1009876543210" },
             messageId,
+            kind: "approval_card",
+            textUpdateMode: "edit",
           },
         }),
       );
@@ -123,6 +127,8 @@ describe("TelegramChannelAdapter.onAction raw fixtures (T27/T28d-f)", () => {
         messageRef: {
           target: { platform: "telegram", chatId: "-1009876543210" },
           messageId: "46",
+          kind: "approval_card",
+          textUpdateMode: "edit",
         },
       }),
     );

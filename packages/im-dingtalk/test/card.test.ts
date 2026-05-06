@@ -85,7 +85,12 @@ describe("DingTalkChannelAdapter card send/update (JAC-82)", () => {
 
     expect(calls).toEqual([{ target: TARGET, card: renderDingTalkApprovalCard(CARD) }]);
     expect(result).toEqual({
-      messageRef: { target: TARGET, messageId: "ding_card_sent" },
+      messageRef: {
+        target: TARGET,
+        messageId: "ding_card_sent",
+        kind: "approval_card",
+        textUpdateMode: "edit",
+      },
       callbackNonce: "",
     });
   });

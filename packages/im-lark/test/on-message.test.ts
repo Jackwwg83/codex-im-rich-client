@@ -43,6 +43,7 @@ describe("Lark message receive fixtures (JAC-152)", () => {
       messageRef: {
         target: { platform: "lark", chatId: "oc_test_private_chat" },
         messageId: "om_test_private_message",
+        kind: "inbound",
       },
     });
   });

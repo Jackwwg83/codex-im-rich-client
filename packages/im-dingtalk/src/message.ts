@@ -73,7 +73,7 @@ export function normalizeDingTalkRawRobotMessage(
     sender,
     text: extractRobotText(raw),
     receivedAt: dingTalkReceivedAt(raw.createAt, nowMs),
-    messageRef: { target, messageId: robotMsgId },
+    messageRef: { target, messageId: robotMsgId, kind: "inbound" },
     idempotencyKey: dingtalkRobotIdempotencyKey(streamMessageId, robotMsgId),
     raw: {
       topic,

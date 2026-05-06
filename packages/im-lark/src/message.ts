@@ -58,7 +58,7 @@ export function normalizeLarkRawMessage(event: LarkRawMessageEvent, nowMs: numbe
     sender: { userId: senderId },
     text: extractText(message),
     receivedAt: larkReceivedAt(message.create_time, nowMs),
-    messageRef: { target, messageId: message.message_id },
+    messageRef: { target, messageId: message.message_id, kind: "inbound" },
   };
 }
 

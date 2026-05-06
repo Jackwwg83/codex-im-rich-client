@@ -48,18 +48,38 @@ export type Sender = {
 };
 
 /**
+ * Platform-neutral lifecycle category for a message reference. The
+ * daemon uses this to preserve Codex-native turn semantics without
+ * assuming every IM can mutate every message type in place.
+ */
+export type MessageRefKind = "inbound" | "text" | "approval_card" | "file";
+
+/**
+ * Text mutation behavior for bot-owned text refs. `edit` means the
+ * platform can mutate the same visible message in place; `append`
+ * means "editText" is implemented as a follow-up / replacement send
+ * and callers should avoid progress-update spam.
+ */
+export type MessageRefTextUpdateMode = "edit" | "append";
+
+/**
  * Stable cross-message reference an adapter returns from `sendCard` /
- * `sendText` / `editText`. Daemon wire-up keeps it so `updateCard` /
- * `editText` / `answerAction` can target the right rendered message
- * later.
+ * `sendText` / `sendFile` or includes on inbound events. Daemon wire-up
+ * keeps it so `updateCard` / `editText` / `answerAction` can target the
+ * right rendered message later.
  *
- * Opaque — adapters typically encode (chatId, messageId) or whatever
- * their platform needs. The daemon doesn't introspect.
+ * `messageId` remains opaque; adapters typically encode (chatId,
+ * messageId) or whatever their platform needs. The lifecycle fields
+ * are the only platform-neutral metadata the daemon may inspect.
  */
 export type MessageRef = {
   readonly target: Target;
   /** Adapter-specific message identifier. */
   readonly messageId: string;
+  /** Optional lifecycle category. Older tests/adapters may omit it. */
+  readonly kind?: MessageRefKind;
+  /** Mutation behavior for bot-owned text refs. */
+  readonly textUpdateMode?: MessageRefTextUpdateMode;
 };
 
 /**

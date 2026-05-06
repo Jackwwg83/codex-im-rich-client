@@ -58,6 +58,8 @@ describe("TelegramShapeFakeChannelAdapter — round-trip (T19)", () => {
     const sent = await adapter.sendCard(target, SAMPLE_CARD);
     expect(sent.messageRef.target.chatId).toBe("c-1");
     expect(sent.messageRef.messageId).toBeTruthy();
+    expect(sent.messageRef.kind).toBe("approval_card");
+    expect(sent.messageRef.textUpdateMode).toBe("edit");
     expect(sent.callbackNonce).toBeTruthy();
     expect(sent.callbackNonce.length).toBeGreaterThanOrEqual(16);
 
@@ -107,7 +109,12 @@ describe("TelegramShapeFakeChannelAdapter — round-trip (T19)", () => {
 
     const messageRef = await adapter.sendText(target, "Codex is working...");
 
-    expect(messageRef).toEqual({ target, messageId: "fake-msg-1" });
+    expect(messageRef).toEqual({
+      target,
+      messageId: "fake-msg-1",
+      kind: "text",
+      textUpdateMode: "edit",
+    });
     expect(adapter._textsForTest()).toContainEqual({
       messageRef,
       text: "Codex is working...",

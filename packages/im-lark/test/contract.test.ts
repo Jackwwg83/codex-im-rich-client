@@ -235,10 +235,25 @@ describe("LarkChannelAdapter contract and boundaries (JAC-159)", () => {
         text: "hello codex",
       }),
     );
-    expect(sentTextRef).toEqual({ target: TARGET, messageId: "om_text_sent" });
-    expect(replyRef).toEqual({ target: TARGET, messageId: "om_text_sent" });
+    expect(sentTextRef).toEqual({
+      target: TARGET,
+      messageId: "om_text_sent",
+      kind: "text",
+      textUpdateMode: "edit",
+    });
+    expect(replyRef).toEqual({
+      target: TARGET,
+      messageId: "om_text_sent",
+      kind: "text",
+      textUpdateMode: "edit",
+    });
     expect(sentCard).toEqual({
-      messageRef: { target: TARGET, messageId: "om_card_sent" },
+      messageRef: {
+        target: TARGET,
+        messageId: "om_card_sent",
+        kind: "approval_card",
+        textUpdateMode: "edit",
+      },
       callbackNonce: "",
     });
     expect(seenActions).toHaveBeenCalledWith(
@@ -247,6 +262,8 @@ describe("LarkChannelAdapter contract and boundaries (JAC-159)", () => {
         messageRef: {
           target: { platform: "lark", chatId: "oc_card_private" },
           messageId: "om_card_private",
+          kind: "approval_card",
+          textUpdateMode: "edit",
         },
       }),
     );
@@ -262,7 +279,12 @@ describe("LarkChannelAdapter contract and boundaries (JAC-159)", () => {
       {
         method: "updateCard",
         input: {
-          messageRef: { target: TARGET, messageId: "om_card_sent" },
+          messageRef: {
+            target: TARGET,
+            messageId: "om_card_sent",
+            kind: "approval_card",
+            textUpdateMode: "edit",
+          },
           card: renderLarkApprovalCard({ ...CARD, status: "resolved" }),
         },
       },

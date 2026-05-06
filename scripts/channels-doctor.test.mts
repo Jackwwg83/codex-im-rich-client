@@ -25,11 +25,11 @@ describe("channels doctor (JAC-237)", () => {
 
     const output = formatChannelsDoctorReport(report);
 
-    expect(report.status).toBe("attention");
-    expect(output).toContain("im doctor: attention");
+    expect(report.status).toBe("ready");
+    expect(output).toContain("im doctor: ready");
     expect(output).toContain("telegram: ready");
     expect(output).toContain("lark: ready");
-    expect(output).toContain("dingtalk: attention");
+    expect(output).toContain("dingtalk: ready");
     expect(output).toContain(
       "adapter_start: info (not checked by default; use DingTalk live gate)",
     );
@@ -38,6 +38,9 @@ describe("channels doctor (JAC-237)", () => {
     );
     expect(output).toContain(
       "daemon.status: pass (running pid=4242 codexThreads=2 pendingApprovals=0)",
+    );
+    expect(output).toContain(
+      "edit_semantics: info (text refs append by lifecycle contract with progress edits suppressed; card refs update through CardKit)",
     );
     expect(output).not.toContain("1234567890:");
     expect(output).not.toContain("sk-testsecret");

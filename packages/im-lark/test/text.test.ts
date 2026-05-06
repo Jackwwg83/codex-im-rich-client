@@ -33,7 +33,12 @@ describe("LarkChannelAdapter text send/edit/reply (JAC-153)", () => {
     const messageRef = await adapter.sendText(TARGET, "hello lark");
 
     expect(calls).toEqual([{ target: TARGET, text: "hello lark" }]);
-    expect(messageRef).toEqual({ target: TARGET, messageId: "om_sent_text" });
+    expect(messageRef).toEqual({
+      target: TARGET,
+      messageId: "om_sent_text",
+      kind: "text",
+      textUpdateMode: "edit",
+    });
   });
 
   it("edits text through the injected message client", async () => {
@@ -74,7 +79,12 @@ describe("LarkChannelAdapter text send/edit/reply (JAC-153)", () => {
     expect(calls).toEqual([
       { target: TARGET, text: "reply body", replyToMessageId: "om_existing_message" },
     ]);
-    expect(replyRef).toEqual({ target: TARGET, messageId: "om_reply_message" });
+    expect(replyRef).toEqual({
+      target: TARGET,
+      messageId: "om_reply_message",
+      kind: "text",
+      textUpdateMode: "edit",
+    });
   });
 
   it("fails fast before start and propagates client failures after start", async () => {

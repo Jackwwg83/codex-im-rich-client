@@ -224,12 +224,17 @@ export interface DaemonIssuedCallbackTokenBatch {
 export interface DaemonMessageRef {
   readonly target: Target;
   readonly messageId: string;
+  readonly kind?: DaemonMessageRefKind;
+  readonly textUpdateMode?: DaemonMessageRefTextUpdateMode;
 }
 
 export interface DaemonSendCardResult {
   readonly messageRef: DaemonMessageRef;
   readonly callbackNonce: string;
 }
+
+export type DaemonMessageRefKind = "inbound" | "text" | "approval_card" | "file";
+export type DaemonMessageRefTextUpdateMode = "edit" | "append";
 
 export interface DaemonUserChatPolicy {
   checkUserAndChat(target: Target, sender: SecurityPolicySender): SecurityPolicyUserChatDecision;
@@ -1623,7 +1628,9 @@ export class Daemon {
     const chunks = splitImText(body);
     const [firstChunk, ...continuationChunks] = chunks;
     if (firstChunk !== undefined) {
-      const edited = await this.#editTurnOutput(state, firstChunk);
+      const edited = isAppendOnlyTextRef(state.messageRef)
+        ? false
+        : await this.#editTurnOutput(state, firstChunk);
       if (!edited && !(await this.#sendTurnOutputChunk(state, firstChunk))) {
         return;
       }
@@ -1657,6 +1664,9 @@ export class Daemon {
 
   async #maybeEditTurnProgress(state: DaemonTurnOutputState): Promise<void> {
     if (state.text.length === 0) {
+      return;
+    }
+    if (isAppendOnlyTextRef(state.messageRef)) {
       return;
     }
     const nowMs = (this.options.now?.() ?? new Date()).getTime();
@@ -3079,7 +3089,12 @@ export class Daemon {
     if (typeof value !== "object" || value === null) {
       return undefined;
     }
-    const partial = value as Partial<{ target: unknown; messageId: unknown }>;
+    const partial = value as Partial<{
+      target: unknown;
+      messageId: unknown;
+      kind: unknown;
+      textUpdateMode: unknown;
+    }>;
     if (typeof partial.target !== "object" || partial.target === null) {
       return undefined;
     }
@@ -3090,6 +3105,8 @@ export class Daemon {
     return {
       target,
       messageId: partial.messageId,
+      ...optionalMessageRefKind(partial.kind),
+      ...optionalMessageRefTextUpdateMode(partial.textUpdateMode),
     };
   }
 
@@ -3282,6 +3299,24 @@ function summarizeItemDetail(item: Record<string, unknown>, type: string): strin
     return text === undefined ? undefined : redact(text.replace(/\s+/g, " ").trim());
   }
   return undefined;
+}
+
+function isAppendOnlyTextRef(ref: DaemonMessageRef | undefined): boolean {
+  return ref?.kind === "text" && ref.textUpdateMode === "append";
+}
+
+function optionalMessageRefKind(
+  value: unknown,
+): { readonly kind: DaemonMessageRefKind } | Record<string, never> {
+  return value === "inbound" || value === "text" || value === "approval_card" || value === "file"
+    ? { kind: value }
+    : {};
+}
+
+function optionalMessageRefTextUpdateMode(
+  value: unknown,
+): { readonly textUpdateMode: DaemonMessageRefTextUpdateMode } | Record<string, never> {
+  return value === "edit" || value === "append" ? { textUpdateMode: value } : {};
 }
 
 function summarizeCommandExecutionItem(item: Record<string, unknown>): string | undefined {

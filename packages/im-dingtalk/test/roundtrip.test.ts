@@ -96,7 +96,12 @@ describe("DingTalk approval adapter fake round-trip (JAC-85)", () => {
     });
 
     expect(sent).toEqual({
-      messageRef: { target: TARGET, messageId: "ding_card_group_001" },
+      messageRef: {
+        target: TARGET,
+        messageId: "ding_card_group_001",
+        kind: "approval_card",
+        textUpdateMode: "edit",
+      },
       callbackNonce: "",
     });
     expect(action.messageRef).toEqual(sent.messageRef);

@@ -73,7 +73,7 @@ export function normalizeLarkRawCardAction(
       userId: senderId,
       ...(event.operator?.name === undefined ? {} : { displayName: event.operator.name }),
     },
-    messageRef: { target, messageId },
+    messageRef: { target, messageId, kind: "approval_card", textUpdateMode: "edit" },
     callbackNonce: rawCallbackData.slice("v1:".length),
     rawCallbackData,
     receivedAt,
