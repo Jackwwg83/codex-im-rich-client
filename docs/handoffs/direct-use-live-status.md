@@ -2,7 +2,7 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-05 - Block 4 real Telegram acceptance remains
+> **Last updated:** 2026-05-06 - Block 4 real Telegram acceptance remains
 > green. Launchd soak remains healthy at the latest heartbeat, and the latest
 > built daemon artifact is now installed and running under launchd with
 > `pendingApprovals=0`. Feishu/Lark direct-use acceptance now proves launchd
@@ -36,7 +36,14 @@
 > `cardEvents=0` after synthetic desktop click attempts. A follow-up local
 > patch fixed DingTalk terminal text output so text message refs no longer
 > attempt CardKit `editText` and instead append via the session reply path; the
-> patched bridge bundle is installed under launchd pid `44722`.
+> patched bridge bundle was previously installed under launchd pid `44722`.
+> A 2026-05-06 follow-up found and fixed one DingTalk production daemon
+> stability issue by disabling the DingTalk SDK client-side WebSocket ping timer
+> in `daemon run`; the rebuilt bridge is installed under launchd pid `34173`.
+> DingTalk Desktop is now logged in and receives a fresh `codex` card-list item
+> from the explicit callback gate, but the conversation stays in a loading state
+> and the gate still ends with `cardEvents=0`, so the final DingTalk callback
+> acceptance remains open.
 
 ## 1. Current State
 
@@ -589,6 +596,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-05 19:05 SGT real callback follow-up | Fresh real DingTalk write prompt rendered the approval card and bound callback tokens, but synthetic clicks still produced no Stream callback and the target file stayed absent. A local `callback_route_key = "codex_im"` experiment was rolled back after it produced no delivered card and left `issued` / unbound tokens. Startup cleanup now revokes both `issued` and `bound` callback tokens before adapter input; targeted tests plus full gates passed, the patched bundle was installed, and launchd pid `21702` revoked the live residue on startup. |
 | 2026-05-05 19:33 SGT explicit callback probe | New `DINGTALK_LIVE_CARD_CALLBACK=1` gate sent a real card, remained connected, and failed with `cardEvents=0`; GPT Pro review says do not modify broker/security/token/messageRef logic and keep DingTalk blocked until callback-capable template plus real client click emits Stream `/v1.0/card/instances/callback`. |
 | 2026-05-05 20:00 SGT DingTalk text output fallback | Fixed DingTalk terminal text output: `sendText` now returns explicit `dingtalk-text:*` refs, and `editText` on those refs appends via DingTalk session reply instead of calling Card OpenAPI and failing with `param.cardNotExist`. This is append semantics, not true in-place text editing, so long streaming turns may produce multiple DingTalk chat messages while Telegram/Lark keep in-place edits. Targeted DingTalk/daemon tests passed, `pnpm typecheck` passed, and the rebuilt bridge bundle is installed under launchd pid `44722`; DingTalk Desktop is currently a background process with zero windows, so a fresh real client prompt/click remains blocked by client UI availability, not bridge startup. |
+| 2026-05-06 19:05 SGT DingTalk callback follow-up | Found a production daemon crash source in the DingTalk SDK client-side WebSocket ping timer (`WebSocket.ping()` while `CONNECTING`) and changed `daemon run` to pass `keepAlive: false`, matching the live-smoke Stream path. Targeted CLI/DingTalk tests and package typechecks passed; the rebuilt bridge is installed and launchd is healthy under pid `34173`. A fresh explicit callback gate delivered a visible `codex` card-list item in DingTalk Desktop, but the conversation stayed in a loading state and the gate still ended redacted with `messageId=present`, `targetSource=env`, and `cardEvents=0`; SQLite callback-token `used` count did not increase. JAC-225 remains open on one real client click that emits the Stream card callback. |
 
 Latest live Telegram acceptance evidence:
 

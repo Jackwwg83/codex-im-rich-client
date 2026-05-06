@@ -119,6 +119,13 @@ describe("daemon run safety rails", () => {
     );
   });
 
+  it("does not enable DingTalk SDK client-side WebSocket ping in production daemon", () => {
+    const source = readFileSync(join(import.meta.dirname, "../src/daemon-run.ts"), "utf8");
+
+    expect(source).toContain("keepAlive: false");
+    expect(source).not.toContain("keepAlive: true");
+  });
+
   it("routes multi-platform daemon sends and callback acknowledgements by platform", async () => {
     const calls: unknown[] = [];
     const makeAdapter = (platform: string) => ({

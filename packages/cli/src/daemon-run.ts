@@ -338,7 +338,7 @@ export function createProductionAdapter(
           clientId: config.adapters.dingtalk.clientId,
           clientSecret: secrets.dingtalkClientSecret,
           ua: "codex-im",
-          keepAlive: true,
+          keepAlive: false,
           debug: false,
         }),
         ...(dingTalkCardClient === undefined ? {} : { cardClient: dingTalkCardClient }),

@@ -2,7 +2,7 @@
 
 > Single source of truth for real Telegram/Lark/DingTalk/Codex App live
 > acceptance after `production-readiness-2026-05-03-r2`.
-> **Last updated:** 2026-05-05 - Telegram real bot + real Codex turn +
+> **Last updated:** 2026-05-06 - Telegram real bot + real Codex turn +
 > approval callback acceptance + development-task control acceptance passed.
 > Feishu/Lark now also passes launchd daemon inbound, `/status`, `/use`,
 > real Codex prompt/reply, live card schema delivery, CardKit terminal-card
@@ -27,6 +27,14 @@
 > session reply path instead of failing CardKit `editText` with
 > `param.cardNotExist`; this is append semantics, not true in-place text
 > editing, so long streaming turns may produce multiple DingTalk chat messages.
+> A 2026-05-06 follow-up found and fixed one production daemon stability issue:
+> `daemon run` no longer enables the DingTalk SDK client-side WebSocket ping
+> timer that can throw while the socket is still connecting. The rebuilt bridge
+> is installed under launchd and readiness remains green. DingTalk Desktop is
+> now logged in and receives a fresh `codex` card-list item from the explicit
+> callback gate, but the current desktop client leaves that conversation in a
+> loading state and the gate still reports `cardEvents=0`, so JAC-225 remains
+> open until a real client click emits the Stream card callback.
 
 ---
 
@@ -404,6 +412,38 @@ Stop and treat as a blocker if:
   DingTalk Web was still on the maintenance page, and the card editor tab was
   not a chat client; no real client click path was available, so JAC-225
   remains open.
+- 2026-05-06 14:15 SGT heartbeat: `git status --short --branch` remained clean
+  and synced at `49a63f5`. `pnpm launchd:status` still reported launchd pid
+  `44722`, started at `2026-05-05T11:59:46.040Z`, with `pendingApprovals=0`;
+  `pnpm dingtalk:readiness` remained `ready` and still labels the approval
+  callback round-trip as info-only. Current-pid daemon stdout still had no
+  entries beyond redacted secret resolution, DingTalk Stream `connect success`,
+  and daemon startup; stderr still had only Node/SDK deprecation warnings.
+  SQLite recorded zero callback audit rows after the current pid startup, and
+  the latest DingTalk callback tokens remained expired or revoked, not `used`.
+  GUI inspection showed DingTalk Desktop running with zero windows; Chrome still
+  only exposed the DingTalk card editor and DingTalk Web maintenance page. No
+  real client click path was available, so JAC-225 remains open.
+- 2026-05-06 19:05 SGT callback follow-up: launchd had restarted after a real
+  DingTalk SDK ping crash from `WebSocket.ping()` while the socket was still
+  `CONNECTING`. The production daemon now passes `keepAlive: false` to the
+  DingTalk Stream client, matching the already-green live-smoke path and
+  avoiding that SDK ping timer. Targeted validation passed:
+  `pnpm exec vitest run packages/cli/test/daemon-run.test.ts
+  packages/im-dingtalk/test/contract.test.ts
+  packages/im-dingtalk/test/reconnect.test.ts --config vitest.config.ts
+  --project unit --project contract`, `pnpm --filter @codex-im/cli typecheck`,
+  `pnpm --filter @codex-im/im-dingtalk typecheck`, `pnpm bridge:build`,
+  `pnpm bridge:install`, `launchctl kickstart -k gui/501/io.codex-im-bridge`,
+  `pnpm launchd:status`, and `pnpm dingtalk:readiness`. The installed daemon is
+  running under pid `34173`, with no new ping crash after restart. A fresh
+  explicit `DINGTALK_LIVE_CARD_CALLBACK=1` probe sent a real card and DingTalk
+  Desktop showed a new `codex` card-list item, but the conversation remained in
+  a loading state and the probe still ended with redacted `messageId=present`,
+  `targetSource=env`, and `cardEvents=0`. SQLite callback-token counts were
+  unchanged after the attempted click path (`used` did not increase), so the
+  remaining blocker is still a real DingTalk client path that opens the card and
+  emits `/v1.0/card/instances/callback`; do not mark DingTalk callback green.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed
