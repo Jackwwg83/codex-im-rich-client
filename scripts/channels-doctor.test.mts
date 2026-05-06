@@ -34,7 +34,7 @@ describe("channels doctor (JAC-237)", () => {
       "adapter_start: info (not checked by default; use DingTalk live gate)",
     );
     expect(output).toContain(
-      "callback_click: warn (not proven; requires DINGTALK_LIVE_CARD_CALLBACK=1 with a real client click)",
+      "callback_click: info (not checked by default; use DINGTALK_LIVE_CARD_CALLBACK=1 with a real client click)",
     );
     expect(output).toContain(
       "daemon.status: pass (running pid=4242 codexThreads=2 pendingApprovals=0)",

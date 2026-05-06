@@ -39,6 +39,7 @@ export {
 } from "./client.js";
 export type {
   DingTalkActionClientLike,
+  DingTalkAllEventHandler,
   DingTalkCardClientLike,
   DingTalkDwClientLike,
   DingTalkOpenApiCardClientConfig,

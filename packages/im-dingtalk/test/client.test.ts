@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DINGTALK_TOPIC_CARD,
   DINGTALK_TOPIC_ROBOT,
+  type DingTalkAllEventHandler,
   type DingTalkDwClientLike,
   type DingTalkStreamEventHandler,
   createDingTalkOpenApiCardClient,
@@ -25,12 +26,18 @@ describe("DingTalk Stream client wrapper (JAC-90 P1 fix)", () => {
   it("adapts DWClient registration, lifecycle, and callback ack into the adapter surface", async () => {
     const calls: unknown[] = [];
     let robotHandler: DingTalkStreamEventHandler | undefined;
+    let allEventHandler: DingTalkAllEventHandler | undefined;
     const dwClient: DingTalkDwClientLike = {
       registerCallbackListener(topic, handler) {
         calls.push({ method: "register", topic });
         if (topic === DINGTALK_TOPIC_ROBOT) {
           robotHandler = handler;
         }
+        return this;
+      },
+      registerAllEventListener(handler) {
+        calls.push({ method: "registerAllEvent" });
+        allEventHandler = handler;
         return this;
       },
       async connect() {
@@ -55,14 +62,17 @@ describe("DingTalk Stream client wrapper (JAC-90 P1 fix)", () => {
 
     client.registerCallbackListener(DINGTALK_TOPIC_ROBOT, () => {});
     client.registerCallbackListener(DINGTALK_TOPIC_CARD, () => {});
+    client.registerAllEventListener?.(() => {});
     await client.connect();
     await client.ackCallback?.("stream_msg_ack_001");
     await client.disconnect();
 
     expect(robotHandler).toBeDefined();
+    expect(allEventHandler).toBeDefined();
     expect(calls).toEqual([
       { method: "register", topic: DINGTALK_TOPIC_ROBOT },
       { method: "register", topic: DINGTALK_TOPIC_CARD },
+      { method: "registerAllEvent" },
       { method: "connect" },
       { method: "ack", messageId: "stream_msg_ack_001", result: { status: "SUCCESS" } },
       { method: "disconnect" },

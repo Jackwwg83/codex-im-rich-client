@@ -2,8 +2,11 @@
 
 import type { Target } from "@codex-im/channel-core";
 import {
+  DINGTALK_TOPIC_CARD,
   DingTalkChannelAdapter,
   type DingTalkInboundAction,
+  type DingTalkStreamClientLike,
+  type DingTalkStreamEventHandler,
   createDingTalkOpenApiCardClient,
   createDingTalkStreamClient,
   renderDingTalkApprovalCard,
@@ -13,7 +16,8 @@ const REQUIRED_FOR_LIVE = ["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET_ENV"] a
 const REQUIRED_FOR_CARD_LIVE = ["DINGTALK_CARD_TEMPLATE_ID"] as const;
 const DEFAULT_DURATION_MS = 5_000;
 const MIN_DURATION_MS = 1_000;
-const MAX_DURATION_MS = 30_000;
+const MAX_DURATION_MS = 120_000;
+const CALLBACK_STREAM_READY_DELAY_MS = 3_000;
 
 type SmokeStatus =
   | "skip"
@@ -32,6 +36,11 @@ interface RedactedStatus {
   readonly durationMs?: number;
   readonly robotEvents?: number;
   readonly cardEvents?: number;
+  readonly streamEvents?: number;
+  readonly rawCardCallbacks?: number;
+  readonly normalizedCardActions?: number;
+  readonly rawCardCallbackMessageId?: "present";
+  readonly rawCardCallbackShape?: SanitizedCardCallbackShape;
   readonly robotCode?: "present" | "missing" | "derived_from_client_id";
   readonly cardTemplateId?: "present" | "missing";
   readonly targetChatId?: "present" | "missing";
@@ -43,6 +52,22 @@ interface RedactedStatus {
   readonly callbackRawActionId?: "present";
   readonly callbackRawSpaceType?: "IM_GROUP" | "IM_ROBOT" | "unknown";
   readonly missing?: readonly string[];
+}
+
+interface SanitizedCardCallbackShape {
+  readonly dataKeys: readonly string[];
+  readonly contentKind: "json_string" | "object" | "missing" | "other";
+  readonly contentKeys: readonly string[];
+  readonly cardPrivateDataKeys: readonly string[];
+  readonly paramsKeys: readonly string[];
+  readonly actionIdsCount: number;
+  readonly actionHints: readonly string[];
+  readonly payloadLocations: readonly string[];
+  readonly hasOutTrackId: boolean;
+  readonly hasSpaceId: boolean;
+  readonly spaceType: "IM_GROUP" | "IM_ROBOT" | "unknown" | "missing";
+  readonly hasUserId: boolean;
+  readonly hasSenderStaffId: boolean;
 }
 
 async function main(): Promise<void> {
@@ -180,20 +205,40 @@ async function runLiveCardCallbackSmoke(input: {
   readonly durationMs: number;
   readonly resolvedTarget: { target: Target; source: "env" | "captured" | "discovered" };
 }): Promise<void> {
-  const counters = { cardEvents: 0 };
+  const counters = { rawCardCallbacks: 0, normalizedCardActions: 0, streamEvents: 0 };
   let callbackMessageRef: "present" | undefined;
   let callbackAction: "present" | undefined;
   let callbackRaw: "present" | undefined;
   let callbackRawActionId: "present" | undefined;
   let callbackRawSpaceType: "IM_GROUP" | "IM_ROBOT" | "unknown" | undefined;
-  const streamClient = createDingTalkStreamClient({
-    clientId: requiredEnv("DINGTALK_CLIENT_ID"),
-    clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
-    debug: false,
-  });
+  let rawCardCallbackMessageId: "present" | undefined;
+  let rawCardCallbackShape: SanitizedCardCallbackShape | undefined;
+  const streamClient = observeLiveCardCallbacks(
+    createDingTalkStreamClient({
+      clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+      clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+      debug: false,
+    }),
+    {
+      onRawCardCallback(event) {
+        counters.rawCardCallbacks++;
+        rawCardCallbackMessageId =
+          event.headers?.messageId === undefined || event.headers.messageId.length === 0
+            ? undefined
+            : "present";
+        rawCardCallbackShape = summarizeCardCallbackShape(event);
+      },
+      onStreamEvent() {
+        counters.streamEvents++;
+      },
+    },
+  );
   const adapter = new DingTalkChannelAdapter({ streamClient });
+  streamClient.registerAllEventListener?.(() => {
+    // The live harness observes generic Stream EVENT frames only to classify callback failures.
+  });
   adapter.onAction((action) => {
-    counters.cardEvents++;
+    counters.normalizedCardActions++;
     callbackMessageRef = action.messageRef === undefined ? undefined : "present";
     callbackAction = action.uiAction === undefined ? undefined : "present";
     const raw = (action as DingTalkInboundAction).raw;
@@ -215,6 +260,7 @@ async function runLiveCardCallbackSmoke(input: {
 
   try {
     await adapter.start();
+    await sleep(CALLBACK_STREAM_READY_DELAY_MS);
     const sent = await messageClient.sendCard({
       target: input.resolvedTarget.target,
       card: renderDingTalkApprovalCard({
@@ -231,17 +277,30 @@ async function runLiveCardCallbackSmoke(input: {
         createdAt: new Date(0),
       }),
     });
-    await waitFor(() => counters.cardEvents > 0, input.durationMs);
-    if (counters.cardEvents === 0) {
+    console.log(
+      "[dingtalk-live-smoke] CARD_SENT: waiting for a real DingTalk client button click.",
+    );
+    await waitFor(
+      () => counters.rawCardCallbacks > 0 || counters.normalizedCardActions > 0,
+      input.durationMs,
+    );
+    if (counters.normalizedCardActions === 0) {
       printStatus({
         ...redactedStatus("blocked"),
         durationMs: input.durationMs,
         messageId: "present",
         targetSource: input.resolvedTarget.source,
-        cardEvents: 0,
+        cardEvents: counters.normalizedCardActions,
+        rawCardCallbacks: counters.rawCardCallbacks,
+        normalizedCardActions: counters.normalizedCardActions,
+        streamEvents: counters.streamEvents,
+        rawCardCallbackMessageId,
+        rawCardCallbackShape,
       });
       console.error(
-        "[dingtalk-live-smoke] BLOCKED: card sent but no Stream card callback arrived before timeout.",
+        counters.rawCardCallbacks === 0
+          ? "[dingtalk-live-smoke] BLOCKED: card sent but no Stream card callback arrived before timeout."
+          : "[dingtalk-live-smoke] BLOCKED: raw Stream card callback arrived but did not normalize into an action.",
       );
       process.exitCode = 3;
       return;
@@ -251,7 +310,12 @@ async function runLiveCardCallbackSmoke(input: {
       durationMs: input.durationMs,
       messageId: "present",
       targetSource: input.resolvedTarget.source,
-      cardEvents: counters.cardEvents,
+      cardEvents: counters.normalizedCardActions,
+      rawCardCallbacks: counters.rawCardCallbacks,
+      normalizedCardActions: counters.normalizedCardActions,
+      streamEvents: counters.streamEvents,
+      rawCardCallbackMessageId,
+      rawCardCallbackShape,
       callbackMessageRef,
       callbackAction,
       callbackRaw,
@@ -281,6 +345,156 @@ async function runLiveCardCallbackSmoke(input: {
   } finally {
     await adapter.stop();
   }
+}
+
+function summarizeCardCallbackShape(
+  event: Parameters<DingTalkStreamEventHandler>[0],
+): SanitizedCardCallbackShape {
+  const data = parseJsonObject(event.data);
+  const contentRaw = data === undefined ? undefined : data.content;
+  const content =
+    typeof contentRaw === "string"
+      ? parseJsonObject(contentRaw)
+      : isRecord(contentRaw)
+        ? contentRaw
+        : undefined;
+  const contentKind =
+    typeof contentRaw === "string"
+      ? content === undefined
+        ? "other"
+        : "json_string"
+      : contentRaw === undefined
+        ? "missing"
+        : isRecord(contentRaw)
+          ? "object"
+          : "other";
+  const cardPrivateData = isRecord(content?.cardPrivateData) ? content.cardPrivateData : undefined;
+  const params = isRecord(cardPrivateData?.params) ? cardPrivateData.params : undefined;
+  const actionIds = Array.isArray(cardPrivateData?.actionIds) ? cardPrivateData.actionIds : [];
+  return {
+    dataKeys: sortedKeys(data),
+    contentKind,
+    contentKeys: sortedKeys(content),
+    cardPrivateDataKeys: sortedKeys(cardPrivateData),
+    paramsKeys: sortedKeys(params),
+    actionIdsCount: actionIds.length,
+    actionHints: [
+      ...actionIds.flatMap((value) => safeActionHint(value)),
+      ...safeActionHint(params?.action),
+    ],
+    payloadLocations: payloadLocations(data, content, params),
+    hasOutTrackId: typeof data?.outTrackId === "string" && data.outTrackId.length > 0,
+    hasSpaceId: typeof data?.spaceId === "string" && data.spaceId.length > 0,
+    spaceType:
+      typeof data?.spaceType === "string" ? sanitizedDingTalkSpaceType(data.spaceType) : "missing",
+    hasUserId: typeof data?.userId === "string" && data.userId.length > 0,
+    hasSenderStaffId: typeof data?.senderStaffId === "string" && data.senderStaffId.length > 0,
+  };
+}
+
+function sortedKeys(record: Record<string, unknown> | undefined): string[] {
+  return record === undefined ? [] : Object.keys(record).sort();
+}
+
+function payloadLocations(
+  data: Record<string, unknown> | undefined,
+  content: Record<string, unknown> | undefined,
+  params: Record<string, unknown> | undefined,
+): string[] {
+  const locations: string[] = [];
+  for (const [prefix, record] of [
+    ["data", data],
+    ["content", content],
+    ["params", params],
+  ] as const) {
+    if (record === undefined) {
+      continue;
+    }
+    for (const [key, value] of Object.entries(record)) {
+      if (typeof value === "string" && /^v1:[A-Z2-7]{16}$/.test(value)) {
+        locations.push(`${prefix}.${key}`);
+      }
+    }
+  }
+  return locations.sort();
+}
+
+function safeActionHint(value: unknown): string[] {
+  if (typeof value !== "string" || value.length === 0) {
+    return [];
+  }
+  const normalized = value.toLowerCase().replaceAll(/[^a-z0-9\u4e00-\u9fff]/g, "");
+  if (
+    [
+      "1",
+      "2",
+      "agree",
+      "accept",
+      "allow",
+      "approve",
+      "confirm",
+      "ok",
+      "yes",
+      "reject",
+      "refuse",
+      "decline",
+      "deny",
+      "disagree",
+      "同意",
+      "通过",
+      "拒绝",
+      "驳回",
+    ].includes(normalized)
+  ) {
+    return [normalized];
+  }
+  return ["present"];
+}
+
+function parseJsonObject(value: string | undefined): Record<string, unknown> | undefined {
+  if (value === undefined || value.length === 0) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function observeLiveCardCallbacks(
+  streamClient: DingTalkStreamClientLike,
+  observers: {
+    readonly onRawCardCallback: (event: Parameters<DingTalkStreamEventHandler>[0]) => void;
+    readonly onStreamEvent: (event: Parameters<DingTalkStreamEventHandler>[0]) => void;
+  },
+): DingTalkStreamClientLike {
+  return {
+    registerCallbackListener(topic, handler) {
+      return streamClient.registerCallbackListener(topic, async (event) => {
+        if (topic === DINGTALK_TOPIC_CARD) {
+          observers.onRawCardCallback(event);
+        }
+        await handler(event);
+      });
+    },
+    registerAllEventListener(handler) {
+      return streamClient.registerAllEventListener?.((event) => {
+        observers.onStreamEvent(event);
+        return handler(event);
+      });
+    },
+    connect() {
+      return streamClient.connect();
+    },
+    disconnect() {
+      return streamClient.disconnect();
+    },
+    ackCallback(messageId) {
+      return streamClient.ackCallback?.(messageId);
+    },
+  };
 }
 
 function redactedStatus(status: SmokeStatus): RedactedStatus {

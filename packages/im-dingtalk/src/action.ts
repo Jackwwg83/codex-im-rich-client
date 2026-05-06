@@ -66,7 +66,7 @@ export function normalizeDingTalkRawCardAction(
     return undefined;
   }
 
-  const chatId = chatIdFromSpace(spaceId, spaceType);
+  const chatId = chatIdFromSpace(spaceId, spaceType, senderUserId);
   if (chatId === undefined) {
     return undefined;
   }
@@ -220,7 +220,7 @@ function parseCardRequest(data: string | undefined): Record<string, unknown> | u
 }
 
 function parseCardContent(content: unknown): Record<string, unknown> | undefined {
-  return typeof content === "string" ? parseJsonRecord(content) : undefined;
+  return typeof content === "string" ? parseJsonRecord(content) : asRecord(content);
 }
 
 function singleActionId(content: Record<string, unknown> | undefined): string | undefined {
@@ -239,18 +239,21 @@ function actionParamValue(content: Record<string, unknown> | undefined): string 
   return stringField(params?.action);
 }
 
-function chatIdFromSpace(spaceId: string, spaceType: string): string | undefined {
-  const prefix =
-    spaceType === "IM_GROUP"
-      ? "dtv1.card//IM_GROUP."
-      : spaceType === "IM_ROBOT"
-        ? "dtv1.card//IM_ROBOT."
-        : undefined;
-  if (prefix === undefined || !spaceId.startsWith(prefix)) {
-    return undefined;
+function chatIdFromSpace(
+  spaceId: string,
+  spaceType: string,
+  senderUserId: string,
+): string | undefined {
+  for (const prefix of ["dtv1.card//IM_GROUP.", "dtv1.card//IM_ROBOT."]) {
+    if (spaceId.startsWith(prefix)) {
+      const chatId = spaceId.slice(prefix.length);
+      return chatId.length > 0 ? chatId : undefined;
+    }
   }
-  const chatId = spaceId.slice(prefix.length);
-  return chatId.length > 0 ? chatId : undefined;
+  if (spaceType.toLowerCase() === "im") {
+    return senderUserId;
+  }
+  return undefined;
 }
 
 function stringField(value: unknown): string | undefined {

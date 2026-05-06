@@ -48,6 +48,22 @@ describe("DingTalk live smoke harness gate (JAC-89)", () => {
     expect(output(result)).not.toContain(CLIENT_ID);
   });
 
+  it("allows a two-minute manual callback window for real client clicks", () => {
+    const result = runLiveSmoke({
+      DINGTALK_LIVE: "1",
+      DINGTALK_LIVE_DRY_RUN: "1",
+      DINGTALK_CLIENT_ID: CLIENT_ID,
+      DINGTALK_CLIENT_SECRET_ENV: "DINGTALK_TEST_SECRET",
+      DINGTALK_TEST_SECRET: SECRET,
+      DINGTALK_LIVE_DURATION_MS: "120000",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('"durationMs": 120000');
+    expect(output(result)).not.toContain(SECRET);
+    expect(output(result)).not.toContain(CLIENT_ID);
+  });
+
   it("blocks explicit card smoke when card template env is incomplete", () => {
     const result = runLiveSmoke({
       DINGTALK_LIVE: "1",

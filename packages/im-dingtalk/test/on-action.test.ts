@@ -147,6 +147,82 @@ describe("DingTalk card action messageRef validation (JAC-84)", () => {
     });
   });
 
+  it("maps public-template callbacks when DingTalk sends a vendor-specific spaceType", () => {
+    const event = cardCallbackWithParams({ action: "accept" });
+    const data = JSON.parse(event.data as string) as Record<string, unknown>;
+    const action = normalizeDingTalkRawCardAction(
+      {
+        ...event,
+        data: JSON.stringify({
+          ...data,
+          spaceType: "ONE_BOX",
+        }),
+      },
+      NOW.getTime(),
+    );
+
+    expect(action).toMatchObject({
+      uiAction: { kind: "allow_once" },
+      rawCallbackData: "dingtalk-template-action:allow_once",
+      target: { platform: "dingtalk", chatId: "staff_private_target" },
+      messageRef: {
+        target: { platform: "dingtalk", chatId: "staff_private_target" },
+        messageId: "ding_card_token_001",
+      },
+    });
+  });
+
+  it("maps real DingTalk private callbacks that use spaceType IM and userId as the target", () => {
+    const event = cardCallbackWithParams({ action: "accept" });
+    const data = JSON.parse(event.data as string) as Record<string, unknown>;
+    const action = normalizeDingTalkRawCardAction(
+      {
+        ...event,
+        data: JSON.stringify({
+          ...data,
+          spaceId: "opaque-private-space",
+          spaceType: "IM",
+        }),
+      },
+      NOW.getTime(),
+    );
+
+    expect(action).toMatchObject({
+      uiAction: { kind: "allow_once" },
+      rawCallbackData: "dingtalk-template-action:allow_once",
+      target: { platform: "dingtalk", chatId: "staff_action_user" },
+      messageRef: {
+        target: { platform: "dingtalk", chatId: "staff_action_user" },
+        messageId: "ding_card_token_001",
+      },
+    });
+  });
+
+  it("maps callbacks when DingTalk sends content as an object instead of a JSON string", () => {
+    const event = cardCallbackWithParams({ action: "accept" });
+    const data = JSON.parse(event.data as string) as Record<string, unknown>;
+    const content = JSON.parse(data.content as string) as Record<string, unknown>;
+    const action = normalizeDingTalkRawCardAction(
+      {
+        ...event,
+        data: JSON.stringify({
+          ...data,
+          content,
+        }),
+      },
+      NOW.getTime(),
+    );
+
+    expect(action).toMatchObject({
+      uiAction: { kind: "allow_once" },
+      rawCallbackData: "dingtalk-template-action:allow_once",
+      messageRef: {
+        target: { platform: "dingtalk", chatId: "staff_private_target" },
+        messageId: "ding_card_token_001",
+      },
+    });
+  });
+
   it("maps DingTalk public-template reject callbacks through messageRef-scoped actions", () => {
     const action = normalizeDingTalkRawCardAction(
       fixture("card-action-public-template-reject.json"),

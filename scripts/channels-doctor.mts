@@ -236,8 +236,8 @@ function evaluateDingTalk(
     { name: "approval_card", status: "info", detail: "supported by CardKit/OpenAPI card client" },
     {
       name: "callback_click",
-      status: "warn",
-      detail: "not proven; requires DINGTALK_LIVE_CARD_CALLBACK=1 with a real client click",
+      status: "info",
+      detail: "not checked by default; use DINGTALK_LIVE_CARD_CALLBACK=1 with a real client click",
     },
     {
       name: "edit_semantics",

@@ -12,42 +12,20 @@
 > `Allow session` reuse callbacks, and Feishu CardKit terminal-card refresh.
 > A fresh Feishu Web regression on 2026-05-05 returned an exact Codex reply
 > after stale-thread recovery.
-> DingTalk Stream connects with redacted test
-> credentials, and production card send/update is now wired behind explicit
-> OpenAPI card-template config; an explicit redacted `DINGTALK_LIVE_CARD=1`
-> live smoke gate now exists for OpenAPI card send/update with AppKey-derived
-> robot-code fallback and optional target capture from one real inbound robot
-> message. DingTalk `Card.Instance.Write` is now open, IM_ROBOT delivery now
-> includes DingTalk's top-level `userId` alongside `userIdType=1`, and redacted
-> OpenAPI card send/update now passes with a contact-discovered enterprise
-> `userid`. The latest DingTalk OpenAPI card gate re-run uses the published
-> template's required parameter shape and remains green. Installed DingTalk
-> config/readiness is now green under launchd. Real DingTalk desktop inbound is
-> now green for both prompt/reply and `/status`; an approval card renders and
-> binds callback tokens. The remaining DingTalk gap is one real CardKit
-> callback click, because macOS/Computer Use synthetic clicks did not trigger a
-> card callback in the current desktop client. A follow-up 2026-05-05 real
-> DingTalk write prompt reproduced card render + token binding, confirmed the
-> synthetic click still produced no callback, rejected an invalid local
-> `callback_route_key` experiment, and added startup cleanup for both `issued`
-> and `bound` callback tokens left by failed send/bind paths. The explicit
-> `DINGTALK_LIVE_CARD_CALLBACK=1` probe now sends a real card and waits for a
-> Stream card callback; its first run stayed connected but failed with
-> `cardEvents=0` after synthetic desktop click attempts. A follow-up local
-> patch fixed DingTalk terminal text output so text message refs no longer
-> attempt CardKit `editText` and instead append via the session reply path; the
-> patched bridge bundle was previously installed under launchd pid `44722`.
-> A 2026-05-06 follow-up found and fixed one DingTalk production daemon
-> stability issue by disabling the DingTalk SDK client-side WebSocket ping timer
-> in `daemon run`; the rebuilt bridge is installed under launchd pid `34173`.
-> DingTalk Desktop is now logged in and receives a fresh `codex` card-list item
-> from the explicit callback gate, but the conversation stays in a loading state
-> and the gate still ends with `cardEvents=0`, so the final DingTalk callback
-> acceptance remains open. JAC-237 added `pnpm im:doctor` / `pnpm
-> channels:doctor` as the unified no-live-network channel readiness surface; it
-> reports launchd/Keychain presence, per-platform config/capability status,
-> edit-vs-append semantics, attachment support, and explicitly keeps DingTalk
-> callback acceptance at `attention` until the real callback click is proven.
+> DingTalk Stream, OpenAPI card send/update, installed readiness, real desktop
+> inbound prompt/status, approval card delivery, and the explicit
+> `DINGTALK_LIVE_CARD_CALLBACK=1` live callback probe are now green. The passing
+> 2026-05-06 probe used the current DingTalk thread binding, delivered a fresh
+> card in DingTalk Desktop, and a real `同意` click produced
+> `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`,
+> `callbackMessageRef=present`, and `callbackAction=present` with redacted
+> output only. The fix accepts DingTalk's real private callback shape
+> (`cardPrivateData.params.action`, `spaceType=IM`, `userId`) while keeping
+> callback-token/messageRef validation fail-closed. DingTalk text refs still
+> append via session reply rather than true in-place edit. JAC-237 added
+> `pnpm im:doctor` / `pnpm channels:doctor` as the unified no-live-network
+> readiness surface; callback_click is now informational, while DingTalk still
+> reports `attention` for edit-vs-append semantics.
 
 ## 1. Current State
 
@@ -304,10 +282,18 @@
     windows and the screen remained empty; Chrome still had only the DingTalk
     card editor and the DingTalk Web maintenance page. No real DingTalk client
     click path was available, so JAC-225 stays open.
-- **Next exact action:** Finish DingTalk real approval callback acceptance with
-  one real user/client CardKit click that emits Stream
-  `/v1.0/card/instances/callback`; synthetic macOS/Computer Use clicks have not
-  triggered the current DingTalk desktop client.
+  - latest evidence - 2026-05-06 21:50 SGT: DingTalk real CardKit callback
+    acceptance passed. The first callback-gate rerun used a stale configured
+    target and produced no visible new card; the passing rerun used the current
+    DingTalk `thread_bindings` target, delivered a fresh card in DingTalk
+    Desktop, and a real `同意` click produced redacted `card_callback_seen`
+    evidence: `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`,
+    `callbackMessageRef=present`, and `callbackAction=present`. The rebuilt
+    bridge was restored under launchd afterward, with `pendingApprovals=0`, and
+    `pnpm dingtalk:readiness` remained ready.
+- **Next exact action:** Keep DingTalk on launchd soak, then close the
+  remaining direct-use parity gap: true in-place text edit or an explicitly
+  accepted append/progress projection for long DingTalk turns.
 
 ## 2. Why This Exists
 
@@ -352,7 +338,7 @@ Required P0 plan edits:
 | Block 1 | truthful production launch chain | complete through A4 |
 | Block 2 | IM command control plane | complete through B8 |
 | Block 3 | repeatable smoke layers | complete through C4 plus real Telegram Web and Feishu Web direct-use acceptance evidence |
-| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk installed readiness, OpenAPI card send/update, real inbound prompt/status, and approval-card delivery are green; DingTalk direct-use remains pending on one real CardKit callback click |
+| Block 4 | real production acceptance + 24h soak | in progress: latest bridge daemon is installed and running under launchd; Telegram and Feishu/Lark direct-use are green; DingTalk installed readiness, OpenAPI card send/update, real inbound prompt/status, approval-card delivery, and real CardKit callback click are green; remaining DingTalk parity gap is append-style text refs vs true in-place edit |
 
 ## 5. Active Redlines
 
@@ -586,7 +572,7 @@ Latest DingTalk direct-use readiness evidence:
 | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 pnpm smoke:dingtalk-live` | green with browser-derived AppKey and Keychain-backed secret; output was redacted and reported `ready_dry_run` |
 | `DINGTALK_LIVE=1 pnpm smoke:dingtalk-live` | green bounded 5-second Stream connection; `robotEvents=0`, `cardEvents=0`, no secret bytes printed |
 | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_DISCOVER_USER=1 pnpm smoke:dingtalk-live` | green redacted `card_updated`; target source was contact-discovered and no user/chat id was printed. Re-run on 2026-05-05 remained green after published-template parameter alignment |
-| `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_CARD_CALLBACK=1 pnpm smoke:dingtalk-live` | blocked as expected for current desktop automation: sent a real card, reported redacted message-id presence and `targetSource=env`, kept Stream connected for 30 seconds, and failed with `cardEvents=0` after synthetic click attempts; callback-success output now includes only redacted raw-shape presence fields for fixture triage |
+| `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_CARD_CALLBACK=1 pnpm smoke:dingtalk-live` | green on 2026-05-06 with a real DingTalk Desktop click against the current thread binding target: redacted `card_callback_seen`, `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`, `callbackMessageRef=present`, and `callbackAction=present`; no secret/user/chat/message id bytes printed |
 | DingTalk developer-console / OpenAPI card check | `Card.Instance.Write` is open; live OpenAPI card probe with contact-discovered enterprise `userid` now reaches redacted `card_updated`; app-bound template creation succeeds, but save/build/publish is still rejected by the card platform, so installed direct-use should keep using explicit configured template evidence until a project-owned template is published |
 | `pnpm dingtalk:readiness` | ready for installed config: adapter enabled, client id present, Keychain secret present, card template id present, and DingTalk global/project allowlist entries present; output now explicitly reports `approval_callback_roundtrip` as info-only and not checked without the live callback gate |
 | 2026-05-04 20:09 SGT local readiness check | still expected blocked with the same local config gaps; no additional launchd/local regression was found |
@@ -601,7 +587,8 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-05 19:33 SGT explicit callback probe | New `DINGTALK_LIVE_CARD_CALLBACK=1` gate sent a real card, remained connected, and failed with `cardEvents=0`; GPT Pro review says do not modify broker/security/token/messageRef logic and keep DingTalk blocked until callback-capable template plus real client click emits Stream `/v1.0/card/instances/callback`. |
 | 2026-05-05 20:00 SGT DingTalk text output fallback | Fixed DingTalk terminal text output: `sendText` now returns explicit `dingtalk-text:*` refs, and `editText` on those refs appends via DingTalk session reply instead of calling Card OpenAPI and failing with `param.cardNotExist`. This is append semantics, not true in-place text editing, so long streaming turns may produce multiple DingTalk chat messages while Telegram/Lark keep in-place edits. Targeted DingTalk/daemon tests passed, `pnpm typecheck` passed, and the rebuilt bridge bundle is installed under launchd pid `44722`; DingTalk Desktop is currently a background process with zero windows, so a fresh real client prompt/click remains blocked by client UI availability, not bridge startup. |
 | 2026-05-06 19:05 SGT DingTalk callback follow-up | Found a production daemon crash source in the DingTalk SDK client-side WebSocket ping timer (`WebSocket.ping()` while `CONNECTING`) and changed `daemon run` to pass `keepAlive: false`, matching the live-smoke Stream path. Targeted CLI/DingTalk tests and package typechecks passed; the rebuilt bridge is installed and launchd is healthy under pid `34173`. A fresh explicit callback gate delivered a visible `codex` card-list item in DingTalk Desktop, but the conversation stayed in a loading state and the gate still ended redacted with `messageId=present`, `targetSource=env`, and `cardEvents=0`; SQLite callback-token `used` count did not increase. JAC-225 remains open on one real client click that emits the Stream card callback. |
-| 2026-05-06 19:26 SGT unified IM doctor | JAC-237 added `pnpm im:doctor` with alias `pnpm channels:doctor`. Default output is no-live-network and redacted: installed bridge plist/status, per-platform secret-source presence via env/Keychain, allowlists, capabilities, adapter-start/live-gate status, inbound/outbound/card/callback status, edit-vs-append semantics, and file support. On the current machine it reports overall `attention`: Telegram and Lark `ready`, DingTalk `attention` because real CardKit callback click remains unproven and DingTalk text refs are append semantics. |
+| 2026-05-06 19:26 SGT unified IM doctor | JAC-237 added `pnpm im:doctor` with alias `pnpm channels:doctor`. Default output is no-live-network and redacted: installed bridge plist/status, per-platform secret-source presence via env/Keychain, allowlists, capabilities, adapter-start/live-gate status, inbound/outbound/card/callback status, edit-vs-append semantics, and file support. After the real callback pass, callback_click is informational; on the current machine the overall report remains `attention` because DingTalk text refs are append semantics rather than true in-place edit. |
+| 2026-05-06 21:50 SGT DingTalk callback acceptance | Compared the local parser with DingTalk/OpenClaw callback behavior, then reran the explicit callback gate against the current DingTalk `thread_bindings` target. A fresh card appeared in DingTalk Desktop, a real `同意` click removed the buttons, and the gate exited 0 with redacted `card_callback_seen`: `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`, `callbackMessageRef=present`, and `callbackAction=present`. The observed callback shape uses `content.cardPrivateData.params.action` and private `spaceType=IM` / `userId` fields; no secret/user/chat/message id bytes were recorded. Launchd was restored afterward and `pnpm dingtalk:readiness` remained ready. |
 
 Latest live Telegram acceptance evidence:
 

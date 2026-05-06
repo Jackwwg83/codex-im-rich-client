@@ -20,12 +20,14 @@ export interface DingTalkStreamEventLike {
 }
 
 export type DingTalkStreamEventHandler = (event: DingTalkStreamEventLike) => void | Promise<void>;
+export type DingTalkAllEventHandler = (event: DingTalkStreamEventLike) => unknown;
 
 export interface DingTalkStreamClientLike {
   registerCallbackListener(
     topic: string,
     handler: DingTalkStreamEventHandler,
   ): DingTalkStreamClientLike | undefined;
+  registerAllEventListener?(handler: DingTalkAllEventHandler): DingTalkStreamClientLike | undefined;
   connect(): void | Promise<void>;
   disconnect(): void | Promise<void>;
   ackCallback?(messageId: string): void | Promise<void>;
@@ -44,6 +46,7 @@ export interface DingTalkDwClientLike {
     topic: string,
     handler: DingTalkStreamEventHandler,
   ): DingTalkDwClientLike | undefined;
+  registerAllEventListener?(handler: DingTalkAllEventHandler): DingTalkDwClientLike | undefined;
   connect(): void | Promise<void>;
   disconnect(): void | Promise<void>;
   socketCallBackResponse(messageId: string, result: unknown): void;
@@ -268,6 +271,14 @@ class DingTalkStreamClient implements DingTalkStreamClientLike {
     handler: DingTalkStreamEventHandler,
   ): DingTalkStreamClientLike | undefined {
     this.#client.registerCallbackListener(topic, handler);
+    return this;
+  }
+
+  registerAllEventListener(handler: DingTalkAllEventHandler): DingTalkStreamClientLike | undefined {
+    this.#client.registerAllEventListener?.((event) => {
+      handler(event);
+      return { status: EventAck.SUCCESS };
+    });
     return this;
   }
 
