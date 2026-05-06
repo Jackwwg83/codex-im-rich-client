@@ -37,6 +37,9 @@
 > Daemon terminal turn output now maps completed Codex `imageGeneration`
 > items with `savedPath` to IM attachments through `sendFile`, preserving the
 > text terminal summary as the Codex-native primary surface.
+> Explicit Telegram and Feishu/Lark live file gates passed with redacted
+> evidence; launchd was restored afterward under pid `94243` with
+> `pendingApprovals=0`.
 
 ## 1. Current State
 
@@ -320,10 +323,15 @@
     sent through adapter `sendFile` after terminal text output. Unsupported
     platforms skip with audit rather than inventing a fallback attachment
     concept.
-- **Next exact action:** Add explicit live attachment gates for Telegram and
-  Feishu/Lark, then design inbound IM image/file ingestion against Codex
+  - latest live gate - Telegram/Lark attachment send: Telegram live file mode
+    sent `codex-im-live-attachment.txt` through the Telegram adapter with
+    `TELEGRAM_LIVE_FILE=1`; Feishu/Lark live file mode sent the same harmless
+    text attachment through SDK `sendFile`. Both gates emitted only redacted
+    status evidence. Launchd was restored under pid `94243`.
+- **Next exact action:** Design inbound IM image/file ingestion against Codex
   `UserInput` (`image` / `localImage`) without introducing a generic chat-media
-  abstraction.
+  abstraction; keep non-image arbitrary file ingestion scoped until Codex App
+  Server exposes a native file input shape.
 
 ## 2. Why This Exists
 
@@ -622,6 +630,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-06 22:25 SGT message lifecycle contract | JAC-238 made `MessageRef` lifecycle metadata explicit across fake, Telegram, Lark, and DingTalk adapters. Daemon now treats DingTalk bot-owned text refs as append-only and skips progress edits, then sends exactly one terminal reply for short output. `pnpm im:doctor` now reports DingTalk edit semantics as informational: text refs append by lifecycle contract, card refs update through CardKit. Full gates passed; `pnpm bridge:build`, `pnpm bridge:install`, and `launchctl kickstart -k gui/501/io.codex-im-bridge` installed the rebuilt daemon under launchd pid `15268` with `pendingApprovals=0`. |
 | 2026-05-07 SGT outbound attachment loop | Telegram/Lark adapter-level `sendFile` is implemented and covered by contract tests. Telegram sends image MIME payloads as photos and generic files as documents with topic routing preserved. Feishu/Lark uploads image/file bytes through SDK `im.image.create` / `im.file.create` and sends `image` / `file` messages. DingTalk remains `supportsAttachments=false` until a real supported file-send path is proven. |
 | 2026-05-07 SGT daemon artifact loop | Daemon terminal turn output now collects completed `imageGeneration.savedPath` items and sends the saved local image through adapter `sendFile` after publishing the terminal text summary. Files are capped, empty files are skipped, unsupported adapters audit-skip, and the implementation keeps Codex `imageGeneration` as the source concept. |
+| 2026-05-07 SGT live attachment gates | Temporarily stopped launchd to avoid Telegram polling contention, then ran explicit live file gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless `codex-im-live-attachment.txt`; Feishu/Lark `LARK_LIVE_FILE=1` sent a harmless file and returned redacted `messageId=present`. Launchd was bootstrapped/kickstarted back to pid `94243`; `pnpm launchd:status` and `pnpm im:doctor` are ready. |
 
 Latest live Telegram acceptance evidence:
 

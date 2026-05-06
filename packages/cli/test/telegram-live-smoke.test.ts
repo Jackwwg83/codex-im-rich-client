@@ -40,6 +40,26 @@ describe("smoke:telegram-live (T35)", () => {
     expect(stderr.join("\n")).toContain("IM_TELEGRAM_BOT_TOKEN");
   });
 
+  it("refuses file mode without an explicit target chat id", async () => {
+    const stderr: string[] = [];
+    const runLive = vi.fn<TelegramLiveRunner>(async () => ({ started: true, stopped: true }));
+
+    const result = await runTelegramLiveSmokeCore({
+      env: {
+        TELEGRAM_LIVE: "1",
+        TELEGRAM_LIVE_FILE: "1",
+        IM_TELEGRAM_BOT_TOKEN: TOKEN,
+      },
+      errorOutput: (line) => stderr.push(line),
+      runLive,
+    });
+
+    expect(result).toEqual({ ok: false, reason: "missing-target" });
+    expect(runLive).not.toHaveBeenCalled();
+    expect(stderr.join("\n")).toContain("TELEGRAM_LIVE_TARGET_CHAT_ID");
+    expect(stderr.join("\n")).not.toContain(TOKEN);
+  });
+
   it("redacts token-shaped material from live runner failures", async () => {
     const stderr: string[] = [];
 
@@ -83,6 +103,32 @@ describe("smoke:telegram-live (T35)", () => {
     expect(runLive).toHaveBeenCalledTimes(1);
     expect(stdout.join("\n")).toContain("smoke:telegram-live ok");
     expect(stdout.join("\n")).not.toContain(TOKEN);
+  });
+
+  it("passes explicit file mode target to the injected live runner", async () => {
+    const runLive = vi.fn<TelegramLiveRunner>(async (input) => {
+      expect(input.fileTargetChatId).toBe("12345");
+      return { started: true, stopped: true, fileSent: true };
+    });
+
+    const result = await runTelegramLiveSmokeCore({
+      env: {
+        TELEGRAM_LIVE: "1",
+        TELEGRAM_LIVE_FILE: "1",
+        TELEGRAM_LIVE_TARGET_CHAT_ID: "12345",
+        IM_TELEGRAM_BOT_TOKEN: TOKEN,
+      },
+      runLive,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      durationMs: 5000,
+      started: true,
+      stopped: true,
+      fileSent: true,
+    });
+    expect(runLive).toHaveBeenCalledTimes(1);
   });
 
   it("bounds live smoke duration parsing", () => {

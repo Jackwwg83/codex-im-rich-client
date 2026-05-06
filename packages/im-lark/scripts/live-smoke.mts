@@ -14,7 +14,7 @@ type SmokeStatus = "skip" | "blocked" | "ready_dry_run" | "sent" | "updated";
 interface RedactedStatus {
   readonly status: SmokeStatus;
   readonly gate: "enabled" | "disabled";
-  readonly mode: "text" | "card";
+  readonly mode: "text" | "card" | "file";
   readonly domain: "feishu" | "lark";
   readonly appId: "present" | "missing";
   readonly appSecretEnv: string | "missing";
@@ -46,6 +46,45 @@ async function main(): Promise<void> {
   if (process.env.LARK_LIVE_DRY_RUN === "1") {
     printStatus(redactedStatus("ready_dry_run"));
     console.log("[lark-live-smoke] READY_DRY_RUN: live env is present; no network call made.");
+    return;
+  }
+
+  if (process.env.LARK_LIVE_FILE === "1") {
+    const { messageClient } = createLarkSdkAdapterOptions(
+      {
+        appId: requiredEnv("LARK_APP_ID"),
+        appSecret: requiredEnv(requiredEnv("LARK_APP_SECRET_ENV")),
+        domain: larkDomainName(),
+      },
+      {
+        createWsClient: () => ({
+          async start() {},
+          close() {},
+        }),
+      },
+    );
+    if (messageClient?.sendFile === undefined) {
+      printStatus(redactedStatus("blocked"));
+      console.error("[lark-live-smoke] BLOCKED: file message client unavailable.");
+      process.exitCode = 4;
+      return;
+    }
+    const result = await messageClient.sendFile({
+      target: { platform: "lark", chatId: requiredEnv("LARK_TARGET_CHAT_ID") },
+      file: {
+        filename: "codex-im-live-attachment.txt",
+        bytes: new TextEncoder().encode(`codex-im lark attachment ${new Date().toISOString()}`),
+        contentType: "text/plain",
+      },
+    });
+    if (result.messageId.length === 0) {
+      printStatus(redactedStatus("blocked"));
+      console.error("[lark-live-smoke] BLOCKED: file send returned an empty message id.");
+      process.exitCode = 5;
+      return;
+    }
+    printStatus({ ...redactedStatus("sent"), messageId: "present" });
+    console.log("[lark-live-smoke] SENT: redacted live file send succeeded.");
     return;
   }
 
@@ -152,7 +191,12 @@ function redactedStatus(status: SmokeStatus): RedactedStatus {
   return {
     status,
     gate: "enabled",
-    mode: process.env.LARK_LIVE_CARD === "1" ? "card" : "text",
+    mode:
+      process.env.LARK_LIVE_FILE === "1"
+        ? "file"
+        : process.env.LARK_LIVE_CARD === "1"
+          ? "card"
+          : "text",
     domain: larkDomainName(),
     appId: present("LARK_APP_ID"),
     appSecretEnv: secretEnvName ?? "missing",

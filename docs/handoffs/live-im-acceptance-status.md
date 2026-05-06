@@ -27,7 +27,8 @@
 > attachments remain unsupported pending a real platform delivery path.
 > Daemon terminal output can now deliver completed Codex
 > `imageGeneration.savedPath` artifacts as IM files after the text summary;
-> live file-send gates still need to prove the platform APIs end to end.
+> explicit live file-send gates now prove the Telegram and Feishu/Lark platform
+> APIs end to end.
 
 ---
 
@@ -67,8 +68,8 @@ Use this wording until all enabled live platform smokes pass:
 
 ```text
 Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, installed DingTalk readiness is green, real DingTalk desktop inbound passes prompt/reply plus /status, and the explicit live CardKit callback probe now passes after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
-Telegram/Lark outbound file/image attachment support is implemented locally but not yet live-smoked.
-Daemon-side delivery of completed `imageGeneration.savedPath` artifacts is implemented locally but not yet live-smoked.
+Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends.
+Daemon-side delivery of completed `imageGeneration.savedPath` artifacts is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram and Feishu/Lark.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -472,6 +473,12 @@ Stop and treat as a blocker if:
   sends through adapter `sendFile` after publishing the terminal text summary.
   Unsupported adapters skip with audit instead of inventing a fallback
   attachment concept.
+- 2026-05-07 SGT live attachment gates: Temporarily stopped launchd to avoid
+  Telegram polling contention, then ran explicit Telegram and Feishu/Lark file
+  gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless
+  `codex-im-live-attachment.txt`; Feishu/Lark `LARK_LIVE_FILE=1` returned
+  redacted `messageId=present`. Launchd was bootstrapped/kickstarted back to
+  pid `94243`, `pendingApprovals=0`, and `pnpm im:doctor` is ready.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed

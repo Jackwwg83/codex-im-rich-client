@@ -67,6 +67,26 @@ describe("Lark live smoke harness gate (JAC-161)", () => {
     expect(output(result)).not.toContain("cli_test_app_id");
     expect(output(result)).not.toContain("oc_test_live_chat");
   });
+
+  it("supports explicit file dry run without leaking live values", () => {
+    const result = runLiveSmoke({
+      LARK_LIVE: "1",
+      LARK_LIVE_FILE: "1",
+      LARK_LIVE_DRY_RUN: "1",
+      LARK_APP_ID: "cli_test_app_id",
+      LARK_APP_SECRET_ENV: "LARK_TEST_SECRET",
+      LARK_TEST_SECRET: SECRET,
+      LARK_TARGET_CHAT_ID: "oc_test_live_chat",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('"status": "ready_dry_run"');
+    expect(result.stdout).toContain('"mode": "file"');
+    expect(result.stdout).toContain("[lark-live-smoke] READY_DRY_RUN");
+    expect(output(result)).not.toContain(SECRET);
+    expect(output(result)).not.toContain("cli_test_app_id");
+    expect(output(result)).not.toContain("oc_test_live_chat");
+  });
 });
 
 function runLiveSmoke(env: Record<string, string>) {
@@ -78,6 +98,7 @@ function runLiveSmoke(env: Record<string, string>) {
     "LARK_LIVE",
     "LARK_LIVE_CARD",
     "LARK_LIVE_CARD_UPDATE",
+    "LARK_LIVE_FILE",
     "LARK_LIVE_DRY_RUN",
     "LARK_TARGET_CHAT_ID",
     "LARK_TEST_SECRET",

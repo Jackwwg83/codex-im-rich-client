@@ -116,6 +116,8 @@ describe("release-readiness-check (JAC-169)", () => {
   it("clears ambient live-smoke env before default live-gate checks", () => {
     const hostileEnv = {
       TELEGRAM_LIVE: "1",
+      TELEGRAM_LIVE_FILE: "1",
+      TELEGRAM_LIVE_TARGET_CHAT_ID: "12345",
       TELEGRAM_LIVE_ROUNDTRIP: "1",
       TELEGRAM_LIVE_DURATION_MS: "0",
       IM_TELEGRAM_BOT_TOKEN: "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
@@ -126,6 +128,7 @@ describe("release-readiness-check (JAC-169)", () => {
       CODEX_REAL_SMOKE: "1",
       CODEX_REAL_SMOKE_PROMPT: "real prompt",
       LARK_LIVE: "1",
+      LARK_LIVE_FILE: "1",
       LARK_LIVE_DRY_RUN: "1",
       LARK_APP_ID: "app-id",
       LARK_APP_SECRET_ENV: "LARK_APP_SECRET",
@@ -160,6 +163,8 @@ describe("release-readiness-check (JAC-169)", () => {
 
       expect(env.PATH).toBe("/usr/bin");
       expect(env.TELEGRAM_LIVE).toBeUndefined();
+      expect(env.TELEGRAM_LIVE_FILE).toBeUndefined();
+      expect(env.TELEGRAM_LIVE_TARGET_CHAT_ID).toBeUndefined();
       expect(env.TELEGRAM_LIVE_ROUNDTRIP).toBeUndefined();
       expect(env.IM_TELEGRAM_BOT_TOKEN).toBeUndefined();
       expect(env.TELEGRAM_ROUNDTRIP_ALLOWED_CHAT_ID).toBeUndefined();
@@ -168,6 +173,7 @@ describe("release-readiness-check (JAC-169)", () => {
       expect(env.TELEGRAM_ROUNDTRIP_TIMEOUT_MS).toBeUndefined();
       expect(env.CODEX_REAL_SMOKE).toBeUndefined();
       expect(env.LARK_LIVE).toBeUndefined();
+      expect(env.LARK_LIVE_FILE).toBeUndefined();
       expect(env.LARK_APP_SECRET_ENV).toBeUndefined();
       expect(env.LARK_APP_SECRET).toBeUndefined();
       expect(env.DINGTALK_LIVE).toBeUndefined();

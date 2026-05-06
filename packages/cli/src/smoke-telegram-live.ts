@@ -3,6 +3,7 @@ import { TelegramChannelAdapter, TelegramLiveSmokeBot } from "@codex-im/im-teleg
 export type TelegramLiveSmokeFailureReason =
   | "missing-live-flag"
   | "missing-token"
+  | "missing-target"
   | "invalid-duration"
   | "live-failed";
 
@@ -12,19 +13,21 @@ export type TelegramLiveSmokeResult =
       readonly durationMs: number;
       readonly started: boolean;
       readonly stopped: boolean;
+      readonly fileSent?: boolean;
     }
   | { readonly ok: false; readonly reason: TelegramLiveSmokeFailureReason };
 
 export interface TelegramLiveRunnerInput {
   readonly botToken: string;
   readonly durationMs: number;
+  readonly fileTargetChatId?: string;
   readonly sleep: (ms: number) => Promise<void>;
   readonly output: (line: string) => void;
 }
 
 export type TelegramLiveRunner = (
   input: TelegramLiveRunnerInput,
-) => Promise<{ readonly started: boolean; readonly stopped: boolean }>;
+) => Promise<{ readonly started: boolean; readonly stopped: boolean; readonly fileSent?: boolean }>;
 
 export interface RunTelegramLiveSmokeOptions {
   readonly env?: Record<string, string | undefined>;
@@ -63,6 +66,13 @@ export async function runTelegramLiveSmokeCore(
     return { ok: false, reason: "missing-token" };
   }
 
+  const fileTargetChatId =
+    env.TELEGRAM_LIVE_FILE === "1" ? env.TELEGRAM_LIVE_TARGET_CHAT_ID : undefined;
+  if (env.TELEGRAM_LIVE_FILE === "1" && fileTargetChatId === undefined) {
+    errorOutput("smoke:telegram-live file mode requires TELEGRAM_LIVE_TARGET_CHAT_ID.");
+    return { ok: false, reason: "missing-target" };
+  }
+
   let durationMs: number;
   try {
     durationMs = parseTelegramLiveDurationMs(env.TELEGRAM_LIVE_DURATION_MS);
@@ -72,12 +82,19 @@ export async function runTelegramLiveSmokeCore(
   }
 
   try {
-    const live = await runLive({ botToken, durationMs, sleep, output });
+    const live = await runLive({
+      botToken,
+      durationMs,
+      ...(fileTargetChatId === undefined ? {} : { fileTargetChatId }),
+      sleep,
+      output,
+    });
     const result = {
       ok: true,
       durationMs,
       started: live.started,
       stopped: live.stopped,
+      ...(live.fileSent === true ? { fileSent: true } : {}),
     } as const;
     output(
       `smoke:telegram-live ok durationMs=${result.durationMs} started=${result.started} stopped=${result.stopped}`,
@@ -109,7 +126,11 @@ export function parseTelegramLiveDurationMs(raw: string | undefined): number {
 
 export async function runTelegramLiveSmokeWithAdapter(
   input: TelegramLiveRunnerInput,
-): Promise<{ readonly started: boolean; readonly stopped: boolean }> {
+): Promise<{ readonly started: boolean; readonly stopped: boolean; readonly fileSent?: boolean }> {
+  const fileTargetChatId = input.fileTargetChatId;
+  if (fileTargetChatId !== undefined) {
+    return runTelegramLiveFileSmokeWithAdapter({ ...input, fileTargetChatId });
+  }
   const bot = new TelegramLiveSmokeBot({ botToken: input.botToken });
   const adapter = new TelegramChannelAdapter({ bot });
   let started = false;
@@ -124,6 +145,34 @@ export async function runTelegramLiveSmokeWithAdapter(
     stopped = true;
   }
   return { started, stopped };
+}
+
+async function runTelegramLiveFileSmokeWithAdapter(
+  input: TelegramLiveRunnerInput & { readonly fileTargetChatId: string },
+): Promise<{ readonly started: boolean; readonly stopped: boolean; readonly fileSent: boolean }> {
+  const bot = new TelegramLiveSmokeBot({ botToken: input.botToken });
+  const adapter = new TelegramChannelAdapter({ bot });
+  let started = false;
+  let stopped = false;
+  let fileSent = false;
+  try {
+    await adapter.start();
+    started = true;
+    await adapter.sendFile(
+      { platform: "telegram", chatId: input.fileTargetChatId },
+      {
+        filename: "codex-im-live-attachment.txt",
+        bytes: new TextEncoder().encode(`codex-im telegram attachment ${new Date().toISOString()}`),
+        contentType: "text/plain",
+      },
+    );
+    fileSent = true;
+    input.output("smoke:telegram-live file send succeeded");
+  } finally {
+    await adapter.stop();
+    stopped = true;
+  }
+  return { started, stopped, fileSent };
 }
 
 export async function run(): Promise<void> {
