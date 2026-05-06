@@ -27,6 +27,8 @@ const CARD: ApprovalCardInput = {
 
 type ApiMocks = {
   readonly sendMessage: ReturnType<typeof vi.fn<TelegramBotApiLike["sendMessage"]>>;
+  readonly sendDocument: ReturnType<typeof vi.fn<TelegramBotApiLike["sendDocument"]>>;
+  readonly sendPhoto: ReturnType<typeof vi.fn<TelegramBotApiLike["sendPhoto"]>>;
   readonly editMessageReplyMarkup: ReturnType<
     typeof vi.fn<TelegramBotApiLike["editMessageReplyMarkup"]>
   >;
@@ -37,6 +39,8 @@ type ApiMocks = {
 function makeApi(): ApiMocks {
   return {
     sendMessage: vi.fn<TelegramBotApiLike["sendMessage"]>(async () => ({ message_id: 42 })),
+    sendDocument: vi.fn<TelegramBotApiLike["sendDocument"]>(async () => ({ message_id: 43 })),
+    sendPhoto: vi.fn<TelegramBotApiLike["sendPhoto"]>(async () => ({ message_id: 44 })),
     editMessageReplyMarkup: vi.fn<TelegramBotApiLike["editMessageReplyMarkup"]>(async () => true),
     editMessageText: vi.fn<TelegramBotApiLike["editMessageText"]>(async () => true),
     answerCallbackQuery: vi.fn<TelegramBotApiLike["answerCallbackQuery"]>(async () => true),

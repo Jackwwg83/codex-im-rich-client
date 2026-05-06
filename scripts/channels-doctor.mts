@@ -144,7 +144,11 @@ function evaluateTelegram(
       detail: "not checked by default; use live acceptance gate",
     },
     { name: "edit_semantics", status: "info", detail: "text/card edit supported" },
-    { name: "file", status: "info", detail: "attachments unsupported" },
+    {
+      name: "file",
+      status: "info",
+      detail: "outbound files/images supported; live send not checked by default",
+    },
   ]);
 }
 
@@ -186,7 +190,11 @@ function evaluateLark(
       detail: "not checked by default; use live acceptance gate",
     },
     { name: "edit_semantics", status: "info", detail: "text/card edit supported" },
-    { name: "file", status: "info", detail: "attachments unsupported" },
+    {
+      name: "file",
+      status: "info",
+      detail: "outbound files/images supported; live send not checked by default",
+    },
   ]);
 }
 

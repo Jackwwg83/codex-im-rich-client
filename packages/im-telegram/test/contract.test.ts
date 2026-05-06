@@ -60,6 +60,8 @@ const TELEGRAM_BOT_TOKEN_SHAPE = /\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g;
 
 type ApiMocks = {
   readonly sendMessage: ReturnType<typeof vi.fn<TelegramBotApiLike["sendMessage"]>>;
+  readonly sendDocument: ReturnType<typeof vi.fn<TelegramBotApiLike["sendDocument"]>>;
+  readonly sendPhoto: ReturnType<typeof vi.fn<TelegramBotApiLike["sendPhoto"]>>;
   readonly editMessageReplyMarkup: ReturnType<
     typeof vi.fn<TelegramBotApiLike["editMessageReplyMarkup"]>
   >;
@@ -70,6 +72,8 @@ type ApiMocks = {
 function makeBot(): { readonly bot: TelegramBotLike; readonly api: ApiMocks } {
   const api: ApiMocks = {
     sendMessage: vi.fn<TelegramBotApiLike["sendMessage"]>(async () => ({ message_id: 1 })),
+    sendDocument: vi.fn<TelegramBotApiLike["sendDocument"]>(async () => ({ message_id: 1 })),
+    sendPhoto: vi.fn<TelegramBotApiLike["sendPhoto"]>(async () => ({ message_id: 1 })),
     editMessageReplyMarkup: vi.fn<TelegramBotApiLike["editMessageReplyMarkup"]>(async () => true),
     editMessageText: vi.fn<TelegramBotApiLike["editMessageText"]>(async () => true),
     answerCallbackQuery: vi.fn<TelegramBotApiLike["answerCallbackQuery"]>(async () => true),
@@ -133,7 +137,7 @@ describe("TelegramChannelAdapter contract and boundaries (JAC-61)", () => {
     expect(channel.capabilities).toEqual({
       supportsButtons: true,
       canEditMessage: true,
-      supportsAttachments: false,
+      supportsAttachments: true,
       maxCallbackDataBytes: 64,
     });
     expect(Object.isFrozen(channel.capabilities)).toBe(true);
@@ -144,12 +148,19 @@ describe("TelegramChannelAdapter contract and boundaries (JAC-61)", () => {
     ).toEqual([...CLOSED_CHANNEL_ADAPTER_METHODS].sort());
   });
 
-  it("fails closed for unsupported attachment sends", async () => {
+  it("sends supported attachment payloads through the bot API", async () => {
     const { api, bot } = makeBot();
     const channel: ChannelAdapter = new TelegramChannelAdapter({ bot });
 
-    await expect(channel.sendFile(TARGET, FILE)).rejects.toThrow(/sendFile/);
+    await channel.start();
+    const messageRef = await channel.sendFile(TARGET, FILE);
 
+    expect(messageRef).toEqual({ target: TARGET, messageId: "1", kind: "file" });
+    expect(api.sendDocument).toHaveBeenCalledWith(
+      TARGET.chatId,
+      expect.objectContaining({ filename: FILE.filename }),
+      { caption: FILE.filename },
+    );
     expect(api.sendMessage).not.toHaveBeenCalled();
     expect(api.editMessageReplyMarkup).not.toHaveBeenCalled();
     expect(api.editMessageText).not.toHaveBeenCalled();

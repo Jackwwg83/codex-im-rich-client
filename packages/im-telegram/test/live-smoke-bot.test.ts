@@ -27,6 +27,8 @@ describe("TelegramLiveSmokeBot", () => {
       api: {
         getMe: vi.fn(async () => ({ id: 1 })),
         sendMessage: vi.fn(async () => ({ message_id: 1 })),
+        sendDocument: vi.fn(async () => ({ message_id: 2 })),
+        sendPhoto: vi.fn(async () => ({ message_id: 3 })),
         editMessageReplyMarkup: vi.fn(async () => undefined),
         editMessageText: vi.fn(async () => undefined),
         answerCallbackQuery: vi.fn(async () => undefined),
@@ -58,6 +60,8 @@ describe("TelegramLiveSmokeBot", () => {
       api: {
         getMe: vi.fn(async () => ({ id: 1 })),
         sendMessage: vi.fn(async () => ({ message_id: 42 })),
+        sendDocument: vi.fn(async () => ({ message_id: 43 })),
+        sendPhoto: vi.fn(async () => ({ message_id: 44 })),
         editMessageReplyMarkup: vi.fn(async () => undefined),
         editMessageText: vi.fn(async () => undefined),
         answerCallbackQuery: vi.fn(async () => undefined),

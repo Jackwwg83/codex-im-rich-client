@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import * as lark from "@larksuiteoapi/node-sdk";
 import { LarkChannelAdapter } from "./adapter.js";
 import type {
@@ -33,6 +34,12 @@ type LarkSdkLogger = {
 
 interface LarkSdkClientLike {
   readonly im: {
+    readonly file: {
+      readonly create: (payload: LarkSdkCreateFilePayload) => Promise<LarkSdkFileResult | null>;
+    };
+    readonly image: {
+      readonly create: (payload: LarkSdkCreateImagePayload) => Promise<LarkSdkImageResult | null>;
+    };
     readonly message: {
       readonly create: (payload: LarkSdkCreateMessagePayload) => Promise<LarkSdkMessageResult>;
       readonly reply: (payload: LarkSdkReplyMessagePayload) => Promise<LarkSdkMessageResult>;
@@ -53,8 +60,23 @@ interface LarkSdkCreateMessagePayload {
   readonly params: { readonly receive_id_type: "chat_id" };
   readonly data: {
     readonly receive_id: string;
-    readonly msg_type: "text" | "interactive";
+    readonly msg_type: "text" | "interactive" | "image" | "file";
     readonly content: string;
+  };
+}
+
+interface LarkSdkCreateFilePayload {
+  readonly data: {
+    readonly file_type: LarkSdkFileType;
+    readonly file_name: string;
+    readonly file: Buffer;
+  };
+}
+
+interface LarkSdkCreateImagePayload {
+  readonly data: {
+    readonly image_type: "message";
+    readonly image: Buffer;
   };
 }
 
@@ -109,6 +131,22 @@ interface LarkSdkMessageResult extends LarkSdkResult {
     readonly message_id?: string;
   };
 }
+
+interface LarkSdkFileResult extends LarkSdkResult {
+  readonly file_key?: string;
+  readonly data?: {
+    readonly file_key?: string;
+  };
+}
+
+interface LarkSdkImageResult extends LarkSdkResult {
+  readonly image_key?: string;
+  readonly data?: {
+    readonly image_key?: string;
+  };
+}
+
+type LarkSdkFileType = "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream";
 
 export const SILENT_LARK_SDK_LOGGER: LarkSdkLogger = Object.freeze({
   error() {},
@@ -209,6 +247,50 @@ function createSdkMessageClient(client: LarkSdkClientLike): LarkMessageClientLik
       );
     },
 
+    async sendFile(input) {
+      assertOutboundFile(input.file, "LarkChannelAdapter.sendFile");
+      if (isLarkImageContentType(input.file.contentType)) {
+        const imageResult = await callLarkSdk("uploadImage", () =>
+          client.im.image.create({
+            data: { image_type: "message", image: Buffer.from(input.file.bytes) },
+          }),
+        );
+        const imageKey = imageKeyFromResult(imageResult);
+        const result = await callLarkSdk("sendImage", () =>
+          client.im.message.create({
+            params: { receive_id_type: "chat_id" },
+            data: {
+              receive_id: input.target.chatId,
+              msg_type: "image",
+              content: JSON.stringify({ image_key: imageKey }),
+            },
+          }),
+        );
+        return { messageId: messageIdFromResult(result) };
+      }
+      const fileResult = await callLarkSdk("uploadFile", () =>
+        client.im.file.create({
+          data: {
+            file_type: larkFileType(input.file),
+            file_name: input.file.filename,
+            file: Buffer.from(input.file.bytes),
+          },
+        }),
+      );
+      const fileKey = fileKeyFromResult(fileResult);
+      const result = await callLarkSdk("sendFile", () =>
+        client.im.message.create({
+          params: { receive_id_type: "chat_id" },
+          data: {
+            receive_id: input.target.chatId,
+            msg_type: "file",
+            content: JSON.stringify({ file_key: fileKey }),
+          },
+        }),
+      );
+      return { messageId: messageIdFromResult(result) };
+    },
+
     async sendCard(input) {
       const result = await callLarkSdk("sendCard", () =>
         client.im.message.create({
@@ -307,10 +389,68 @@ function messageIdFromResult(result: LarkSdkMessageResult): string {
   return messageId;
 }
 
+function fileKeyFromResult(result: LarkSdkFileResult | null): string {
+  assertOk(result ?? {});
+  const fileKey = result?.file_key ?? result?.data?.file_key;
+  if (fileKey === undefined || fileKey.length === 0) {
+    throw new Error("Lark SDK response missing file_key");
+  }
+  return fileKey;
+}
+
+function imageKeyFromResult(result: LarkSdkImageResult | null): string {
+  assertOk(result ?? {});
+  const imageKey = result?.image_key ?? result?.data?.image_key;
+  if (imageKey === undefined || imageKey.length === 0) {
+    throw new Error("Lark SDK response missing image_key");
+  }
+  return imageKey;
+}
+
 function assertOk(result: LarkSdkResult): void {
   if (result.code !== undefined && result.code !== 0) {
     throw new Error(`Lark SDK returned code ${result.code}`);
   }
+}
+
+function assertOutboundFile(
+  file: { filename: string; bytes: Uint8Array },
+  operation: string,
+): void {
+  if (file.filename.trim().length === 0) {
+    throw new Error(`${operation} requires a filename`);
+  }
+  if (file.bytes.byteLength === 0) {
+    throw new Error(`${operation} refuses empty files`);
+  }
+}
+
+function isLarkImageContentType(contentType: string): boolean {
+  return /^(?:image\/jpeg|image\/jpg|image\/png|image\/webp|image\/gif|image\/tiff|image\/bmp|image\/x-icon|image\/vnd\.microsoft\.icon)$/iu.test(
+    contentType,
+  );
+}
+
+function larkFileType(file: { filename: string; contentType: string }): LarkSdkFileType {
+  const filename = file.filename.toLowerCase();
+  const contentType = file.contentType.toLowerCase();
+  if (contentType === "application/pdf" || filename.endsWith(".pdf")) return "pdf";
+  if (contentType.includes("word") || filename.endsWith(".doc") || filename.endsWith(".docx")) {
+    return "doc";
+  }
+  if (contentType.includes("excel") || filename.endsWith(".xls") || filename.endsWith(".xlsx")) {
+    return "xls";
+  }
+  if (
+    contentType.includes("powerpoint") ||
+    filename.endsWith(".ppt") ||
+    filename.endsWith(".pptx")
+  ) {
+    return "ppt";
+  }
+  if (contentType === "video/mp4" || filename.endsWith(".mp4")) return "mp4";
+  if (contentType === "audio/ogg" || filename.endsWith(".opus")) return "opus";
+  return "stream";
 }
 
 function asRecord(input: unknown): Record<string, unknown> | undefined {

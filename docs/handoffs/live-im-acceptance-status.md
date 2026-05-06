@@ -2,7 +2,7 @@
 
 > Single source of truth for real Telegram/Lark/DingTalk/Codex App live
 > acceptance after `production-readiness-2026-05-03-r2`.
-> **Last updated:** 2026-05-06 - Telegram real bot + real Codex turn +
+> **Last updated:** 2026-05-07 - Telegram real bot + real Codex turn +
 > approval callback acceptance + development-task control acceptance passed.
 > Feishu/Lark now also passes launchd daemon inbound, `/status`, `/use`,
 > real Codex prompt/reply, live card schema delivery, CardKit terminal-card
@@ -22,6 +22,9 @@
 > suppresses progress edits for append-only refs and sends one terminal reply
 > for short output. Launchd has been restored with the rebuilt daemon and
 > readiness remains green.
+> Telegram/Lark outbound file/image attachment support is now implemented at
+> the adapter contract layer and reflected in `pnpm im:doctor`; DingTalk
+> attachments remain unsupported pending a real platform delivery path.
 
 ---
 
@@ -61,6 +64,7 @@ Use this wording until all enabled live platform smokes pass:
 
 ```text
 Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, installed DingTalk readiness is green, real DingTalk desktop inbound passes prompt/reply plus /status, and the explicit live CardKit callback probe now passes after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
+Telegram/Lark outbound file/image attachment support is implemented locally but not yet live-smoked.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -451,6 +455,14 @@ Stop and treat as a blocker if:
   informational instead of an unresolved warning. Full gates passed, then
   `pnpm bridge:build`, `pnpm bridge:install`, and launchd kickstart installed
   the rebuilt daemon under launchd pid `15268` with `pendingApprovals=0`.
+- 2026-05-07 SGT outbound attachment loop: Telegram and Feishu/Lark
+  adapter-level file/image send support landed locally. Telegram routes common
+  image MIME payloads to `sendPhoto` and generic artifacts to `sendDocument`;
+  Feishu/Lark uploads message images/files via SDK resource APIs and then sends
+  `image` / `file` messages. Full gates passed; the rebuilt bridge was
+  installed and kickstarted under launchd pid `60859` with
+  `pendingApprovals=0`. DingTalk remains unsupported for attachments until a
+  real delivery path is proven.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed

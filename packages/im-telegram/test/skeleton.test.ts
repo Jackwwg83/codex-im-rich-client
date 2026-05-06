@@ -6,7 +6,7 @@ describe("@codex-im/im-telegram skeleton (T20)", () => {
     expect(TELEGRAM_CAPABILITIES).toEqual({
       supportsButtons: true,
       canEditMessage: true,
-      supportsAttachments: false,
+      supportsAttachments: true,
       maxCallbackDataBytes: 64,
     });
 

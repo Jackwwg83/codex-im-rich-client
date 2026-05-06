@@ -123,6 +123,10 @@ function makeHarness(): ContractHarness {
     async updateCard(input) {
       messageCalls.push({ method: "updateCard", input });
     },
+    async sendFile(input) {
+      messageCalls.push({ method: "sendFile", input });
+      return { messageId: "om_file_sent" };
+    },
   };
   const actionClient: LarkActionClientLike = {
     async answerAction(input) {
@@ -199,7 +203,7 @@ describe("LarkChannelAdapter contract and boundaries (JAC-159)", () => {
     expect(channel.capabilities).toEqual({
       supportsButtons: true,
       canEditMessage: true,
-      supportsAttachments: false,
+      supportsAttachments: true,
       maxCallbackDataBytes: 256,
     });
     expect(Object.isFrozen(channel.capabilities)).toBe(true);
@@ -298,13 +302,15 @@ describe("LarkChannelAdapter contract and boundaries (JAC-159)", () => {
     ]);
   });
 
-  it("fails closed for unsupported attachment sends", async () => {
+  it("sends supported attachment payloads through the injected message client", async () => {
     const { adapter, messageCalls } = makeHarness();
     const channel: ChannelAdapter = adapter;
 
-    await expect(channel.sendFile(TARGET, FILE)).rejects.toThrow(/sendFile/);
+    await adapter.start();
+    const messageRef = await channel.sendFile(TARGET, FILE);
 
-    expect(messageCalls).toEqual([]);
+    expect(messageRef).toEqual({ target: TARGET, messageId: "om_file_sent", kind: "file" });
+    expect(messageCalls).toEqual([{ method: "sendFile", input: { target: TARGET, file: FILE } }]);
   });
 
   it("production source has no webhook, public listener, or HTTP server entry point", () => {

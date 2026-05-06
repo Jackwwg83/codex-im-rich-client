@@ -126,6 +126,70 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
     ]);
   });
 
+  it("uploads and sends image and generic file payloads through SDK APIs", async () => {
+    const sdkCalls: unknown[] = [];
+    const deps = fakeSdkDeps({ sdkCalls });
+    const adapter = createLarkSdkChannelAdapter(CONFIG, deps);
+
+    await adapter.start();
+    const imageRef = await adapter.sendFile(TARGET, {
+      filename: "screenshot.png",
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+      contentType: "image/png",
+    });
+    const fileRef = await adapter.sendFile(TARGET, {
+      filename: "codex-diff.patch",
+      bytes: new TextEncoder().encode("diff --git a/file b/file"),
+      contentType: "text/x-patch",
+    });
+
+    expect(imageRef).toEqual({ target: TARGET, messageId: "om_image", kind: "file" });
+    expect(fileRef).toEqual({ target: TARGET, messageId: "om_file", kind: "file" });
+    expect(sdkCalls).toEqual([
+      {
+        method: "imageCreate",
+        payload: {
+          data: {
+            image_type: "message",
+            image: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+          },
+        },
+      },
+      {
+        method: "create",
+        payload: {
+          params: { receive_id_type: "chat_id" },
+          data: {
+            receive_id: TARGET.chatId,
+            msg_type: "image",
+            content: JSON.stringify({ image_key: "img_uploaded" }),
+          },
+        },
+      },
+      {
+        method: "fileCreate",
+        payload: {
+          data: {
+            file_type: "stream",
+            file_name: "codex-diff.patch",
+            file: Buffer.from("diff --git a/file b/file"),
+          },
+        },
+      },
+      {
+        method: "create",
+        payload: {
+          params: { receive_id_type: "chat_id" },
+          data: {
+            receive_id: TARGET.chatId,
+            msg_type: "file",
+            content: JSON.stringify({ file_key: "file_uploaded" }),
+          },
+        },
+      },
+    ]);
+  });
+
   it("converts each message id to card id once before CardKit updates", async () => {
     const sdkCalls: unknown[] = [];
     const deps = fakeSdkDeps({ sdkCalls });
@@ -194,10 +258,29 @@ function fakeSdkDeps(options: {
   return {
     createClient: () => ({
       im: {
+        image: {
+          async create(payload: unknown) {
+            sdkCalls.push({ method: "imageCreate", payload });
+            return { image_key: "img_uploaded" };
+          },
+        },
+        file: {
+          async create(payload: unknown) {
+            sdkCalls.push({ method: "fileCreate", payload });
+            return { file_key: "file_uploaded" };
+          },
+        },
         message: {
           async create(payload: unknown) {
             sdkCalls.push({ method: "create", payload });
-            return { code: 0, data: { message_id: "om_create" } };
+            const data = (payload as { readonly data?: { readonly msg_type?: string } }).data;
+            const messageId =
+              data?.msg_type === "image"
+                ? "om_image"
+                : data?.msg_type === "file"
+                  ? "om_file"
+                  : "om_create";
+            return { code: 0, data: { message_id: messageId } };
           },
           async reply(payload: unknown) {
             sdkCalls.push({ method: "reply", payload });

@@ -145,6 +145,24 @@ export class TelegramRecordingBot implements TelegramBotLike {
         this.sentMessages.push({ chatId, messageId: String(sent.message_id), text });
         return sent;
       },
+      sendDocument: async (chatId, document, options) => {
+        const sent = await api.sendDocument(chatId, document, options);
+        this.sentMessages.push({
+          chatId,
+          messageId: String(sent.message_id),
+          text: options.caption ?? "[document]",
+        });
+        return sent;
+      },
+      sendPhoto: async (chatId, photo, options) => {
+        const sent = await api.sendPhoto(chatId, photo, options);
+        this.sentMessages.push({
+          chatId,
+          messageId: String(sent.message_id),
+          text: options.caption ?? "[photo]",
+        });
+        return sent;
+      },
       editMessageReplyMarkup: (
         chatId: string,
         messageId: number,

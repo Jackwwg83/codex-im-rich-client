@@ -42,6 +42,9 @@ describe("channels doctor (JAC-237)", () => {
     expect(output).toContain(
       "edit_semantics: info (text refs append by lifecycle contract with progress edits suppressed; card refs update through CardKit)",
     );
+    expect(output).toContain(
+      "file: info (outbound files/images supported; live send not checked by default)",
+    );
     expect(output).not.toContain("1234567890:");
     expect(output).not.toContain("sk-testsecret");
   });

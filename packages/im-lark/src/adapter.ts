@@ -50,6 +50,7 @@ export interface LarkMessageClientLike {
     replyToMessageId?: string;
   }): Promise<{ messageId: string }>;
   editText(input: { messageRef: MessageRef; text: string }): Promise<void>;
+  sendFile?(input: { target: Target; file: OutboundFile }): Promise<{ messageId: string }>;
   sendCard?(input: { target: Target; card: LarkApprovalCardJson }): Promise<{ messageId: string }>;
   updateCard?(input: { messageRef: MessageRef; card: LarkApprovalCardJson }): Promise<void>;
 }
@@ -197,8 +198,18 @@ export class LarkChannelAdapter implements ChannelAdapter {
     }
   }
 
-  async sendFile(_target: Target, _file: OutboundFile): Promise<MessageRef> {
-    throw this.#notImplemented("sendFile", "future Phase 4+ attachment slice");
+  async sendFile(target: Target, file: OutboundFile): Promise<MessageRef> {
+    this.#assertStarted("sendFile");
+    const messageClient = this.#messageClient("sendFile");
+    if (messageClient.sendFile === undefined) {
+      throw new Error("LarkChannelAdapter.sendFile requires messageClient.sendFile");
+    }
+    try {
+      const sent = await messageClient.sendFile({ target, file });
+      return { target, messageId: sent.messageId, kind: "file" };
+    } catch (error) {
+      throw new Error(`LarkChannelAdapter.sendFile failed: ${describeError(error)}`);
+    }
   }
 
   _startedForTest(): boolean {
@@ -314,10 +325,6 @@ export class LarkChannelAdapter implements ChannelAdapter {
       throw new Error(`LarkChannelAdapter.${method} requires an injected messageClient`);
     }
     return messageClient;
-  }
-
-  #notImplemented(method: string, issue: string): Error {
-    return new Error(`LarkChannelAdapter.${method} is not implemented until ${issue}`);
   }
 
   #installInboundHandlers(eventDispatcher: LarkEventDispatcherLike): void {

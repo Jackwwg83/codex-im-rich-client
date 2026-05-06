@@ -10,7 +10,7 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
-import { Bot } from "grammy";
+import { Bot, InputFile } from "grammy";
 import { decodeCallbackData } from "./callback-codec.js";
 import { TELEGRAM_CAPABILITIES } from "./capabilities.js";
 
@@ -77,6 +77,11 @@ export interface TelegramSendMessageOptions {
   };
 }
 
+export interface TelegramSendFileOptions {
+  message_thread_id?: number;
+  caption?: string;
+}
+
 export interface TelegramEditMessageReplyMarkupOptions {
   reply_markup: TelegramReplyMarkup;
 }
@@ -104,6 +109,16 @@ export interface TelegramBotApiLike {
     chatId: string,
     text: string,
     options: TelegramSendMessageOptions,
+  ): Promise<TelegramSentMessageLike>;
+  sendDocument(
+    chatId: string,
+    document: InputFile,
+    options: TelegramSendFileOptions,
+  ): Promise<TelegramSentMessageLike>;
+  sendPhoto(
+    chatId: string,
+    photo: InputFile,
+    options: TelegramSendFileOptions,
   ): Promise<TelegramSentMessageLike>;
   editMessageReplyMarkup(
     chatId: string,
@@ -308,8 +323,19 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     }
   }
 
-  async sendFile(_target: Target, _file: OutboundFile): Promise<MessageRef> {
-    throw notImplemented("sendFile");
+  async sendFile(target: Target, file: OutboundFile): Promise<MessageRef> {
+    this.#assertStarted("sendFile");
+    const api = this.#api("sendFile");
+    const upload = telegramInputFile(file);
+    const options = sendFileOptions(target, file);
+    try {
+      const sent = isTelegramPhotoContentType(file.contentType)
+        ? await api.sendPhoto(target.chatId, upload, options)
+        : await api.sendDocument(target.chatId, upload, options);
+      return { target, messageId: String(sent.message_id), kind: "file" };
+    } catch (error) {
+      throw new Error(`TelegramChannelAdapter.sendFile failed: ${describeTelegramError(error)}`);
+    }
   }
 
   #createBot(): TelegramBotLike {
@@ -406,10 +432,6 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   }
 }
 
-function notImplemented(method: string): Error {
-  return new Error(`TelegramChannelAdapter.${method} is not implemented until its Phase 3 slice`);
-}
-
 function sendMessageOptions(target: Target, card: ApprovalCardInput): TelegramSendMessageOptions {
   const inlineKeyboard = card.actions.map((action) => [buttonForAction(action)]);
   const messageThreadId = parseTelegramTopicId(target.topicId);
@@ -424,6 +446,28 @@ function sendTextOptions(target: Target): TelegramSendMessageOptions {
   return {
     ...(messageThreadId !== undefined ? { message_thread_id: messageThreadId } : {}),
   };
+}
+
+function sendFileOptions(target: Target, file: OutboundFile): TelegramSendFileOptions {
+  const messageThreadId = parseTelegramTopicId(target.topicId);
+  return {
+    ...(messageThreadId !== undefined ? { message_thread_id: messageThreadId } : {}),
+    ...(file.filename.length > 0 ? { caption: file.filename } : {}),
+  };
+}
+
+function telegramInputFile(file: OutboundFile): InputFile {
+  if (file.filename.trim().length === 0) {
+    throw new Error("TelegramChannelAdapter.sendFile requires a filename");
+  }
+  if (file.bytes.byteLength === 0) {
+    throw new Error("TelegramChannelAdapter.sendFile refuses empty files");
+  }
+  return new InputFile(Buffer.from(file.bytes), file.filename);
+}
+
+function isTelegramPhotoContentType(contentType: string): boolean {
+  return /^(?:image\/jpeg|image\/jpg|image\/png|image\/webp)$/iu.test(contentType);
 }
 
 function buttonForAction(action: ApprovalActionInput): TelegramInlineKeyboardButton {

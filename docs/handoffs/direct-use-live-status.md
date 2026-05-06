@@ -2,7 +2,7 @@
 
 > Single source of truth for Direct Use Completion / Phase 8 production
 > usability hardening.
-> **Last updated:** 2026-05-06 - Block 4 real Telegram acceptance remains
+> **Last updated:** 2026-05-07 - Block 4 real Telegram acceptance remains
 > green. Launchd soak remains healthy at the latest heartbeat, and the latest
 > built daemon artifact is now installed and running under launchd with
 > `pendingApprovals=0`. Feishu/Lark direct-use acceptance now proves launchd
@@ -28,6 +28,12 @@
 > place. JAC-237 added `pnpm im:doctor` / `pnpm channels:doctor` as the unified
 > no-live-network readiness surface; callback_click and DingTalk text-append
 > semantics are now informational.
+> Telegram and Feishu/Lark outbound `sendFile` now have adapter-level
+> file/image implementations: Telegram routes common images through
+> `sendPhoto` and generic artifacts through `sendDocument`; Feishu/Lark uploads
+> message images/files through the SDK before sending image/file messages.
+> DingTalk attachments remain unsupported until a real DingTalk file delivery
+> API path is proven.
 
 ## 1. Current State
 
@@ -299,8 +305,16 @@
     single terminal reply while Telegram/Lark keep in-place text edits. Full
     gates passed, `pnpm im:doctor` reports `ready`, and the rebuilt bridge is
     installed under launchd pid `15268`.
-- **Next exact action:** Continue launchd soak and identify the next local
-  non-external readiness gap; current `im:doctor` is `ready`.
+  - latest patch - Telegram/Lark outbound attachment support: `sendFile`
+    returns `kind: "file"` message refs, Telegram preserves topic routing for
+    documents/photos, Feishu/Lark uploads message images/files before sending,
+    and `pnpm im:doctor` reports outbound files/images as supported for those
+    two platforms. DingTalk stays explicitly unsupported for attachments. Full
+    gates passed; the rebuilt bridge was installed and kickstarted under
+    launchd pid `60859` with `pendingApprovals=0`.
+- **Next exact action:** Wire safe daemon-level artifact/file sending on top of
+  the adapter capability, then add explicit live attachment gates for Telegram
+  and Feishu/Lark.
 
 ## 2. Why This Exists
 
@@ -597,6 +611,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-06 19:26 SGT unified IM doctor | JAC-237 added `pnpm im:doctor` with alias `pnpm channels:doctor`. Default output is no-live-network and redacted: installed bridge plist/status, per-platform secret-source presence via env/Keychain, allowlists, capabilities, adapter-start/live-gate status, inbound/outbound/card/callback status, edit-vs-append semantics, and file support. After the real callback pass, callback_click is informational. JAC-238 later made DingTalk append-style text refs an explicit lifecycle semantic rather than an unresolved readiness warning. |
 | 2026-05-06 21:50 SGT DingTalk callback acceptance | Compared the local parser with DingTalk/OpenClaw callback behavior, then reran the explicit callback gate against the current DingTalk `thread_bindings` target. A fresh card appeared in DingTalk Desktop, a real `同意` click removed the buttons, and the gate exited 0 with redacted `card_callback_seen`: `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`, `callbackMessageRef=present`, and `callbackAction=present`. The observed callback shape uses `content.cardPrivateData.params.action` and private `spaceType=IM` / `userId` fields; no secret/user/chat/message id bytes were recorded. Launchd was restored afterward and `pnpm dingtalk:readiness` remained ready. |
 | 2026-05-06 22:25 SGT message lifecycle contract | JAC-238 made `MessageRef` lifecycle metadata explicit across fake, Telegram, Lark, and DingTalk adapters. Daemon now treats DingTalk bot-owned text refs as append-only and skips progress edits, then sends exactly one terminal reply for short output. `pnpm im:doctor` now reports DingTalk edit semantics as informational: text refs append by lifecycle contract, card refs update through CardKit. Full gates passed; `pnpm bridge:build`, `pnpm bridge:install`, and `launchctl kickstart -k gui/501/io.codex-im-bridge` installed the rebuilt daemon under launchd pid `15268` with `pendingApprovals=0`. |
+| 2026-05-07 SGT outbound attachment loop | Telegram/Lark adapter-level `sendFile` is implemented and covered by contract tests. Telegram sends image MIME payloads as photos and generic files as documents with topic routing preserved. Feishu/Lark uploads image/file bytes through SDK `im.image.create` / `im.file.create` and sends `image` / `file` messages. DingTalk remains `supportsAttachments=false` until a real supported file-send path is proven. |
 
 Latest live Telegram acceptance evidence:
 

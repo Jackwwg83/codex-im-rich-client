@@ -6,7 +6,7 @@ describe("@codex-im/im-lark skeleton (JAC-149)", () => {
     expect(LARK_CAPABILITIES).toEqual({
       supportsButtons: true,
       canEditMessage: true,
-      supportsAttachments: false,
+      supportsAttachments: true,
       maxCallbackDataBytes: 256,
     });
 
@@ -33,7 +33,7 @@ describe("@codex-im/im-lark skeleton (JAC-149)", () => {
     expect(adapter._startedForTest()).toBe(false);
   });
 
-  it("keeps later card/action slices explicitly unimplemented", async () => {
+  it("fails closed when file support is called without injected lifecycle dependencies", async () => {
     const adapter = new LarkChannelAdapter();
     const ref = {
       target: { platform: "lark", chatId: "chat-1" },
@@ -41,7 +41,7 @@ describe("@codex-im/im-lark skeleton (JAC-149)", () => {
     };
 
     await expect(adapter.sendFile(ref.target, {} as never)).rejects.toThrow(
-      "LarkChannelAdapter.sendFile is not implemented until future Phase 4+ attachment slice",
+      "LarkChannelAdapter.sendFile requires start() first",
     );
   });
 });

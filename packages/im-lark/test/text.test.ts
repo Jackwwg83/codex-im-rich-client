@@ -87,6 +87,47 @@ describe("LarkChannelAdapter text send/edit/reply (JAC-153)", () => {
     });
   });
 
+  it("sends outbound files through the injected message client", async () => {
+    const calls: unknown[] = [];
+    const messageClient: LarkMessageClientLike = {
+      async sendText(input) {
+        calls.push(input);
+        return { messageId: "unused" };
+      },
+      async editText(input) {
+        calls.push(input);
+      },
+      async sendFile(input) {
+        calls.push(input);
+        return { messageId: "om_file_message" };
+      },
+    };
+    const adapter = new LarkChannelAdapter({ wsClient: fakeWsClient(), messageClient });
+
+    await adapter.start();
+    const messageRef = await adapter.sendFile(TARGET, {
+      filename: "screenshot.png",
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+      contentType: "image/png",
+    });
+
+    expect(calls).toEqual([
+      {
+        target: TARGET,
+        file: {
+          filename: "screenshot.png",
+          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+          contentType: "image/png",
+        },
+      },
+    ]);
+    expect(messageRef).toEqual({
+      target: TARGET,
+      messageId: "om_file_message",
+      kind: "file",
+    });
+  });
+
   it("fails fast before start and propagates client failures after start", async () => {
     const adapter = new LarkChannelAdapter({
       wsClient: fakeWsClient(),

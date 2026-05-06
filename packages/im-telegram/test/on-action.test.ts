@@ -25,6 +25,8 @@ class FakeTelegramBot implements TelegramBotLike {
   readonly stop = vi.fn(() => undefined);
   readonly api: TelegramBotApiLike = {
     sendMessage: vi.fn<TelegramBotApiLike["sendMessage"]>(async () => ({ message_id: 1 })),
+    sendDocument: vi.fn<TelegramBotApiLike["sendDocument"]>(async () => ({ message_id: 2 })),
+    sendPhoto: vi.fn<TelegramBotApiLike["sendPhoto"]>(async () => ({ message_id: 3 })),
     editMessageReplyMarkup: vi.fn<TelegramBotApiLike["editMessageReplyMarkup"]>(async () => true),
     editMessageText: vi.fn<TelegramBotApiLike["editMessageText"]>(async () => true),
     answerCallbackQuery: vi.fn<TelegramBotApiLike["answerCallbackQuery"]>(async () => true),

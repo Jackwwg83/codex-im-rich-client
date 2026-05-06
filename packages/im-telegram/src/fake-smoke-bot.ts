@@ -58,6 +58,24 @@ export class TelegramFakeSmokeBot implements TelegramBotLike {
       }
       return { message_id: sent.messageId };
     },
+    sendDocument: async (_chatId, _document, options): Promise<TelegramSentMessageLike> => {
+      const sent = this.#recordMessage(
+        this.sentMessages,
+        this.#nextMessageId++,
+        options.caption ?? "[document]",
+        {},
+      );
+      return { message_id: sent.messageId };
+    },
+    sendPhoto: async (_chatId, _photo, options): Promise<TelegramSentMessageLike> => {
+      const sent = this.#recordMessage(
+        this.sentMessages,
+        this.#nextMessageId++,
+        options.caption ?? "[photo]",
+        {},
+      );
+      return { message_id: sent.messageId };
+    },
     editMessageReplyMarkup: async () => true,
     editMessageText: async (
       _chatId: string,
