@@ -37,6 +37,8 @@
     "launchd:install": "node bin/install-launchd.mjs",
     "launchd:status": "node bin/launchd-status.mjs",
     "launchd:uninstall": "node bin/uninstall-launchd.mjs",
+    "im:doctor": "tsx scripts/channels-doctor.mts",
+    "channels:doctor": "pnpm im:doctor",
     "dingtalk:readiness": "tsx scripts/dingtalk-readiness.mts",
     "db:backup": "tsx packages/cli/src/index.ts db backup",
     "smoke:app-server": "tsx packages/cli/src/index.ts smoke app-server",

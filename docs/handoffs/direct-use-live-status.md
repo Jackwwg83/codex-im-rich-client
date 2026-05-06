@@ -43,7 +43,11 @@
 > DingTalk Desktop is now logged in and receives a fresh `codex` card-list item
 > from the explicit callback gate, but the conversation stays in a loading state
 > and the gate still ends with `cardEvents=0`, so the final DingTalk callback
-> acceptance remains open.
+> acceptance remains open. JAC-237 added `pnpm im:doctor` / `pnpm
+> channels:doctor` as the unified no-live-network channel readiness surface; it
+> reports launchd/Keychain presence, per-platform config/capability status,
+> edit-vs-append semantics, attachment support, and explicitly keeps DingTalk
+> callback acceptance at `attention` until the real callback click is proven.
 
 ## 1. Current State
 
@@ -597,6 +601,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-05 19:33 SGT explicit callback probe | New `DINGTALK_LIVE_CARD_CALLBACK=1` gate sent a real card, remained connected, and failed with `cardEvents=0`; GPT Pro review says do not modify broker/security/token/messageRef logic and keep DingTalk blocked until callback-capable template plus real client click emits Stream `/v1.0/card/instances/callback`. |
 | 2026-05-05 20:00 SGT DingTalk text output fallback | Fixed DingTalk terminal text output: `sendText` now returns explicit `dingtalk-text:*` refs, and `editText` on those refs appends via DingTalk session reply instead of calling Card OpenAPI and failing with `param.cardNotExist`. This is append semantics, not true in-place text editing, so long streaming turns may produce multiple DingTalk chat messages while Telegram/Lark keep in-place edits. Targeted DingTalk/daemon tests passed, `pnpm typecheck` passed, and the rebuilt bridge bundle is installed under launchd pid `44722`; DingTalk Desktop is currently a background process with zero windows, so a fresh real client prompt/click remains blocked by client UI availability, not bridge startup. |
 | 2026-05-06 19:05 SGT DingTalk callback follow-up | Found a production daemon crash source in the DingTalk SDK client-side WebSocket ping timer (`WebSocket.ping()` while `CONNECTING`) and changed `daemon run` to pass `keepAlive: false`, matching the live-smoke Stream path. Targeted CLI/DingTalk tests and package typechecks passed; the rebuilt bridge is installed and launchd is healthy under pid `34173`. A fresh explicit callback gate delivered a visible `codex` card-list item in DingTalk Desktop, but the conversation stayed in a loading state and the gate still ended redacted with `messageId=present`, `targetSource=env`, and `cardEvents=0`; SQLite callback-token `used` count did not increase. JAC-225 remains open on one real client click that emits the Stream card callback. |
+| 2026-05-06 19:26 SGT unified IM doctor | JAC-237 added `pnpm im:doctor` with alias `pnpm channels:doctor`. Default output is no-live-network and redacted: installed bridge plist/status, per-platform secret-source presence via env/Keychain, allowlists, capabilities, adapter-start/live-gate status, inbound/outbound/card/callback status, edit-vs-append semantics, and file support. On the current machine it reports overall `attention`: Telegram and Lark `ready`, DingTalk `attention` because real CardKit callback click remains unproven and DingTalk text refs are append semantics. |
 
 Latest live Telegram acceptance evidence:
 
