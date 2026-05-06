@@ -31,6 +31,7 @@ export type {
   DaemonIssuedCallbackTokenBatch,
   DaemonMessageRef,
   DaemonOptions,
+  DaemonOutboundFile,
   DaemonSendCardResult,
   DaemonSignal,
   DaemonSessionRouterContext,

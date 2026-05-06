@@ -1,4 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { basename, extname } from "node:path";
 import type { CodexRichEvent } from "@codex-im/codex-runtime";
 import {
   type ActorPolicy,
@@ -83,6 +85,8 @@ const MAX_IM_TEXT_CHARS = 3_800;
 const MAX_IM_TEXT_CHUNKS = 6;
 const MAX_IM_TEXT_BUFFER_CHARS = MAX_IM_TEXT_CHARS * MAX_IM_TEXT_CHUNKS;
 const MAX_IM_ITEM_SUMMARIES = 6;
+const MAX_IM_ARTIFACT_FILES = 3;
+const MAX_IM_ARTIFACT_FILE_BYTES = 10 * 1024 * 1024;
 const PROGRESS_EDIT_INTERVAL_MS = 1_500;
 
 export interface DaemonBroker {
@@ -130,6 +134,7 @@ export interface DaemonAdapter {
   updateCard?(ref: DaemonMessageRef, card: ApprovalCard): MaybePromise<void>;
   editText?(ref: DaemonMessageRef, body: string): MaybePromise<void>;
   sendText?(target: Target, body: string): MaybePromise<DaemonMessageRef>;
+  sendFile?(target: Target, file: DaemonOutboundFile): MaybePromise<DaemonMessageRef>;
   start?(): MaybePromise<void>;
   stop?(): MaybePromise<void>;
 }
@@ -228,6 +233,12 @@ export interface DaemonMessageRef {
   readonly textUpdateMode?: DaemonMessageRefTextUpdateMode;
 }
 
+export interface DaemonOutboundFile {
+  readonly filename: string;
+  readonly bytes: Uint8Array;
+  readonly contentType: string;
+}
+
 export interface DaemonSendCardResult {
   readonly messageRef: DaemonMessageRef;
   readonly callbackNonce: string;
@@ -273,9 +284,16 @@ interface DaemonTurnOutputState {
   readonly target: Target;
   readonly turnId: string;
   readonly itemSummaries: string[];
+  readonly files: DaemonTurnOutputFile[];
   messageRef?: DaemonMessageRef;
   lastProgressEditAtMs?: number;
   text: string;
+}
+
+interface DaemonTurnOutputFile {
+  readonly path: string;
+  readonly filename: string;
+  readonly contentType: string;
 }
 
 interface DaemonProjectConfig {
@@ -373,6 +391,7 @@ export interface DaemonOptions {
   readonly now?: () => Date;
   readonly statusPath?: string;
   readonly writeStatusSnapshot?: (snapshot: DaemonStatusSnapshot) => MaybePromise<void>;
+  readonly readArtifactFile?: (path: string) => MaybePromise<Uint8Array>;
 }
 
 export class Daemon {
@@ -1543,6 +1562,15 @@ export class Daemon {
       ) {
         state.itemSummaries.push(summary);
       }
+      const file = extractCodexItemFile(event.raw);
+      if (
+        state !== undefined &&
+        file !== undefined &&
+        state.files.length < MAX_IM_ARTIFACT_FILES &&
+        !state.files.some((candidate) => candidate.path === file.path)
+      ) {
+        state.files.push(file);
+      }
       return;
     }
 
@@ -1565,6 +1593,7 @@ export class Daemon {
       state,
       this.#terminalTurnOutputBody(event, state.text, state.itemSummaries),
     );
+    await this.#publishTerminalTurnFiles(state);
   }
 
   #clearTerminalActiveTurn(target: Target, threadId: string, turnId: string): void {
@@ -1591,7 +1620,13 @@ export class Daemon {
   }
 
   async #openTurnOutput(target: Target, threadId: string, turnId: string): Promise<void> {
-    const state: DaemonTurnOutputState = { target, turnId, itemSummaries: [], text: "" };
+    const state: DaemonTurnOutputState = {
+      target,
+      turnId,
+      itemSummaries: [],
+      files: [],
+      text: "",
+    };
     this.#turnOutputs.set(turnOutputKey(threadId, turnId), state);
     if (this.#adapter?.sendText === undefined) {
       return;
@@ -1660,6 +1695,59 @@ export class Daemon {
       });
       return false;
     }
+  }
+
+  async #publishTerminalTurnFiles(state: DaemonTurnOutputState): Promise<void> {
+    if (state.files.length === 0) {
+      return;
+    }
+    if (this.#adapter?.sendFile === undefined) {
+      this.#emitAuditEvent("runtime.turn_output_file_skipped", {
+        target: state.target,
+        result: "skipped",
+        metadata: { reason: "adapter_unsupported", turnId: state.turnId },
+      });
+      return;
+    }
+    for (const file of state.files) {
+      await this.#sendTurnOutputFile(state, file);
+    }
+  }
+
+  async #sendTurnOutputFile(
+    state: DaemonTurnOutputState,
+    file: DaemonTurnOutputFile,
+  ): Promise<void> {
+    try {
+      const bytes = await this.#readArtifactFile(file.path);
+      if (bytes.byteLength === 0 || bytes.byteLength > MAX_IM_ARTIFACT_FILE_BYTES) {
+        this.#emitAuditEvent("runtime.turn_output_file_skipped", {
+          target: state.target,
+          result: "skipped",
+          metadata: {
+            reason: bytes.byteLength === 0 ? "empty_file" : "file_too_large",
+            filename: file.filename,
+            turnId: state.turnId,
+          },
+        });
+        return;
+      }
+      await this.#adapter?.sendFile?.(state.target, {
+        filename: file.filename,
+        bytes,
+        contentType: file.contentType,
+      });
+    } catch (error) {
+      this.#emitAuditEvent("runtime.turn_output_file_send_failed", {
+        target: state.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), filename: file.filename, turnId: state.turnId },
+      });
+    }
+  }
+
+  async #readArtifactFile(path: string): Promise<Uint8Array> {
+    return this.options.readArtifactFile?.(path) ?? readFile(path);
   }
 
   async #maybeEditTurnProgress(state: DaemonTurnOutputState): Promise<void> {
@@ -3299,6 +3387,56 @@ function summarizeItemDetail(item: Record<string, unknown>, type: string): strin
     return text === undefined ? undefined : redact(text.replace(/\s+/g, " ").trim());
   }
   return undefined;
+}
+
+function extractCodexItemFile(raw: unknown): DaemonTurnOutputFile | undefined {
+  const item = readRawItem(raw);
+  if (item === undefined || readStringField(item, "type") !== "imageGeneration") {
+    return undefined;
+  }
+  const status = readStringField(item, "status");
+  if (status !== undefined && status !== "completed") {
+    return undefined;
+  }
+  const path = readStringField(item, "savedPath");
+  if (path === undefined || path.length === 0) {
+    return undefined;
+  }
+  const filename = basename(path);
+  if (filename.length === 0) {
+    return undefined;
+  }
+  return {
+    path,
+    filename,
+    contentType: contentTypeForPath(path),
+  };
+}
+
+function contentTypeForPath(path: string): string {
+  switch (extname(path).toLowerCase()) {
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".png":
+      return "image/png";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
+    case ".pdf":
+      return "application/pdf";
+    case ".txt":
+    case ".log":
+      return "text/plain";
+    case ".json":
+      return "application/json";
+    case ".patch":
+    case ".diff":
+      return "text/x-patch";
+    default:
+      return "application/octet-stream";
+  }
 }
 
 function isAppendOnlyTextRef(ref: DaemonMessageRef | undefined): boolean {

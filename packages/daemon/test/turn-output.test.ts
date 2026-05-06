@@ -395,6 +395,123 @@ describe("daemon turn output projection", () => {
     await daemon.stop();
   });
 
+  it("sends completed image-generation artifacts through the adapter file path", async () => {
+    const queue = new EventQueue();
+    const artifactBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const readArtifactFile = vi.fn(async () => artifactBytes);
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    const sendFile = vi.fn(async (target: Target) => ({
+      target,
+      messageId: "bot-file-1",
+      kind: "file" as const,
+    }));
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        sendFile,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      readArtifactFile,
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Generate a diagram",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-image-1",
+      raw: {
+        params: {
+          item: {
+            type: "imageGeneration",
+            status: "completed",
+            result: "saved",
+            savedPath: "/tmp/codex-im/diagram.png",
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-1",
+      deltaText: "diagram ready",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => sendFile.mock.calls.length === 1);
+    expect(readArtifactFile).toHaveBeenCalledWith("/tmp/codex-im/diagram.png");
+    expect(sendFile).toHaveBeenCalledWith(TARGET, {
+      filename: "diagram.png",
+      bytes: artifactBytes,
+      contentType: "image/png",
+    });
+    expect(editText).toHaveBeenLastCalledWith(
+      { target: TARGET, messageId: "bot-output-1" },
+      "diagram ready\n\nCodex items:\n- imageGeneration completed: /tmp/codex-im/diagram.png",
+    );
+
+    await daemon.stop();
+  });
+
   it("summarizes native development and tool-call Codex items in terminal IM output", async () => {
     const queue = new EventQueue();
     const sendText = vi.fn(async (target: Target, _body: string) => ({

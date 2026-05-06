@@ -25,6 +25,9 @@
 > Telegram/Lark outbound file/image attachment support is now implemented at
 > the adapter contract layer and reflected in `pnpm im:doctor`; DingTalk
 > attachments remain unsupported pending a real platform delivery path.
+> Daemon terminal output can now deliver completed Codex
+> `imageGeneration.savedPath` artifacts as IM files after the text summary;
+> live file-send gates still need to prove the platform APIs end to end.
 
 ---
 
@@ -65,6 +68,7 @@ Use this wording until all enabled live platform smokes pass:
 ```text
 Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, installed DingTalk readiness is green, real DingTalk desktop inbound passes prompt/reply plus /status, and the explicit live CardKit callback probe now passes after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
 Telegram/Lark outbound file/image attachment support is implemented locally but not yet live-smoked.
+Daemon-side delivery of completed `imageGeneration.savedPath` artifacts is implemented locally but not yet live-smoked.
 ```
 
 Do not claim that the product is actually live-validated or production accepted
@@ -460,9 +464,14 @@ Stop and treat as a blocker if:
   image MIME payloads to `sendPhoto` and generic artifacts to `sendDocument`;
   Feishu/Lark uploads message images/files via SDK resource APIs and then sends
   `image` / `file` messages. Full gates passed; the rebuilt bridge was
-  installed and kickstarted under launchd pid `60859` with
+  installed and kickstarted under launchd pid `80748` with
   `pendingApprovals=0`. DingTalk remains unsupported for attachments until a
   real delivery path is proven.
+- 2026-05-07 SGT daemon artifact loop: Daemon terminal turn output now maps
+  completed Codex `imageGeneration.savedPath` items to bounded local artifact
+  sends through adapter `sendFile` after publishing the terminal text summary.
+  Unsupported adapters skip with audit instead of inventing a fallback
+  attachment concept.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed

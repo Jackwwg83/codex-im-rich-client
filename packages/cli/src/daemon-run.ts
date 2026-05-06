@@ -30,6 +30,7 @@ import {
   type DaemonAdapter,
   type DaemonMessageRef,
   type DaemonOptions,
+  type DaemonOutboundFile,
   type DaemonSendCardResult,
   Supervisor,
   createDaemonLogger,
@@ -259,6 +260,14 @@ export class MultiPlatformDaemonAdapter implements DaemonAdapter {
       throw new Error(`IM adapter for ${target.platform} does not support sendText`);
     }
     return adapter.sendText(target, body);
+  }
+
+  async sendFile(target: Target, file: DaemonOutboundFile): Promise<DaemonMessageRef> {
+    const adapter = this.#adapterForTarget(target, "sendFile");
+    if (adapter.sendFile === undefined) {
+      throw new Error(`IM adapter for ${target.platform} does not support sendFile`);
+    }
+    return adapter.sendFile(target, file);
   }
 
   #adapterForTarget(target: Target, method: string): DaemonAdapter {

@@ -144,6 +144,13 @@ describe("daemon run safety rails", () => {
         calls.push({ platform, method: "sendText", target, body });
         return { target, messageId: `${platform}-text-1` };
       },
+      async sendFile(
+        target: { platform: string; chatId: string },
+        file: { filename: string; bytes: Uint8Array; contentType: string },
+      ) {
+        calls.push({ platform, method: "sendFile", target, filename: file.filename });
+        return { target, messageId: `${platform}-file-1`, kind: "file" as const };
+      },
       async sendCard(target: { platform: string; chatId: string }) {
         calls.push({ platform, method: "sendCard", target });
         return {
@@ -174,6 +181,11 @@ describe("daemon run safety rails", () => {
 
     await adapter.start();
     await adapter.sendText(larkTarget, "hello");
+    await adapter.sendFile(larkTarget, {
+      filename: "diagram.png",
+      bytes: new Uint8Array([1, 2, 3]),
+      contentType: "image/png",
+    });
     await adapter.sendCard(dingTalkRef.target, {
       schemaVersion: "approval-card.v1",
       kind: "unknown",
@@ -206,6 +218,7 @@ describe("daemon run safety rails", () => {
       { platform: "lark", method: "start" },
       { platform: "dingtalk", method: "start" },
       { platform: "lark", method: "sendText", target: larkTarget, body: "hello" },
+      { platform: "lark", method: "sendFile", target: larkTarget, filename: "diagram.png" },
       { platform: "dingtalk", method: "sendCard", target: dingTalkRef.target },
       { platform: "dingtalk", method: "updateCard", ref: dingTalkRef },
       { platform: "dingtalk", method: "editText", ref: dingTalkRef, body: "done" },
