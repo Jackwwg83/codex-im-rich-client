@@ -1,7 +1,8 @@
 # Computer Use Capability Evidence
 
 Generated: 2026-05-03
-Status: JAC-163 evidence update - real provider capability not verified
+Status: JAC-274 contract update - App Server dynamic-tool contract implemented;
+real desktop execution still not live-accepted
 
 ## 1. Local Protocol Evidence
 
@@ -230,9 +231,50 @@ Observed official-doc facts:
 
 Decision:
 
-The official docs reinforce the local scan. This project can render downstream
-Computer Use-like `dynamicToolCall` output and can keep `/cu` as an explicit
-policy-gated command, but it still must not implement real desktop execution by
-calling the current Codex session's Computer Use MCP tools or parsing Codex UI /
-CLI output. JAC-274 remains blocked until an official/local App Server contract
-names a provider registration surface and a bounded smoke path.
+The official docs distinguish two surfaces:
+
+- Codex App's interactive Computer Use product surface, invoked by mentioning
+  `@Computer` / an app name inside Codex.
+- App Server's experimental `dynamicTools` + `item/tool/call` surface, enabled
+  by `initialize.capabilities.experimentalApi`.
+
+JAC-274 now uses the second surface as this project's daemon-facing provider
+contract. It still must not implement real desktop execution by calling the
+current Codex session's Computer Use MCP tools or parsing Codex UI / CLI output.
+Live desktop execution remains unaccepted until a configured provider completes
+a bounded non-dry-run smoke through the reviewed dynamic-tool boundary.
+
+## 8. JAC-274 Contract Implementation
+
+Generated: 2026-05-08
+
+Implemented contract:
+
+- `performInitializeHandshake()` can opt into experimental App Server APIs by
+  sending `capabilities: { experimentalApi: true }` during `initialize`.
+- Production `daemon run` opts in when `computerUse.enabled` is true.
+- Explicit `/cu <task>` starts a new Codex thread with a dynamic tool spec only
+  when a `ComputerUseProvider` is configured.
+- The shared dynamic tool is:
+  - `namespace: "codex_im.computer_use"`
+  - `name: "operate"`
+  - input fields: `app`, `step`, `action`, optional `sensitivity`,
+    optional `blockedReason`
+- The same daemon route is used for Telegram, Feishu/Lark, and DingTalk because
+  IM adapters only enter through the common `ChannelAdapter` message path.
+- The `/cu` prompt explicitly asks Codex to use Codex App Computer Use via
+  `@Computer` / the allowed app mention when available, and forbids shell,
+  terminal automation, or Codex UI automation as substitutes.
+- Execution still passes through `ComputerUseSessionRegistry`,
+  `ComputerUsePolicy`, `ComputerUseToolGate`, audit redaction, and
+  `ComputerUseProvider.execute()`.
+- If no real provider is configured, production remains fail-closed and does
+  not advertise the dynamic tool.
+
+What this changes:
+
+- JAC-274 is no longer blocked on a daemon-facing App Server registration
+  contract. The contract is now explicit and tested.
+- JAC-274 is still not a live desktop execution pass. A real provider must still
+  prove a non-dry-run `/cu` task through this boundary before the project can
+  claim real Computer Use execution green.

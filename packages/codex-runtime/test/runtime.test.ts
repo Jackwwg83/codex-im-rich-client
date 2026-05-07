@@ -57,6 +57,14 @@ import pino from "pino";
 import { describe, expect, it } from "vitest";
 import { CodexRuntime } from "../src/runtime.js";
 
+type DynamicToolSpec = {
+  readonly namespace?: string;
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: unknown;
+  readonly deferLoading?: boolean;
+};
+
 const SILENT = pino({ level: "silent" });
 
 interface Harness {
@@ -115,6 +123,43 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
     // use toEqual since the wire path is shared.
     expect(received).toBe(params);
     expect(r.thread.id).toBe("thread-1");
+
+    await teardown(h);
+  });
+
+  it("threadStart forwards experimental dynamicTools without rewriting the contract", async () => {
+    const h = await harness();
+    let received: unknown;
+    h.fake.respondTo("thread/start", (params) => {
+      received = params;
+      return { thread: { id: "thread-cu" } } as unknown as ThreadStartResponse;
+    });
+
+    const dynamicTool: DynamicToolSpec = {
+      namespace: "codex_im.computer_use",
+      name: "operate",
+      description: "Execute one scoped Computer Use step after explicit /cu policy gates.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          app: { type: "string" },
+          step: { type: "string" },
+          action: { type: "string" },
+          sensitivity: { enum: ["normal", "sensitive"] },
+        },
+        required: ["app", "step", "action"],
+      },
+    };
+    const params: ThreadStartParams & { readonly dynamicTools: readonly DynamicToolSpec[] } = {
+      cwd: "/tmp",
+      dynamicTools: [dynamicTool],
+    };
+
+    await h.runtime.threadStart(params);
+
+    expect(received).toBe(params);
+    expect((received as { dynamicTools?: unknown }).dynamicTools).toEqual([dynamicTool]);
 
     await teardown(h);
   });

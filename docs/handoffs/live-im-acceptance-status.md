@@ -101,11 +101,12 @@ Telegram/Lark outbound file/image attachment support is implemented and live-smo
 Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath` artifacts, completed/failed long command logs, local dynamic-tool / Computer Use screenshot artifacts, and file-change patch attachments is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram, Feishu/Lark, and DingTalk.
 ```
 
-Do not extend this claim to Slack live workspace acceptance, inbound DingTalk
-user-upload acceptance, or real Computer Use provider execution. Those remain
-separate acceptance tracks. Real Computer Use provider evidence/live execution
-is tracked separately by JAC-274; current `/cu` support is
-control/status/policy/audit/output projection, not verified desktop execution.
+Do not extend this claim to Slack live workspace acceptance or real Computer
+Use provider execution. Those remain separate acceptance tracks. JAC-274 now
+has an explicit App Server dynamic-tool provider contract for `/cu` turns across
+Telegram, Feishu/Lark, and DingTalk, but current `/cu` support is still
+control/status/policy/audit/output projection plus contract registration, not
+verified desktop execution.
 
 ## 3. Live Acceptance Matrix
 
@@ -170,9 +171,10 @@ control/status/policy/audit/output projection, not verified desktop execution.
 | launchd live start | `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k ... && pnpm launchd:status` | pass | installed daemon starts under user LaunchAgent with redacted secret presence and `pendingApprovals=0` |
 | Redaction | installed bridge plist/app/config/log scan for token-shaped output | pass | `BRIDGE_HOME=$HOME ... node scripts/bridge-redaction-scan.mjs` returned `redaction scan ok`; launchd plist lint also passed |
 
-Computer Use remains dry-run readiness only in the current release candidate;
-real desktop execution is not part of live IM acceptance until a reviewed real
-provider is implemented.
+Computer Use remains outside the live IM acceptance claim for real desktop
+execution. The `/cu` App Server dynamic-tool provider contract is implemented,
+but a non-dry-run live desktop provider smoke must pass before real Computer Use
+execution is called green.
 
 ## 4. Passing Criteria
 

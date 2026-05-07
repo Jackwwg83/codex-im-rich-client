@@ -85,7 +85,7 @@ pnpm smoke:computer-use-live
 | Codex-native controls: `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp` | JAC-236 / JAC-264 are complete. `packages/core/src/command-router.ts` lists these commands; `packages/daemon/src/daemon.ts` calls `CodexRuntime` wrappers for model, compaction, usage, capabilities, skills, apps, MCP login, and MCP reload. | Local green, shared across enabled adapters |
 | `/mcp login <server>` and `/mcp reload` | `docs/handoffs/direct-use-live-status.md` records JAC-264; runtime wrappers keep method literals centralized. | Local green |
 | `/cu status` | JAC-267 complete. IM output reports enabled state, provider readiness, allowed/denied apps, sensitive keywords, and live-smoke gate without desktop action. | Local green |
-| Explicit `/cu <task>` | Phase 6 explicit `/cu` prompt wrapper, policy, session registry, audit, and dynamic-tool gate are implemented. Normal prompts do not create CU sessions. | Safe control path green; real provider execution blocked by JAC-274 |
+| Explicit `/cu <task>` | Phase 6 explicit `/cu` prompt wrapper, policy, session registry, audit, dynamic-tool gate, and App Server dynamic-tool registration contract are implemented for Telegram, Feishu/Lark, and DingTalk when a provider is configured. Normal prompts do not create CU sessions. | Safe control path and provider contract green; live desktop execution still tracked by JAC-274 |
 | `/approvals` and `/approve <id> <action>` fallback | Direct-use status records approval fallback loop. It uses bound server-side callback token state and `ApprovalBroker.resolve()`; IM text never carries raw callback tokens/message refs. | Local green |
 | Streaming text / terminal output | Telegram and Lark edit in place; DingTalk text refs are append-style by explicit lifecycle contract. JAC-238 models edit vs append semantics. | Green, platform-specific lifecycle documented |
 | `commandExecution` output | JAC-261/JAC-265 record short output inline and long completed/failed output as redacted `.log` attachments. This refresh also projects `riskLevel` / `risk` when App Server includes it. | Local green |
@@ -95,7 +95,7 @@ pnpm smoke:computer-use-live
 | Outbound images/files/artifacts | Telegram and Feishu/Lark live file gates passed. DingTalk `sendFile` is implemented locally through media upload plus session webhook when a fresh inbound robot message exists, and through proactive robot group/user media delivery when `DINGTALK_TARGET_CHAT_ID` is configured. DingTalk live file and image gates now both return redacted `status=file_sent`. | Telegram/Lark/DingTalk live green |
 | Inbound images/files | Telegram Web and Feishu Web inbound image/file live gates pass with local path/filename/size presence only. DingTalk inbound image and generic-file uploads now both pass real live gates: image uses live `content.downloadCode` / `content.pictureDownloadCode`, file uses live `msgtype=file` plus `content.downloadCode` / `content.fileName`, and both download through `/v1.0/robot/messageFiles/download` with redacted `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, and local path/filename/size presence only. | Telegram/Lark/DingTalk live green |
 | Computer Use output/artifacts | Dynamic-tool / Computer Use `inputImage` artifacts are projected through `sendFile`; summaries hide raw tool args. This refresh also projects app, step/action, policy decision, blocked reason, and approval-required state when those summary fields are present. | Output projection local green |
-| Real desktop Computer Use execution | Generated `ClientRequest`, `ServerRequest`, `ServerNotification`, `Config`, `ProfileV2`, `TurnStartParams`, `ToolsV2`, `UserInput`, and `ThreadItem` were re-scanned. They support dynamic tool-call callbacks and downstream GUI/image artifact rendering, but no reviewed daemon-facing provider registration surface. Non-dry-run live smoke is blocked. | Not achieved; tracked by JAC-274 |
+| Real desktop Computer Use execution | JAC-274 now implements the reviewed daemon-facing contract: `initialize.capabilities.experimentalApi` opt-in plus `/cu` `thread/start.dynamicTools` for `codex_im.computer_use` / `operate`, routed through the existing session/policy/audit/provider gate. Non-dry-run live desktop execution is still not accepted until a configured provider proves the bounded smoke. | Contract achieved; live execution still tracked by JAC-274 |
 | Identity and group safety | JAC-240 and JAC-241 complete. `/whoami` is redacted; access groups and mention-required group policy are implemented. | Local green |
 | Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264/265/266/267/268/269/271/272/273 are Done. JAC-275 tracks the command-risk / Computer Use detail refresh. JAC-277 is green for DingTalk inbound image and generic-file uploads after the 2026-05-08 file gate. JAC-274 remains the Computer Use parent, now split into JAC-278 official provider-contract evidence and JAC-279 local experimental provider POC. JAC-248 remains Slack live workspace acceptance. | Green tracking, with follow-up tracks explicit |
 | Repo handoff tracking | `docs/handoffs/direct-use-live-status.md`, `docs/handoffs/live-im-acceptance-status.md`, and `docs/phase-6/computer-use-capability-evidence.md` record current state and blockers. | Green |
@@ -113,13 +113,13 @@ These are outside the active supported-platform completion claim:
    `Operator-Gated` labels to make this explicit.
 
 2. **Real desktop Computer Use provider execution (JAC-274).**
-   The IM `/cu` control and output surfaces are implemented, but real desktop
-   execution is not verified. The current generated App Server protocol does
-   not expose a verified daemon-facing provider registration surface. The latest
-   scan distinguishes Codex App's interactive Computer Use product capability
-   from this project's App Server integration boundary: downstream
-   `dynamicToolCall` / `imageView` / `imageGeneration` rendering is supported,
-   but upstream real provider execution still lacks a contract.
+   The IM `/cu` control, output surfaces, and daemon-facing App Server
+   dynamic-tool contract are implemented. The contract uses
+   `capabilities.experimentalApi` plus `thread/start.dynamicTools` for the
+   project-owned `codex_im.computer_use` / `operate` tool, routed through the
+   existing session, policy, audit, allowed-tool, and provider gates. Real
+   desktop execution is still not live-accepted until a configured provider
+   completes the non-dry-run smoke through that boundary.
 
 3. **Slack live workspace acceptance.**
    Slack implementation and local/file materialization are present, but current
@@ -144,7 +144,8 @@ Those remain separate follow-up tracks:
 
 - Slack test app bot/app tokens and enabled bridge config.
 - DingTalk robot/Stream delivery evidence for one real uploaded image/file.
-- Codex App Server capability evidence for a real Computer Use provider.
+- Non-dry-run live Computer Use provider evidence through the implemented
+  App Server dynamic-tool contract.
 
 ## 5. Blocker Unblock Packet
 
@@ -294,13 +295,15 @@ Acceptance evidence:
 
 Unblock condition:
 
-- There is current Codex App Server capability evidence or an official/local
-  provider contract that names the provider registration method or namespace,
-  the tool/argument schema, the screenshot/artifact shape, and the approval or
-  policy boundary for real desktop actions.
-- Until then, `UnsupportedComputerUseProvider` remains the correct fail-closed
-  production behavior even though `/cu status`, `/cu <task>` gating, audit, and
-  GUI artifact projection are implemented.
+- The provider contract is now implemented through App Server experimental
+  `dynamicTools` and `item/tool/call`: initialize with
+  `capabilities.experimentalApi`, register `codex_im.computer_use` / `operate`
+  on explicit `/cu` new threads when a provider is configured, and pass all
+  calls through the `/cu` session, policy, audit, allowed-tool, and provider
+  gates.
+- Remaining unblock condition: a configured provider must prove a bounded
+  non-dry-run Chrome smoke. Until then, production without a provider remains
+  fail-closed and must not claim real desktop execution green.
 
 Evidence scan:
 
@@ -318,7 +321,7 @@ COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
 pnpm smoke:computer-use-live
 ```
 
-Non-dry-run gate, only after the provider contract exists:
+Non-dry-run gate, only after a provider is configured:
 
 ```bash
 COMPUTER_USE_LIVE=1 \

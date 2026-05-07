@@ -49,6 +49,52 @@ describe("performInitializeHandshake", () => {
     await client.stop();
   });
 
+  it("can opt into experimental App Server APIs during initialize", async () => {
+    const [clientT, serverT] = createInMemoryTransportPair();
+    const seen: { method?: string; id?: number; params?: unknown }[] = [];
+    serverT.onMessage((m) => {
+      const env = m as { method?: string; id?: number; params?: unknown };
+      seen.push(env);
+      if (env.method === "initialize" && typeof env.id === "number") {
+        serverT.send({
+          id: env.id,
+          result: {
+            userAgent: "test-spike/0.0.0 (Mac OS 26.1.0; arm64)",
+            codexHome: "/Users/x/.codex",
+            platformFamily: "unix",
+            platformOs: "macos",
+          },
+        });
+      }
+    });
+    await serverT.start();
+
+    const client = new AppServerClient(clientT);
+    await client.start();
+
+    await performInitializeHandshake(
+      client,
+      {
+        name: "test-spike",
+        title: null,
+        version: "0.0.0",
+      },
+      { capabilities: { experimentalApi: true } },
+    );
+
+    const initRequest = seen.find((m) => m.method === "initialize" && typeof m.id === "number");
+    expect(initRequest?.params).toEqual({
+      clientInfo: {
+        name: "test-spike",
+        title: null,
+        version: "0.0.0",
+      },
+      capabilities: { experimentalApi: true },
+    });
+
+    await client.stop();
+  });
+
   it("propagates server error (e.g. invalid clientInfo)", async () => {
     const [clientT, serverT] = createInMemoryTransportPair();
     serverT.onMessage((m) => {

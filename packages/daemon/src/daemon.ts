@@ -85,8 +85,49 @@ const DEFAULT_PRUNE_BATCH_SIZE = 100;
 const DEFAULT_STUCK_ISSUED_GRACE_MS = 5_000;
 const DEFAULT_BIND_RETRY_DELAYS_MS = [50, 150, 350] as const;
 const DEFAULT_COMPUTER_USE_ALLOWED_TOOLS = Object.freeze([
+  { namespace: "codex_im.computer_use", tool: "operate" },
   { namespace: null, tool: "computer_use.synthetic" },
 ] as const satisfies readonly ComputerUseAllowedTool[]);
+type ComputerUseDynamicToolSpec = {
+  readonly namespace?: string;
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: unknown;
+  readonly deferLoading?: boolean;
+};
+const COMPUTER_USE_DYNAMIC_TOOL_SPEC = Object.freeze({
+  namespace: "codex_im.computer_use",
+  name: "operate",
+  description:
+    "Execute one scoped Computer Use step for the active explicit /cu session after Codex IM policy, session, and approval gates pass.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      app: {
+        type: "string",
+        description: "Allowed app for this /cu session, for example Google Chrome.",
+      },
+      step: {
+        type: "string",
+        description: "Short user-visible step summary.",
+      },
+      action: {
+        type: "string",
+        description: "The bounded GUI action or observation requested for this step.",
+      },
+      sensitivity: {
+        enum: ["normal", "sensitive"],
+        description: "Mark sensitive before credentials, payment, posting, deletion, or settings.",
+      },
+      blockedReason: {
+        type: "string",
+        description: "Set when the provider should stop instead of acting.",
+      },
+    },
+    required: ["app", "step", "action"],
+  },
+} as const satisfies ComputerUseDynamicToolSpec);
 const EAGER_PRUNE_RATIO = 0.8;
 const MAX_IM_TEXT_CHARS = 3_800;
 const MAX_IM_TEXT_CHUNKS = 6;
@@ -371,6 +412,7 @@ interface DaemonProjectConfig {
 interface DaemonThreadStartParams {
   readonly cwd?: string | null;
   readonly model?: string | null;
+  readonly dynamicTools?: readonly ComputerUseDynamicToolSpec[];
 }
 
 interface DaemonThreadStartResult {
@@ -2126,7 +2168,9 @@ export class Daemon {
     }
 
     if (route.codexThreadId === undefined) {
-      const startedThread = await runtime.threadStart(this.#threadStartParams(route));
+      const startedThread = await runtime.threadStart(
+        this.#threadStartParams(route, { computerUse: true }),
+      );
       const threadId = this.#threadId(startedThread);
       if (threadId === undefined || sessionRouter.bindThread === undefined) {
         return;
@@ -3853,10 +3897,16 @@ export class Daemon {
     return error instanceof Error ? error.message : String(error);
   }
 
-  #threadStartParams(route: Extract<SessionRoute, { kind: "bound" }>): DaemonThreadStartParams {
+  #threadStartParams(
+    route: Extract<SessionRoute, { kind: "bound" }>,
+    opts: { readonly computerUse?: boolean } = {},
+  ): DaemonThreadStartParams {
     return {
       cwd: route.cwd,
       ...(route.defaultModel === undefined ? {} : { model: route.defaultModel }),
+      ...(opts.computerUse === true && this.options.computerUseProvider !== undefined
+        ? { dynamicTools: [COMPUTER_USE_DYNAMIC_TOOL_SPEC] }
+        : {}),
     };
   }
 

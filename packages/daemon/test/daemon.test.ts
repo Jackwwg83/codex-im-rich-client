@@ -1381,6 +1381,103 @@ describe("Daemon skeleton (T14)", () => {
     });
   });
 
+  it("registers the same App Server Computer Use dynamic tool contract for Telegram, Lark, and DingTalk /cu turns", async () => {
+    const platforms = [
+      { platform: "telegram", chatId: "-tg" },
+      { platform: "lark", chatId: "oc_lark" },
+      { platform: "dingtalk", chatId: "cid_dingtalk" },
+    ] as const;
+
+    for (const target of platforms) {
+      let messageHandler: ((message: unknown) => void) | undefined;
+      const sender = { userId: `user-${target.platform}` };
+      const route = {
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        codexThreadId: undefined,
+      };
+      const sessionRouter = {
+        resolve: vi.fn(() => route),
+        bind: vi.fn(),
+        bindThread: vi.fn((_target, codexThreadId: string) => ({
+          ...route,
+          codexThreadId,
+        })),
+      };
+      const runtime = {
+        threadStart: vi.fn((_params: unknown) => ({ thread: { id: `thread-${target.platform}` } })),
+        turnStart: vi.fn((_params: unknown) => ({ turn: { id: `turn-${target.platform}` } })),
+        turnSteer: vi.fn(),
+        turnInterrupt: vi.fn(),
+      };
+      const adapter = {
+        onAction: vi.fn(() => () => {}),
+        onMessage: vi.fn((handler: (message: unknown) => void) => {
+          messageHandler = handler;
+          return () => {};
+        }),
+      };
+
+      const daemon = new Daemon({
+        loadConfig: () => ({
+          computerUse: {
+            enabled: true,
+            defaultApp: "Google Chrome",
+            allowedApps: ["Google Chrome"],
+            denyApps: ["Keychain Access"],
+            requireApprovalKeywords: ["login", "token"],
+            liveSmokeEnabled: true,
+          },
+        }),
+        openStorage: () => ({}),
+        createBroker: () => ({
+          attach: vi.fn(),
+          enablePendingMode: vi.fn(),
+          registerDynamicToolCallHandler: vi.fn(),
+        }),
+        createSecurityPolicy: () => ({
+          checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+          checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+        }),
+        createSessionRouter: () => sessionRouter,
+        createSupervisor: () => ({ currentRuntime: () => runtime }),
+        createAdapter: () => adapter,
+        computerUseProvider: new FakeComputerUseProvider(),
+        generateComputerUseSessionId: () => `cu-session-${target.platform}`,
+      });
+
+      await daemon.start();
+      messageHandler?.({
+        target,
+        sender,
+        text: "/cu inspect the visible Chrome page",
+        messageRef: { target, messageId: `msg-${target.platform}` },
+        receivedAt: new Date("2026-05-08T00:00:00.000Z"),
+      });
+      await flushDaemonHandlers();
+
+      const threadStartParams = runtime.threadStart.mock.calls[0]?.[0] as
+        | { dynamicTools?: readonly { namespace?: string; name?: string; inputSchema?: unknown }[] }
+        | undefined;
+      expect(threadStartParams?.dynamicTools).toEqual([
+        expect.objectContaining({
+          namespace: "codex_im.computer_use",
+          name: "operate",
+          inputSchema: expect.objectContaining({ type: "object" }),
+        }),
+      ]);
+      const turnStartParams = runtime.turnStart.mock.calls[0]?.[0] as
+        | { input?: readonly { text?: string }[] }
+        | undefined;
+      expect(turnStartParams?.input?.[0]?.text).toContain("@Computer");
+      expect(turnStartParams?.input?.[0]?.text).toContain("Google Chrome");
+
+      await daemon.stop();
+    }
+  });
+
   it("routes /cu status to a safe policy summary without starting Codex work", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };

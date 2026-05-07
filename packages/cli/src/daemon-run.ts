@@ -122,11 +122,17 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
         runtimeFactory: (client: AppServerClient) => new CodexRuntime(client),
         broker: approvalBroker,
         performHandshake: (client: AppServerClient) =>
-          performInitializeHandshake(client, {
-            name: "codex-im-rich-client",
-            title: "Codex IM Rich Client",
-            version: config.codex.versionPin,
-          }),
+          performInitializeHandshake(
+            client,
+            {
+              name: "codex-im-rich-client",
+              title: "Codex IM Rich Client",
+              version: config.codex.versionPin,
+            },
+            {
+              ...(config.computerUse.enabled ? { capabilities: { experimentalApi: true } } : {}),
+            },
+          ),
         audit: {
           emit: (message: string) => logger.info({ event: "supervisor", message }),
           emitFatal: (message: string) => logger.fatal({ event: "supervisor", message }),
