@@ -18,6 +18,7 @@ Required app settings:
   `codex-im-bridge-slack-app`.
 - Bot token scopes:
   - `chat:write`
+  - `files:read`
   - `files:write`
   - `commands`
   - `app_mentions:read`
@@ -124,6 +125,8 @@ JAC-248 is not complete until these additional real-client paths also pass:
 - `/codex status`, `/codex projects`, and `/codex use codex-im` route through
   the same daemon command path as other IMs.
 - A harmless prompt returns a Codex reply into Slack.
+- A harmless uploaded image/file reaches the daemon as a local
+  `InboundAttachment` without leaking the Slack private file URL or token.
 - A real approval card click reaches the daemon as a Socket Mode interactive
   event and passes callback-token plus `messageRef` validation.
 - The terminal approval card removes buttons or otherwise makes the decision

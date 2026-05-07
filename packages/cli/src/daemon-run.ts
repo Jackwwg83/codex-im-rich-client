@@ -370,6 +370,7 @@ export function createProductionAdapter(
       adapter: createSlackSdkChannelAdapter({
         botToken: secrets.slackBotToken,
         appToken: secrets.slackAppToken,
+        attachmentDir: join(config.daemon.dataDir, "attachments", "slack"),
       }),
     });
   }

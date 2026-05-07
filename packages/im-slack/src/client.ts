@@ -1,7 +1,12 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { SocketModeClient } from "@slack/socket-mode";
 import {
   SlackChannelAdapter,
   type SlackChannelAdapterOptions,
+  type SlackDownloadedFile,
+  type SlackFileDownloadInput,
   type SlackFilesUploadV2Input,
   type SlackMessageResult,
   type SlackPostMessageInput,
@@ -14,6 +19,7 @@ import {
 export interface SlackSdkChannelAdapterOptions {
   readonly botToken: string;
   readonly appToken: string;
+  readonly attachmentDir?: string;
   readonly fetchImpl?: typeof fetch;
   readonly socketClient?: SlackSocketModeClientLike;
   readonly webClient?: SlackWebClientLike;
@@ -21,6 +27,7 @@ export interface SlackSdkChannelAdapterOptions {
 
 export interface SlackWebApiClientOptions {
   readonly botToken: string;
+  readonly attachmentDir?: string;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -40,6 +47,7 @@ export function createSlackSdkChannelAdapter(
       options.webClient ??
       createSlackWebApiClient({
         botToken: options.botToken,
+        ...(options.attachmentDir === undefined ? {} : { attachmentDir: options.attachmentDir }),
         ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       }),
   } satisfies SlackChannelAdapterOptions);
@@ -61,6 +69,8 @@ export function createSlackWebApiClient(options: SlackWebApiClientOptions): Slac
     chatPostMessage: (input) => slackChatPostMessage(options.botToken, input, fetchImpl),
     chatUpdate: (input) => slackChatUpdate(options.botToken, input, fetchImpl),
     filesUploadV2: (input) => slackFilesUploadV2(options.botToken, input, fetchImpl),
+    downloadFile: (input) =>
+      slackDownloadFile(options.botToken, input, options.attachmentDir, fetchImpl),
   };
 }
 
@@ -165,6 +175,30 @@ async function slackFilesUploadV2(
   return { channel: input.channel_id, ts: fileId };
 }
 
+async function slackDownloadFile(
+  token: string,
+  input: SlackFileDownloadInput,
+  attachmentDir: string | undefined,
+  fetchImpl: typeof fetch,
+): Promise<SlackDownloadedFile> {
+  const response = await fetchImpl(input.url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Slack file download failed with HTTP ${response.status}`);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const dir = attachmentDir ?? defaultSlackAttachmentDir();
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const localPath = join(
+    dir,
+    `${safeSlackPathPart(input.fileId)}-${safeSlackFilename(input.filename)}`,
+  );
+  await writeFile(localPath, bytes, { mode: 0o600 });
+  return { localPath, sizeBytes: bytes.byteLength };
+}
+
 async function slackJsonApi(
   method: string,
   token: string,
@@ -257,6 +291,23 @@ function assertSecretPresent(label: string, value: string): void {
   if (value.trim().length === 0) {
     throw new Error(`${label} is required`);
   }
+}
+
+function defaultSlackAttachmentDir(): string {
+  return join(tmpdir(), "codex-im-slack-attachments");
+}
+
+function safeSlackFilename(filename: string): string {
+  const base = basename(filename)
+    .replace(/[^\w .@+-]/gu, "_")
+    .trim();
+  const safe = base.length === 0 || base === "." || base === ".." ? "attachment" : base;
+  return safe.slice(0, 160);
+}
+
+function safeSlackPathPart(value: string): string {
+  const safe = value.replace(/[^\w.@+-]/gu, "_").trim();
+  return (safe.length === 0 ? "slack-file" : safe).slice(0, 80);
 }
 
 function asRecord(input: unknown): Record<string, unknown> | undefined {

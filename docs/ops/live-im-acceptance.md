@@ -257,6 +257,8 @@ Passing criteria:
 - `/codex status`, `/codex projects`, and `/codex use codex-im` route through
   the shared daemon command path;
 - one harmless Codex prompt returns a Slack reply;
+- one harmless uploaded image/file reaches the daemon as an inbound attachment
+  and routes through the existing Codex image/local-path file input behavior;
 - one real approval card click reaches the daemon through Socket Mode and
   passes callback-token plus `messageRef` validation;
 - the terminal approval card visibly resolves without leaving active buttons.

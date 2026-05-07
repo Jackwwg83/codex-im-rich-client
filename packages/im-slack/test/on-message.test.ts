@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { SlackChannelAdapter, type SlackSocketModeEventName } from "../src/index.js";
+import {
+  SlackChannelAdapter,
+  type SlackSocketModeEventName,
+  type SlackWebClientLike,
+} from "../src/index.js";
 
 class FakeSlackSocketClient {
   readonly handlers = new Map<
@@ -126,5 +130,148 @@ describe("SlackChannelAdapter.onMessage (JAC-245)", () => {
     });
 
     expect(messages).toEqual([]);
+  });
+
+  it("downloads Slack message files before emitting inbound attachments", async () => {
+    const socketClient = new FakeSlackSocketClient();
+    const webClient: SlackWebClientLike = {
+      downloadFile: vi
+        .fn()
+        .mockResolvedValueOnce({
+          localPath: "/tmp/codex-im/slack/F_IMAGE-screenshot.png",
+          sizeBytes: 3,
+        })
+        .mockResolvedValueOnce({
+          localPath: "/tmp/codex-im/slack/F_LOG-output.log",
+          sizeBytes: 7,
+        }),
+    };
+    const adapter = new SlackChannelAdapter({ socketClient, webClient });
+    const messages: unknown[] = [];
+    adapter.onMessage((message) => messages.push(message));
+
+    await adapter.start();
+    await socketClient.emit("message", {
+      team_id: "T_TEST",
+      event: {
+        type: "message",
+        channel_type: "im",
+        channel: "D_TEST",
+        user: "U_TEST_USER",
+        text: "please inspect these",
+        ts: "1715000000.000100",
+        files: [
+          {
+            id: "F_IMAGE",
+            name: "screenshot.png",
+            mimetype: "image/png",
+            url_private_download: "https://files.slack.test/screenshot",
+            size: 3,
+          },
+          {
+            id: "F_LOG",
+            name: "output.log",
+            mimetype: "text/plain",
+            url_private: "https://files.slack.test/output",
+            size: 7,
+          },
+        ],
+      },
+    });
+
+    expect(webClient.downloadFile).toHaveBeenCalledTimes(2);
+    expect(webClient.downloadFile).toHaveBeenNthCalledWith(1, {
+      fileId: "F_IMAGE",
+      filename: "screenshot.png",
+      contentType: "image/png",
+      url: "https://files.slack.test/screenshot",
+    });
+    expect(webClient.downloadFile).toHaveBeenNthCalledWith(2, {
+      fileId: "F_LOG",
+      filename: "output.log",
+      contentType: "text/plain",
+      url: "https://files.slack.test/output",
+    });
+    expect(messages).toEqual([
+      expect.objectContaining({
+        attachments: [
+          {
+            kind: "image",
+            filename: "screenshot.png",
+            contentType: "image/png",
+            localPath: "/tmp/codex-im/slack/F_IMAGE-screenshot.png",
+            sizeBytes: 3,
+          },
+          {
+            kind: "file",
+            filename: "output.log",
+            contentType: "text/plain",
+            localPath: "/tmp/codex-im/slack/F_LOG-output.log",
+            sizeBytes: 7,
+          },
+        ],
+      }),
+    ]);
+  });
+
+  it("accepts Slack file_share subtype only when file metadata is present", async () => {
+    const socketClient = new FakeSlackSocketClient();
+    const webClient: SlackWebClientLike = {
+      downloadFile: vi.fn(async () => ({
+        localPath: "/tmp/codex-im/slack/F_SHARE-shared.txt",
+        sizeBytes: 5,
+      })),
+    };
+    const adapter = new SlackChannelAdapter({ socketClient, webClient });
+    const messages: unknown[] = [];
+    adapter.onMessage((message) => messages.push(message));
+
+    await adapter.start();
+    await socketClient.emit("message", {
+      team_id: "T_TEST",
+      event: {
+        type: "message",
+        channel: "D_TEST",
+        user: "U_TEST_USER",
+        subtype: "file_share",
+        text: "shared a file",
+        ts: "1715000002.000100",
+        files: [
+          {
+            id: "F_SHARE",
+            name: "shared.txt",
+            mimetype: "text/plain",
+            url_private_download: "https://files.slack.test/shared",
+          },
+        ],
+      },
+    });
+    await socketClient.emit("message", {
+      team_id: "T_TEST",
+      event: {
+        type: "message",
+        channel: "D_TEST",
+        user: "U_TEST_USER",
+        subtype: "file_share",
+        text: "metadata missing",
+        ts: "1715000003.000100",
+      },
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toEqual(
+      expect.objectContaining({
+        text: "shared a file",
+        attachments: [
+          {
+            kind: "file",
+            filename: "shared.txt",
+            contentType: "text/plain",
+            localPath: "/tmp/codex-im/slack/F_SHARE-shared.txt",
+            sizeBytes: 5,
+          },
+        ],
+      }),
+    );
   });
 });

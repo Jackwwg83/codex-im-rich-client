@@ -2,6 +2,7 @@ import type {
   ActionAck,
   ChannelAdapter,
   InboundAction,
+  InboundAttachment,
   InboundMessage,
   MessageRef,
   OutboundFile,
@@ -11,7 +12,11 @@ import type {
 import { decodeSlackCallbackHandle, normalizeSlackRawBlockAction } from "./action.js";
 import { SLACK_CAPABILITIES } from "./capabilities.js";
 import { type SlackApprovalCardBlock, renderSlackApprovalCard } from "./card.js";
-import { type SlackRawMessagePayload, normalizeSlackRawMessage } from "./message.js";
+import {
+  type SlackRawMessagePayload,
+  normalizeSlackRawMessage,
+  slackFileAttachmentDescriptors,
+} from "./message.js";
 import { isSlackSlashCommandMessageId, normalizeSlackRawSlashCommand } from "./slash-command.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
@@ -31,6 +36,7 @@ export interface SlackWebClientLike {
   chatPostMessage?(input: SlackPostMessageInput): Promise<SlackMessageResult>;
   chatUpdate?(input: SlackUpdateMessageInput): Promise<SlackMessageResult | undefined>;
   filesUploadV2?(input: SlackFilesUploadV2Input): Promise<SlackMessageResult | undefined>;
+  downloadFile?(input: SlackFileDownloadInput): Promise<SlackDownloadedFile>;
 }
 
 export interface SlackPostMessageInput {
@@ -56,6 +62,18 @@ export interface SlackFilesUploadV2Input {
 }
 
 export type SlackFileUploadInput = SlackFilesUploadV2Input;
+
+export interface SlackFileDownloadInput {
+  readonly fileId: string;
+  readonly filename: string;
+  readonly contentType: string;
+  readonly url: string;
+}
+
+export interface SlackDownloadedFile {
+  readonly localPath: string;
+  readonly sizeBytes?: number;
+}
 
 export interface SlackMessageResult {
   readonly channel?: string;
@@ -269,20 +287,54 @@ export class SlackChannelAdapter implements ChannelAdapter {
     socketClient.on?.("interactive", (payload) => this.#emitRawAction(payload));
   }
 
-  #emitRawMessage(payload: unknown): void {
+  async #emitRawMessage(payload: unknown): Promise<void> {
     if (this.#inboundPaused) {
       return;
     }
-    const message = normalizeSlackRawMessage(
-      payload as SlackRawMessagePayload,
-      this._nowForTest().getTime(),
-    );
+    const raw = payload as SlackRawMessagePayload;
+    const attachments = await this.#materializeAttachments(raw);
+    const message = normalizeSlackRawMessage(raw, this._nowForTest().getTime(), attachments);
     if (message === undefined) {
       return;
     }
     for (const handler of this.#onMessageHandlers) {
       handler(message);
     }
+  }
+
+  async #materializeAttachments(
+    payload: SlackRawMessagePayload,
+  ): Promise<readonly InboundAttachment[]> {
+    const descriptors = slackFileAttachmentDescriptors(payload.event);
+    if (descriptors.length === 0) {
+      return [];
+    }
+    const downloadFile = this.#options.webClient?.downloadFile;
+    if (downloadFile === undefined) {
+      return [];
+    }
+    const attachments: InboundAttachment[] = [];
+    for (const descriptor of descriptors) {
+      try {
+        const downloaded = await downloadFile({
+          fileId: descriptor.fileId,
+          filename: descriptor.filename,
+          contentType: descriptor.contentType,
+          url: descriptor.url,
+        });
+        attachments.push({
+          kind: descriptor.kind,
+          filename: descriptor.filename,
+          contentType: descriptor.contentType,
+          localPath: downloaded.localPath,
+          ...(downloaded.sizeBytes === undefined ? {} : { sizeBytes: downloaded.sizeBytes }),
+        });
+      } catch {
+        // Slack private download URLs and headers can contain bearer material.
+        // Drop the attachment instead of surfacing raw platform errors.
+      }
+    }
+    return attachments;
   }
 
   async #emitRawAction(payload: unknown): Promise<void> {

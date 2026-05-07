@@ -11,6 +11,8 @@ export type {
 export { SlackChannelAdapter } from "./adapter.js";
 export type {
   SlackChannelAdapterOptions,
+  SlackDownloadedFile,
+  SlackFileDownloadInput,
   SlackFileUploadInput,
   SlackFilesUploadV2Input,
   SlackMessageResult,
@@ -52,6 +54,8 @@ export type {
 } from "./live-smoke.js";
 export { normalizeSlackRawMessage } from "./message.js";
 export type {
+  SlackFileAttachmentDescriptor,
+  SlackRawFile,
   SlackRawAuthorization,
   SlackRawMessageEvent,
   SlackRawMessagePayload,

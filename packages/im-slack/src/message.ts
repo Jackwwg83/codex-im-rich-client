@@ -1,4 +1,4 @@
-import type { InboundMessage, Target } from "@codex-im/channel-core";
+import type { InboundAttachment, InboundMessage, Target } from "@codex-im/channel-core";
 
 export interface SlackRawMessagePayload {
   readonly team_id?: string;
@@ -22,17 +22,38 @@ export interface SlackRawMessageEvent {
   readonly thread_ts?: string;
   readonly subtype?: string;
   readonly bot_id?: string;
+  readonly files?: readonly SlackRawFile[];
+}
+
+export interface SlackRawFile {
+  readonly id?: string;
+  readonly name?: string;
+  readonly title?: string;
+  readonly mimetype?: string;
+  readonly filetype?: string;
+  readonly url_private?: string;
+  readonly url_private_download?: string;
+  readonly size?: number;
+}
+
+export interface SlackFileAttachmentDescriptor {
+  readonly fileId: string;
+  readonly filename: string;
+  readonly contentType: string;
+  readonly url: string;
+  readonly kind: "image" | "file";
 }
 
 export function normalizeSlackRawMessage(
   payload: SlackRawMessagePayload,
   nowMs: number,
+  attachments: readonly InboundAttachment[] = [],
 ): InboundMessage | undefined {
   const event = payload.event;
   if (event === undefined) {
     throw new Error("SlackChannelAdapter.onMessage received missing event");
   }
-  if (event.bot_id !== undefined || event.subtype !== undefined) {
+  if (event.bot_id !== undefined || isUnsupportedSlackSubtype(event)) {
     return undefined;
   }
   const teamId = slackTeamId(payload);
@@ -59,7 +80,34 @@ export function normalizeSlackRawMessage(
       messageId: `${event.channel}:${event.ts}`,
       kind: "inbound",
     },
+    ...(attachments.length === 0 ? {} : { attachments }),
   };
+}
+
+export function slackFileAttachmentDescriptors(
+  event: SlackRawMessageEvent | undefined,
+): readonly SlackFileAttachmentDescriptor[] {
+  const files = event?.files ?? [];
+  return files.flatMap((file) => {
+    const fileId = nonEmptyString(file.id);
+    const url = nonEmptyString(file.url_private_download) ?? nonEmptyString(file.url_private);
+    if (fileId === undefined || url === undefined) {
+      return [];
+    }
+    const contentType =
+      nonEmptyString(file.mimetype) ??
+      contentTypeForSlackFiletype(file.filetype) ??
+      "application/octet-stream";
+    return [
+      {
+        fileId,
+        filename: nonEmptyString(file.name) ?? nonEmptyString(file.title) ?? `slack-file-${fileId}`,
+        contentType,
+        url,
+        kind: contentType.toLowerCase().startsWith("image/") ? "image" : "file",
+      },
+    ];
+  });
 }
 
 function slackTeamId(payload: SlackRawMessagePayload): string | undefined {
@@ -83,6 +131,13 @@ function slackText(event: SlackRawMessageEvent): string {
   return text.replace(/^<@[A-Z0-9_]+(?:\|[^>]+)?>\s*/u, "");
 }
 
+function isUnsupportedSlackSubtype(event: SlackRawMessageEvent): boolean {
+  if (event.subtype === undefined) {
+    return false;
+  }
+  return event.subtype !== "file_share" || (event.files?.length ?? 0) === 0;
+}
+
 function slackReceivedAt(ts: string | undefined, nowMs: number): Date {
   if (ts === undefined) {
     return new Date(nowMs);
@@ -95,4 +150,31 @@ function slackReceivedAt(ts: string | undefined, nowMs: number): Date {
   const fractionMs = Number(`0.${fractionRaw}`);
   const ms = seconds * 1000 + (Number.isFinite(fractionMs) ? Math.floor(fractionMs * 1000) : 0);
   return new Date(ms);
+}
+
+function nonEmptyString(value: string | undefined): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function contentTypeForSlackFiletype(filetype: string | undefined): string | undefined {
+  const normalized = filetype?.toLowerCase();
+  if (normalized === undefined) {
+    return undefined;
+  }
+  if (normalized === "png") {
+    return "image/png";
+  }
+  if (normalized === "jpg" || normalized === "jpeg") {
+    return "image/jpeg";
+  }
+  if (normalized === "gif") {
+    return "image/gif";
+  }
+  if (normalized === "pdf") {
+    return "application/pdf";
+  }
+  if (normalized === "text" || normalized === "txt") {
+    return "text/plain";
+  }
+  return undefined;
 }
