@@ -236,7 +236,47 @@ Failure localization:
   delivery target;
 - timeout/no connection -> network/proxy/Stream endpoint issue.
 
-## 6. launchd / Keychain
+## 6. Slack
+
+Slack live acceptance is tracked separately from the already accepted
+Telegram/Lark/DingTalk matrix because it requires a real Slack app, Socket Mode
+app-level token, bot token, workspace install, slash command, Events API, and
+interactivity setup.
+
+Runbook:
+
+- `docs/ops/slack-live-smoke.md`
+
+Passing criteria:
+
+- `pnpm im:doctor` reports Slack ready after local config and Keychain/env
+  setup;
+- `pnpm smoke:slack-live` proves live auth/connect gates with redacted output;
+- explicit live text and file gates send to the test Slack target;
+- real Slack DM or app mention reaches the launchd daemon;
+- `/codex status`, `/codex projects`, and `/codex use codex-im` route through
+  the shared daemon command path;
+- one harmless Codex prompt returns a Slack reply;
+- one real approval card click reaches the daemon through Socket Mode and
+  passes callback-token plus `messageRef` validation;
+- the terminal approval card visibly resolves without leaving active buttons.
+
+Do not mark Slack accepted from local adapter tests alone. JAC-248 remains open
+until the real workspace path above passes.
+
+Failure localization:
+
+- Slack disabled in `pnpm im:doctor` -> installed config has not enabled Slack;
+- Slack blocked in `pnpm im:doctor` -> missing bot/app token source or allowlist
+  gap;
+- Socket Mode connection failure -> app-level token or Socket Mode app setting;
+- text/file send failure -> bot token scope, workspace install, or target access;
+- no inbound event -> Events API subscription, DM/channel invite, or Socket Mode
+  listener gap;
+- no approval callback -> Interactivity, Block Kit payload, or callback token /
+  `messageRef` validation mismatch.
+
+## 7. launchd / Keychain
 
 Needed:
 
@@ -276,7 +316,7 @@ Rollback:
 pnpm launchd:uninstall
 ```
 
-## 7. Evidence Format
+## 8. Evidence Format
 
 Record results as:
 

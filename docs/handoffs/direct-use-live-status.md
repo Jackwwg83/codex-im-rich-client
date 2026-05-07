@@ -56,7 +56,11 @@
 > local config currently reports Slack disabled while Telegram/Lark/DingTalk
 > remain ready. JAC-255 extends the launchd Keychain wrapper to optionally
 > load `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` from dedicated Keychain services
-> without requiring Slack when disabled.
+> without requiring Slack when disabled. JAC-256 adds the operator runbook for
+> real Slack workspace acceptance and links it from the live IM acceptance
+> runbook; Slack still must not be called accepted until a real workspace DM or
+> app mention, `/codex` commands, prompt/reply, file send, and approval callback
+> path have passed with redacted evidence.
 
 ## 1. Current State
 
@@ -665,6 +669,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Slack T5a production wiring loop | JAC-253 added disabled-by-default Slack config, redacted `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` secret resolution, official Socket Mode production adapter construction, Slack callback-handle routing, and daemon enabled-platform fallback targeting. `@codex-im/im-slack` still uses injected clients for tests and Socket Mode in production; JAC-248 stays open until a real Slack workspace runs inbound, approval click, text, and file gates. |
 | 2026-05-07 SGT Slack T5b doctor loop | JAC-254 added Slack to the unified `pnpm im:doctor` / `pnpm channels:doctor` no-live-network readiness report. Doctor now checks Slack bot/app token source presence by env/Keychain names only, global/project allowlists, allowed channels, capabilities, Socket Mode, `/codex` slash ingress, Block Kit approvals, edit semantics, and file support. Local installed config currently reports Slack `disabled`, not green live acceptance. |
 | 2026-05-07 SGT Slack T5c Keychain wrapper loop | JAC-255 extended `bin/load-and-run.sh` so launchd runtime can optionally load `SLACK_BOT_TOKEN` from Keychain service `codex-im-bridge-slack-bot` and `SLACK_APP_TOKEN` from `codex-im-bridge-slack-app`. Dry-run reports only set/unset + length, runtime exports Slack env vars only when present, and Slack remains optional until config enables it. |
+| 2026-05-07 SGT Slack T5d live acceptance runbook loop | JAC-256 added `docs/ops/slack-live-smoke.md` and linked Slack into `docs/ops/live-im-acceptance.md`. The runbook pins the required Slack app scopes/settings, Keychain services, no-live doctor gate, explicit live text/file gates, and real-client acceptance evidence. Slack remains not accepted until JAC-248 records real workspace inbound, `/codex`, prompt/reply, approval click, and terminal-card finalization. |
 | 2026-05-07 SGT installed Slack-ready bundle | Rebuilt and installed the latest daemon/wrapper bundle, then kickstarted launchd. `pnpm launchd:status` reports pid `66457`, startedAt `2026-05-07T05:21:55.128Z`, `pendingApprovals=0`; `pnpm im:doctor` reports ready for installed Telegram/Lark/DingTalk and Slack `disabled` in current config. |
 
 Latest live Telegram acceptance evidence:
