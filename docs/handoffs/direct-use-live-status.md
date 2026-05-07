@@ -51,7 +51,10 @@
 > production config/daemon wiring under JAC-253: Slack is disabled by default,
 > secrets resolve from `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` env refs only,
 > daemon-run can create the Slack Socket Mode adapter, and real Slack workspace
-> acceptance remains open under JAC-248.
+> acceptance remains open under JAC-248. JAC-254 extends the unified
+> no-live-network `pnpm im:doctor` readiness surface to Slack; the installed
+> local config currently reports Slack disabled while Telegram/Lark/DingTalk
+> remain ready.
 
 ## 1. Current State
 
@@ -658,6 +661,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Slack T4 slash-command loop | Slack Socket Mode `/codex` slash-command payloads now ack immediately and normalize into existing daemon text: known Codex-native command words become `/status`, `/projects`, `/threads`, `/use`, `/diagnostics`, `/cu status`, etc.; unknown text remains a normal Codex prompt. Slash-command replies use `chat.postMessage` append semantics because there is no editable originating Slack message. Optional App Home remains deferred. |
 | 2026-05-07 SGT Slack T5 file/smoke skeleton loop | Slack outbound artifacts now use a `filesUploadV2`-shaped adapter surface instead of legacy `files.upload`; empty files and blank filenames fail locally. Added `pnpm smoke:slack-live`, default-skipped without secrets, with redacted dry-run/text/file gates. The file live gate uses Slack's external upload sequence (`files.getUploadURLExternal` -> upload URL -> `files.completeUploadExternal`). Real Slack workspace acceptance remains pending test app tokens/channel setup. |
 | 2026-05-07 SGT Slack T5a production wiring loop | JAC-253 added disabled-by-default Slack config, redacted `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` secret resolution, official Socket Mode production adapter construction, Slack callback-handle routing, and daemon enabled-platform fallback targeting. `@codex-im/im-slack` still uses injected clients for tests and Socket Mode in production; JAC-248 stays open until a real Slack workspace runs inbound, approval click, text, and file gates. |
+| 2026-05-07 SGT Slack T5b doctor loop | JAC-254 added Slack to the unified `pnpm im:doctor` / `pnpm channels:doctor` no-live-network readiness report. Doctor now checks Slack bot/app token source presence by env/Keychain names only, global/project allowlists, allowed channels, capabilities, Socket Mode, `/codex` slash ingress, Block Kit approvals, edit semantics, and file support. Local installed config currently reports Slack `disabled`, not green live acceptance. |
 
 Latest live Telegram acceptance evidence:
 

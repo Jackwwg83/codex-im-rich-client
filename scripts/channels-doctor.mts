@@ -8,12 +8,13 @@ import type { ChannelCapabilities } from "../packages/channel-core/src/index.js"
 import { type CodexImConfig, parseConfigToml } from "../packages/config/src/index.js";
 import { DINGTALK_CAPABILITIES } from "../packages/im-dingtalk/src/index.js";
 import { LARK_CAPABILITIES } from "../packages/im-lark/src/index.js";
+import { SLACK_CAPABILITIES } from "../packages/im-slack/src/index.js";
 import { TELEGRAM_CAPABILITIES } from "../packages/im-telegram/src/index.js";
 
 type DoctorStatus = "ready" | "attention" | "blocked";
 type PlatformStatus = DoctorStatus | "disabled";
 type CheckStatus = "pass" | "fail" | "warn" | "info";
-type Platform = "telegram" | "lark" | "dingtalk";
+type Platform = "telegram" | "lark" | "dingtalk" | "slack";
 
 export interface DoctorCheck {
   readonly name: string;
@@ -63,12 +64,15 @@ const SECRET_SERVICES = {
   telegram: "codex-im-bridge",
   lark: "codex-im-bridge-lark",
   dingtalk: "codex-im-bridge-dingtalk",
-} as const satisfies Record<Platform, string>;
+  slackBot: "codex-im-bridge-slack-bot",
+  slackApp: "codex-im-bridge-slack-app",
+} as const;
 
 const CAPABILITIES = {
   telegram: TELEGRAM_CAPABILITIES,
   lark: LARK_CAPABILITIES,
   dingtalk: DINGTALK_CAPABILITIES,
+  slack: SLACK_CAPABILITIES,
 } as const satisfies Record<Platform, ChannelCapabilities>;
 
 export function evaluateChannelsDoctor(input: EvaluateChannelsDoctorInput): ChannelsDoctorReport {
@@ -79,6 +83,7 @@ export function evaluateChannelsDoctor(input: EvaluateChannelsDoctorInput): Chan
     evaluateTelegram(input.config, env, keychainSecretPresent),
     evaluateLark(input.config, env, keychainSecretPresent),
     evaluateDingTalk(input.config, env, keychainSecretPresent),
+    evaluateSlack(input.config, env, keychainSecretPresent),
   ];
   const installedChecks = formatInstalledChecks(installed);
   const allChecks = [...installedChecks, ...platformReports.flatMap((platform) => platform.checks)];
@@ -254,6 +259,62 @@ function evaluateDingTalk(
         "text refs append by lifecycle contract with progress edits suppressed; card refs update through CardKit",
     },
     { name: "file", status: "info", detail: "attachments unsupported" },
+  ]);
+}
+
+function evaluateSlack(
+  config: CodexImConfig,
+  env: Record<string, string | undefined>,
+  keychainSecretPresent: (service: string) => boolean,
+): PlatformDoctorReport {
+  const adapter = config.adapters.slack;
+  return platformReport("slack", adapter.enabled, [
+    adapterEnabled(adapter.enabled),
+    secretCheck({
+      name: "bot_token",
+      envName: adapter.botTokenEnv,
+      service: SECRET_SERVICES.slackBot,
+      env,
+      keychainSecretPresent,
+    }),
+    secretCheck({
+      name: "app_token",
+      envName: adapter.appTokenEnv,
+      service: SECRET_SERVICES.slackApp,
+      env,
+      keychainSecretPresent,
+    }),
+    allowlistCheck(config, "slack"),
+    {
+      name: "allowed_channel_ids",
+      status: adapter.allowedChannelIds.length > 0 ? "pass" : "warn",
+      detail:
+        adapter.allowedChannelIds.length > 0
+          ? "present"
+          : "empty; rely on global/project allowlist",
+    },
+    capabilitiesCheck("slack"),
+    {
+      name: "socket_mode",
+      status: "info",
+      detail: "not checked by default; use Slack live gate",
+    },
+    { name: "slash_command", status: "info", detail: "/codex ingress supported by adapter" },
+    { name: "inbound_text", status: "info", detail: "not checked by default; use Slack live gate" },
+    { name: "outbound_text", status: "info", detail: "supported by adapter" },
+    { name: "approval_card", status: "info", detail: "supported by Block Kit buttons" },
+    {
+      name: "callback_click",
+      status: "info",
+      detail: "not checked by default; use Slack live acceptance gate",
+    },
+    { name: "edit_semantics", status: "info", detail: "text/card edit supported" },
+    {
+      name: "file",
+      status: "info",
+      detail:
+        "outbound files/images supported through external upload; live send not checked by default",
+    },
   ]);
 }
 
