@@ -47,6 +47,7 @@
     "smoke:computer-use-live": "tsx scripts/computer-use-live-smoke.mts",
     "smoke:lark-fake": "vitest run --config vitest.config.ts --project unit packages/daemon/test/lark-fake-smoke.test.ts",
     "smoke:lark-live": "tsx packages/im-lark/scripts/live-smoke.mts",
+    "smoke:slack-live": "tsx packages/im-slack/scripts/live-smoke.mts",
     "daemon:run": "tsx packages/cli/src/index.ts daemon run",
     "smoke:telegram-fake": "tsx packages/cli/src/index.ts smoke telegram-fake",
     "smoke:daemon-roundtrip": "tsx packages/cli/src/index.ts smoke daemon-roundtrip",

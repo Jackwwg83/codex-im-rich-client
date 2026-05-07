@@ -12,6 +12,7 @@ export { SlackChannelAdapter } from "./adapter.js";
 export type {
   SlackChannelAdapterOptions,
   SlackFileUploadInput,
+  SlackFilesUploadV2Input,
   SlackMessageResult,
   SlackPostMessageInput,
   SlackSocketModeClientLike,
@@ -33,6 +34,12 @@ export type {
   SlackSectionBlock,
 } from "./card.js";
 export { SLACK_CAPABILITIES } from "./capabilities.js";
+export { runSlackLiveSmokeCore } from "./live-smoke.js";
+export type {
+  SlackLiveSmokeOptions,
+  SlackLiveSmokeRedactedStatus,
+  SlackLiveSmokeStatus,
+} from "./live-smoke.js";
 export { normalizeSlackRawMessage } from "./message.js";
 export type {
   SlackRawAuthorization,

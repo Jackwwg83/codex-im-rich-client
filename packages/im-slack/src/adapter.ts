@@ -30,7 +30,7 @@ export interface SlackSocketModeClientLike {
 export interface SlackWebClientLike {
   chatPostMessage?(input: SlackPostMessageInput): Promise<SlackMessageResult>;
   chatUpdate?(input: SlackUpdateMessageInput): Promise<SlackMessageResult | undefined>;
-  filesUpload?(input: SlackFileUploadInput): Promise<SlackMessageResult | undefined>;
+  filesUploadV2?(input: SlackFilesUploadV2Input): Promise<SlackMessageResult | undefined>;
 }
 
 export interface SlackPostMessageInput {
@@ -47,13 +47,15 @@ export interface SlackUpdateMessageInput {
   readonly blocks?: readonly SlackApprovalCardBlock[];
 }
 
-export interface SlackFileUploadInput {
-  readonly channels: readonly string[];
+export interface SlackFilesUploadV2Input {
+  readonly channel_id: string;
   readonly filename: string;
-  readonly contentType: string;
-  readonly bytes: Uint8Array;
+  readonly title: string;
+  readonly file: Uint8Array;
   readonly thread_ts?: string;
 }
+
+export type SlackFileUploadInput = SlackFilesUploadV2Input;
 
 export interface SlackMessageResult {
   readonly channel?: string;
@@ -219,15 +221,16 @@ export class SlackChannelAdapter implements ChannelAdapter {
 
   async sendFile(target: Target, file: OutboundFile): Promise<MessageRef> {
     this.#assertStarted("sendFile");
+    assertSlackOutboundFile(file);
     const webClient = this.#webClient("sendFile");
-    if (webClient.filesUpload === undefined) {
-      throw new Error("SlackChannelAdapter.sendFile requires webClient.filesUpload");
+    if (webClient.filesUploadV2 === undefined) {
+      throw new Error("SlackChannelAdapter.sendFile requires webClient.filesUploadV2");
     }
-    const sent = await webClient.filesUpload({
-      channels: [slackChannelFromTarget(target)],
+    const sent = await webClient.filesUploadV2({
+      channel_id: slackChannelFromTarget(target),
       filename: file.filename,
-      contentType: file.contentType,
-      bytes: file.bytes,
+      title: file.filename,
+      file: file.bytes,
       ...(target.threadKey === undefined ? {} : { thread_ts: target.threadKey }),
     });
     return {
@@ -351,4 +354,13 @@ function requiredTs(ts: string | undefined): string {
     throw new Error("SlackChannelAdapter received Slack message without ts");
   }
   return ts;
+}
+
+function assertSlackOutboundFile(file: OutboundFile): void {
+  if (file.filename.trim().length === 0) {
+    throw new Error("SlackChannelAdapter.sendFile requires a filename");
+  }
+  if (file.bytes.byteLength === 0) {
+    throw new Error("SlackChannelAdapter.sendFile refuses empty files");
+  }
 }
