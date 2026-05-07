@@ -1733,15 +1733,14 @@ export class Daemon {
     if (event.type === "unknown") {
       const state = this.#turnOutputStateForStatusEvent(event);
       const summary = summarizeCodexStatusEvent(event);
-      if (
-        state !== undefined &&
-        summary !== undefined &&
-        state.statusSummaries.length < MAX_IM_STATUS_SUMMARIES &&
-        !state.statusSummaries.includes(summary)
-      ) {
-        state.statusSummaries.push(summary);
-        await this.#maybeEditTurnProgress(state);
-      }
+      await this.#appendTurnStatusSummary(state, summary);
+      return;
+    }
+
+    if (event.type === "warning" || event.type === "error") {
+      const state = this.#turnOutputStateForRuntimeNotice(event.raw);
+      const summary = summarizeCodexRuntimeNotice(event);
+      await this.#appendTurnStatusSummary(state, summary);
       return;
     }
 
@@ -1785,6 +1784,43 @@ export class Daemon {
       return undefined;
     }
     if (isGlobalRuntimeStatusMethod(event.method) && this.#turnOutputs.size === 1) {
+      return this.#turnOutputs.values().next().value;
+    }
+    return undefined;
+  }
+
+  async #appendTurnStatusSummary(
+    state: DaemonTurnOutputState | undefined,
+    summary: string | undefined,
+  ): Promise<void> {
+    if (
+      state !== undefined &&
+      summary !== undefined &&
+      state.statusSummaries.length < MAX_IM_STATUS_SUMMARIES &&
+      !state.statusSummaries.includes(summary)
+    ) {
+      state.statusSummaries.push(summary);
+      await this.#maybeEditTurnProgress(state);
+    }
+  }
+
+  #turnOutputStateForRuntimeNotice(raw: unknown): DaemonTurnOutputState | undefined {
+    const rawRecord = readRecord(raw);
+    const params = readRecord(rawRecord?.params);
+    const threadId = readStringField(params, "threadId") ?? readStringField(rawRecord, "threadId");
+    const turnId = readStringField(params, "turnId") ?? readStringField(rawRecord, "turnId");
+    if (threadId !== undefined && turnId !== undefined) {
+      return this.#turnOutputs.get(turnOutputKey(threadId, turnId));
+    }
+    if (threadId !== undefined) {
+      for (const state of this.#turnOutputs.values()) {
+        if (state.threadId === threadId) {
+          return state;
+        }
+      }
+      return undefined;
+    }
+    if (this.#turnOutputs.size === 1) {
       return this.#turnOutputs.values().next().value;
     }
     return undefined;
@@ -4548,6 +4584,8 @@ function summarizeCodexStatusEvent(
       return "usage updated";
     case "remoteControl/status/changed":
       return summarizeRemoteControlStatus(params);
+    case "configWarning":
+      return summarizeConfigWarningStatus(params);
     case "turn/plan/updated":
       return summarizePlanStatus(params);
     case "turn/diff/updated":
@@ -4573,6 +4611,7 @@ function isGlobalRuntimeStatusMethod(method: string): boolean {
     method === "mcpServer/oauthLogin/completed" ||
     method === "account/rateLimits/updated" ||
     method === "remoteControl/status/changed" ||
+    method === "configWarning" ||
     method === "skills/changed" ||
     method === "app/list/updated"
   );
@@ -4634,6 +4673,48 @@ function summarizeMcpOauthStatus(params: Record<string, unknown> | undefined): s
 
 function summarizeRemoteControlStatus(params: Record<string, unknown> | undefined): string {
   return `remote control: ${safeStatusText(readStringField(params, "status") ?? "unknown")}`;
+}
+
+function summarizeConfigWarningStatus(params: Record<string, unknown> | undefined): string {
+  const message = readNoticeMessage(params);
+  return message === undefined ? "config warning" : `config warning: ${message}`;
+}
+
+function summarizeCodexRuntimeNotice(
+  event: Extract<CodexRichEvent, { type: "warning" | "error" }>,
+): string | undefined {
+  const raw = readRecord(event.raw);
+  const params = readRecord(raw?.params) ?? raw;
+  const message = readNoticeMessage(params);
+  const code = readNoticeCode(params);
+  const label = event.type;
+  return `${label}: ${message ?? "received"}${code === undefined ? "" : ` (${code})`}`;
+}
+
+function readNoticeMessage(params: Record<string, unknown> | undefined): string | undefined {
+  const error = readRecord(params?.error);
+  const message =
+    readStringField(params, "message") ??
+    readStringField(params, "msg") ??
+    readStringField(params, "reason") ??
+    readStringField(params, "error") ??
+    readStringField(error, "message") ??
+    readStringField(error, "reason") ??
+    readStringField(params, "detail");
+  return message === undefined ? undefined : safeStatusText(message);
+}
+
+function readNoticeCode(params: Record<string, unknown> | undefined): string | undefined {
+  const error = readRecord(params?.error);
+  const code =
+    readStringField(params, "code") ??
+    readStringField(error, "code") ??
+    readStringField(error, "kind");
+  if (code !== undefined) {
+    return safeStatusText(code);
+  }
+  const numericCode = readNumberField(params, "code") ?? readNumberField(error, "code");
+  return numericCode === undefined ? undefined : safeStatusText(formatInteger(numericCode));
 }
 
 function summarizePlanStatus(params: Record<string, unknown> | undefined): string {

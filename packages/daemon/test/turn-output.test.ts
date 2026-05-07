@@ -870,6 +870,132 @@ describe("daemon turn output projection", () => {
     await daemon.stop();
   });
 
+  it("folds Codex warning and error notices into the active IM turn output", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Trigger runtime warning output",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "warning",
+      raw: {
+        method: "warning",
+        params: {
+          message: "near context limit sk-abcdefghijklmnopqrstuvwxyz1234567890",
+        },
+      },
+    });
+    queue.push({
+      type: "error",
+      raw: {
+        method: "error",
+        params: {
+          message: "provider failed",
+          code: "E_PROVIDER",
+          stack: "SECRET=abcdefghijklmnopqrstuvwxyz should not be shown",
+        },
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "configWarning",
+      params: {
+        message: "deprecated MCP config",
+        detail: "Authorization: Bearer should-not-be-shown",
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-agent",
+      deltaText: "done",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length >= 2);
+    const lastEdit = editText.mock.calls.at(-1);
+    expect(lastEdit).toBeDefined();
+    const [, body] = lastEdit as unknown as [DaemonMessageRef, string];
+    expect(body).toBe(
+      [
+        "done",
+        "",
+        "Codex status:",
+        "- warning: near context limit ***REDACTED:openai-token***",
+        "- error: provider failed (E_PROVIDER)",
+        "- config warning: deprecated MCP config",
+      ].join("\n"),
+    );
+    expect(body).not.toContain("SECRET=");
+    expect(body).not.toContain("Authorization");
+    expect(body).not.toContain("should-not-be-shown");
+
+    await daemon.stop();
+  });
+
   it("includes short command output and sends file-change diffs as IM attachments", async () => {
     const queue = new EventQueue();
     const sendText = vi.fn(async (target: Target, _body: string) => ({
