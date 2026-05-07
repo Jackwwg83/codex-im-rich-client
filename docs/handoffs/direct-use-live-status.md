@@ -122,7 +122,7 @@
 > IM output/artifact projection are implemented, but non-dry-run real desktop
 > execution still intentionally blocks until current Codex App Server
 > namespace/tool capability evidence exists. A follow-up protocol surface scan
-> at HEAD `0f0ba3c` checked `ClientRequest`, `ServerRequest`,
+> recorded by `4e8da9f` checked `ClientRequest`, `ServerRequest`,
 > `ServerNotification`, `Config`, `ProfileV2`, `TurnStartParams`, `ToolsV2`,
 > `UserInput`, and `ThreadItem`: the protocol supports downstream
 > dynamic-tool/image artifact rendering and an `item/tool/call` callback
