@@ -372,9 +372,10 @@
     `TELEGRAM_LIVE_FILE=1`; Feishu/Lark live file mode sent the same harmless
     text attachment through SDK `sendFile`. Both gates emitted only redacted
     status evidence. Launchd was restored under pid `94243`.
-- **Next exact action:** Finish DingTalk outbound attachment verification,
-  rebuild/install the bridge, and run an explicit real DingTalk file-send gate
-  only after a fresh inbound DingTalk message seeds the session reply URL.
+- **Next exact action:** Run
+  `DINGTALK_LIVE=1 DINGTALK_LIVE_FILE=1 ... pnpm smoke:dingtalk-live`, send one
+  fresh DingTalk message to the bot during the gate window to seed the session
+  reply URL, and record whether the script reaches redacted `FILE_SENT`.
 
 ## 2. Why This Exists
 

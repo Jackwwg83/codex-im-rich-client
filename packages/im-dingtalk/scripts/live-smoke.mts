@@ -8,6 +8,7 @@ import {
   type DingTalkStreamClientLike,
   type DingTalkStreamEventHandler,
   createDingTalkOpenApiCardClient,
+  createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
   renderDingTalkApprovalCard,
 } from "../src/index.js";
@@ -25,7 +26,8 @@ type SmokeStatus =
   | "ready_dry_run"
   | "connected"
   | "card_updated"
-  | "card_callback_seen";
+  | "card_callback_seen"
+  | "file_sent";
 
 interface RedactedStatus {
   readonly status: SmokeStatus;
@@ -51,6 +53,7 @@ interface RedactedStatus {
   readonly callbackRaw?: "present";
   readonly callbackRawActionId?: "present";
   readonly callbackRawSpaceType?: "IM_GROUP" | "IM_ROBOT" | "unknown";
+  readonly fileKind?: "file" | "image";
   readonly missing?: readonly string[];
 }
 
@@ -93,6 +96,10 @@ async function main(): Promise<void> {
   if (process.env.DINGTALK_LIVE_DRY_RUN === "1") {
     printStatus({ ...redactedStatus("ready_dry_run"), durationMs });
     console.log("[dingtalk-live-smoke] READY_DRY_RUN: live env is present; no network call made.");
+    return;
+  }
+  if (process.env.DINGTALK_LIVE_FILE === "1") {
+    await runLiveFileSmoke({ durationMs });
     return;
   }
   if (process.env.DINGTALK_LIVE_CARD === "1") {
@@ -197,6 +204,67 @@ async function main(): Promise<void> {
     console.error(`[dingtalk-live-smoke] BLOCKED: ${redactKnownValues(errorMessage(error))}`);
     process.exitCode = 3;
   } finally {
+    await adapter.stop();
+  }
+}
+
+async function runLiveFileSmoke(input: { readonly durationMs: number }): Promise<void> {
+  const counters = { robotEvents: 0 };
+  let capturedTarget: Target | undefined;
+  const streamClient = createDingTalkStreamClient({
+    clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+    clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+    debug: false,
+  });
+  const adapter = new DingTalkChannelAdapter({
+    streamClient,
+    textClient: createDingTalkSessionReplyTextClient({
+      clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+      clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+    }),
+  });
+  const unsubscribe = adapter.onMessage((message) => {
+    counters.robotEvents++;
+    capturedTarget ??= message.target;
+  });
+
+  try {
+    const file = liveFilePayload();
+    await adapter.start();
+    console.log(
+      "[dingtalk-live-smoke] FILE_WAITING: send one fresh DingTalk message to the bot to seed a session reply URL.",
+    );
+    await waitForTarget(() => capturedTarget, input.durationMs);
+    if (capturedTarget === undefined) {
+      printStatus({
+        ...redactedStatus("blocked"),
+        durationMs: input.durationMs,
+        robotEvents: counters.robotEvents,
+        targetSource: "missing",
+        fileKind: file.kind,
+      });
+      console.error(
+        "[dingtalk-live-smoke] BLOCKED: no fresh DingTalk inbound robot message arrived before timeout; cannot seed session reply URL for file send.",
+      );
+      process.exitCode = 3;
+      return;
+    }
+    await adapter.sendFile(capturedTarget, file.outbound);
+    printStatus({
+      ...redactedStatus("file_sent"),
+      durationMs: input.durationMs,
+      robotEvents: counters.robotEvents,
+      targetSource: "captured",
+      messageId: "present",
+      fileKind: file.kind,
+    });
+    console.log("[dingtalk-live-smoke] FILE_SENT: redacted live file smoke completed.");
+  } catch (error) {
+    printStatus({ ...redactedStatus("blocked"), durationMs: input.durationMs });
+    console.error(`[dingtalk-live-smoke] BLOCKED: ${redactKnownValues(errorMessage(error))}`);
+    process.exitCode = 3;
+  } finally {
+    unsubscribe();
     await adapter.stop();
   }
 }
@@ -512,6 +580,44 @@ function redactedStatus(status: SmokeStatus): RedactedStatus {
     cardTemplateId: present("DINGTALK_CARD_TEMPLATE_ID"),
     targetChatId: present("DINGTALK_TARGET_CHAT_ID"),
   };
+}
+
+function liveFilePayload(): {
+  readonly kind: "file" | "image";
+  readonly outbound: {
+    readonly filename: string;
+    readonly bytes: Uint8Array;
+    readonly contentType: string;
+  };
+} {
+  const kind = process.env.DINGTALK_LIVE_FILE_KIND ?? "file";
+  if (kind === "image") {
+    return {
+      kind,
+      outbound: {
+        filename: "codex-im-live-smoke.png",
+        bytes: Uint8Array.from([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+          0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+          0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x60,
+          0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5, 0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49,
+          0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+        ]),
+        contentType: "image/png",
+      },
+    };
+  }
+  if (kind === "file") {
+    return {
+      kind,
+      outbound: {
+        filename: "codex-im-live-smoke.txt",
+        bytes: new TextEncoder().encode("codex-im dingtalk live file smoke\n"),
+        contentType: "text/plain",
+      },
+    };
+  }
+  throw new Error("DINGTALK_LIVE_FILE_KIND must be file or image");
 }
 
 function printStatus(status: RedactedStatus): void {

@@ -131,7 +131,7 @@ remain separate acceptance tracks.
 | DingTalk live callback probe | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_CARD_CALLBACK=1 ... pnpm smoke:dingtalk-live` | pass | 2026-05-06 real DingTalk Desktop click produced `card_callback_seen` with redacted `messageId=present`, `targetSource=env`, `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`, `callbackMessageRef=present`, `callbackAction=present`, `callbackRaw=present`, and no secret bytes |
 | DingTalk failed send/bind token cleanup | restart daemon after issued-only callback token residue | pass | startup now revokes both `issued` and `bound` callback tokens before adapter input; this covers the invalid local `callback_route_key` experiment that left unbound issued tokens after no card delivery |
 | DingTalk real callback click | real user/client approval-card click reaches adapter callback flow | pass | adapter accepts `cardPrivateData.params.token = v1:<opaque>` plus the official public-template `cardPrivateData.params.action = accept/reject`; real private callbacks with `spaceType=IM` map target/messageRef through the sender `userId`; daemon lookup stays scoped by token or `messageRef + action` |
-| DingTalk outbound image/file attachment | `DingTalkChannelAdapter.sendFile` after one inbound robot message seeds a session reply URL | local pass | client obtains a DingTalk access token, uploads bytes through `/media/upload`, sends `image` / `file` via the captured session webhook, and returns a file `MessageRef`; explicit live file-send gate remains pending |
+| DingTalk outbound image/file attachment | `DingTalkChannelAdapter.sendFile` after one inbound robot message seeds a session reply URL | local pass | client obtains a DingTalk access token, uploads bytes through `/media/upload`, sends `image` / `file` via the captured session webhook, and returns a file `MessageRef`; explicit `DINGTALK_LIVE_FILE=1` live gate exists and remains pending |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -504,8 +504,10 @@ Stop and treat as a blocker if:
   replies without logging secret material. Full local gates passed; the rebuilt
   bridge was installed and kickstarted under launchd pid `2165`,
   `pendingApprovals=0`, and `pnpm im:doctor` reports DingTalk file support as
-  needing an inbound session reply URL. This is not yet a real DingTalk
-  file-send acceptance claim.
+  needing an inbound session reply URL. `DINGTALK_LIVE_FILE=1` now provides the
+  explicit live gate and waits for a fresh inbound DingTalk message before
+  sending the harmless attachment. This is not yet a real DingTalk file-send
+  acceptance claim.
 - 2026-05-07 SGT Codex-native control loop: The common IM command plane now
   exposes Codex App Server-native surfaces for model listing, thread
   compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,

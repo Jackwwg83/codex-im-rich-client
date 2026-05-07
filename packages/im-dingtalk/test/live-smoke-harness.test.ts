@@ -48,6 +48,39 @@ describe("DingTalk live smoke harness gate (JAC-89)", () => {
     expect(output(result)).not.toContain(CLIENT_ID);
   });
 
+  it("keeps explicit file smoke gated behind live env and does not fall through to Stream", () => {
+    const result = runLiveSmoke({
+      DINGTALK_LIVE: "1",
+      DINGTALK_LIVE_FILE: "1",
+      DINGTALK_CLIENT_SECRET_ENV: "DINGTALK_TEST_SECRET",
+      DINGTALK_TEST_SECRET: SECRET,
+    });
+
+    expect(result.status).toBe(2);
+    expect(output(result)).toContain("[dingtalk-live-smoke] BLOCKED");
+    expect(output(result)).toContain("DINGTALK_CLIENT_ID");
+    expect(output(result)).not.toContain("[dingtalk-live-smoke] CONNECTED");
+    expect(output(result)).not.toContain(SECRET);
+  });
+
+  it("supports explicit file smoke dry run without printing identifiers", () => {
+    const result = runLiveSmoke({
+      DINGTALK_LIVE: "1",
+      DINGTALK_LIVE_FILE: "1",
+      DINGTALK_LIVE_DRY_RUN: "1",
+      DINGTALK_CLIENT_ID: CLIENT_ID,
+      DINGTALK_CLIENT_SECRET_ENV: "DINGTALK_TEST_SECRET",
+      DINGTALK_TEST_SECRET: SECRET,
+      DINGTALK_LIVE_DURATION_MS: "1000",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('"status": "ready_dry_run"');
+    expect(result.stdout).toContain("[dingtalk-live-smoke] READY_DRY_RUN");
+    expect(output(result)).not.toContain(SECRET);
+    expect(output(result)).not.toContain(CLIENT_ID);
+  });
+
   it("allows a two-minute manual callback window for real client clicks", () => {
     const result = runLiveSmoke({
       DINGTALK_LIVE: "1",
@@ -129,6 +162,8 @@ function runLiveSmoke(env: Record<string, string>) {
     "DINGTALK_LIVE_CARD_CALLBACK",
     "DINGTALK_LIVE_CAPTURE_TARGET",
     "DINGTALK_LIVE_DRY_RUN",
+    "DINGTALK_LIVE_FILE",
+    "DINGTALK_LIVE_FILE_KIND",
     "DINGTALK_LIVE_DURATION_MS",
     "DINGTALK_ROBOT_CODE",
     "DINGTALK_TARGET_CHAT_ID",
