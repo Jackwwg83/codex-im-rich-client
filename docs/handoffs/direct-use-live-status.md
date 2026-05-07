@@ -76,8 +76,11 @@
 > policy, default/allowed/denied apps, sensitive approval keywords, and the
 > live-smoke gate.
 > Explicit Telegram and Feishu/Lark live file gates passed with redacted
-> evidence; after the JAC-265 bridge reinstall/kickstart, launchd is running
-> under pid `49496` with `pendingApprovals=0`. Common group safety now has a config-level mention
+> evidence; after the latest Codex-native IM output loop bridge
+> reinstall/kickstart, launchd is running under pid `3045` with
+> `pendingApprovals=0`, `pnpm im:doctor` is ready for installed
+> Telegram/Lark/DingTalk with Slack disabled, and the bridge redaction scan
+> returned `redaction scan ok`. Common group safety now has a config-level mention
 > gate: configured Telegram/Feishu-Lark/DingTalk group chats must mention a
 > configured alias before ordinary inbound text reaches Codex, while approval
 > callback authorization remains bound to callback tokens, messageRef
@@ -727,6 +730,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Computer Use status loop | JAC-267 enriches `/cu status` and `/diagnostics` with Computer Use provider/readiness information without starting a Codex turn or desktop action. The IM output now distinguishes policy enabled/disabled, provider configured/unavailable, readiness or blocked reason, explicit `/cu` requirement, allowed/denied apps, sensitive approval keywords, and the live-smoke gate. This is a status surface only; real provider execution remains separately gated. |
 | 2026-05-07 SGT warning/error status loop | JAC-268 projects Codex App `warning`, `error`, and `configWarning` notifications into the active IM turn as redacted `Codex status` lines. The daemon uses message/code-level summaries only and does not render raw JSON payloads, stack traces, tool args, secrets, chat IDs, user IDs, or message IDs. |
 | 2026-05-07 SGT tool progress status loop | JAC-269 projects `item/mcpToolCall/progress` and `item/commandExecution/terminalInteraction` into the active IM turn as redacted `Codex status` lines. MCP progress uses the App Server progress message; command terminal interaction reports that input is requested without rendering raw command output, stdin, process ids, tool args, or raw JSON. |
+| 2026-05-07 SGT bridge install checkpoint | After the Codex-native IM output loop, `pnpm bridge:build`, `pnpm bridge:install`, `launchctl kickstart -k gui/501/io.codex-im-bridge`, `pnpm launchd:status`, `pnpm im:doctor`, and the explicit bridge redaction scan passed. Installed launchd is running pid `3045` with `pendingApprovals=0`; doctor reports installed Telegram/Lark/DingTalk ready and Slack disabled. |
 | 2026-05-07 SGT MCP control loop | JAC-264 adds `/mcp login <server>` and `/mcp reload` to the shared IM control plane. Both call new centralized `CodexRuntime` wrappers for App Server `mcpServer/oauth/login` and `config/mcpServer/reload`; `/mcp` without args remains the status/tool-count listing. The daemon does not call MCP tools directly from IM. |
 | 2026-05-07 SGT live attachment gates | Temporarily stopped launchd to avoid Telegram polling contention, then ran explicit live file gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless `codex-im-live-attachment.txt`; Feishu/Lark `LARK_LIVE_FILE=1` sent a harmless file and returned redacted `messageId=present`. Launchd was bootstrapped/kickstarted back to pid `94243`; `pnpm launchd:status` and `pnpm im:doctor` are ready. |
 | 2026-05-07 SGT inbound attachment loop | Telegram inbound `photo` / `document` and Feishu/Lark inbound `image` / `file` messages now materialize platform resources to local daemon attachment directories before routing. Daemon maps image attachments to Codex `localImage` inputs and appends generic file paths to the prompt text instead of inventing a non-existent Codex file input. Targeted tests passed: Telegram on-message, Lark on-message + SDK client, and daemon routing (135 tests total), plus `pnpm typecheck:tests` and `pnpm lint`. DingTalk remains explicit unsupported for attachments. |

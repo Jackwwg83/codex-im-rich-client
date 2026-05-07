@@ -558,6 +558,12 @@ Stop and treat as a blocker if:
   suppressed. Full local gates passed, then the bridge bundle was rebuilt,
   installed, and launchd restarted to pid `49496`; `pnpm im:doctor` reports
   ready for installed Telegram/Lark/DingTalk and Slack disabled.
+- 2026-05-07 SGT bridge install checkpoint: After the Codex-native IM output
+  loop, `pnpm bridge:build`, `pnpm bridge:install`, `launchctl kickstart -k
+  gui/501/io.codex-im-bridge`, `pnpm launchd:status`, `pnpm im:doctor`, and
+  the explicit bridge redaction scan passed. Installed launchd is running pid
+  `3045` with `pendingApprovals=0`; doctor reports installed
+  Telegram/Lark/DingTalk ready and Slack disabled.
 - 2026-05-07 SGT live attachment gates: Temporarily stopped launchd to avoid
   Telegram polling contention, then ran explicit Telegram and Feishu/Lark file
   gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless
