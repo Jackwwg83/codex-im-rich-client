@@ -324,8 +324,10 @@ describe("@codex-im/config (T7-T8)", () => {
       "telegram:group-chat",
       "lark:group-chat",
     ]);
-    expect(config.projects.web.allowedUsers).toEqual(["telegram:group-user", "lark:group-user"]);
-    expect(config.projects.web.allowedChats).toEqual(["telegram:group-chat", "lark:group-chat"]);
+    const webProject = config.projects.web;
+    expect(webProject).toBeDefined();
+    expect(webProject?.allowedUsers).toEqual(["telegram:group-user", "lark:group-user"]);
+    expect(webProject?.allowedChats).toEqual(["telegram:group-chat", "lark:group-chat"]);
   });
 
   it("fails closed when a global or project access group reference is unknown", () => {
