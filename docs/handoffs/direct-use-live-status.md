@@ -121,7 +121,8 @@
 > current `/cu` control, status, policy, fake/unsupported provider, audit, and
 > IM output/artifact projection are implemented, but non-dry-run real desktop
 > execution still intentionally blocks until current Codex App Server
-> namespace/tool capability evidence exists.
+> namespace/tool capability evidence exists. Current completion audit:
+> `docs/handoffs/2026-05-07-codex-native-im-goal-audit.md`.
 
 ## 1. Current State
 
