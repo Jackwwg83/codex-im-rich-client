@@ -101,3 +101,60 @@ JAC-163 must produce one of these outcomes:
 In either outcome, JAC-163 may still land fake and unsupported providers plus the
 broker-owned typed dynamic-tool registration API. It must not land real desktop
 control.
+
+## 6. JAC-274 Follow-Up Evidence
+
+Generated: 2026-05-07
+
+JAC-274 re-checked the current `codex-cli 0.128.0` generated protocol and live
+smoke behavior before any real provider implementation.
+
+Observed local protocol facts:
+
+- `TurnStartParams` has no field for registering `DynamicToolSpec[]` or any
+  Computer Use provider metadata with a turn.
+- `ToolsV2` currently exposes only `web_search` and `view_image`.
+- `DynamicToolSpec` exists in the generated protocol, but this repository has
+  no verified `turn/start` or config surface that wires a daemon-provided
+  desktop tool into Codex App Server.
+- `codex app-server --help` exposes app-server transport / generation tooling,
+  but no documented Computer Use provider registration command.
+
+Observed smoke behavior:
+
+```text
+pnpm smoke:computer-use-live
+-> status=skip, reason=set COMPUTER_USE_LIVE=1
+
+COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 \
+COMPUTER_USE_LIVE_DRY_RUN=1 COMPUTER_USE_LIVE_APP="Google Chrome" \
+COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
+pnpm smoke:computer-use-live
+-> status=ready_dry_run, no desktop action executed
+```
+
+The non-dry-run path remains intentionally blocked with
+`real desktop execution is not implemented in Phase 6 harness`.
+
+JAC-274 therefore keeps the existing product behavior:
+
+- `/cu` from IM creates an explicit, policy-gated Computer Use context.
+- Dynamic `item/tool/call` still fails closed unless the session, tool, app, and
+  policy gates all pass.
+- Production uses `UnsupportedComputerUseProvider` until a current Codex App
+  Server capability surface is proven.
+- IM output projection of Computer Use-like `dynamicToolCall` items and local
+  `inputImage` artifacts remains valid because it is downstream rendering, not
+  provider execution.
+
+Next evidence needed before any real provider:
+
+1. A sanitized real App Server trace showing the namespace/tool/argument shape
+   for local Computer Use, or official/local protocol evidence that no such
+   daemon-facing provider registration exists in the current Codex pin.
+2. A reviewed production path for the daemon to execute that provider without
+   depending on the interactive Codex session's MCP tools or parsing UI/CLI
+   output.
+3. A bounded Chrome-only live smoke that returns redacted `DynamicToolCallResponse`
+   content and, if screenshots are produced, sends them through the existing IM
+   artifact path.
