@@ -81,19 +81,15 @@
 > configured-provider presence, readiness/blocked reason, explicit `/cu`
 > policy, default/allowed/denied apps, sensitive approval keywords, and the
 > live-smoke gate.
-> Explicit Telegram and Feishu/Lark live file gates passed with redacted
-> evidence; after the latest Codex-native IM output loop bridge
+> Explicit Telegram, Feishu/Lark, and DingTalk live file gates passed with
+> redacted evidence; after the latest Codex-native IM output loop bridge
 > reinstall/kickstart, launchd is running under pid `16732` with
 > `pendingApprovals=0`, `pnpm im:doctor` is ready for installed
 > Telegram/Lark/DingTalk with Slack disabled, and the bridge redaction scan
-> returned `redaction scan ok`. A fresh DingTalk `DINGTALK_LIVE_FILE=1`
-> attachment gate attempt is tracked by JAC-273 and remains blocked on a usable
-> DingTalk client session: Stream connected, but no fresh inbound robot message
-> arrived during the 120s window, so no session reply URL was captured and no
-> attachment was sent. A follow-up desktop attempt cleared the macOS microphone
-> permission prompt, reached DingTalk quick-login, and then stopped at
-> mobile-device confirmation; without an authenticated DingTalk chat, the
-> daemon still cannot capture the required session reply URL. Common group
+> returned `redaction scan ok`. JAC-273 is now Done: DingTalk `DINGTALK_LIVE_FILE=1`
+> file and image gates both returned redacted `status=file_sent` through the
+> proactive target path, so the attachment live gate no longer depends on a
+> visible DingTalk client window. Common group
 > safety now has a config-level mention
 > gate: configured Telegram/Feishu-Lark/DingTalk group chats must mention a
 > configured alias before ordinary inbound text reaches Codex, while approval
