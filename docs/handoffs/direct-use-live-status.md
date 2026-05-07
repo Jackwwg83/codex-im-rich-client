@@ -43,7 +43,11 @@
 > text terminal summary as the Codex-native primary surface.
 > Explicit Telegram and Feishu/Lark live file gates passed with redacted
 > evidence; launchd was restored afterward under pid `94243` with
-> `pendingApprovals=0`.
+> `pendingApprovals=0`. Common group safety now has a config-level mention
+> gate: configured Telegram/Feishu-Lark/DingTalk group chats must mention a
+> configured alias before ordinary inbound text reaches Codex, while approval
+> callback authorization remains bound to callback tokens, messageRef
+> validation, and `ApprovalBroker.resolve()`.
 
 ## 1. Current State
 
@@ -641,6 +645,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Codex-native control loop | Common daemon routing now exposes `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, and `/mcp` for every supported IM adapter. `CodexRuntime` keeps the new App Server method wrappers centralized, daemon replies redact local paths/targets, and Computer Use dynamic tool calls are summarized as Codex-native GUI activity. Full local gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150 files, 1401 pass, 1 skipped), and `pnpm lint`. |
 | 2026-05-07 SGT approval fallback loop | Common daemon routing now exposes `/approvals` and `/approve <id> <action>`. The fallback path is intentionally server-state based: it only resolves a pending approval when SQLite has a bound callback-token record for that approval, target, action, and approval-card `messageRef`; the IM text never carries raw callback tokens or message refs. Full local gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150 files, 1403 pass, 1 skipped), `pnpm lint`, and `pnpm protocol:check`. |
 | 2026-05-07 SGT identity/access loop | `/whoami` now reports redacted IM identity presence and current project/thread binding across supported adapters without leaking raw chat, user, topic, display-name, cwd, or full thread ids. Config parsing also supports reusable `security.access_groups` referenced by global `default_access_groups` or project-level `access_groups`; unknown group references fail closed and groups expand into the existing `SecurityPolicy` allowlist shape. |
+| 2026-05-07 SGT group mention-gate loop | `security.group_policy` now supports configured `mention_required_chats` plus `mention_aliases`. Daemon inbound routing calls `SecurityPolicy.checkInboundMessage()` before command/prompt routing, so configured group chats without an alias are audited and dropped before Codex sees the text; non-gated chats keep the existing allowlist behavior. Targeted tests passed for core policy, config parsing, and daemon denial audit. |
 
 Latest live Telegram acceptance evidence:
 

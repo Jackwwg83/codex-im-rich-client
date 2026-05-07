@@ -51,13 +51,32 @@ allowed_chats = [
 `allowed_users` / `allowed_chats`，因此运行时仍沿用同一套
 `SecurityPolicy` 校验，不引入 first-actor-wins。
 
+群聊可以显式配置 mention gate。只有配置在 `mention_required_chats` 里的
+chat 会被额外要求出现别名；未配置 chat 仍只按 user/chat allowlist 判断：
+
+```toml
+[security.group_policy]
+mention_required_chats = [
+  "telegram:-100123456",
+  "lark:oc_group_xxx",
+  "dingtalk:cid_group_xxx"
+]
+mention_aliases = ["@codex", "/codex"]
+```
+
+这是 daemon 入站路由前的统一策略，适用于当前支持的 Telegram、
+Feishu/Lark、DingTalk adapter。它不决定谁能点 approval；approval 仍由
+callback token、messageRef、`ApprovalBroker.resolve()` 和
+`bindActorPolicy` 校验。
+
 检查顺序：
 
 1. platform 是否启用。
 2. user 是否 allowed 或 admin。
 3. chat 是否 allowed。
-4. chat 是否绑定项目。
-5. 用户是否有项目权限。
+4. 如果 chat 配置了 mention gate，普通 prompt/command 是否包含别名。
+5. chat 是否绑定项目。
+6. 用户是否有项目权限。
 
 ## 3. 项目权限
 

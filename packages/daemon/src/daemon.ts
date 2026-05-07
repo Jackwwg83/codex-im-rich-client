@@ -261,6 +261,15 @@ export interface DaemonUserChatPolicy {
   checkUserAndChat(target: Target, sender: SecurityPolicySender): SecurityPolicyUserChatDecision;
 }
 
+interface DaemonInboundMessagePolicy {
+  checkUserAndChat?(target: Target, sender: SecurityPolicySender): SecurityPolicyUserChatDecision;
+  checkInboundMessage?(
+    target: Target,
+    sender: SecurityPolicySender,
+    text: string,
+  ): SecurityPolicyUserChatDecision;
+}
+
 interface DaemonSessionRouter {
   resolve(target: Target): SessionRoute;
   bind?(target: Target, input: SessionBindingInput): SessionRoute;
@@ -833,8 +842,10 @@ export class Daemon {
         return;
       }
 
-      const policy = this.#userChatPolicy(this.#securityPolicy);
-      const decision = policy?.checkUserAndChat(inbound.target, inbound.sender);
+      const policy = this.#inboundMessagePolicy(this.#securityPolicy);
+      const decision =
+        policy?.checkInboundMessage?.(inbound.target, inbound.sender, inbound.text) ??
+        policy?.checkUserAndChat?.(inbound.target, inbound.sender);
       if (decision?.kind !== "allow") {
         this.#emitAuditEvent("inbound.message_denied", {
           target: inbound.target,
@@ -1411,6 +1422,20 @@ export class Daemon {
       return undefined;
     }
     return value as DaemonUserChatPolicy;
+  }
+
+  #inboundMessagePolicy(value: unknown): DaemonInboundMessagePolicy | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    const candidate = value as Partial<DaemonInboundMessagePolicy>;
+    if (
+      typeof candidate.checkInboundMessage !== "function" &&
+      typeof candidate.checkUserAndChat !== "function"
+    ) {
+      return undefined;
+    }
+    return candidate as DaemonInboundMessagePolicy;
   }
 
   #commandPolicy(value: unknown): DaemonCommandPolicy | undefined {

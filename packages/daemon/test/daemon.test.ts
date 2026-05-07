@@ -1161,6 +1161,68 @@ describe("Daemon skeleton (T14)", () => {
     });
   });
 
+  it("drops mention-gated group messages before routing when the bot is not mentioned", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-group" };
+    const sender = { userId: "u-alice" };
+    const auditInserts: unknown[] = [];
+    const sessionRouter = { resolve: vi.fn() };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+      sendText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkInboundMessage: vi.fn(() => ({ kind: "deny" as const, reason: "mention_required" })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      auditRepository: { insertBestEffort: vi.fn((input) => auditInserts.push(input)) },
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "run tests",
+      messageRef: { target, messageId: "msg-group" },
+      receivedAt: new Date("2026-05-02T00:00:03.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(sessionRouter.resolve).not.toHaveBeenCalled();
+    expect(runtime.threadStart).not.toHaveBeenCalled();
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(adapter.editText).not.toHaveBeenCalled();
+    expect(adapter.sendText).not.toHaveBeenCalled();
+    const deniedAudit = auditInserts.find(
+      (input) =>
+        typeof input === "object" &&
+        input !== null &&
+        (input as { action?: unknown }).action === "inbound.message_denied",
+    ) as { metadataJson?: string } | undefined;
+    expect(JSON.parse(deniedAudit?.metadataJson ?? "{}")).toMatchObject({
+      actorKey: "telegram:u-alice",
+      reason: "mention_required",
+    });
+  });
+
   it("audits malformed inbound messages before dropping them fail-closed", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const auditInserts: unknown[] = [];

@@ -16,11 +16,17 @@ export type SecurityPolicyProjectConfig = {
   readonly allowedChats: readonly string[];
 };
 
+export type SecurityPolicyGroupPolicyConfig = {
+  readonly mentionRequiredChats: readonly string[];
+  readonly mentionAliases: readonly string[];
+};
+
 export type SecurityPolicyConfig = {
   readonly allowedUsers: readonly string[];
   readonly allowedChats: readonly string[];
   readonly commands: SecurityPolicyCommandConfig;
   readonly projects?: readonly SecurityPolicyProjectConfig[];
+  readonly groupPolicy?: SecurityPolicyGroupPolicyConfig;
 };
 
 export type SecurityPolicySnapshot = {
@@ -29,6 +35,7 @@ export type SecurityPolicySnapshot = {
   readonly allowedChats: readonly string[];
   readonly commands: SecurityPolicyCommandConfig;
   readonly projects: readonly SecurityPolicyProjectConfig[];
+  readonly groupPolicy: SecurityPolicyGroupPolicyConfig;
 };
 
 export type SecurityPolicyAllowDecision = { readonly kind: "allow" };
@@ -95,6 +102,36 @@ export class SecurityPolicy {
       return { kind: "deny", reason: "user_not_allowed" };
     }
     return { kind: "allow" };
+  }
+
+  checkInboundMessage(
+    target: Target,
+    sender: SecurityPolicySender,
+    text: string,
+  ): SecurityPolicyUserChatDecision {
+    const userChatDecision = this.checkUserAndChat(target, sender);
+    if (userChatDecision.kind !== "allow") {
+      return userChatDecision;
+    }
+
+    if (
+      !this.#snapshot.groupPolicy.mentionRequiredChats.includes(
+        platformScoped(target.platform, target.chatId),
+      )
+    ) {
+      return { kind: "allow" };
+    }
+
+    const aliases = this.#snapshot.groupPolicy.mentionAliases;
+    if (aliases.length === 0) {
+      return { kind: "deny", reason: "mention_required" };
+    }
+
+    const normalizedText = text.toLocaleLowerCase();
+    if (aliases.some((alias) => normalizedText.includes(alias.toLocaleLowerCase()))) {
+      return { kind: "allow" };
+    }
+    return { kind: "deny", reason: "mention_required" };
   }
 
   checkApprovalDestination(
@@ -167,6 +204,15 @@ function snapshotFromConfig(config: SecurityPolicyConfig): SecurityPolicySnapsho
   assertStringArray(config.allowedChats, "allowedChats");
   assertStringArray(config.commands.denyPatterns, "commands.denyPatterns");
   assertStringArray(config.commands.requireAdminPatterns, "commands.requireAdminPatterns");
+  const groupPolicy = config.groupPolicy ?? {
+    mentionRequiredChats: [],
+    mentionAliases: [],
+  };
+  if (!isRecord(groupPolicy)) {
+    throw new SecurityPolicyConfigError("groupPolicy must be an object");
+  }
+  assertStringArray(groupPolicy.mentionRequiredChats, "groupPolicy.mentionRequiredChats");
+  assertStringArray(groupPolicy.mentionAliases, "groupPolicy.mentionAliases");
   for (const [index, project] of (config.projects ?? []).entries()) {
     if (typeof project.projectId !== "string" || project.projectId.length === 0) {
       throw new SecurityPolicyConfigError(
@@ -183,6 +229,10 @@ function snapshotFromConfig(config: SecurityPolicyConfig): SecurityPolicySnapsho
     commands: Object.freeze({
       denyPatterns: freezeStrings(config.commands.denyPatterns),
       requireAdminPatterns: freezeStrings(config.commands.requireAdminPatterns),
+    }),
+    groupPolicy: Object.freeze({
+      mentionRequiredChats: freezeStrings(groupPolicy.mentionRequiredChats),
+      mentionAliases: freezeStrings(groupPolicy.mentionAliases),
     }),
     projects: Object.freeze(
       (config.projects ?? []).map((project) =>

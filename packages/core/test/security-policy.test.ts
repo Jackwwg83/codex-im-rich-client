@@ -114,6 +114,51 @@ describe("SecurityPolicy.checkUserAndChat (T9.2 / D22)", () => {
   });
 });
 
+describe("SecurityPolicy.checkInboundMessage group policy (JAC-241)", () => {
+  it("requires a configured mention before routing messages from mention-gated group chats", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      groupPolicy: {
+        mentionRequiredChats: ["telegram:-1001"],
+        mentionAliases: ["@codex", "/codex"],
+      },
+    });
+
+    expect(
+      policy.checkInboundMessage(
+        { platform: "telegram", chatId: "-1001" },
+        { userId: "123" },
+        "run tests",
+      ),
+    ).toEqual({ kind: "deny", reason: "mention_required" });
+    expect(
+      policy.checkInboundMessage(
+        { platform: "telegram", chatId: "-1001" },
+        { userId: "123" },
+        "@Codex run tests",
+      ),
+    ).toEqual({ kind: "allow" });
+  });
+
+  it("keeps non-gated chats on the existing user/chat allowlist behavior", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      groupPolicy: {
+        mentionRequiredChats: ["telegram:-2002"],
+        mentionAliases: ["@codex"],
+      },
+    });
+
+    expect(
+      policy.checkInboundMessage(
+        { platform: "telegram", chatId: "-1001" },
+        { userId: "123" },
+        "run tests",
+      ),
+    ).toEqual({ kind: "allow" });
+  });
+});
+
 describe("SecurityPolicy.checkProjectAccess (Phase 3 mid-review P1)", () => {
   it("allows globally allowed user/chat when no project ACLs are configured", () => {
     const policy = new SecurityPolicy(ALLOW_CONFIG);

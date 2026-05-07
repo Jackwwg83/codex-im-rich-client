@@ -20,6 +20,10 @@ export interface CodexImConfig {
     adminUsers: string[];
     defaultAccessGroups?: string[];
     accessGroups?: Record<string, CodexImAccessGroupConfig>;
+    groupPolicy: {
+      mentionRequiredChats: string[];
+      mentionAliases: string[];
+    };
     commands: {
       denyPatterns: string[];
       requireAdminPatterns: string[];
@@ -138,6 +142,13 @@ const rawAccessGroupSchema = z
   })
   .strict();
 
+const rawGroupPolicySchema = z
+  .object({
+    mention_required_chats: z.array(z.string()).default([]),
+    mention_aliases: z.array(z.string()).default([]),
+  })
+  .strict();
+
 const rawConfigSchema = z
   .object({
     daemon: z
@@ -165,6 +176,10 @@ const rawConfigSchema = z
         admin_users: z.array(z.string()),
         default_access_groups: z.array(z.string()).default([]),
         access_groups: z.record(z.string(), rawAccessGroupSchema).default({}),
+        group_policy: rawGroupPolicySchema.default({
+          mention_required_chats: [],
+          mention_aliases: [],
+        }),
         commands: z
           .object({
             deny_patterns: z.array(z.string()),
@@ -280,6 +295,10 @@ export function parseConfigToml(source: string): CodexImConfig {
       adminUsers: parsed.security.admin_users,
       defaultAccessGroups: parsed.security.default_access_groups,
       accessGroups,
+      groupPolicy: {
+        mentionRequiredChats: parsed.security.group_policy.mention_required_chats,
+        mentionAliases: parsed.security.group_policy.mention_aliases,
+      },
       commands: {
         denyPatterns: parsed.security.commands.deny_patterns,
         requireAdminPatterns: parsed.security.commands.require_admin_patterns,

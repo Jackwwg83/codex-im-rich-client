@@ -482,6 +482,7 @@ function createSecurityPolicy(config: CodexImConfig): SecurityPolicy {
     allowedUsers: config.security.allowedUsers,
     allowedChats: config.security.allowedChats,
     commands: config.security.commands,
+    groupPolicy: config.security.groupPolicy,
     projects: Object.entries(config.projects).map(([projectId, project]) => {
       return {
         projectId,

@@ -280,6 +280,10 @@ describe("@codex-im/config (T7-T8)", () => {
       deny_patterns = []
       require_admin_patterns = []
 
+      [security.group_policy]
+      mention_required_chats = ["telegram:group-chat"]
+      mention_aliases = ["@codex"]
+
       [security.access_groups.operators]
       allowed_users = ["telegram:group-user", "lark:group-user"]
       allowed_chats = ["telegram:group-chat", "lark:group-chat"]
@@ -324,6 +328,10 @@ describe("@codex-im/config (T7-T8)", () => {
       "telegram:group-chat",
       "lark:group-chat",
     ]);
+    expect(config.security.groupPolicy).toEqual({
+      mentionRequiredChats: ["telegram:group-chat"],
+      mentionAliases: ["@codex"],
+    });
     const webProject = config.projects.web;
     expect(webProject).toBeDefined();
     expect(webProject?.allowedUsers).toEqual(["telegram:group-user", "lark:group-user"]);
