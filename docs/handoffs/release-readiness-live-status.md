@@ -22,6 +22,7 @@
 - **Base tag:** `phase-7-extended-platforms-web-console-complete`.
 - **Version:** `0.1.0-phase7`.
 - **Release tag:** `production-readiness-2026-05-03-r2`.
+- **Follow-on live acceptance tag:** `live-im-acceptance-2026-05-07`.
 - **Handoff:** `docs/handoffs/2026-05-03-production-readiness.md`.
 - **Next exact action:** continue direct-use hardening / Slack readiness from
   `docs/handoffs/direct-use-live-status.md` and Linear project

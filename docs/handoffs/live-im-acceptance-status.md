@@ -39,6 +39,7 @@
 - **Mode:** Live IM acceptance.
 - **Branch:** `codex/live-im-acceptance`.
 - **Base release candidate:** `production-readiness-2026-05-03-r2`.
+- **Live acceptance tag:** `live-im-acceptance-2026-05-07`.
 - **Release candidate status:** non-live gates, fake smokes, contract tests,
   outside-voice review, and GitHub Actions CI are green.
 - **Live acceptance status:** Telegram real direct-use acceptance is green.
