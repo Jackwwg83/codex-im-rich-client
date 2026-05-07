@@ -61,6 +61,12 @@ export interface CodexImConfig {
       cardTemplateId?: string;
       callbackRouteKey?: string;
     };
+    slack: {
+      enabled: boolean;
+      botTokenEnv: string;
+      appTokenEnv: string;
+      allowedChannelIds: string[];
+    };
   };
   projects: Record<
     string,
@@ -97,6 +103,8 @@ export interface ResolvedConfigSecrets {
   larkEncryptKey?: string;
   larkVerificationToken?: string;
   dingtalkClientSecret?: string;
+  slackBotToken?: string;
+  slackAppToken?: string;
 }
 
 const envNameSchema = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, {
@@ -241,6 +249,20 @@ const rawConfigSchema = z
             client_id: "disabled",
             client_secret_env: "DINGTALK_CLIENT_SECRET",
           }),
+        slack: z
+          .object({
+            enabled: z.boolean(),
+            bot_token_env: envNameSchema,
+            app_token_env: envNameSchema,
+            allowed_channel_ids: z.array(z.string()),
+          })
+          .strict()
+          .default({
+            enabled: false,
+            bot_token_env: "SLACK_BOT_TOKEN",
+            app_token_env: "SLACK_APP_TOKEN",
+            allowed_channel_ids: [],
+          }),
       })
       .strict(),
     projects: z.record(
@@ -345,6 +367,12 @@ export function parseConfigToml(source: string): CodexImConfig {
         ...(parsed.adapters.dingtalk.callback_route_key === undefined
           ? {}
           : { callbackRouteKey: parsed.adapters.dingtalk.callback_route_key }),
+      },
+      slack: {
+        enabled: parsed.adapters.slack.enabled,
+        botTokenEnv: parsed.adapters.slack.bot_token_env,
+        appTokenEnv: parsed.adapters.slack.app_token_env,
+        allowedChannelIds: parsed.adapters.slack.allowed_channel_ids,
       },
     },
     projects: Object.fromEntries(
@@ -460,11 +488,16 @@ export function resolveConfigSecrets(
     );
   }
 
+  if (config.adapters.slack.enabled) {
+    secrets.slackBotToken = resolveSecretEnv("slack", config.adapters.slack.botTokenEnv, opts);
+    secrets.slackAppToken = resolveSecretEnv("slack", config.adapters.slack.appTokenEnv, opts);
+  }
+
   return secrets;
 }
 
 function resolveSecretEnv(
-  adapter: "telegram" | "lark" | "dingtalk",
+  adapter: "telegram" | "lark" | "dingtalk" | "slack",
   envName: string,
   opts: ConfigSecretResolverOptions,
 ): string {

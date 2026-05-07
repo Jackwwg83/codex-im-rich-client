@@ -54,6 +54,12 @@ robot_code         = "ding_test_robot_code"
 card_template_id   = "ding_test_card_template"
 callback_route_key = "codex_im"
 
+[adapters.slack]
+enabled                = true
+bot_token_env          = "SLACK_BOT_TOKEN"
+app_token_env          = "SLACK_APP_TOKEN"
+allowed_channel_ids    = ["T_TEST:C_TEST"]
+
 [projects.web]
 cwd            = "/Users/mini/code/web"
 allowed_users  = ["telegram:123456789"]
@@ -85,6 +91,12 @@ describe("@codex-im/config (T7-T8)", () => {
       robotCode: "ding_test_robot_code",
       cardTemplateId: "ding_test_card_template",
       callbackRouteKey: "codex_im",
+    });
+    expect(config.adapters.slack).toEqual({
+      enabled: true,
+      botTokenEnv: "SLACK_BOT_TOKEN",
+      appTokenEnv: "SLACK_APP_TOKEN",
+      allowedChannelIds: ["T_TEST:C_TEST"],
     });
     expect(config.storage.autoMigrate).toBe(false);
     expect(config.computerUse).toEqual({
@@ -147,6 +159,12 @@ describe("@codex-im/config (T7-T8)", () => {
         client_id = "disabled"
         client_secret_env = "DINGTALK_CLIENT_SECRET"
 
+        [adapters.slack]
+        enabled = false
+        bot_token_env = "SLACK_BOT_TOKEN"
+        app_token_env = "SLACK_APP_TOKEN"
+        allowed_channel_ids = []
+
         [projects.web]
         cwd = "/tmp/project"
         allowed_users = []
@@ -174,6 +192,28 @@ describe("@codex-im/config (T7-T8)", () => {
         ),
       ),
     ).toThrow(/environment variable name/);
+  });
+
+  it("defaults Slack to disabled for existing configs without a Slack adapter block", () => {
+    const config = parseConfigToml(
+      EXAMPLE_CONFIG.replace(
+        `
+[adapters.slack]
+enabled                = true
+bot_token_env          = "SLACK_BOT_TOKEN"
+app_token_env          = "SLACK_APP_TOKEN"
+allowed_channel_ids    = ["T_TEST:C_TEST"]
+`,
+        "",
+      ),
+    );
+
+    expect(config.adapters.slack).toEqual({
+      enabled: false,
+      botTokenEnv: "SLACK_BOT_TOKEN",
+      appTokenEnv: "SLACK_APP_TOKEN",
+      allowedChannelIds: [],
+    });
   });
 
   it("parses Computer Use app policy and rejects token-looking app values", () => {
@@ -226,6 +266,8 @@ describe("@codex-im/config (T7-T8)", () => {
     const syntheticLarkEncryptKey = "TEST_LARK_ENCRYPT_KEY_NEVER_LOGGED";
     const syntheticLarkVerificationToken = "TEST_LARK_VERIFY_NEVER_LOGGED";
     const syntheticDingTalkSecret = "TEST_DINGTALK_SECRET_NEVER_LOGGED";
+    const syntheticSlackBotToken = "TEST_SLACK_BOT_TOKEN_NEVER_LOGGED";
+    const syntheticSlackAppToken = "TEST_SLACK_APP_TOKEN_NEVER_LOGGED";
     const logLines: string[] = [];
 
     const secrets = resolveConfigSecrets(config, {
@@ -235,6 +277,8 @@ describe("@codex-im/config (T7-T8)", () => {
         LARK_ENCRYPT_KEY: syntheticLarkEncryptKey,
         LARK_VERIFICATION_TOKEN: syntheticLarkVerificationToken,
         DINGTALK_CLIENT_SECRET: syntheticDingTalkSecret,
+        SLACK_BOT_TOKEN: syntheticSlackBotToken,
+        SLACK_APP_TOKEN: syntheticSlackAppToken,
       },
       logger: { info: (...args) => logLines.push(JSON.stringify(args)) },
     });
@@ -244,15 +288,21 @@ describe("@codex-im/config (T7-T8)", () => {
     expect(secrets.larkEncryptKey).toBe(syntheticLarkEncryptKey);
     expect(secrets.larkVerificationToken).toBe(syntheticLarkVerificationToken);
     expect(secrets.dingtalkClientSecret).toBe(syntheticDingTalkSecret);
+    expect(secrets.slackBotToken).toBe(syntheticSlackBotToken);
+    expect(secrets.slackAppToken).toBe(syntheticSlackAppToken);
     expect(logLines.length).toBeGreaterThan(0);
     expect(logLines.join("\n")).not.toContain(syntheticToken);
     expect(logLines.join("\n")).not.toContain(syntheticLarkSecret);
     expect(logLines.join("\n")).not.toContain(syntheticLarkEncryptKey);
     expect(logLines.join("\n")).not.toContain(syntheticLarkVerificationToken);
     expect(logLines.join("\n")).not.toContain(syntheticDingTalkSecret);
+    expect(logLines.join("\n")).not.toContain(syntheticSlackBotToken);
+    expect(logLines.join("\n")).not.toContain(syntheticSlackAppToken);
     expect(logLines.join("\n")).toContain("IM_TELEGRAM_BOT_TOKEN");
     expect(logLines.join("\n")).toContain("LARK_APP_SECRET");
     expect(logLines.join("\n")).toContain("DINGTALK_CLIENT_SECRET");
+    expect(logLines.join("\n")).toContain("SLACK_BOT_TOKEN");
+    expect(logLines.join("\n")).toContain("SLACK_APP_TOKEN");
     expect(() => resolveConfigSecrets(config, { env: {} })).toThrow(/IM_TELEGRAM_BOT_TOKEN/);
   });
 
@@ -303,6 +353,12 @@ describe("@codex-im/config (T7-T8)", () => {
       enabled = false
       client_id = "disabled"
       client_secret_env = "DINGTALK_CLIENT_SECRET"
+
+      [adapters.slack]
+      enabled = false
+      bot_token_env = "SLACK_BOT_TOKEN"
+      app_token_env = "SLACK_APP_TOKEN"
+      allowed_channel_ids = []
 
       [projects.web]
       cwd = "/tmp/project"

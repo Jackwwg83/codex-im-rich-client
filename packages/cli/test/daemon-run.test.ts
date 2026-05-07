@@ -104,12 +104,13 @@ describe("daemon run safety rails", () => {
     expect(source).toContain(".callbackTokens.revokeActive()");
   });
 
-  it("wires Telegram, Lark, and DingTalk production adapters behind one daemon surface", () => {
+  it("wires Telegram, Lark, DingTalk, and Slack production adapters behind one daemon surface", () => {
     const source = readFileSync(join(import.meta.dirname, "../src/daemon-run.ts"), "utf8");
 
     expect(source).toContain("new TelegramChannelAdapter");
     expect(source).toContain("createLarkSdkChannelAdapter");
     expect(source).toContain("new DingTalkChannelAdapter");
+    expect(source).toContain("createSlackSdkChannelAdapter");
     expect(source).toContain("createDingTalkOpenApiCardClient");
     expect(source).toContain("createDingTalkNoopActionClient");
     expect(source).toContain("createDingTalkSessionReplyTextClient");
@@ -117,6 +118,8 @@ describe("daemon run safety rails", () => {
     expect(source).toContain(
       "config.adapters.dingtalk.robotCode ?? config.adapters.dingtalk.clientId",
     );
+    expect(source).toContain("botToken: secrets.slackBotToken");
+    expect(source).toContain("appToken: secrets.slackAppToken");
   });
 
   it("does not enable DingTalk SDK client-side WebSocket ping in production daemon", () => {
@@ -172,15 +175,18 @@ describe("daemon run safety rails", () => {
       { platform: "telegram", adapter: makeAdapter("telegram") },
       { platform: "lark", adapter: makeAdapter("lark") },
       { platform: "dingtalk", adapter: makeAdapter("dingtalk") },
+      { platform: "slack", adapter: makeAdapter("slack") },
     ]);
     const larkTarget = { platform: "lark", chatId: "oc_test" };
     const dingTalkRef = {
       target: { platform: "dingtalk", chatId: "cid_test" },
       messageId: "ding-card-1",
     };
+    const slackTarget = { platform: "slack", chatId: "T_TEST:C_TEST" };
 
     await adapter.start();
     await adapter.sendText(larkTarget, "hello");
+    await adapter.sendText(slackTarget, "hello slack");
     await adapter.sendFile(larkTarget, {
       filename: "diagram.png",
       bytes: new Uint8Array([1, 2, 3]),
@@ -211,13 +217,19 @@ describe("daemon run safety rails", () => {
       ok: true,
       userMessage: "ok",
     });
+    await adapter.answerAction("slack-block-action:1777751000000:trigger-1", {
+      ok: true,
+      userMessage: "ok",
+    });
     await adapter.stop();
 
     expect(calls).toEqual([
       { platform: "telegram", method: "start" },
       { platform: "lark", method: "start" },
       { platform: "dingtalk", method: "start" },
+      { platform: "slack", method: "start" },
       { platform: "lark", method: "sendText", target: larkTarget, body: "hello" },
+      { platform: "slack", method: "sendText", target: slackTarget, body: "hello slack" },
       { platform: "lark", method: "sendFile", target: larkTarget, filename: "diagram.png" },
       { platform: "dingtalk", method: "sendCard", target: dingTalkRef.target },
       { platform: "dingtalk", method: "updateCard", ref: dingTalkRef },
@@ -227,6 +239,12 @@ describe("daemon run safety rails", () => {
         method: "answerAction",
         callbackHandle: "lark-card-action:1777751000000:event-1",
       },
+      {
+        platform: "slack",
+        method: "answerAction",
+        callbackHandle: "slack-block-action:1777751000000:trigger-1",
+      },
+      { platform: "slack", method: "stop" },
       { platform: "dingtalk", method: "stop" },
       { platform: "lark", method: "stop" },
       { platform: "telegram", method: "stop" },

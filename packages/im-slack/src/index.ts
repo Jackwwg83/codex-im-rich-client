@@ -25,6 +25,16 @@ export {
   isSlackActionWirePayload,
   redactSlackActionPayloadForLog,
 } from "./callback-codec.js";
+export {
+  createSlackSdkChannelAdapter,
+  createSlackSocketModeClient,
+  createSlackWebApiClient,
+} from "./client.js";
+export type {
+  SlackSdkChannelAdapterOptions,
+  SlackSocketModeClientOptions,
+  SlackWebApiClientOptions,
+} from "./client.js";
 export { renderSlackApprovalCard } from "./card.js";
 export type {
   SlackActionsBlock,

@@ -43,6 +43,7 @@ import {
   createDingTalkStreamClient,
 } from "@codex-im/im-dingtalk";
 import { createLarkSdkChannelAdapter } from "@codex-im/im-lark";
+import { createSlackSdkChannelAdapter } from "@codex-im/im-slack";
 import { TelegramChannelAdapter } from "@codex-im/im-telegram";
 import {
   AuditRepository,
@@ -360,6 +361,18 @@ export function createProductionAdapter(
       }),
     });
   }
+  if (config.adapters.slack.enabled) {
+    if (secrets.slackBotToken === undefined || secrets.slackAppToken === undefined) {
+      throw new Error("daemon run requires resolved Slack bot and app tokens");
+    }
+    entries.push({
+      platform: "slack",
+      adapter: createSlackSdkChannelAdapter({
+        botToken: secrets.slackBotToken,
+        appToken: secrets.slackAppToken,
+      }),
+    });
+  }
   if (entries.length === 0) {
     throw new Error("daemon run requires at least one enabled IM adapter");
   }
@@ -386,6 +399,9 @@ function platformForCallbackHandle(callbackHandle: string): string | undefined {
   }
   if (callbackHandle.startsWith("dingtalk-card-action:")) {
     return "dingtalk";
+  }
+  if (callbackHandle.startsWith("slack-block-action:")) {
+    return "slack";
   }
   return undefined;
 }
@@ -556,6 +572,9 @@ function approvalTargetForSnapshot(
   }
   if (config.adapters.dingtalk.enabled) {
     enabledPlatforms.add("dingtalk");
+  }
+  if (config.adapters.slack.enabled) {
+    enabledPlatforms.add("slack");
   }
   const firstAllowedChat = config.security.allowedChats
     .map(parseScopedId)
