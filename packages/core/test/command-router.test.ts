@@ -28,6 +28,8 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
       "plugins",
       "apps",
       "mcp",
+      "approvals",
+      "approve",
     ];
     expect(COMMAND_ROUTER_COMMANDS).toEqual(expected);
 

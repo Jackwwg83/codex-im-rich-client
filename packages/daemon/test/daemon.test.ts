@@ -1970,6 +1970,118 @@ describe("Daemon skeleton (T14)", () => {
     }
   });
 
+  it("lists pending approvals and resolves one through text fallback without raw token input", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-100approval-chat" };
+    const sender = { userId: "telegram-user-1" };
+    const messageRef = { target, messageId: "msg-approve-fallback" };
+    const pending: PendingApprovalSnapshot = {
+      id: "approval-fallback",
+      appServerRequestId: 42,
+      method: "item/commandExecution/requestApproval",
+      params: { command: "touch /tmp/codex-im-fallback.txt" },
+      createdAt: new Date("2026-05-03T00:00:00.000Z"),
+      expiresAt: new Date("2026-05-03T00:10:00.000Z"),
+    };
+    const boundRecord: CallbackTokenRecord = {
+      tokenHash: "hash-allow-once",
+      approvalId: pending.id,
+      action: "allow_once",
+      callbackNonce: "nonce-fallback",
+      target,
+      actor: { kind: "im" },
+      status: "bound",
+      messageRef: { chatId: target.chatId, messageId: "approval-card-1" },
+      createdAt: "2026-05-03T00:00:00.000Z",
+      expiresAt: "2026-05-03T00:10:00.000Z",
+    };
+    const broker = {
+      attach: vi.fn(),
+      enablePendingMode: vi.fn(),
+      listPending: vi.fn(() => [pending]),
+      resolve: vi.fn(async () => ({
+        kind: "ok" as const,
+        appliedAt: new Date("2026-05-03T00:00:10.000Z"),
+      })),
+    };
+    const callbackTokenRepository = {
+      insert: vi.fn(),
+      findBoundByApprovalTargetAction: vi.fn(() => boundRecord),
+      casUpdate: vi.fn(() => ({ ...boundRecord, status: "used" as const })),
+      revokeBoundSiblings: vi.fn(() => []),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => broker,
+      callbackTokenRepository,
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => ({ kind: "unbound" as const, target })) }),
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/approvals",
+      messageRef,
+      receivedAt: new Date("2026-05-03T00:00:01.000Z"),
+    });
+    await flushDaemonHandlers();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/approve approval-fallback allow_once",
+      messageRef,
+      receivedAt: new Date("2026-05-03T00:00:02.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const bodies = adapter.editText.mock.calls.map(([, body]) => body as string);
+    expect(bodies[0]).toContain("Pending approvals:");
+    expect(bodies[0]).toContain("approval-fallback");
+    expect(bodies[0]).toContain("command_execution");
+    expect(bodies[0]).not.toContain("-100approval-chat");
+    expect(callbackTokenRepository.findBoundByApprovalTargetAction).toHaveBeenCalledWith({
+      approvalId: "approval-fallback",
+      target,
+      action: "allow_once",
+    });
+    expect(broker.resolve).toHaveBeenCalledWith({
+      approvalId: "approval-fallback",
+      decision: { kind: "allow_once" },
+      actor: { kind: "im", platform: "telegram", userId: "telegram-user-1" },
+      target,
+      callbackNonce: "nonce-fallback",
+    });
+    expect(callbackTokenRepository.casUpdate).toHaveBeenCalledWith(
+      "hash-allow-once",
+      "bound",
+      "used",
+      {
+        actor: { kind: "im", platform: "telegram", userId: "telegram-user-1" },
+      },
+    );
+    expect(callbackTokenRepository.revokeBoundSiblings).toHaveBeenCalledWith(
+      "approval-fallback",
+      "hash-allow-once",
+    );
+    expect(bodies[1]).toContain("Approval resolved: approval-fallback allow_once");
+  });
+
   it("routes /status to the current binding without leaking raw target or path data", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-100secret-chat", threadKey: "topic-secret" };

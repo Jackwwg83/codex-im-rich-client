@@ -111,6 +111,7 @@ until the matrix below is complete with real credentials and redacted evidence.
 | Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
 | Telegram/Lark inbound image/file upload | platform file resources materialize locally, then route to Codex turn input | local pass | Telegram `photo` / `document` and Feishu/Lark `image` / `file` unit coverage proves adapter download + daemon routing; images map to Codex `localImage`, generic files map to local-path text context |
 | Common Codex-native IM control commands | `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp` through daemon common command routing | local pass | Runtime wrappers keep App Server method literals centralized in `CodexRuntime`; daemon output is redacted and shared by Telegram/Lark/DingTalk adapters through the common control plane |
+| Common approval text fallback | `/approvals` and `/approve <id> <action>` through daemon common command routing | local pass | Fallback only resolves approvals that already have a server-side bound callback token record with a bound approval-card `messageRef`; no raw callback token or approval payload is accepted from IM text |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
@@ -493,6 +494,16 @@ Stop and treat as a blocker if:
   projected as Codex-native GUI activity in terminal IM summaries. Full local
   gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150
   files, 1401 pass, 1 skipped), and `pnpm lint`.
+- 2026-05-07 SGT approval fallback control loop: The common IM command plane
+  now exposes `/approvals` and `/approve <id> <action>`. The fallback path
+  resolves through `ApprovalBroker.resolve()` using the server-side bound
+  callback token record and its callback nonce; it requires the approval card
+  to have a bound `messageRef`, marks the selected token `used`, and revokes
+  bound sibling actions just like button callbacks. It does not accept raw
+  callback tokens, action payloads, chat ids, or message refs from IM text.
+  Full local gates passed on this patch: `pnpm typecheck`,
+  `pnpm typecheck:tests`, `pnpm test` (150 files, 1403 pass, 1 skipped),
+  `pnpm lint`, and `pnpm protocol:check`.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed

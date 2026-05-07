@@ -26,6 +26,8 @@ export const COMMAND_ROUTER_COMMANDS = Object.freeze([
   "plugins",
   "apps",
   "mcp",
+  "approvals",
+  "approve",
 ] as const);
 
 export type CommandRouterCommandName = (typeof COMMAND_ROUTER_COMMANDS)[number];

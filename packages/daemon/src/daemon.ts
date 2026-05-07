@@ -42,6 +42,7 @@ import {
   type AuditInsert,
   BindingRepository,
   type CallbackTokenAction,
+  type CallbackTokenApprovalTargetActionLookup,
   type CallbackTokenCasFields,
   type CallbackTokenInsert,
   type CallbackTokenMessageRefActionLookup,
@@ -71,6 +72,12 @@ const CALLBACK_TOKEN_FAIL_MESSAGES: Partial<Record<CallbackTokenStatus, string>>
   used: "already resolved",
   issued: "binding not ready",
 };
+const TEXT_FALLBACK_APPROVAL_ACTIONS = Object.freeze([
+  "allow_once",
+  "allow_session",
+  "decline",
+  "abort",
+] as const satisfies readonly CallbackTokenAction[]);
 const DEFAULT_PRUNE_INTERVAL_MS = 60_000;
 const DEFAULT_TERMINAL_RECORD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_TERMINAL_RECORD_MAX_COUNT = 10_000;
@@ -167,6 +174,9 @@ export interface DaemonCallbackTokenRepository {
   findByHash?(tokenHash: string): CallbackTokenRecord | unknown;
   findBoundByMessageRefAction?(
     input: CallbackTokenMessageRefActionLookup,
+  ): CallbackTokenRecord | unknown;
+  findBoundByApprovalTargetAction?(
+    input: CallbackTokenApprovalTargetActionLookup,
   ): CallbackTokenRecord | unknown;
   casUpdate?(
     tokenHash: string,
@@ -1064,18 +1074,7 @@ export class Daemon {
     record: CallbackTokenRecord,
     actor: NonNullable<ApprovalActor>,
   ): Promise<void> {
-    const repository = this.options.callbackTokenRepository;
-    const used = repository?.casUpdate?.(record.tokenHash, "bound", "used", { actor });
-    if (used === undefined) {
-      this.#emitAuditEvent("audit.cas_unreachable_after_resolve", {
-        approvalId: record.approvalId,
-        target: record.target,
-        result: "forced_used",
-        metadata: { tokenHash: record.tokenHash },
-      });
-      repository?.forceMarkUsed?.(record.tokenHash, { actor });
-    }
-
+    this.#markAcceptedApprovalRecord(record, actor);
     try {
       await this.#answerAction(callbackHandle, "decision recorded", true);
     } catch (error) {
@@ -1086,6 +1085,30 @@ export class Daemon {
         metadata: { error: errorMessage(error) },
       });
     }
+    await this.#finalizeAcceptedApproval(record);
+  }
+
+  #markAcceptedApprovalRecord(
+    record: CallbackTokenRecord,
+    actor: NonNullable<ApprovalActor>,
+  ): void {
+    const repository = this.options.callbackTokenRepository;
+    const used = repository?.casUpdate?.(record.tokenHash, "bound", "used", { actor });
+    if (used !== undefined) {
+      return;
+    }
+
+    this.#emitAuditEvent("audit.cas_unreachable_after_resolve", {
+      approvalId: record.approvalId,
+      target: record.target,
+      result: "forced_used",
+      metadata: { tokenHash: record.tokenHash },
+    });
+    repository?.forceMarkUsed?.(record.tokenHash, { actor });
+  }
+
+  async #finalizeAcceptedApproval(record: CallbackTokenRecord): Promise<void> {
+    const repository = this.options.callbackTokenRepository;
     const terminalCard = this.options.renderResolvedApprovalCard?.(
       record,
       this.#approvalCardsById.get(record.approvalId),
@@ -2114,6 +2137,16 @@ export class Daemon {
       await this.#routeMcpCommand(inbound);
       return;
     }
+
+    if (command.name === "approvals") {
+      await this.#routeApprovalsCommand(inbound);
+      return;
+    }
+
+    if (command.name === "approve") {
+      await this.#routeApproveCommand(inbound, command);
+      return;
+    }
   }
 
   async #routeHelpCommand(inbound: { messageRef?: DaemonMessageRef }): Promise<void> {
@@ -2141,6 +2174,8 @@ export class Daemon {
         "/plugins - List Codex plugins visible to the current project.",
         "/apps - List Codex app/connectors visible to the current thread.",
         "/mcp - List MCP server status and exposed tool counts.",
+        "/approvals - List pending approvals for this chat.",
+        "/approve <id> <action> - Text fallback for approval buttons.",
         "Completed file, command, and tool activity may appear as Codex items.",
       ].join("\n"),
     );
@@ -2658,6 +2693,130 @@ export class Daemon {
       });
       await this.#editInboundMessage(inbound.messageRef, "Codex MCP status failed.");
     }
+  }
+
+  async #routeApprovalsCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const pending = this.#broker?.listPending?.();
+    if (pending === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Pending approval list unavailable.");
+      return;
+    }
+    if (this.options.callbackTokenRepository?.findBoundByApprovalTargetAction === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Approval fallback unavailable.");
+      return;
+    }
+
+    const lines: string[] = [];
+    for (const snapshot of pending) {
+      const actions = this.#fallbackApprovalActionsForTarget(snapshot, inbound.target);
+      if (actions.length === 0) {
+        continue;
+      }
+      lines.push(
+        `- ${snapshot.id} ${classifyApprovalRequest(snapshot.method)} actions: ${actions.join(", ")} expires: ${snapshot.expiresAt.toISOString()}`,
+      );
+    }
+
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      lines.length === 0
+        ? "No pending approvals for this chat."
+        : ["Pending approvals:", ...lines].join("\n"),
+    );
+  }
+
+  async #routeApproveCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const approvalId = command.args[0];
+    const action = parseTextApprovalAction(command.args[1]);
+    if (approvalId === undefined || action === undefined) {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Usage: /approve <approval-id> <allow_once|allow_session|decline|abort>",
+      );
+      return;
+    }
+
+    if (this.#broker?.resolve === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Approval resolution unavailable.");
+      return;
+    }
+    if (!this.#broker.listPending?.().some((snapshot) => snapshot.id === approvalId)) {
+      await this.#editInboundMessage(inbound.messageRef, "Approval is not pending or is stale.");
+      return;
+    }
+
+    const record = this.#resolvableCallbackRecord(
+      this.options.callbackTokenRepository?.findBoundByApprovalTargetAction?.({
+        approvalId,
+        target: inbound.target,
+        action,
+      }),
+    );
+    if (record === undefined || record.messageRef === undefined) {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Approval fallback unavailable or stale for this chat/action.",
+      );
+      return;
+    }
+    if (!targetEqual(record.target, inbound.target)) {
+      await this.#editInboundMessage(inbound.messageRef, "Approval belongs to a different chat.");
+      return;
+    }
+
+    const actor = this.#inboundActor(inbound);
+    if (actor === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Approval actor unavailable.");
+      return;
+    }
+
+    const result = await this.#broker.resolve({
+      approvalId,
+      decision: { kind: action } as ApprovalUiAction,
+      actor,
+      target: record.target,
+      callbackNonce: record.callbackNonce,
+    });
+    if (result.kind === "error") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `Approval failed: ${this.#resolveErrorMessage(result.error)}`,
+      );
+      return;
+    }
+
+    this.#markAcceptedApprovalRecord(record, actor);
+    await this.#finalizeAcceptedApproval(record);
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      `Approval resolved: ${approvalId} ${action}`,
+    );
+  }
+
+  #fallbackApprovalActionsForTarget(
+    snapshot: PendingApprovalSnapshot,
+    target: Target,
+  ): readonly CallbackTokenAction[] {
+    const findBound = this.options.callbackTokenRepository?.findBoundByApprovalTargetAction;
+    if (findBound === undefined) {
+      return [];
+    }
+    return TEXT_FALLBACK_APPROVAL_ACTIONS.filter(
+      (action) =>
+        this.#resolvableCallbackRecord(
+          findBound.call(this.options.callbackTokenRepository, {
+            approvalId: snapshot.id,
+            target,
+            action,
+          }),
+        ) !== undefined,
+    );
   }
 
   async #routeAliasCommand(
@@ -4221,6 +4380,25 @@ function summarizeNamedToolItem(
     return namespace;
   }
   return `${namespace}.${tool}`;
+}
+
+function parseTextApprovalAction(value: string | undefined): CallbackTokenAction | undefined {
+  switch (value) {
+    case "allow":
+    case "allow_once":
+    case "once":
+      return "allow_once";
+    case "allow_session":
+    case "session":
+      return "allow_session";
+    case "decline":
+    case "deny":
+      return "decline";
+    case "abort":
+      return "abort";
+    default:
+      return undefined;
+  }
 }
 
 function truncateItemSummary(summary: string): string {

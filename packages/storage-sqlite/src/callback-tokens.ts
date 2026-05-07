@@ -45,6 +45,12 @@ export interface CallbackTokenMessageRefActionLookup {
   action: CallbackTokenAction;
 }
 
+export interface CallbackTokenApprovalTargetActionLookup {
+  approvalId: string;
+  target: CallbackTokenTarget;
+  action: CallbackTokenAction;
+}
+
 export interface CallbackTokenRecord {
   tokenHash: string;
   approvalId: string;
@@ -275,6 +281,39 @@ export class CallbackTokenRepository {
         targetTopicId: input.target.topicId ?? "",
         msgChatId: input.messageRef.chatId,
         msgMessageId: input.messageRef.messageId,
+      }) as CallbackTokenRow[];
+
+    return rows.length === 1 ? hydrate(rows[0] as CallbackTokenRow) : undefined;
+  }
+
+  findBoundByApprovalTargetAction(
+    input: CallbackTokenApprovalTargetActionLookup,
+  ): CallbackTokenRecord | undefined {
+    const rows = this.db
+      .prepare(
+        `
+          SELECT ${SELECT_COLUMNS}
+            FROM callback_tokens
+           WHERE status = 'bound'
+             AND approval_id = @approvalId
+             AND action = @action
+             AND target_platform = @targetPlatform
+             AND target_chat_id = @targetChatId
+             AND COALESCE(target_thread_key, '') = @targetThreadKey
+             AND COALESCE(target_topic_id, '') = @targetTopicId
+             AND msg_chat_id IS NOT NULL
+             AND msg_message_id IS NOT NULL
+           ORDER BY created_at DESC, token_hash ASC
+           LIMIT 2
+        `,
+      )
+      .all({
+        approvalId: input.approvalId,
+        action: input.action,
+        targetPlatform: input.target.platform,
+        targetChatId: input.target.chatId,
+        targetThreadKey: input.target.threadKey ?? "",
+        targetTopicId: input.target.topicId ?? "",
       }) as CallbackTokenRow[];
 
     return rows.length === 1 ? hydrate(rows[0] as CallbackTokenRow) : undefined;

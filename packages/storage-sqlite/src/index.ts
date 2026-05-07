@@ -88,6 +88,7 @@ export {
 export {
   CallbackTokenRepository,
   hashCallbackToken,
+  type CallbackTokenApprovalTargetActionLookup,
   type CallbackMessageRef,
   type CallbackTokenAction,
   type CallbackTokenActor,
