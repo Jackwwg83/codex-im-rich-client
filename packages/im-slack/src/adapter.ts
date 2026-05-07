@@ -8,7 +8,9 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
+import { decodeSlackCallbackHandle, normalizeSlackRawBlockAction } from "./action.js";
 import { SLACK_CAPABILITIES } from "./capabilities.js";
+import { type SlackApprovalCardBlock, renderSlackApprovalCard } from "./card.js";
 import { type SlackRawMessagePayload, normalizeSlackRawMessage } from "./message.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
@@ -33,6 +35,7 @@ export interface SlackWebClientLike {
 export interface SlackPostMessageInput {
   readonly channel: string;
   readonly text: string;
+  readonly blocks?: readonly SlackApprovalCardBlock[];
   readonly thread_ts?: string;
 }
 
@@ -40,6 +43,7 @@ export interface SlackUpdateMessageInput {
   readonly channel: string;
   readonly ts: string;
   readonly text: string;
+  readonly blocks?: readonly SlackApprovalCardBlock[];
 }
 
 export interface SlackFileUploadInput {
@@ -117,7 +121,29 @@ export class SlackChannelAdapter implements ChannelAdapter {
 
   async sendCard(_target: Target, _card: ApprovalCardInput): Promise<SendCardResult> {
     this.#assertStarted("sendCard");
-    throw new Error("SlackChannelAdapter.sendCard requires Slack T3 approval-card implementation");
+    const webClient = this.#webClient("sendCard");
+    if (webClient.chatPostMessage === undefined) {
+      throw new Error("SlackChannelAdapter.sendCard requires webClient.chatPostMessage");
+    }
+    const rendered = renderSlackApprovalCard(_card);
+    const sent = await webClient.chatPostMessage({
+      channel: slackChannelFromTarget(_target),
+      text: rendered.text,
+      blocks: rendered.blocks,
+      ...(_target.threadKey === undefined ? {} : { thread_ts: _target.threadKey }),
+    });
+    return {
+      messageRef: {
+        target: _target,
+        messageId: slackMessageId(
+          sent.channel ?? slackChannelFromTarget(_target),
+          requiredTs(sent.ts),
+        ),
+        kind: "approval_card",
+        textUpdateMode: "edit",
+      },
+      callbackNonce: "",
+    };
   }
 
   async sendText(target: Target, body: string): Promise<MessageRef> {
@@ -144,9 +170,20 @@ export class SlackChannelAdapter implements ChannelAdapter {
 
   async updateCard(_ref: MessageRef, _card: ApprovalCardInput): Promise<void> {
     this.#assertStarted("updateCard");
-    throw new Error(
-      "SlackChannelAdapter.updateCard requires Slack T3 approval-card implementation",
-    );
+    const webClient = this.#webClient("updateCard");
+    if (webClient.chatUpdate === undefined) {
+      throw new Error("SlackChannelAdapter.updateCard requires webClient.chatUpdate");
+    }
+    const parsed = parseSlackMessageId(_ref.messageId);
+    const rendered = renderSlackApprovalCard(_card, {
+      blockIdSuffix: String(this._nowForTest().getTime()),
+    });
+    await webClient.chatUpdate({
+      channel: parsed.channel,
+      ts: parsed.ts,
+      text: rendered.text,
+      blocks: rendered.blocks,
+    });
   }
 
   async editText(ref: MessageRef, body: string): Promise<void> {
@@ -161,7 +198,9 @@ export class SlackChannelAdapter implements ChannelAdapter {
 
   async answerAction(_callbackHandle: string, _ack: ActionAck): Promise<void> {
     this.#assertStarted("answerAction");
-    throw new Error("SlackChannelAdapter.answerAction requires Slack T3 action implementation");
+    if (decodeSlackCallbackHandle(_callbackHandle) === undefined) {
+      throw new Error("SlackChannelAdapter.answerAction invalid callback handle");
+    }
   }
 
   async sendFile(target: Target, file: OutboundFile): Promise<MessageRef> {
@@ -209,6 +248,7 @@ export class SlackChannelAdapter implements ChannelAdapter {
   #installInboundHandlers(socketClient: SlackSocketModeClientLike): void {
     socketClient.on?.("message", (payload) => this.#emitRawMessage(payload));
     socketClient.on?.("app_mention", (payload) => this.#emitRawMessage(payload));
+    socketClient.on?.("interactive", (payload) => this.#emitRawAction(payload));
   }
 
   #emitRawMessage(payload: unknown): void {
@@ -224,6 +264,19 @@ export class SlackChannelAdapter implements ChannelAdapter {
     }
     for (const handler of this.#onMessageHandlers) {
       handler(message);
+    }
+  }
+
+  async #emitRawAction(payload: unknown): Promise<void> {
+    if (this.#inboundPaused) {
+      return;
+    }
+    const action = await normalizeSlackRawBlockAction(payload, this._nowForTest().getTime());
+    if (action === undefined) {
+      return;
+    }
+    for (const handler of this.#onActionHandlers) {
+      handler(action);
     }
   }
 

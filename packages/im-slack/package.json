@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc -b",
-    "test": "cd ../.. && vitest run --config vitest.config.ts --project unit packages/im-slack/test/skeleton.test.ts packages/im-slack/test/no-boundary-imports.test.ts packages/im-slack/test/on-message.test.ts packages/im-slack/test/text.test.ts"
+    "test": "cd ../.. && vitest run --config vitest.config.ts --project unit packages/im-slack/test/skeleton.test.ts packages/im-slack/test/no-boundary-imports.test.ts packages/im-slack/test/on-message.test.ts packages/im-slack/test/text.test.ts packages/im-slack/test/send-card.test.ts packages/im-slack/test/on-action.test.ts"
   },
   "dependencies": {
     "@codex-im/channel-core": "workspace:*"
