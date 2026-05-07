@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   LarkChannelAdapter,
   type LarkEventDispatcherLike,
   type LarkEventHandlerMap,
+  type LarkMessageClientLike,
   type LarkRawMessageEvent,
   type LarkWsClientLike,
   normalizeLarkRawMessage,
@@ -78,6 +79,120 @@ describe("Lark message receive fixtures (JAC-152)", () => {
     expect(msg.target).toEqual({ platform: "lark", chatId: "oc_test_file_chat" });
   });
 
+  it("downloads Lark image messages as inbound image attachments", async () => {
+    const downloadFile = vi.fn<NonNullable<LarkMessageClientLike["downloadFile"]>>(async () => ({
+      localPath: "/tmp/codex-im-lark/image.jpg",
+      sizeBytes: 4,
+    }));
+    const adapter = new LarkChannelAdapter({
+      wsClient: {
+        async start() {},
+        close() {},
+      },
+      createEventDispatcher: () => new FakeLarkEventDispatcher(),
+      messageClient: {
+        sendText: vi.fn(),
+        editText: vi.fn(),
+        downloadFile,
+      },
+      now: () => new Date(1777750004000),
+    });
+    const seen: unknown[] = [];
+    adapter.onMessage((msg) => seen.push(msg));
+
+    await adapter.start();
+    await adapter._emitRawMessageForTest({
+      sender: { sender_id: { open_id: "ou_image_sender" } },
+      message: {
+        message_id: "om_image_message",
+        chat_id: "oc_image_chat",
+        chat_type: "p2p",
+        message_type: "image",
+        content: JSON.stringify({ image_key: "img_test_key" }),
+        create_time: "1777750005000",
+      },
+    });
+
+    expect(downloadFile).toHaveBeenCalledWith({
+      messageId: "om_image_message",
+      fileKey: "img_test_key",
+      kind: "image",
+      filename: "lark-image-om_image_message.jpg",
+      contentType: "image/jpeg",
+    });
+    expect(seen).toEqual([
+      expect.objectContaining({
+        text: "",
+        attachments: [
+          {
+            kind: "image",
+            filename: "lark-image-om_image_message.jpg",
+            contentType: "image/jpeg",
+            localPath: "/tmp/codex-im-lark/image.jpg",
+            sizeBytes: 4,
+          },
+        ],
+      }),
+    ]);
+  });
+
+  it("downloads Lark file messages as inbound file attachments", async () => {
+    const downloadFile = vi.fn<NonNullable<LarkMessageClientLike["downloadFile"]>>(async () => ({
+      localPath: "/tmp/codex-im-lark/build.log",
+      sizeBytes: 42,
+    }));
+    const adapter = new LarkChannelAdapter({
+      wsClient: {
+        async start() {},
+        close() {},
+      },
+      createEventDispatcher: () => new FakeLarkEventDispatcher(),
+      messageClient: {
+        sendText: vi.fn(),
+        editText: vi.fn(),
+        downloadFile,
+      },
+      now: () => new Date(1777750004000),
+    });
+    const seen: unknown[] = [];
+    adapter.onMessage((msg) => seen.push(msg));
+
+    await adapter.start();
+    await adapter._emitRawMessageForTest({
+      sender: { sender_id: { open_id: "ou_file_sender" } },
+      message: {
+        message_id: "om_file_message",
+        chat_id: "oc_file_chat",
+        chat_type: "p2p",
+        message_type: "file",
+        content: JSON.stringify({ file_key: "file_test_key", file_name: "build.log" }),
+        create_time: "1777750006000",
+      },
+    });
+
+    expect(downloadFile).toHaveBeenCalledWith({
+      messageId: "om_file_message",
+      fileKey: "file_test_key",
+      kind: "file",
+      filename: "build.log",
+      contentType: "application/octet-stream",
+    });
+    expect(seen).toEqual([
+      expect.objectContaining({
+        text: "",
+        attachments: [
+          {
+            kind: "file",
+            filename: "build.log",
+            contentType: "application/octet-stream",
+            localPath: "/tmp/codex-im-lark/build.log",
+            sizeBytes: 42,
+          },
+        ],
+      }),
+    ]);
+  });
+
   it("emits raw message fixtures only after lifecycle start unpauses inbound", async () => {
     const dispatcher = new FakeLarkEventDispatcher();
     const wsClient: LarkWsClientLike = {
@@ -95,7 +210,7 @@ describe("Lark message receive fixtures (JAC-152)", () => {
       received.push(msg.text);
     });
 
-    adapter._emitRawMessageForTest(fixture("private-message.json"));
+    await adapter._emitRawMessageForTest(fixture("private-message.json"));
     expect(received).toEqual([]);
 
     await adapter.start();

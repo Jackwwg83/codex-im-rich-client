@@ -1,4 +1,4 @@
-import type { InboundMessage, Target } from "@codex-im/channel-core";
+import type { InboundAttachment, InboundMessage, Target } from "@codex-im/channel-core";
 
 export interface LarkRawMessageEvent {
   readonly sender?: {
@@ -36,7 +36,18 @@ export interface LarkRawMention {
   readonly tenant_key?: string;
 }
 
-export function normalizeLarkRawMessage(event: LarkRawMessageEvent, nowMs: number): InboundMessage {
+export interface LarkMessageResourceAttachmentDescriptor {
+  readonly kind: "image" | "file";
+  readonly fileKey: string;
+  readonly filename: string;
+  readonly contentType: string;
+}
+
+export function normalizeLarkRawMessage(
+  event: LarkRawMessageEvent,
+  nowMs: number,
+  attachments: readonly InboundAttachment[] = [],
+): InboundMessage {
   const message = event.message;
   const senderId =
     event.sender?.sender_id?.open_id ??
@@ -56,10 +67,46 @@ export function normalizeLarkRawMessage(event: LarkRawMessageEvent, nowMs: numbe
   return {
     target,
     sender: { userId: senderId },
-    text: extractText(message),
+    text: extractText(message, attachments),
     receivedAt: larkReceivedAt(message.create_time, nowMs),
     messageRef: { target, messageId: message.message_id, kind: "inbound" },
+    ...(attachments.length === 0 ? {} : { attachments }),
   };
+}
+
+export function larkMessageResourceAttachmentDescriptor(
+  event: LarkRawMessageEvent,
+): LarkMessageResourceAttachmentDescriptor | undefined {
+  const message = event.message;
+  if (message?.message_id === undefined || message.message_type === undefined) {
+    return undefined;
+  }
+  const content = parseLarkContent(message.content);
+  if (message.message_type === "image") {
+    const imageKey = readString(content, "image_key");
+    if (imageKey === undefined) {
+      return undefined;
+    }
+    return {
+      kind: "image",
+      fileKey: imageKey,
+      filename: `lark-image-${message.message_id}.jpg`,
+      contentType: "image/jpeg",
+    };
+  }
+  if (message.message_type === "file") {
+    const fileKey = readString(content, "file_key");
+    if (fileKey === undefined) {
+      return undefined;
+    }
+    return {
+      kind: "file",
+      fileKey,
+      filename: readString(content, "file_name") ?? `lark-file-${message.message_id}`,
+      contentType: "application/octet-stream",
+    };
+  }
+  return undefined;
 }
 
 function larkTarget(message: NonNullable<LarkRawMessageEvent["message"]>): Target {
@@ -71,7 +118,16 @@ function larkTarget(message: NonNullable<LarkRawMessageEvent["message"]>): Targe
   };
 }
 
-function extractText(message: NonNullable<LarkRawMessageEvent["message"]>): string {
+function extractText(
+  message: NonNullable<LarkRawMessageEvent["message"]>,
+  attachments: readonly InboundAttachment[],
+): string {
+  if (
+    attachments.length > 0 &&
+    (message.message_type === "image" || message.message_type === "file")
+  ) {
+    return "";
+  }
   if (message.message_type !== "text") {
     return `Unsupported Lark message type: ${message.message_type}`;
   }
@@ -87,6 +143,25 @@ function extractText(message: NonNullable<LarkRawMessageEvent["message"]>): stri
   } catch {
     return content;
   }
+}
+
+function parseLarkContent(content: string | undefined): Record<string, unknown> | undefined {
+  if (content === undefined || content.length === 0) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readString(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function larkReceivedAt(createTime: string | undefined, nowMs: number): Date {

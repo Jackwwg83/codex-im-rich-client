@@ -62,8 +62,9 @@ describe("TelegramChannelAdapter lifecycle (T21)", () => {
       start: vi.fn(() => new Promise<void>(() => undefined)),
       stop: vi.fn(() => undefined),
       on: vi.fn((filter, handler) => {
-        expect(filter).toBe("message:text");
-        handlers.push(handler as TelegramMessageHandlerLike);
+        if (filter === "message:text") {
+          handlers.push(handler as TelegramMessageHandlerLike);
+        }
       }),
     };
     const adapter = new TelegramChannelAdapter({ bot });

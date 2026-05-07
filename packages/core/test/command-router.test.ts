@@ -34,9 +34,11 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
 
   it("routes plain text to a prompt with attachments preserved", () => {
     const attachment = {
+      kind: "file" as const,
       filename: "notes.txt",
       contentType: "text/plain",
-      bytes: new Uint8Array([1, 2, 3]),
+      localPath: "/tmp/codex-im/notes.txt",
+      sizeBytes: 3,
     };
     expect(routeInboundCommand("please inspect the repo", { attachments: [attachment] })).toEqual({
       kind: "prompt",

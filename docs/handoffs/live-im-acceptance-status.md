@@ -22,9 +22,11 @@
 > suppresses progress edits for append-only refs and sends one terminal reply
 > for short output. Launchd has been restored with the rebuilt daemon and
 > readiness remains green.
-> Telegram/Lark outbound file/image attachment support is now implemented at
-> the adapter contract layer and reflected in `pnpm im:doctor`; DingTalk
-> attachments remain unsupported pending a real platform delivery path.
+> Telegram/Lark outbound and inbound file/image attachment support is now
+> implemented at the adapter contract layer. Inbound images are passed to Codex
+> as native `UserInput.localImage`; inbound generic files are passed as local
+> path context because Codex App Server has no generic `UserInput.file` shape.
+> DingTalk attachments remain unsupported pending a real platform delivery path.
 > Daemon terminal output can now deliver completed Codex
 > `imageGeneration.savedPath` artifacts as IM files after the text summary;
 > explicit live file-send gates now prove the Telegram and Feishu/Lark platform
@@ -68,7 +70,7 @@ Use this wording until all enabled live platform smokes pass:
 
 ```text
 Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, installed DingTalk readiness is green, real DingTalk desktop inbound passes prompt/reply plus /status, and the explicit live CardKit callback probe now passes after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
-Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends.
+Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context.
 Daemon-side delivery of completed `imageGeneration.savedPath` artifacts is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram and Feishu/Lark.
 ```
 
@@ -107,6 +109,7 @@ until the matrix below is complete with real credentials and redacted evidence.
 | Lark approval abort | real write command requiring approval from Feishu Web, tap `Abort` | pass | target file remained absent; callback token `abort=used`, sibling tokens revoked; Codex turn returned interrupted/declined output and pending approvals returned to zero |
 | Lark approval allow session | exact same shell command sent twice, first tap `Allow session` | pass | first command wrote 13 bytes; second identical prompt ran without a new Lark callback token and the file grew to 26 bytes; `approval-2 allow_session=used`, siblings revoked |
 | Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
+| Telegram/Lark inbound image/file upload | platform file resources materialize locally, then route to Codex turn input | local pass | Telegram `photo` / `document` and Feishu/Lark `image` / `file` unit coverage proves adapter download + daemon routing; images map to Codex `localImage`, generic files map to local-path text context |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |

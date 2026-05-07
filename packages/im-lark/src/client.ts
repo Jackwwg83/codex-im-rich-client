@@ -1,4 +1,7 @@
 import { Buffer } from "node:buffer";
+import { mkdir, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import * as lark from "@larksuiteoapi/node-sdk";
 import { LarkChannelAdapter } from "./adapter.js";
 import type {
@@ -16,6 +19,7 @@ export interface LarkSdkChannelAdapterConfig {
   readonly domain?: "feishu" | "lark";
   readonly verificationToken?: string;
   readonly encryptKey?: string;
+  readonly attachmentDir?: string;
 }
 
 export interface LarkSdkDeps {
@@ -44,6 +48,11 @@ interface LarkSdkClientLike {
       readonly create: (payload: LarkSdkCreateMessagePayload) => Promise<LarkSdkMessageResult>;
       readonly reply: (payload: LarkSdkReplyMessagePayload) => Promise<LarkSdkMessageResult>;
       readonly update: (payload: LarkSdkUpdateTextPayload) => Promise<LarkSdkMessageResult>;
+    };
+    readonly messageResource?: {
+      readonly get: (
+        payload: LarkSdkMessageResourceGetPayload,
+      ) => Promise<LarkSdkMessageResourceResult>;
     };
   };
   readonly cardkit: {
@@ -93,6 +102,16 @@ interface LarkSdkUpdateTextPayload {
   readonly data: {
     readonly msg_type: "text";
     readonly content: string;
+  };
+}
+
+interface LarkSdkMessageResourceGetPayload {
+  readonly path: {
+    readonly message_id: string;
+    readonly file_key: string;
+  };
+  readonly params: {
+    readonly type: "image" | "file";
   };
 }
 
@@ -146,6 +165,10 @@ interface LarkSdkImageResult extends LarkSdkResult {
   };
 }
 
+interface LarkSdkMessageResourceResult {
+  writeFile(path: string): Promise<unknown>;
+}
+
 type LarkSdkFileType = "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream";
 
 export const SILENT_LARK_SDK_LOGGER: LarkSdkLogger = Object.freeze({
@@ -171,7 +194,7 @@ export function createLarkSdkAdapterOptions(
   const wsClient = deps.createWsClient?.(config) ?? createDefaultWsClient(config);
   return {
     wsClient,
-    messageClient: createSdkMessageClient(client),
+    messageClient: createSdkMessageClient(client, config.attachmentDir),
     actionClient: createSdkActionClient(),
     createEventDispatcher: () =>
       deps.createEventDispatcher?.(config) ?? createDefaultDispatcher(config),
@@ -209,7 +232,10 @@ function createDefaultDispatcher(config: LarkSdkChannelAdapterConfig): LarkEvent
   });
 }
 
-function createSdkMessageClient(client: LarkSdkClientLike): LarkMessageClientLike {
+function createSdkMessageClient(
+  client: LarkSdkClientLike,
+  attachmentDir: string | undefined,
+): LarkMessageClientLike {
   const cardIdsByMessageId = new Map<string, string>();
   let lastCardUpdateSequence = 0;
   return {
@@ -320,6 +346,34 @@ function createSdkMessageClient(client: LarkSdkClientLike): LarkMessageClientLik
           }),
         ),
       );
+    },
+
+    async downloadFile(input) {
+      const get = client.im.messageResource?.get;
+      if (get === undefined) {
+        throw new Error("Lark SDK downloadFile requires im.messageResource.get");
+      }
+      const dir = attachmentDir ?? defaultLarkAttachmentDir();
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      const localPath = join(
+        dir,
+        `${input.messageId}-${input.fileKey.slice(0, 12)}-${safeLarkFilename(input.filename)}`,
+      );
+      const resource = await callLarkSdk("downloadMessageResource", () =>
+        get({
+          path: { message_id: input.messageId, file_key: input.fileKey },
+          params: { type: input.kind === "image" ? "image" : "file" },
+        }),
+      );
+      await resource.writeFile(localPath);
+      const size = await stat(localPath).then(
+        (info) => info.size,
+        () => undefined,
+      );
+      return {
+        localPath,
+        ...(size === undefined ? {} : { sizeBytes: size }),
+      };
     },
   };
 }
@@ -451,6 +505,18 @@ function larkFileType(file: { filename: string; contentType: string }): LarkSdkF
   if (contentType === "video/mp4" || filename.endsWith(".mp4")) return "mp4";
   if (contentType === "audio/ogg" || filename.endsWith(".opus")) return "opus";
   return "stream";
+}
+
+function defaultLarkAttachmentDir(): string {
+  return join(tmpdir(), "codex-im-lark-attachments");
+}
+
+function safeLarkFilename(filename: string): string {
+  const base = basename(filename)
+    .replace(/[^\w .@+-]/gu, "_")
+    .trim();
+  const safe = base.length === 0 || base === "." || base === ".." ? "attachment" : base;
+  return safe.slice(0, 160);
 }
 
 function asRecord(input: unknown): Record<string, unknown> | undefined {

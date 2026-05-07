@@ -98,6 +98,20 @@ export type OutboundFile = {
 };
 
 /**
+ * Inbound attachment metadata after the adapter has made a platform object
+ * usable by the local Codex daemon. Image attachments may become Codex
+ * `UserInput.localImage`; generic files remain explicit until Codex exposes a
+ * first-class file input shape.
+ */
+export type InboundAttachment = {
+  readonly kind: "image" | "file";
+  readonly filename: string;
+  readonly contentType: string;
+  readonly localPath: string;
+  readonly sizeBytes?: number;
+};
+
+/**
  * Inbound chat-message event from the IM platform. The adapter
  * normalizes raw platform payloads (Telegram Update, Lark webhook) into
  * this shape before handing off to the daemon wire-up.
@@ -111,6 +125,8 @@ export type InboundMessage = {
   readonly receivedAt: Date;
   /** Stable reference to the inbound message (for reply / edit chains). */
   readonly messageRef: MessageRef;
+  /** Platform attachments that have been safely materialized for local Codex input. */
+  readonly attachments?: readonly InboundAttachment[];
 };
 
 /**

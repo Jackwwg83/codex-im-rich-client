@@ -8,7 +8,8 @@
 //   supportsButtons      — adapter renders inline keyboard buttons
 //   canEditMessage       — adapter can edit a previously sent message
 //                          (used to update an approval card on resolve)
-//   supportsAttachments  — adapter can send OutboundFile payloads
+//   supportsAttachments  — adapter can send OutboundFile payloads and
+//                          materialize inbound attachment resources locally
 //   maxCallbackDataBytes — upper bound on callback_data size (per
 //                          platform; Telegram = 64 per Bot API §inline
 //                          keyboards). Renderer / daemon wire-up should

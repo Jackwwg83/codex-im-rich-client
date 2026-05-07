@@ -22,7 +22,7 @@ export interface TelegramLiveSmokeBotLike {
   start(options?: { readonly drop_pending_updates?: boolean }): Promise<void>;
   stop(): void | Promise<void>;
   on(
-    filter: "message:text" | "callback_query:data",
+    filter: "message:text" | "message:photo" | "message:document" | "callback_query:data",
     handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
   ): unknown;
 }
@@ -114,7 +114,7 @@ export class TelegramLiveSmokeBot implements TelegramBotLike {
   }
 
   on(
-    filter: "message:text" | "callback_query:data",
+    filter: "message:text" | "message:photo" | "message:document" | "callback_query:data",
     handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
   ): unknown {
     return this.#bot.on(filter, handler);
@@ -192,7 +192,7 @@ export class TelegramRecordingBot implements TelegramBotLike {
   }
 
   on(
-    filter: "message:text" | "callback_query:data",
+    filter: "message:text" | "message:photo" | "message:document" | "callback_query:data",
     handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
   ): unknown {
     return this.#bot.on?.(filter, handler);

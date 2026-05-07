@@ -302,7 +302,10 @@ export function createProductionAdapter(
     }
     entries.push({
       platform: "telegram",
-      adapter: new TelegramChannelAdapter({ botToken: secrets.telegramBotToken }),
+      adapter: new TelegramChannelAdapter({
+        botToken: secrets.telegramBotToken,
+        attachmentDir: join(config.daemon.dataDir, "attachments", "telegram"),
+      }),
     });
   }
   if (config.adapters.lark.enabled) {
@@ -315,6 +318,7 @@ export function createProductionAdapter(
         appId: config.adapters.lark.appId,
         appSecret: secrets.larkAppSecret,
         domain: config.adapters.lark.domain,
+        attachmentDir: join(config.daemon.dataDir, "attachments", "lark"),
         ...(secrets.larkEncryptKey === undefined ? {} : { encryptKey: secrets.larkEncryptKey }),
         ...(secrets.larkVerificationToken === undefined
           ? {}

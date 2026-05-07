@@ -95,7 +95,9 @@ export class TelegramFakeSmokeBot implements TelegramBotLike {
     },
   };
 
-  readonly #messageTextHandlers: TelegramMessageHandlerLike[] = [];
+  readonly #messageHandlers: Partial<
+    Record<"message:text" | "message:photo" | "message:document", TelegramMessageHandlerLike[]>
+  > = {};
   readonly #callbackHandlers: TelegramCallbackQueryHandlerLike[] = [];
 
   async start(): Promise<void> {
@@ -107,11 +109,14 @@ export class TelegramFakeSmokeBot implements TelegramBotLike {
   }
 
   on(
-    filter: "message:text" | "callback_query:data",
+    filter: "message:text" | "message:photo" | "message:document" | "callback_query:data",
     handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
   ): unknown {
-    if (filter === "message:text") {
-      this.#messageTextHandlers.push(handler as TelegramMessageHandlerLike);
+    if (filter.startsWith("message:")) {
+      const messageFilter = filter as "message:text" | "message:photo" | "message:document";
+      const handlers = this.#messageHandlers[messageFilter] ?? [];
+      handlers.push(handler as TelegramMessageHandlerLike);
+      this.#messageHandlers[messageFilter] = handlers;
       return undefined;
     }
     this.#callbackHandlers.push(handler as TelegramCallbackQueryHandlerLike);
@@ -120,7 +125,7 @@ export class TelegramFakeSmokeBot implements TelegramBotLike {
 
   async injectTextMessage(input: TelegramFakeSmokeMessage): Promise<void> {
     const ctx = this.#textMessageContext(input);
-    await Promise.all(this.#messageTextHandlers.map((handler) => handler(ctx)));
+    await Promise.all((this.#messageHandlers["message:text"] ?? []).map((handler) => handler(ctx)));
   }
 
   async injectCallbackQuery(input: TelegramFakeSmokeCallback): Promise<void> {

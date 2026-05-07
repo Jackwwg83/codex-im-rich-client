@@ -22,9 +22,11 @@ export const COMMAND_ROUTER_COMMANDS = Object.freeze([
 export type CommandRouterCommandName = (typeof COMMAND_ROUTER_COMMANDS)[number];
 
 export type CommandRouterAttachment = {
+  readonly kind: "image" | "file";
   readonly filename: string;
   readonly contentType: string;
-  readonly bytes: Uint8Array;
+  readonly localPath: string;
+  readonly sizeBytes?: number;
 };
 
 export type RouteInboundCommandOptions = {

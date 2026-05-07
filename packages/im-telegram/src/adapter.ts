@@ -1,9 +1,13 @@
 import { Buffer } from "node:buffer";
 import { randomBytes } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import type {
   ActionAck,
   ChannelAdapter,
   InboundAction,
+  InboundAttachment,
   InboundMessage,
   MessageRef,
   OutboundFile,
@@ -38,7 +42,26 @@ export interface TelegramTextMessageLike {
   readonly date?: number;
   readonly chat: TelegramChatLike;
   readonly from?: TelegramUserLike;
-  readonly text: string;
+  readonly text?: string;
+  readonly caption?: string;
+  readonly photo?: readonly TelegramPhotoSizeLike[];
+  readonly document?: TelegramDocumentLike;
+}
+
+export interface TelegramPhotoSizeLike {
+  readonly file_id: string;
+  readonly file_unique_id?: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly file_size?: number;
+}
+
+export interface TelegramDocumentLike {
+  readonly file_id: string;
+  readonly file_unique_id?: string;
+  readonly file_name?: string;
+  readonly mime_type?: string;
+  readonly file_size?: number;
 }
 
 export interface TelegramMessageContextLike {
@@ -135,6 +158,14 @@ export interface TelegramBotApiLike {
     callbackQueryId: string,
     options: TelegramAnswerCallbackQueryOptions,
   ): Promise<unknown>;
+  getFile?(fileId: string): Promise<TelegramFileInfoLike>;
+}
+
+export interface TelegramFileInfoLike {
+  readonly file_id?: string;
+  readonly file_unique_id?: string;
+  readonly file_size?: number;
+  readonly file_path?: string;
 }
 
 export type TelegramMessageHandlerLike = (ctx: TelegramMessageContextLike) => void | Promise<void>;
@@ -147,15 +178,42 @@ export interface TelegramBotLike {
   stop(): void | Promise<void>;
   readonly api?: TelegramBotApiLike;
   on?(
-    filter: "message:text" | "callback_query:data",
+    filter: "message:text" | "message:photo" | "message:document" | "callback_query:data",
     handler: TelegramMessageHandlerLike | TelegramCallbackQueryHandlerLike,
   ): unknown;
 }
+
+export interface TelegramAttachmentDownloadRequest {
+  readonly fileId: string;
+  readonly filename: string;
+  readonly contentType: string;
+  readonly kind: "image" | "file";
+  readonly messageId: string;
+}
+
+export interface TelegramDownloadedAttachment {
+  readonly localPath: string;
+  readonly sizeBytes?: number;
+}
+
+export interface TelegramFetchResponseLike {
+  readonly ok: boolean;
+  readonly status: number;
+  readonly statusText: string;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+export type TelegramFetchLike = (url: string) => Promise<TelegramFetchResponseLike>;
 
 export interface TelegramChannelAdapterOptions {
   readonly botToken?: string;
   readonly bot?: TelegramBotLike;
   readonly createBot?: (botToken: string) => TelegramBotLike;
+  readonly attachmentDir?: string;
+  readonly downloadFile?: (
+    request: TelegramAttachmentDownloadRequest,
+  ) => Promise<TelegramDownloadedAttachment>;
+  readonly fetch?: TelegramFetchLike;
   readonly now?: () => Date;
 }
 
@@ -378,11 +436,11 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       return;
     }
     if (bot.on === undefined) {
-      throw new Error('TelegramChannelAdapter.onMessage requires bot.on("message:text")');
+      throw new Error('TelegramChannelAdapter.onMessage requires bot.on("message:*")');
     }
-    bot.on("message:text", (ctx: TelegramMessageContextLike) => {
-      this.#emitTelegramTextMessage(ctx);
-    });
+    for (const filter of ["message:text", "message:photo", "message:document"] as const) {
+      bot.on(filter, (ctx: TelegramMessageContextLike) => this.#emitTelegramMessage(ctx));
+    }
     this.#messageHandlerInstalled = true;
   }
 
@@ -399,11 +457,11 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     this.#actionHandlerInstalled = true;
   }
 
-  #emitTelegramTextMessage(ctx: TelegramMessageContextLike): void {
+  async #emitTelegramMessage(ctx: TelegramMessageContextLike): Promise<void> {
     if (!this.#acceptInbound()) {
       return;
     }
-    const msg = normalizeTelegramTextMessage(ctx, this.#nowMs());
+    const msg = await this.#normalizeTelegramMessage(ctx);
     for (const handler of this.#onMessageHandlers) {
       try {
         handler(msg);
@@ -411,6 +469,27 @@ export class TelegramChannelAdapter implements ChannelAdapter {
         // Keep one subscriber failure from blocking other subscribers.
       }
     }
+  }
+
+  async #normalizeTelegramMessage(ctx: TelegramMessageContextLike): Promise<InboundMessage> {
+    return normalizeTelegramTextMessage(ctx, this.#nowMs(), (request) =>
+      this.#downloadTelegramAttachment(request),
+    );
+  }
+
+  async #downloadTelegramAttachment(
+    request: TelegramAttachmentDownloadRequest,
+  ): Promise<TelegramDownloadedAttachment> {
+    if (this.#options.downloadFile !== undefined) {
+      return this.#options.downloadFile(request);
+    }
+    return downloadTelegramFile({
+      request,
+      api: this.#api("downloadFile"),
+      botToken: this.#options.botToken,
+      attachmentDir: this.#options.attachmentDir,
+      fetch: this.#options.fetch,
+    });
   }
 
   #emitTelegramCallbackQuery(ctx: TelegramCallbackQueryContextLike): void {
@@ -515,25 +594,29 @@ function formatApprovalCard(card: ApprovalCardInput): string {
 function normalizeTelegramTextMessage(
   ctx: TelegramMessageContextLike,
   nowMs: number,
-): InboundMessage {
+  downloadAttachment?: (
+    request: TelegramAttachmentDownloadRequest,
+  ) => Promise<TelegramDownloadedAttachment>,
+): Promise<InboundMessage> {
   const message = ctx.message;
   const chat = message?.chat ?? ctx.chat;
   const from = message?.from ?? ctx.from;
   if (message === undefined || chat === undefined || from === undefined) {
-    throw new Error("TelegramChannelAdapter.onMessage received incomplete message:text context");
+    throw new Error("TelegramChannelAdapter.onMessage received incomplete message context");
   }
 
   const target = telegramTarget(chat, message.message_thread_id);
-  return {
+  return materializeTelegramAttachments(message, downloadAttachment).then((attachments) => ({
     target,
     sender: {
       userId: String(from.id),
       ...optionalDisplayName(from),
     },
-    text: message.text,
+    text: message.text ?? message.caption ?? "",
     receivedAt: message.date !== undefined ? new Date(message.date * 1000) : new Date(nowMs),
     messageRef: { target, messageId: String(message.message_id), kind: "inbound" },
-  };
+    ...(attachments.length === 0 ? {} : { attachments }),
+  }));
 }
 
 function telegramTarget(
@@ -546,6 +629,161 @@ function telegramTarget(
     chatId: String(chat.id),
     ...(topicId !== undefined ? { topicId } : {}),
   };
+}
+
+async function materializeTelegramAttachments(
+  message: TelegramTextMessageLike,
+  downloadAttachment:
+    | ((request: TelegramAttachmentDownloadRequest) => Promise<TelegramDownloadedAttachment>)
+    | undefined,
+): Promise<InboundAttachment[]> {
+  const descriptors = telegramAttachmentDescriptors(message);
+  const attachments: InboundAttachment[] = [];
+  for (const descriptor of descriptors) {
+    if (downloadAttachment === undefined) {
+      continue;
+    }
+    try {
+      const downloaded = await downloadAttachment(descriptor);
+      attachments.push({
+        kind: descriptor.kind,
+        filename: descriptor.filename,
+        contentType: descriptor.contentType,
+        localPath: downloaded.localPath,
+        ...(downloaded.sizeBytes === undefined ? {} : { sizeBytes: downloaded.sizeBytes }),
+      });
+    } catch {
+      // Attachment download failure must not leak tokenized file URLs or block text routing.
+    }
+  }
+  return attachments;
+}
+
+function telegramAttachmentDescriptors(
+  message: TelegramTextMessageLike,
+): TelegramAttachmentDownloadRequest[] {
+  const descriptors: TelegramAttachmentDownloadRequest[] = [];
+  const photo = largestTelegramPhoto(message.photo);
+  if (photo !== undefined) {
+    descriptors.push({
+      fileId: photo.file_id,
+      filename: `telegram-photo-${message.message_id}.jpg`,
+      contentType: "image/jpeg",
+      kind: "image",
+      messageId: String(message.message_id),
+    });
+  }
+  const document = message.document;
+  if (document !== undefined) {
+    const contentType = document.mime_type ?? "application/octet-stream";
+    descriptors.push({
+      fileId: document.file_id,
+      filename: safeTelegramFilename(
+        document.file_name ??
+          `telegram-file-${message.message_id}${extensionForContentType(contentType)}`,
+      ),
+      contentType,
+      kind: contentType.toLowerCase().startsWith("image/") ? "image" : "file",
+      messageId: String(message.message_id),
+    });
+  }
+  return descriptors;
+}
+
+function largestTelegramPhoto(
+  photos: readonly TelegramPhotoSizeLike[] | undefined,
+): TelegramPhotoSizeLike | undefined {
+  return photos?.reduce<TelegramPhotoSizeLike | undefined>((best, current) => {
+    if (best === undefined) {
+      return current;
+    }
+    return telegramPhotoScore(current) >= telegramPhotoScore(best) ? current : best;
+  }, undefined);
+}
+
+function telegramPhotoScore(photo: TelegramPhotoSizeLike): number {
+  return photo.file_size ?? (photo.width ?? 0) * (photo.height ?? 0);
+}
+
+async function downloadTelegramFile(input: {
+  readonly request: TelegramAttachmentDownloadRequest;
+  readonly api: TelegramBotApiLike;
+  readonly botToken: string | undefined;
+  readonly attachmentDir: string | undefined;
+  readonly fetch: TelegramFetchLike | undefined;
+}): Promise<TelegramDownloadedAttachment> {
+  if (input.api.getFile === undefined) {
+    throw new Error("TelegramChannelAdapter.downloadFile requires api.getFile");
+  }
+  if (input.botToken === undefined || input.botToken.length === 0) {
+    throw new Error("TelegramChannelAdapter.downloadFile requires botToken");
+  }
+  const fileInfo = await input.api.getFile(input.request.fileId);
+  const filePath = fileInfo.file_path;
+  if (filePath === undefined || filePath.length === 0) {
+    throw new Error("TelegramChannelAdapter.downloadFile received no file_path");
+  }
+  const fetchFile = telegramFetch(input.fetch);
+  const response = await fetchFile(
+    `https://api.telegram.org/file/bot${input.botToken}/${filePath}`,
+  );
+  if (!response.ok) {
+    throw new Error(`TelegramChannelAdapter.downloadFile failed: HTTP ${response.status}`);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const dir = input.attachmentDir ?? defaultTelegramAttachmentDir();
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const localPath = join(
+    dir,
+    `${input.request.messageId}-${input.request.fileId.slice(0, 12)}-${safeTelegramFilename(
+      input.request.filename,
+    )}`,
+  );
+  await writeFile(localPath, bytes, { mode: 0o600 });
+  return { localPath, sizeBytes: bytes.byteLength };
+}
+
+function telegramFetch(fetchOverride: TelegramFetchLike | undefined): TelegramFetchLike {
+  if (fetchOverride !== undefined) {
+    return fetchOverride;
+  }
+  const globalFetch = (globalThis as unknown as { readonly fetch?: TelegramFetchLike }).fetch;
+  if (globalFetch === undefined) {
+    throw new Error("TelegramChannelAdapter.downloadFile requires fetch");
+  }
+  return globalFetch;
+}
+
+function defaultTelegramAttachmentDir(): string {
+  return join(tmpdir(), "codex-im-telegram-attachments");
+}
+
+function safeTelegramFilename(filename: string): string {
+  const base = basename(filename)
+    .replace(/[^\w .@+-]/gu, "_")
+    .trim();
+  const safe = base.length === 0 || base === "." || base === ".." ? "attachment" : base;
+  return safe.slice(0, 160);
+}
+
+function extensionForContentType(contentType: string): string {
+  switch (contentType.toLowerCase()) {
+    case "image/jpeg":
+    case "image/jpg":
+      return ".jpg";
+    case "image/png":
+      return ".png";
+    case "image/webp":
+      return ".webp";
+    case "image/gif":
+      return ".gif";
+    case "application/pdf":
+      return ".pdf";
+    case "text/plain":
+      return ".txt";
+    default:
+      return "";
+  }
 }
 
 function normalizeTelegramCallbackQuery(

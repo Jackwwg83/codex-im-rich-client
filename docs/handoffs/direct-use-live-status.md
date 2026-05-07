@@ -28,10 +28,14 @@
 > place. JAC-237 added `pnpm im:doctor` / `pnpm channels:doctor` as the unified
 > no-live-network readiness surface; callback_click and DingTalk text-append
 > semantics are now informational.
-> Telegram and Feishu/Lark outbound `sendFile` now have adapter-level
-> file/image implementations: Telegram routes common images through
-> `sendPhoto` and generic artifacts through `sendDocument`; Feishu/Lark uploads
-> message images/files through the SDK before sending image/file messages.
+> Telegram and Feishu/Lark attachments now have adapter-level outbound and
+> inbound implementations. Outbound `sendFile` routes Telegram images through
+> `sendPhoto`, generic Telegram artifacts through `sendDocument`, and
+> Feishu/Lark images/files through SDK upload + message send. Inbound Telegram
+> photo/document and Feishu/Lark image/file resources are downloaded to local
+> daemon attachment directories; images are forwarded to Codex as native
+> `UserInput.localImage`, while generic files are passed as explicit local-path
+> context because Codex App Server has no generic `UserInput.file` shape.
 > DingTalk attachments remain unsupported until a real DingTalk file delivery
 > API path is proven.
 > Daemon terminal turn output now maps completed Codex `imageGeneration`
@@ -631,6 +635,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT outbound attachment loop | Telegram/Lark adapter-level `sendFile` is implemented and covered by contract tests. Telegram sends image MIME payloads as photos and generic files as documents with topic routing preserved. Feishu/Lark uploads image/file bytes through SDK `im.image.create` / `im.file.create` and sends `image` / `file` messages. DingTalk remains `supportsAttachments=false` until a real supported file-send path is proven. |
 | 2026-05-07 SGT daemon artifact loop | Daemon terminal turn output now collects completed `imageGeneration.savedPath` items and sends the saved local image through adapter `sendFile` after publishing the terminal text summary. Files are capped, empty files are skipped, unsupported adapters audit-skip, and the implementation keeps Codex `imageGeneration` as the source concept. |
 | 2026-05-07 SGT live attachment gates | Temporarily stopped launchd to avoid Telegram polling contention, then ran explicit live file gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless `codex-im-live-attachment.txt`; Feishu/Lark `LARK_LIVE_FILE=1` sent a harmless file and returned redacted `messageId=present`. Launchd was bootstrapped/kickstarted back to pid `94243`; `pnpm launchd:status` and `pnpm im:doctor` are ready. |
+| 2026-05-07 SGT inbound attachment loop | Telegram inbound `photo` / `document` and Feishu/Lark inbound `image` / `file` messages now materialize platform resources to local daemon attachment directories before routing. Daemon maps image attachments to Codex `localImage` inputs and appends generic file paths to the prompt text instead of inventing a non-existent Codex file input. Targeted tests passed: Telegram on-message, Lark on-message + SDK client, and daemon routing (135 tests total), plus `pnpm typecheck:tests` and `pnpm lint`. DingTalk remains explicit unsupported for attachments. |
 
 Latest live Telegram acceptance evidence:
 

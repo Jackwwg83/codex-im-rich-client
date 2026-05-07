@@ -2,6 +2,7 @@ import type {
   ActionAck,
   ChannelAdapter,
   InboundAction,
+  InboundAttachment,
   InboundMessage,
   MessageRef,
   OutboundFile,
@@ -15,7 +16,11 @@ import {
 } from "./action.js";
 import { LARK_CAPABILITIES } from "./capabilities.js";
 import { type LarkApprovalCardJson, renderLarkApprovalCard } from "./card.js";
-import { type LarkRawMessageEvent, normalizeLarkRawMessage } from "./message.js";
+import {
+  type LarkRawMessageEvent,
+  larkMessageResourceAttachmentDescriptor,
+  normalizeLarkRawMessage,
+} from "./message.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
@@ -53,6 +58,13 @@ export interface LarkMessageClientLike {
   sendFile?(input: { target: Target; file: OutboundFile }): Promise<{ messageId: string }>;
   sendCard?(input: { target: Target; card: LarkApprovalCardJson }): Promise<{ messageId: string }>;
   updateCard?(input: { messageRef: MessageRef; card: LarkApprovalCardJson }): Promise<void>;
+  downloadFile?(input: {
+    messageId: string;
+    fileKey: string;
+    kind: "image" | "file";
+    filename: string;
+    contentType: string;
+  }): Promise<{ localPath: string; sizeBytes?: number }>;
 }
 
 export interface LarkActionClientLike {
@@ -224,8 +236,8 @@ export class LarkChannelAdapter implements ChannelAdapter {
     return this.#options.now?.() ?? new Date();
   }
 
-  _emitRawMessageForTest(raw: LarkRawMessageEvent): void {
-    this.#emitRawMessage(raw);
+  _emitRawMessageForTest(raw: LarkRawMessageEvent): Promise<void> {
+    return this.#emitRawMessage(raw);
   }
 
   _emitRawActionForTest(raw: LarkRawCardActionInput): void {
@@ -263,13 +275,13 @@ export class LarkChannelAdapter implements ChannelAdapter {
     }
   }
 
-  #emitRawMessage(raw: LarkRawMessageEvent): void {
+  async #emitRawMessage(raw: LarkRawMessageEvent): Promise<void> {
     if (!this.#acceptInbound()) {
       return;
     }
     let msg: InboundMessage;
     try {
-      msg = normalizeLarkRawMessage(raw, this.#nowMs());
+      msg = normalizeLarkRawMessage(raw, this.#nowMs(), await this.#materializeAttachments(raw));
     } catch {
       return;
     }
@@ -327,15 +339,46 @@ export class LarkChannelAdapter implements ChannelAdapter {
     return messageClient;
   }
 
+  async #materializeAttachments(raw: LarkRawMessageEvent): Promise<readonly InboundAttachment[]> {
+    const descriptor = larkMessageResourceAttachmentDescriptor(raw);
+    if (descriptor === undefined) {
+      return [];
+    }
+    const messageId = raw.message?.message_id;
+    const downloadFile = this.#options.messageClient?.downloadFile;
+    if (messageId === undefined || downloadFile === undefined) {
+      return [];
+    }
+    try {
+      const downloaded = await downloadFile({
+        messageId,
+        fileKey: descriptor.fileKey,
+        kind: descriptor.kind,
+        filename: descriptor.filename,
+        contentType: descriptor.contentType,
+      });
+      return [
+        {
+          kind: descriptor.kind,
+          filename: descriptor.filename,
+          contentType: descriptor.contentType,
+          localPath: downloaded.localPath,
+          ...(downloaded.sizeBytes === undefined ? {} : { sizeBytes: downloaded.sizeBytes }),
+        },
+      ];
+    } catch {
+      return [];
+    }
+  }
+
   #installInboundHandlers(eventDispatcher: LarkEventDispatcherLike): void {
     if (this.#inboundHandlersInstalled) {
       return;
     }
     const handlers: LarkEventHandlerMap = {};
     if (this.#onMessageHandlers.size > 0) {
-      handlers["im.message.receive_v1"] = (event: LarkRawMessageEvent) => {
+      handlers["im.message.receive_v1"] = (event: LarkRawMessageEvent) =>
         this.#emitRawMessage(event);
-      };
     }
     if (this.#onActionHandlers.size > 0) {
       handlers["card.action.trigger"] = (event: LarkRawCardActionInput) => {

@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   type LarkEventDispatcherLike,
@@ -190,6 +193,50 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
     ]);
   });
 
+  it("downloads inbound message resources to the configured attachment directory", async () => {
+    const attachmentDir = await mkdtemp(join(tmpdir(), "codex-im-lark-test-"));
+    const sdkCalls: unknown[] = [];
+    try {
+      const deps = fakeSdkDeps({ sdkCalls, resourceBytes: new TextEncoder().encode("log text") });
+      const adapter = createLarkSdkChannelAdapter({ ...CONFIG, attachmentDir }, deps);
+      const seen: unknown[] = [];
+
+      adapter.onMessage((msg) => seen.push(msg));
+      await adapter.start();
+      await adapter._emitRawMessageForTest({
+        sender: { sender_id: { open_id: "ou_file_sender" } },
+        message: {
+          message_id: "om_resource_message",
+          chat_id: "oc_resource_chat",
+          chat_type: "p2p",
+          message_type: "file",
+          content: JSON.stringify({ file_key: "file_resource_key", file_name: "build.log" }),
+          create_time: "1777750006000",
+        },
+      });
+
+      const attachment = (
+        seen[0] as {
+          readonly attachments?: readonly [
+            { readonly localPath: string; readonly sizeBytes: number },
+          ];
+        }
+      ).attachments?.[0];
+      expect(attachment?.localPath.startsWith(attachmentDir)).toBe(true);
+      expect(attachment?.sizeBytes).toBe(8);
+      await expect(readFile(attachment?.localPath ?? "", "utf8")).resolves.toBe("log text");
+      expect(sdkCalls).toContainEqual({
+        method: "messageResourceGet",
+        payload: {
+          path: { message_id: "om_resource_message", file_key: "file_resource_key" },
+          params: { type: "file" },
+        },
+      });
+    } finally {
+      await rm(attachmentDir, { recursive: true, force: true });
+    }
+  });
+
   it("converts each message id to card id once before CardKit updates", async () => {
     const sdkCalls: unknown[] = [];
     const deps = fakeSdkDeps({ sdkCalls });
@@ -251,6 +298,7 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
 function fakeSdkDeps(options: {
   readonly dispatcher?: FakeSdkEventDispatcher;
   readonly cardKitUpdateError?: unknown;
+  readonly resourceBytes?: Uint8Array;
   readonly sdkCalls?: unknown[];
   readonly wsClient?: LarkWsClientLike;
 }): LarkSdkDeps {
@@ -289,6 +337,16 @@ function fakeSdkDeps(options: {
           async update(payload: unknown) {
             sdkCalls.push({ method: "update", payload });
             return { code: 0, data: { message_id: "om_update" } };
+          },
+        },
+        messageResource: {
+          async get(payload: unknown) {
+            sdkCalls.push({ method: "messageResourceGet", payload });
+            return {
+              async writeFile(path: string) {
+                await writeFile(path, Buffer.from(options.resourceBytes ?? []));
+              },
+            };
           },
         },
       },

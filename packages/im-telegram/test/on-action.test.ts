@@ -35,7 +35,7 @@ class FakeTelegramBot implements TelegramBotLike {
   #callbackHandlers: Array<(ctx: TelegramCallbackQueryContextLike) => void | Promise<void>> = [];
 
   on(
-    filter: "message:text" | "callback_query:data",
+    filter: "message:text" | "message:photo" | "message:document" | "callback_query:data",
     handler:
       | ((ctx: TelegramCallbackQueryContextLike) => void | Promise<void>)
       | ((ctx: never) => void | Promise<void>),

@@ -264,6 +264,21 @@ interface DaemonTextInput {
   readonly text_elements: [];
 }
 
+interface DaemonLocalImageInput {
+  readonly type: "localImage";
+  readonly path: string;
+}
+
+type DaemonUserInput = DaemonTextInput | DaemonLocalImageInput;
+
+interface DaemonInboundAttachment {
+  readonly kind: "image" | "file";
+  readonly filename: string;
+  readonly contentType: string;
+  readonly localPath: string;
+  readonly sizeBytes?: number;
+}
+
 interface DaemonCodexRuntime {
   readonly events?: {
     events(): AsyncIterableIterator<CodexRichEvent>;
@@ -326,7 +341,7 @@ interface DaemonThreadForkParams {
 
 interface DaemonTurnStartParams {
   readonly threadId: string;
-  readonly input: DaemonTextInput[];
+  readonly input: DaemonUserInput[];
   readonly cwd?: string | null;
   readonly model?: string | null;
 }
@@ -338,7 +353,7 @@ interface DaemonTurnStartResult {
 
 interface DaemonTurnSteerParams {
   readonly threadId: string;
-  readonly input: DaemonTextInput[];
+  readonly input: DaemonUserInput[];
   readonly expectedTurnId: string;
 }
 
@@ -773,6 +788,7 @@ export class Daemon {
           target: Target;
           sender: SecurityPolicySender;
           text: string;
+          attachments: readonly DaemonInboundAttachment[];
           messageRef?: DaemonMessageRef;
         }
       | undefined;
@@ -800,7 +816,7 @@ export class Daemon {
         return;
       }
 
-      const routed = routeInboundCommand(inbound.text);
+      const routed = routeInboundCommand(inbound.text, { attachments: inbound.attachments });
       this.#emitAuditEvent("inbound.message_allowed", {
         target: inbound.target,
         result: "allowed",
@@ -808,10 +824,17 @@ export class Daemon {
           actorKey: actorKey(inbound.target, inbound.sender),
           routeKind: routed.kind,
           textLength: inbound.text.length,
+          attachmentCount: inbound.attachments.length,
+          imageAttachmentCount: inbound.attachments.filter(
+            (attachment) => attachment.kind === "image",
+          ).length,
+          fileAttachmentCount: inbound.attachments.filter(
+            (attachment) => attachment.kind === "file",
+          ).length,
         },
       });
       if (routed.kind === "prompt") {
-        await this.#routePrompt(inbound, routed.text);
+        await this.#routePrompt(inbound, routed.text, routed.attachments);
         return;
       }
 
@@ -1363,8 +1386,13 @@ export class Daemon {
   }
 
   async #routePrompt(
-    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    inbound: {
+      target: Target;
+      sender: SecurityPolicySender;
+      messageRef?: DaemonMessageRef;
+    },
     text: string,
+    attachments: readonly DaemonInboundAttachment[],
   ): Promise<void> {
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();
@@ -1388,7 +1416,7 @@ export class Daemon {
       return;
     }
 
-    const input = textInput(text);
+    const input = promptInput(text, attachments);
     if (route.activeTurnId !== undefined) {
       await runtime.turnSteer({
         threadId: route.codexThreadId,
@@ -1506,7 +1534,7 @@ export class Daemon {
   #startPromptTurn(
     runtime: DaemonCodexRuntime,
     route: Extract<SessionRoute, { kind: "bound" }> & { codexThreadId: string },
-    input: DaemonTextInput[],
+    input: DaemonUserInput[],
   ): Promise<DaemonTurnStartResult> {
     return Promise.resolve(
       runtime.turnStart({
@@ -3147,6 +3175,7 @@ export class Daemon {
         target: Target;
         sender: SecurityPolicySender;
         text: string;
+        attachments: readonly DaemonInboundAttachment[];
         messageRef?: DaemonMessageRef;
       }
     | undefined {
@@ -3157,6 +3186,7 @@ export class Daemon {
       target: unknown;
       sender: unknown;
       text: unknown;
+      attachments: unknown;
       messageRef: unknown;
     }>;
     const target = this.#daemonTarget(partial.target);
@@ -3165,11 +3195,58 @@ export class Daemon {
       return undefined;
     }
     const messageRef = this.#daemonMessageRef(partial.messageRef);
+    const attachments = this.#daemonInboundAttachments(partial.attachments);
     return {
       target,
       sender,
       text: partial.text,
+      attachments,
       ...(messageRef === undefined ? {} : { messageRef }),
+    };
+  }
+
+  #daemonInboundAttachments(value: unknown): readonly DaemonInboundAttachment[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const attachments: DaemonInboundAttachment[] = [];
+    for (const item of value) {
+      const attachment = this.#daemonInboundAttachment(item);
+      if (attachment !== undefined) {
+        attachments.push(attachment);
+      }
+    }
+    return attachments;
+  }
+
+  #daemonInboundAttachment(value: unknown): DaemonInboundAttachment | undefined {
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+    const partial = value as Partial<{
+      kind: unknown;
+      filename: unknown;
+      contentType: unknown;
+      localPath: unknown;
+      sizeBytes: unknown;
+    }>;
+    if (
+      (partial.kind !== "image" && partial.kind !== "file") ||
+      typeof partial.filename !== "string" ||
+      typeof partial.contentType !== "string" ||
+      typeof partial.localPath !== "string" ||
+      partial.localPath.length === 0
+    ) {
+      return undefined;
+    }
+    return {
+      kind: partial.kind,
+      filename: partial.filename,
+      contentType: partial.contentType,
+      localPath: partial.localPath,
+      ...(typeof partial.sizeBytes === "number" && Number.isFinite(partial.sizeBytes)
+        ? { sizeBytes: partial.sizeBytes }
+        : {}),
     };
   }
 
@@ -3255,7 +3332,57 @@ function generateRawCallbackToken(): string {
 }
 
 function textInput(text: string): DaemonTextInput[] {
-  return [{ type: "text", text, text_elements: [] }];
+  return [textInputItem(text)];
+}
+
+function textInputItem(text: string): DaemonTextInput {
+  return { type: "text", text, text_elements: [] };
+}
+
+function promptInput(
+  text: string,
+  attachments: readonly DaemonInboundAttachment[] = [],
+): DaemonUserInput[] {
+  if (attachments.length === 0) {
+    return textInput(text);
+  }
+  const fileAttachments = attachments.filter((attachment) => attachment.kind === "file");
+  const imageAttachments = attachments.filter((attachment) => attachment.kind === "image");
+  const textWithFiles = promptTextWithFileAttachments(text, fileAttachments, imageAttachments);
+  const input: DaemonUserInput[] = [];
+  if (textWithFiles.length > 0) {
+    input.push(textInputItem(textWithFiles));
+  }
+  for (const attachment of imageAttachments) {
+    input.push({ type: "localImage", path: attachment.localPath });
+  }
+  return input.length === 0 ? textInput("Please inspect the attached file(s).") : input;
+}
+
+function promptTextWithFileAttachments(
+  text: string,
+  fileAttachments: readonly DaemonInboundAttachment[],
+  imageAttachments: readonly DaemonInboundAttachment[],
+): string {
+  const trimmed = text.trim();
+  const sections: string[] = [];
+  if (trimmed.length > 0) {
+    sections.push(text);
+  } else if (imageAttachments.length > 0 && fileAttachments.length === 0) {
+    sections.push("Please inspect the attached image(s).");
+  }
+  if (fileAttachments.length > 0) {
+    sections.push(
+      [
+        "Attached file(s) saved locally for Codex:",
+        ...fileAttachments.map((attachment) => {
+          const size = attachment.sizeBytes === undefined ? "" : `, ${attachment.sizeBytes} bytes`;
+          return `- ${attachment.filename} (${attachment.contentType}${size}): ${attachment.localPath}`;
+        }),
+      ].join("\n"),
+    );
+  }
+  return sections.join("\n\n");
 }
 
 function turnOutputKey(threadId: string, turnId: string): string {

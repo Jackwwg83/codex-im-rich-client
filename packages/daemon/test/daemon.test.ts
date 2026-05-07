@@ -722,6 +722,147 @@ describe("Daemon skeleton (T14)", () => {
     });
   });
 
+  it("maps inbound image attachments to Codex localImage turn input", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-image" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => route), bind: vi.fn() }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "what changed in this screenshot?",
+      attachments: [
+        {
+          kind: "image",
+          filename: "screenshot.png",
+          contentType: "image/png",
+          localPath: "/tmp/codex-im/screenshot.png",
+          sizeBytes: 4,
+        },
+      ],
+      messageRef: { target, messageId: "msg-image" },
+      receivedAt: new Date("2026-05-02T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      input: [
+        { type: "text", text: "what changed in this screenshot?", text_elements: [] },
+        { type: "localImage", path: "/tmp/codex-im/screenshot.png" },
+      ],
+      cwd: "/repo/web",
+    });
+  });
+
+  it("passes inbound generic files as local path context without inventing Codex file input", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-file" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => route), bind: vi.fn() }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "summarize this log",
+      attachments: [
+        {
+          kind: "file",
+          filename: "server.log",
+          contentType: "text/plain",
+          localPath: "/tmp/codex-im/server.log",
+          sizeBytes: 12,
+        },
+      ],
+      messageRef: { target, messageId: "msg-file" },
+      receivedAt: new Date("2026-05-02T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      input: [
+        {
+          type: "text",
+          text: [
+            "summarize this log",
+            "",
+            "Attached file(s) saved locally for Codex:",
+            "- server.log (text/plain, 12 bytes): /tmp/codex-im/server.log",
+          ].join("\n"),
+          text_elements: [],
+        },
+      ],
+      cwd: "/repo/web",
+    });
+    expect(JSON.stringify(runtime.turnStart.mock.calls)).not.toContain('"type":"file"');
+  });
+
   it("routes an allowed prompt with an active turn to runtime.turnSteer", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
