@@ -32,15 +32,14 @@
 > media delivery when `DINGTALK_TARGET_CHAT_ID` is configured. DingTalk
 > attachment live acceptance now passes for both file and image gates with
 > redacted `status=file_sent`, `targetSource=env`, and message id presence only.
-> Inbound DingTalk image materialization now also has a passing real live gate:
-> a real DingTalk Desktop image send reached Stream with
+> Inbound DingTalk image and generic-file materialization now also have passing
+> real live gates: real DingTalk Desktop uploads reached Stream with
 > `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, and
 > `attachmentEvents=1`; the adapter recognized the live `content.downloadCode`
-> / `content.pictureDownloadCode` shape, used the generic `downloadCode` for
-> `/v1.0/robot/messageFiles/download`, saved a local file, and emitted common
-> `InboundAttachment[]` with only redacted presence evidence. DingTalk inbound
-> generic file upload still needs the same explicit live gate before claiming
-> file-upload parity.
+> / `content.pictureDownloadCode` image shape and the generic `msgtype=file`
+> / `content.downloadCode` file shape, used the generic `downloadCode` for
+> `/v1.0/robot/messageFiles/download`, saved local files, and emitted common
+> `InboundAttachment[]` with only redacted counters/presence evidence.
 > Daemon terminal output can now deliver Codex-native artifacts through IM:
 > short command output is inline, long completed/failed command output becomes
 > a redacted `.log` attachment, file-change diffs become redacted `.patch`
@@ -164,7 +163,7 @@ control/status/policy/audit/output projection, not verified desktop execution.
 | DingTalk outbound image/file attachment | `DingTalkChannelAdapter.sendFile` through a session reply URL or proactive `DINGTALK_TARGET_CHAT_ID` target | pass | client obtains a DingTalk access token, uploads bytes through `/media/upload`, sends `image` / `file` via the captured session webhook when available, or sends proactive robot group/user media when no session reply URL exists; explicit `DINGTALK_LIVE_FILE=1` file and image gates both returned redacted `status=file_sent`, `targetSource=env`, and `messageId=present` |
 | Installed DingTalk proactive attachment bundle | `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k ... && pnpm launchd:status && pnpm im:doctor` | pass | installed daemon restarted to pid `53319` with `pendingApprovals=0`; doctor is ready and reports DingTalk file support through session reply URL or proactive target; installed bridge redaction scan returned `redaction scan ok` |
 | DingTalk inbound image attachment | real DingTalk Desktop image upload through `DINGTALK_LIVE_INBOUND_ATTACHMENT=1` | pass | live gate returned redacted `status=inbound_attachment_received`, `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, `attachmentDownloadAttempts=1`, `attachmentDownloadSuccesses=1`, and local path/filename/size presence only; parser now handles DingTalk's live `msgtype=<other>` plus `content.downloadCode` / `content.pictureDownloadCode` shape and uses the generic `downloadCode` for the robot file download API |
-| DingTalk inbound generic file attachment | real DingTalk Desktop file upload through `DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND=file` | local pass; live pending | same materialization path covers robot `file` messages locally; run one real file-upload gate before claiming DingTalk generic-file parity |
+| DingTalk inbound generic file attachment | real DingTalk Desktop file upload through `DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND=file` | pass | 2026-05-08 live gate returned redacted `status=inbound_attachment_received`, `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, `attachmentDownloadAttempts=1`, `attachmentDownloadSuccesses=1`, and local path/filename/size presence only; live raw shape was `msgtype=file` with `content.downloadCode` / `content.fileName` |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -177,7 +176,7 @@ provider is implemented.
 
 ## 4. Passing Criteria
 
-As of 2026-05-07, the enabled Telegram / Feishu-Lark / DingTalk live IM
+As of 2026-05-08, the enabled Telegram / Feishu-Lark / DingTalk live IM
 acceptance matrix is complete with redacted evidence. Future platforms or
 capabilities must satisfy the same criteria before being called live accepted.
 
@@ -681,7 +680,18 @@ Stop and treat as a blocker if:
   `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`,
   `attachmentDownloadAttempts=1`, `attachmentDownloadSuccesses=1`,
   `attachmentDownloadFailures=0`, and only path/filename/size presence fields.
-  DingTalk inbound generic file live acceptance remains pending separately.
+- 2026-05-08 SGT inbound attachment parity gate: temporarily kept launchd
+  stopped to avoid long-polling/Stream contention, then ran the new explicit
+  Telegram and Feishu/Lark inbound attachment live gates plus the remaining
+  DingTalk generic-file gate. Telegram Web file and image uploads both returned
+  `smoke:telegram-live INBOUND_ATTACHMENT_RECEIVED` with local path/filename/size
+  presence. Feishu Web file and image uploads both returned redacted
+  `status=inbound_attachment_received`, `messageEvents=1`, and
+  `attachmentEvents=1`. DingTalk Desktop generic file upload returned redacted
+  `status=inbound_attachment_received`, `rawStreamEvents=1`,
+  `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`,
+  `attachmentDownloadAttempts=1`, `attachmentDownloadSuccesses=1`, and
+  `attachmentDownloadFailures=0`.
 - 2026-05-07 SGT Codex-native control loop: The common IM command plane now
   exposes Codex App Server-native surfaces for model listing, thread
   compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,

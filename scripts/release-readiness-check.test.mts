@@ -117,6 +117,8 @@ describe("release-readiness-check (JAC-169)", () => {
     const hostileEnv = {
       TELEGRAM_LIVE: "1",
       TELEGRAM_LIVE_FILE: "1",
+      TELEGRAM_LIVE_INBOUND_ATTACHMENT: "1",
+      TELEGRAM_LIVE_INBOUND_ATTACHMENT_KIND: "file",
       TELEGRAM_LIVE_TARGET_CHAT_ID: "12345",
       TELEGRAM_LIVE_ROUNDTRIP: "1",
       TELEGRAM_LIVE_DURATION_MS: "0",
@@ -129,6 +131,9 @@ describe("release-readiness-check (JAC-169)", () => {
       CODEX_REAL_SMOKE_PROMPT: "real prompt",
       LARK_LIVE: "1",
       LARK_LIVE_FILE: "1",
+      LARK_LIVE_INBOUND_ATTACHMENT: "1",
+      LARK_LIVE_INBOUND_ATTACHMENT_KIND: "image",
+      LARK_LIVE_DURATION_MS: "0",
       LARK_LIVE_DRY_RUN: "1",
       LARK_APP_ID: "app-id",
       LARK_APP_SECRET_ENV: "LARK_APP_SECRET",
@@ -137,6 +142,8 @@ describe("release-readiness-check (JAC-169)", () => {
       LARK_LIVE_TEXT: "text",
       DINGTALK_LIVE: "1",
       DINGTALK_LIVE_DRY_RUN: "1",
+      DINGTALK_LIVE_INBOUND_ATTACHMENT: "1",
+      DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND: "file",
       DINGTALK_CLIENT_ID: "client-id",
       DINGTALK_CLIENT_SECRET_ENV: "DINGTALK_CLIENT_SECRET",
       DINGTALK_CLIENT_SECRET: "secret",
@@ -164,6 +171,8 @@ describe("release-readiness-check (JAC-169)", () => {
       expect(env.PATH).toBe("/usr/bin");
       expect(env.TELEGRAM_LIVE).toBeUndefined();
       expect(env.TELEGRAM_LIVE_FILE).toBeUndefined();
+      expect(env.TELEGRAM_LIVE_INBOUND_ATTACHMENT).toBeUndefined();
+      expect(env.TELEGRAM_LIVE_INBOUND_ATTACHMENT_KIND).toBeUndefined();
       expect(env.TELEGRAM_LIVE_TARGET_CHAT_ID).toBeUndefined();
       expect(env.TELEGRAM_LIVE_ROUNDTRIP).toBeUndefined();
       expect(env.IM_TELEGRAM_BOT_TOKEN).toBeUndefined();
@@ -174,9 +183,14 @@ describe("release-readiness-check (JAC-169)", () => {
       expect(env.CODEX_REAL_SMOKE).toBeUndefined();
       expect(env.LARK_LIVE).toBeUndefined();
       expect(env.LARK_LIVE_FILE).toBeUndefined();
+      expect(env.LARK_LIVE_INBOUND_ATTACHMENT).toBeUndefined();
+      expect(env.LARK_LIVE_INBOUND_ATTACHMENT_KIND).toBeUndefined();
+      expect(env.LARK_LIVE_DURATION_MS).toBeUndefined();
       expect(env.LARK_APP_SECRET_ENV).toBeUndefined();
       expect(env.LARK_APP_SECRET).toBeUndefined();
       expect(env.DINGTALK_LIVE).toBeUndefined();
+      expect(env.DINGTALK_LIVE_INBOUND_ATTACHMENT).toBeUndefined();
+      expect(env.DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND).toBeUndefined();
       expect(env.DINGTALK_CLIENT_SECRET_ENV).toBeUndefined();
       expect(env.DINGTALK_CLIENT_SECRET).toBeUndefined();
       expect(env.COMPUTER_USE_LIVE).toBeUndefined();

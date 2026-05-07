@@ -131,6 +131,42 @@ describe("smoke:telegram-live (T35)", () => {
     expect(runLive).toHaveBeenCalledTimes(1);
   });
 
+  it("passes explicit inbound attachment gate to the injected live runner", async () => {
+    const stdout: string[] = [];
+    const runLive = vi.fn<TelegramLiveRunner>(async (input) => {
+      expect(input.inboundAttachmentKind).toBe("image");
+      return {
+        started: true,
+        stopped: true,
+        inboundAttachmentReceived: true,
+        inboundAttachmentKind: "image",
+      };
+    });
+
+    const result = await runTelegramLiveSmokeCore({
+      env: {
+        TELEGRAM_LIVE: "1",
+        TELEGRAM_LIVE_INBOUND_ATTACHMENT: "1",
+        TELEGRAM_LIVE_INBOUND_ATTACHMENT_KIND: "image",
+        IM_TELEGRAM_BOT_TOKEN: TOKEN,
+      },
+      output: (line) => stdout.push(line),
+      runLive,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      durationMs: 5000,
+      started: true,
+      stopped: true,
+      inboundAttachmentReceived: true,
+      inboundAttachmentKind: "image",
+    });
+    expect(runLive).toHaveBeenCalledTimes(1);
+    expect(stdout.join("\n")).toContain("smoke:telegram-live ok");
+    expect(stdout.join("\n")).not.toContain(TOKEN);
+  });
+
   it("bounds live smoke duration parsing", () => {
     expect(parseTelegramLiveDurationMs(undefined)).toBe(5000);
     expect(parseTelegramLiveDurationMs("0")).toBe(0);

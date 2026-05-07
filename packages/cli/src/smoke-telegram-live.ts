@@ -4,8 +4,11 @@ export type TelegramLiveSmokeFailureReason =
   | "missing-live-flag"
   | "missing-token"
   | "missing-target"
+  | "invalid-inbound-attachment-kind"
   | "invalid-duration"
   | "live-failed";
+
+export type TelegramLiveInboundAttachmentKind = "any" | "file" | "image";
 
 export type TelegramLiveSmokeResult =
   | {
@@ -14,6 +17,8 @@ export type TelegramLiveSmokeResult =
       readonly started: boolean;
       readonly stopped: boolean;
       readonly fileSent?: boolean;
+      readonly inboundAttachmentReceived?: boolean;
+      readonly inboundAttachmentKind?: "file" | "image";
     }
   | { readonly ok: false; readonly reason: TelegramLiveSmokeFailureReason };
 
@@ -21,13 +26,18 @@ export interface TelegramLiveRunnerInput {
   readonly botToken: string;
   readonly durationMs: number;
   readonly fileTargetChatId?: string;
+  readonly inboundAttachmentKind?: TelegramLiveInboundAttachmentKind;
   readonly sleep: (ms: number) => Promise<void>;
   readonly output: (line: string) => void;
 }
 
-export type TelegramLiveRunner = (
-  input: TelegramLiveRunnerInput,
-) => Promise<{ readonly started: boolean; readonly stopped: boolean; readonly fileSent?: boolean }>;
+export type TelegramLiveRunner = (input: TelegramLiveRunnerInput) => Promise<{
+  readonly started: boolean;
+  readonly stopped: boolean;
+  readonly fileSent?: boolean;
+  readonly inboundAttachmentReceived?: boolean;
+  readonly inboundAttachmentKind?: "file" | "image";
+}>;
 
 export interface RunTelegramLiveSmokeOptions {
   readonly env?: Record<string, string | undefined>;
@@ -72,6 +82,16 @@ export async function runTelegramLiveSmokeCore(
     errorOutput("smoke:telegram-live file mode requires TELEGRAM_LIVE_TARGET_CHAT_ID.");
     return { ok: false, reason: "missing-target" };
   }
+  let inboundAttachmentKind: TelegramLiveInboundAttachmentKind | undefined;
+  try {
+    inboundAttachmentKind =
+      env.TELEGRAM_LIVE_INBOUND_ATTACHMENT === "1"
+        ? parseTelegramLiveInboundAttachmentKind(env.TELEGRAM_LIVE_INBOUND_ATTACHMENT_KIND)
+        : undefined;
+  } catch (error) {
+    errorOutput(redactTelegramSecrets(describeError(error)));
+    return { ok: false, reason: "invalid-inbound-attachment-kind" };
+  }
 
   let durationMs: number;
   try {
@@ -86,6 +106,7 @@ export async function runTelegramLiveSmokeCore(
       botToken,
       durationMs,
       ...(fileTargetChatId === undefined ? {} : { fileTargetChatId }),
+      ...(inboundAttachmentKind === undefined ? {} : { inboundAttachmentKind }),
       sleep,
       output,
     });
@@ -95,6 +116,10 @@ export async function runTelegramLiveSmokeCore(
       started: live.started,
       stopped: live.stopped,
       ...(live.fileSent === true ? { fileSent: true } : {}),
+      ...(live.inboundAttachmentReceived === true ? { inboundAttachmentReceived: true } : {}),
+      ...(live.inboundAttachmentKind === undefined
+        ? {}
+        : { inboundAttachmentKind: live.inboundAttachmentKind }),
     } as const;
     output(
       `smoke:telegram-live ok durationMs=${result.durationMs} started=${result.started} stopped=${result.stopped}`,
@@ -124,9 +149,29 @@ export function parseTelegramLiveDurationMs(raw: string | undefined): number {
   return parsed;
 }
 
-export async function runTelegramLiveSmokeWithAdapter(
-  input: TelegramLiveRunnerInput,
-): Promise<{ readonly started: boolean; readonly stopped: boolean; readonly fileSent?: boolean }> {
+export function parseTelegramLiveInboundAttachmentKind(
+  raw: string | undefined,
+): TelegramLiveInboundAttachmentKind {
+  const kind = raw ?? "any";
+  if (kind === "any" || kind === "file" || kind === "image") {
+    return kind;
+  }
+  throw new Error("TELEGRAM_LIVE_INBOUND_ATTACHMENT_KIND must be any, file, or image");
+}
+
+export async function runTelegramLiveSmokeWithAdapter(input: TelegramLiveRunnerInput): Promise<{
+  readonly started: boolean;
+  readonly stopped: boolean;
+  readonly fileSent?: boolean;
+  readonly inboundAttachmentReceived?: boolean;
+  readonly inboundAttachmentKind?: "file" | "image";
+}> {
+  if (input.inboundAttachmentKind !== undefined) {
+    return runTelegramLiveInboundAttachmentSmokeWithAdapter({
+      ...input,
+      inboundAttachmentKind: input.inboundAttachmentKind,
+    });
+  }
   const fileTargetChatId = input.fileTargetChatId;
   if (fileTargetChatId !== undefined) {
     return runTelegramLiveFileSmokeWithAdapter({ ...input, fileTargetChatId });
@@ -173,6 +218,99 @@ async function runTelegramLiveFileSmokeWithAdapter(
     stopped = true;
   }
   return { started, stopped, fileSent };
+}
+
+async function runTelegramLiveInboundAttachmentSmokeWithAdapter(
+  input: TelegramLiveRunnerInput & {
+    readonly inboundAttachmentKind: TelegramLiveInboundAttachmentKind;
+  },
+): Promise<{
+  readonly started: boolean;
+  readonly stopped: boolean;
+  readonly inboundAttachmentReceived: true;
+  readonly inboundAttachmentKind: "file" | "image";
+}> {
+  const bot = new TelegramLiveSmokeBot({ botToken: input.botToken });
+  const adapter = new TelegramChannelAdapter({ bot, botToken: input.botToken });
+  let started = false;
+  let stopped = false;
+  let messageEvents = 0;
+  let attachmentEvents = 0;
+  let received:
+    | {
+        readonly kind: "file" | "image";
+        readonly hasLocalPath: boolean;
+        readonly hasSizeBytes: boolean;
+        readonly hasFilename: boolean;
+      }
+    | undefined;
+  const unsubscribe = adapter.onMessage((message) => {
+    messageEvents++;
+    for (const attachment of message.attachments ?? []) {
+      if (
+        input.inboundAttachmentKind !== "any" &&
+        attachment.kind !== input.inboundAttachmentKind
+      ) {
+        continue;
+      }
+      attachmentEvents++;
+      if (received === undefined) {
+        received = {
+          kind: attachment.kind,
+          hasLocalPath: attachment.localPath.length > 0,
+          hasSizeBytes: attachment.sizeBytes !== undefined,
+          hasFilename: attachment.filename.length > 0,
+        };
+      }
+    }
+  });
+
+  try {
+    await adapter.start();
+    started = true;
+    input.output(
+      "smoke:telegram-live INBOUND_ATTACHMENT_WAITING: send one Telegram image/file message to the bot during the smoke window.",
+    );
+    await waitFor(() => received !== undefined, input.durationMs, input.sleep);
+    if (received === undefined) {
+      throw new Error(
+        `no Telegram inbound image/file attachment arrived before timeout messageEvents=${messageEvents} attachmentEvents=${attachmentEvents}`,
+      );
+    }
+    input.output(
+      [
+        "smoke:telegram-live INBOUND_ATTACHMENT_RECEIVED",
+        `kind=${received.kind}`,
+        `localPath=${received.hasLocalPath ? "present" : "missing"}`,
+        `sizeBytes=${received.hasSizeBytes ? "present" : "missing"}`,
+        `filename=${received.hasFilename ? "present" : "missing"}`,
+      ].join(" "),
+    );
+  } finally {
+    unsubscribe();
+    await adapter.stop();
+    stopped = true;
+  }
+  if (received === undefined) {
+    throw new Error("Telegram inbound attachment state was lost before completion");
+  }
+  return {
+    started,
+    stopped,
+    inboundAttachmentReceived: true,
+    inboundAttachmentKind: received.kind,
+  };
+}
+
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs: number,
+  sleep: (ms: number) => Promise<void>,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate() && Date.now() < deadline) {
+    await sleep(Math.min(250, Math.max(0, deadline - Date.now())));
+  }
 }
 
 export async function run(): Promise<void> {

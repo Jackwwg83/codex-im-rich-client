@@ -56,6 +56,7 @@ DingTalk inbound user-upload gate
 -> DINGTALK_LIVE_INBOUND_ATTACHMENT=1 image gate passed with redacted status=inbound_attachment_received
 -> rawStreamEvents=1, rawRobotCallbacks=1, robotEvents=1, attachmentEvents=1
 -> attachmentDownloadAttempts=1, attachmentDownloadSuccesses=1, attachmentDownloadFailures=0
+-> DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND=file gate passed on 2026-05-08 with the same redacted counters and robot `msgtype=file` / `content.downloadCode` shape
 -> launchd restored afterward at pid=91940, pendingApprovals=0; im:doctor ready
 
 pnpm smoke:computer-use-live
@@ -92,11 +93,11 @@ pnpm smoke:computer-use-live
 | MCP/plugin/skill/tool status output | JAC-263/JAC-269/JAC-271/JAC-272 record low-noise redacted Codex status projection for lifecycle, MCP progress, terminal interaction, guardian/deprecation/hook, and auto-approval-review events. | Local green |
 | Approval request cards and callbacks | Telegram and Feishu/Lark live approval matrices passed. DingTalk live CardKit callback probe passed with callback token/messageRef validation fail-closed. | Green for enabled platforms |
 | Outbound images/files/artifacts | Telegram and Feishu/Lark live file gates passed. DingTalk `sendFile` is implemented locally through media upload plus session webhook when a fresh inbound robot message exists, and through proactive robot group/user media delivery when `DINGTALK_TARGET_CHAT_ID` is configured. DingTalk live file and image gates now both return redacted `status=file_sent`. | Telegram/Lark/DingTalk live green |
-| Inbound images/files | Telegram and Feishu/Lark inbound image/file materialization local tests pass. DingTalk inbound image upload now passes a real live gate: the live `content.downloadCode` / `content.pictureDownloadCode` shape is recognized, the generic `downloadCode` downloads through `/v1.0/robot/messageFiles/download`, and the smoke returned redacted `status=inbound_attachment_received`, `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, and local path/filename/size presence only. DingTalk generic file upload still needs the same explicit live gate. | Image path live green; DingTalk generic file live pending |
+| Inbound images/files | Telegram Web and Feishu Web inbound image/file live gates pass with local path/filename/size presence only. DingTalk inbound image and generic-file uploads now both pass real live gates: image uses live `content.downloadCode` / `content.pictureDownloadCode`, file uses live `msgtype=file` plus `content.downloadCode` / `content.fileName`, and both download through `/v1.0/robot/messageFiles/download` with redacted `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, and local path/filename/size presence only. | Telegram/Lark/DingTalk live green |
 | Computer Use output/artifacts | Dynamic-tool / Computer Use `inputImage` artifacts are projected through `sendFile`; summaries hide raw tool args. This refresh also projects app, step/action, policy decision, blocked reason, and approval-required state when those summary fields are present. | Output projection local green |
 | Real desktop Computer Use execution | Generated `ClientRequest`, `ServerRequest`, `ServerNotification`, `Config`, `ProfileV2`, `TurnStartParams`, `ToolsV2`, `UserInput`, and `ThreadItem` were re-scanned. They support dynamic tool-call callbacks and downstream GUI/image artifact rendering, but no reviewed daemon-facing provider registration surface. Non-dry-run live smoke is blocked. | Not achieved; tracked by JAC-274 |
 | Identity and group safety | JAC-240 and JAC-241 complete. `/whoami` is redacted; access groups and mention-required group policy are implemented. | Local green |
-| Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264/265/266/267/268/269/271/272/273 are Done. JAC-275 tracks the command-risk / Computer Use detail refresh. JAC-277 is green for DingTalk inbound image upload and should remain open only for generic file upload, or be split if we want separate file parity tracking. JAC-274 remains the Computer Use parent, now split into JAC-278 official provider-contract evidence and JAC-279 local experimental provider POC. JAC-248 remains Slack live workspace acceptance. | Green tracking, with follow-up tracks explicit |
+| Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264/265/266/267/268/269/271/272/273 are Done. JAC-275 tracks the command-risk / Computer Use detail refresh. JAC-277 is green for DingTalk inbound image and generic-file uploads after the 2026-05-08 file gate. JAC-274 remains the Computer Use parent, now split into JAC-278 official provider-contract evidence and JAC-279 local experimental provider POC. JAC-248 remains Slack live workspace acceptance. | Green tracking, with follow-up tracks explicit |
 | Repo handoff tracking | `docs/handoffs/direct-use-live-status.md`, `docs/handoffs/live-im-acceptance-status.md`, and `docs/phase-6/computer-use-capability-evidence.md` record current state and blockers. | Green |
 
 ## 3. Follow-Up Tracks
@@ -120,10 +121,10 @@ These are outside the active supported-platform completion claim:
    `dynamicToolCall` / `imageView` / `imageGeneration` rendering is supported,
    but upstream real provider execution still lacks a contract.
 
-3. **DingTalk live inbound generic-file upload acceptance.**
-   Real DingTalk inbound image upload is now live-green. Generic file upload
-   still needs one real `DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND=file` run before
-   claiming complete inbound file parity.
+3. **Slack live workspace acceptance.**
+   Slack implementation and local/file materialization are present, but current
+   local config is disabled and the Slack Keychain services are absent. Live
+   Slack acceptance still requires a test workspace app/token/channel setup.
 
 ## 4. Completion Verdict
 
@@ -135,11 +136,10 @@ Computer Use output model through the shared daemon and adapter contract.
 DingTalk outbound file/image live attachment acceptance is green through the
 proactive robot media path; DingTalk inbound image live acceptance is green
 through the robot file download path. DingTalk inbound generic-file live
-acceptance remains open until a real robot `file` callback passes the same
-gate.
+acceptance is also green after the 2026-05-08 real Desktop file-upload gate.
 
-This verdict does **not** claim Slack live workspace acceptance, DingTalk live
-inbound generic-file upload acceptance, or real desktop Computer Use provider execution.
+This verdict does **not** claim Slack live workspace acceptance or real desktop
+Computer Use provider execution.
 Those remain separate follow-up tracks:
 
 - Slack test app bot/app tokens and enabled bridge config.
@@ -204,11 +204,11 @@ Acceptance evidence:
 - JAC-273 can be closed once Linear is updated with the commit SHA and redacted
   command results.
 
-### DingTalk live inbound generic-file upload acceptance
+### DingTalk live inbound generic-file upload acceptance - complete 2026-05-08
 
 Accepted condition:
 
-- One real DingTalk robot `file` message reaches the Stream client
+- One real DingTalk robot `file` message reached the Stream client
   while `DINGTALK_LIVE_INBOUND_ATTACHMENT=1` is running.
 - The live smoke exits with redacted `status=inbound_attachment_received`,
   `rawRobotCallbacks>=1`, `robotEvents>=1`, `attachmentEvents>=1`,
@@ -234,8 +234,8 @@ Next diagnosis:
 
 - Re-run the explicit inbound gate and send a fresh image/file only after the
   smoke prints `INBOUND_ATTACHMENT_WAITING`.
-- Use `DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND=file` for the remaining generic
-  file acceptance.
+- DingTalk generic file upload acceptance is complete as of 2026-05-08; keep
+  the gate available for regression checks.
 
 ### JAC-248 - Slack real workspace acceptance
 
