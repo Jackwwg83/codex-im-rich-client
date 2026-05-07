@@ -262,7 +262,7 @@ function evaluateDingTalk(
       name: "file",
       status: "info",
       detail:
-        "outbound files/images supported after inbound session reply URL; live send not checked by default",
+        "outbound files/images supported through session reply URL or proactive target; live send not checked by default",
     },
   ]);
 }

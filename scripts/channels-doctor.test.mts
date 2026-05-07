@@ -51,7 +51,7 @@ describe("channels doctor (JAC-237)", () => {
       "file: info (outbound files/images supported; live send not checked by default)",
     );
     expect(output).toContain(
-      "file: info (outbound files/images supported after inbound session reply URL; live send not checked by default)",
+      "file: info (outbound files/images supported through session reply URL or proactive target; live send not checked by default)",
     );
     expect(output).not.toContain("attachments unsupported");
     expect(output).not.toContain("1234567890:");

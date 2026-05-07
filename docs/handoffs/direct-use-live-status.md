@@ -413,17 +413,17 @@
     two platforms. DingTalk stays explicitly unsupported for attachments. Full
     gates passed; the rebuilt bridge was installed and kickstarted under
     launchd pid `80748` with `pendingApprovals=0`.
-  - latest patch - DingTalk outbound attachment support: `sendFile` now uses
+  - superseded patch - DingTalk outbound attachment support: `sendFile` now uses
     DingTalk's real session media path after an inbound robot message provides a
     session reply URL. The production daemon injects DingTalk client credentials
     into the text/media client, the client fetches a DingTalk access token,
     uploads image/file bytes to DingTalk media, and sends `image` / `file`
     session webhook replies. Full local gates passed; the rebuilt bridge was
     installed and kickstarted under launchd pid `2165`, `pendingApprovals=0`,
-    and `pnpm im:doctor` reports DingTalk file support as
-    `outbound files/images supported after inbound session reply URL`. This is
-    local implementation evidence only until a real DingTalk file-send gate
-    passes.
+    and `pnpm im:doctor` reported the original DingTalk file support as
+    `outbound files/images supported after inbound session reply URL`. This was
+    later superseded by proactive target delivery and live file/image
+    acceptance on 2026-05-07 SGT.
   - latest live gate attempt - DingTalk file send: `DINGTALK_LIVE_FILE=1`
     connected to DingTalk Stream and waited for a fresh inbound robot message,
     but local DingTalk Desktop exposed no usable chat window and Chrome only had
