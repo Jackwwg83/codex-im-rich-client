@@ -981,6 +981,52 @@ describe("daemon turn output projection", () => {
       },
     });
     queue.push({
+      type: "unknown",
+      method: "guardianWarning",
+      params: {
+        threadId: "thread-1",
+        message: "policy warning ghp_abcdefghijklmnopqrstuvwxyz123456",
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "deprecationNotice",
+      params: {
+        summary: "old config field deprecated",
+        details: "SECRET=abcdefghijklmnopqrstuvwxyz should not be shown",
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "hook/started",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        run: {
+          eventName: "preToolUse",
+          status: "running",
+          sourcePath: "/Users/alice/private/hook.sh",
+          entries: [{ text: "do not show" }],
+        },
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "hook/completed",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        run: {
+          eventName: "preToolUse",
+          status: "success",
+          durationMs: 42,
+          statusMessage: "ok",
+          sourcePath: "/Users/alice/private/hook.sh",
+          entries: [{ text: "do not show" }],
+        },
+      },
+    });
+    queue.push({
       type: "agent_message_delta",
       threadId: "thread-1",
       turnId: "turn-1",
@@ -1010,6 +1056,10 @@ describe("daemon turn output projection", () => {
         "- config warning: deprecated MCP config",
         "- MCP progress: GitHub tool is working ***REDACTED:slack-token***",
         "- command interaction: terminal input requested",
+        "- guardian warning: policy warning ***REDACTED:github-token***",
+        "- deprecation: old config field deprecated",
+        "- hook started: preToolUse",
+        "- hook completed: preToolUse (success, 42ms)",
       ].join("\n"),
     );
     expect(body).not.toContain("SECRET=");
@@ -1017,6 +1067,8 @@ describe("daemon turn output projection", () => {
     expect(body).not.toContain("should-not-be-shown");
     expect(body).not.toContain("password");
     expect(body).not.toContain("process-secret");
+    expect(body).not.toContain("/Users/alice");
+    expect(body).not.toContain("do not show");
 
     await daemon.stop();
   });

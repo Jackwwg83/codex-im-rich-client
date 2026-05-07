@@ -4362,6 +4362,21 @@ function readNumberField(value: unknown, key: string): number | undefined {
   return typeof field === "number" && Number.isFinite(field) ? field : undefined;
 }
 
+function readNumberLikeField(value: unknown, key: string): number | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  if (typeof field === "number" && Number.isFinite(field)) {
+    return field;
+  }
+  if (typeof field === "bigint") {
+    const numberValue = Number(field);
+    return Number.isSafeInteger(numberValue) ? numberValue : undefined;
+  }
+  return undefined;
+}
+
 function readArrayField(value: unknown, key: string): unknown[] {
   if (typeof value !== "object" || value === null) {
     return [];
@@ -4590,6 +4605,14 @@ function summarizeCodexStatusEvent(
       return summarizeMcpToolProgressStatus(params);
     case "item/commandExecution/terminalInteraction":
       return "command interaction: terminal input requested";
+    case "guardianWarning":
+      return summarizeGuardianWarningStatus(params);
+    case "deprecationNotice":
+      return summarizeDeprecationStatus(params);
+    case "hook/started":
+      return summarizeHookStatus(params, "started");
+    case "hook/completed":
+      return summarizeHookStatus(params, "completed");
     case "turn/plan/updated":
       return summarizePlanStatus(params);
     case "turn/diff/updated":
@@ -4616,6 +4639,7 @@ function isGlobalRuntimeStatusMethod(method: string): boolean {
     method === "account/rateLimits/updated" ||
     method === "remoteControl/status/changed" ||
     method === "configWarning" ||
+    method === "deprecationNotice" ||
     method === "skills/changed" ||
     method === "app/list/updated"
   );
@@ -4687,6 +4711,42 @@ function summarizeConfigWarningStatus(params: Record<string, unknown> | undefine
 function summarizeMcpToolProgressStatus(params: Record<string, unknown> | undefined): string {
   const message = readNoticeMessage(params);
   return message === undefined ? "MCP progress" : `MCP progress: ${message}`;
+}
+
+function summarizeGuardianWarningStatus(params: Record<string, unknown> | undefined): string {
+  const message = readNoticeMessage(params);
+  return message === undefined ? "guardian warning" : `guardian warning: ${message}`;
+}
+
+function summarizeDeprecationStatus(params: Record<string, unknown> | undefined): string {
+  const summary =
+    readStringField(params, "summary") ??
+    readStringField(params, "message") ??
+    readStringField(params, "details");
+  return summary === undefined ? "deprecation notice" : `deprecation: ${safeStatusText(summary)}`;
+}
+
+function summarizeHookStatus(
+  params: Record<string, unknown> | undefined,
+  phase: "started" | "completed",
+): string {
+  const run = readRecord(params?.run);
+  const eventName =
+    readStringField(run, "eventName") ?? readStringField(params, "eventName") ?? "unknown";
+  if (phase === "started") {
+    return `hook started: ${safeStatusText(eventName)}`;
+  }
+
+  const status = readStringField(run, "status") ?? readStringField(params, "status");
+  const duration =
+    readNumberLikeField(run, "durationMs") ?? readNumberLikeField(params, "durationMs");
+  const parts = [
+    status === undefined ? undefined : safeStatusText(status),
+    duration === undefined ? undefined : `${formatInteger(duration)}ms`,
+  ].filter((part): part is string => part !== undefined);
+  return `hook completed: ${safeStatusText(eventName)}${
+    parts.length === 0 ? "" : ` (${parts.join(", ")})`
+  }`;
 }
 
 function summarizeCodexRuntimeNotice(

@@ -62,7 +62,10 @@
 > notices also project into the same redacted status section as message/code
 > summaries only, without raw JSON or stack traces. MCP tool progress and
 > command terminal-interaction notices also surface there without streaming raw
-> command output, terminal stdin, or tool arguments.
+> command output, terminal stdin, or tool arguments. Guardian warnings,
+> deprecation notices, and hook started/completed notifications are summarized
+> at message/event/status/duration level only; realtime/voice notifications are
+> intentionally not surfaced by this status pass.
 > `/model <model>` now updates the current IM binding's `defaultModel`, so
 > subsequent Codex turns from Telegram/Feishu-Lark/DingTalk use the selected
 > model through existing `CodexRuntime` request params; `/model` without args
@@ -730,6 +733,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Computer Use status loop | JAC-267 enriches `/cu status` and `/diagnostics` with Computer Use provider/readiness information without starting a Codex turn or desktop action. The IM output now distinguishes policy enabled/disabled, provider configured/unavailable, readiness or blocked reason, explicit `/cu` requirement, allowed/denied apps, sensitive approval keywords, and the live-smoke gate. This is a status surface only; real provider execution remains separately gated. |
 | 2026-05-07 SGT warning/error status loop | JAC-268 projects Codex App `warning`, `error`, and `configWarning` notifications into the active IM turn as redacted `Codex status` lines. The daemon uses message/code-level summaries only and does not render raw JSON payloads, stack traces, tool args, secrets, chat IDs, user IDs, or message IDs. |
 | 2026-05-07 SGT tool progress status loop | JAC-269 projects `item/mcpToolCall/progress` and `item/commandExecution/terminalInteraction` into the active IM turn as redacted `Codex status` lines. MCP progress uses the App Server progress message; command terminal interaction reports that input is requested without rendering raw command output, stdin, process ids, tool args, or raw JSON. |
+| 2026-05-07 SGT guardian/deprecation/hook status loop | JAC-271 projects `guardianWarning`, `deprecationNotice`, `hook/started`, and `hook/completed` into the active IM turn as redacted `Codex status` lines. Hook summaries include event/status/duration only and deliberately omit hook source paths, output entries, raw JSON, secrets, chat IDs, user IDs, and message IDs. Realtime/voice notifications remain out of scope for this pass. |
 | 2026-05-07 SGT bridge install checkpoint | After the Codex-native IM output loop, `pnpm bridge:build`, `pnpm bridge:install`, `launchctl kickstart -k gui/501/io.codex-im-bridge`, `pnpm launchd:status`, `pnpm im:doctor`, and the explicit bridge redaction scan passed. Installed launchd is running pid `3045` with `pendingApprovals=0`; doctor reports installed Telegram/Lark/DingTalk ready and Slack disabled. |
 | 2026-05-07 SGT MCP control loop | JAC-264 adds `/mcp login <server>` and `/mcp reload` to the shared IM control plane. Both call new centralized `CodexRuntime` wrappers for App Server `mcpServer/oauth/login` and `config/mcpServer/reload`; `/mcp` without args remains the status/tool-count listing. The daemon does not call MCP tools directly from IM. |
 | 2026-05-07 SGT live attachment gates | Temporarily stopped launchd to avoid Telegram polling contention, then ran explicit live file gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless `codex-im-live-attachment.txt`; Feishu/Lark `LARK_LIVE_FILE=1` sent a harmless file and returned redacted `messageId=present`. Launchd was bootstrapped/kickstarted back to pid `94243`; `pnpm launchd:status` and `pnpm im:doctor` are ready. |
