@@ -94,6 +94,8 @@ const MAX_IM_TEXT_BUFFER_CHARS = MAX_IM_TEXT_CHARS * MAX_IM_TEXT_CHUNKS;
 const MAX_IM_ITEM_SUMMARIES = 6;
 const MAX_IM_ARTIFACT_FILES = 3;
 const MAX_IM_ARTIFACT_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_INLINE_COMMAND_OUTPUT_CHARS = 240;
+const MAX_GENERATED_ATTACHMENT_TEXT_CHARS = 200_000;
 const PROGRESS_EDIT_INTERVAL_MS = 1_500;
 
 export interface DaemonBroker {
@@ -346,7 +348,8 @@ interface DaemonTurnOutputState {
 }
 
 interface DaemonTurnOutputFile {
-  readonly path: string;
+  readonly path?: string;
+  readonly bytes?: Uint8Array;
   readonly filename: string;
   readonly contentType: string;
 }
@@ -1668,14 +1671,19 @@ export class Daemon {
       ) {
         state.itemSummaries.push(summary);
       }
-      const file = extractCodexItemFile(event.raw);
-      if (
-        state !== undefined &&
-        file !== undefined &&
-        state.files.length < MAX_IM_ARTIFACT_FILES &&
-        !state.files.some((candidate) => candidate.path === file.path)
-      ) {
-        state.files.push(file);
+      if (state !== undefined) {
+        for (const file of extractCodexItemFiles(event.raw)) {
+          if (state.files.length >= MAX_IM_ARTIFACT_FILES) {
+            break;
+          }
+          if (
+            !state.files.some(
+              (candidate) => turnOutputFileKey(candidate) === turnOutputFileKey(file),
+            )
+          ) {
+            state.files.push(file);
+          }
+        }
       }
       return;
     }
@@ -1825,7 +1833,21 @@ export class Daemon {
     file: DaemonTurnOutputFile,
   ): Promise<void> {
     try {
-      const bytes = await this.#readArtifactFile(file.path);
+      const bytes =
+        file.bytes ??
+        (file.path === undefined ? undefined : await this.#readArtifactFile(file.path));
+      if (bytes === undefined) {
+        this.#emitAuditEvent("runtime.turn_output_file_skipped", {
+          target: state.target,
+          result: "skipped",
+          metadata: {
+            reason: "missing_file_source",
+            filename: file.filename,
+            turnId: state.turnId,
+          },
+        });
+        return;
+      }
       if (bytes.byteLength === 0 || bytes.byteLength > MAX_IM_ARTIFACT_FILE_BYTES) {
         this.#emitAuditEvent("runtime.turn_output_file_skipped", {
           target: state.target,
@@ -4298,7 +4320,7 @@ function summarizeItemDetail(item: Record<string, unknown>, type: string): strin
     return summarizeCommandExecutionItem(item);
   }
   if (type === "mcpToolCall") {
-    return summarizeNamedToolItem(item, "server");
+    return summarizeMcpToolCallItem(item);
   }
   if (type === "dynamicToolCall") {
     return summarizeDynamicToolCallItem(item);
@@ -4329,34 +4351,119 @@ function summarizeDynamicToolCallItem(item: Record<string, unknown>): string | u
     return undefined;
   }
   const normalized = name.toLowerCase();
-  if (normalized.includes("computer_use") || normalized.includes("computer-use")) {
-    return `Computer Use ${name}`;
-  }
-  return name;
+  const displayName =
+    normalized.includes("computer_use") || normalized.includes("computer-use")
+      ? `Computer Use ${name}`
+      : name;
+  return summarizeToolDetails(item, displayName);
 }
 
-function extractCodexItemFile(raw: unknown): DaemonTurnOutputFile | undefined {
+function extractCodexItemFiles(raw: unknown): readonly DaemonTurnOutputFile[] {
   const item = readRawItem(raw);
-  if (item === undefined || readStringField(item, "type") !== "imageGeneration") {
-    return undefined;
+  if (item === undefined) {
+    return [];
   }
+  const type = readStringField(item, "type");
   const status = readStringField(item, "status");
   if (status !== undefined && status !== "completed") {
-    return undefined;
+    return [];
   }
-  const path = readStringField(item, "savedPath");
+  if (type === "imageGeneration") {
+    return artifactFileFromPath(readStringField(item, "savedPath"));
+  }
+  if (type === "imageView") {
+    return artifactFileFromPath(readStringField(item, "path"));
+  }
+  if (type === "commandExecution") {
+    return commandOutputFile(item);
+  }
+  if (type === "fileChange") {
+    return fileChangePatchFile(item);
+  }
+  return [];
+}
+
+function artifactFileFromPath(path: string | undefined): readonly DaemonTurnOutputFile[] {
   if (path === undefined || path.length === 0) {
-    return undefined;
+    return [];
   }
   const filename = basename(path);
   if (filename.length === 0) {
+    return [];
+  }
+  return [
+    {
+      path,
+      filename,
+      contentType: contentTypeForPath(path),
+    },
+  ];
+}
+
+function commandOutputFile(item: Record<string, unknown>): readonly DaemonTurnOutputFile[] {
+  const output = readStringField(item, "aggregatedOutput");
+  if (output === undefined || output.trim().length === 0) {
+    return [];
+  }
+  if (inlineCommandOutputPreview(output) !== undefined) {
+    return [];
+  }
+  const id = safeFileToken(readStringField(item, "id") ?? "command");
+  return [
+    {
+      filename: `codex-command-${id}.log`,
+      bytes: encodeGeneratedAttachment(output),
+      contentType: "text/plain",
+    },
+  ];
+}
+
+function fileChangePatchFile(item: Record<string, unknown>): readonly DaemonTurnOutputFile[] {
+  const patch = buildFileChangePatch(item);
+  if (patch === undefined) {
+    return [];
+  }
+  const id = safeFileToken(readStringField(item, "id") ?? "filechange");
+  return [
+    {
+      filename: `codex-filechange-${id}.patch`,
+      bytes: encodeGeneratedAttachment(patch),
+      contentType: "text/x-patch",
+    },
+  ];
+}
+
+function buildFileChangePatch(item: Record<string, unknown>): string | undefined {
+  const changes = item.changes;
+  if (!Array.isArray(changes)) {
     return undefined;
   }
-  return {
-    path,
-    filename,
-    contentType: contentTypeForPath(path),
-  };
+  const sections = changes
+    .map((change) => {
+      const record = readRecord(change);
+      const diff = readStringField(record, "diff");
+      if (record === undefined || diff === undefined || diff.length === 0) {
+        return undefined;
+      }
+      const path = readStringField(record, "path") ?? "unknown";
+      const kind = readStringField(record, "kind") ?? "change";
+      return `# ${kind} ${path}\n${diff.trimEnd()}\n`;
+    })
+    .filter(isDefined);
+  return sections.length === 0 ? undefined : sections.join("\n");
+}
+
+function encodeGeneratedAttachment(text: string): Uint8Array {
+  const redacted = redact(text);
+  const bounded =
+    redacted.length <= MAX_GENERATED_ATTACHMENT_TEXT_CHARS
+      ? redacted
+      : `${redacted.slice(0, MAX_GENERATED_ATTACHMENT_TEXT_CHARS)}\n\n[truncated for IM attachment]\n`;
+  return new TextEncoder().encode(bounded);
+}
+
+function turnOutputFileKey(file: DaemonTurnOutputFile): string {
+  return file.path === undefined ? `generated:${file.filename}` : `path:${file.path}`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -4407,6 +4514,7 @@ function summarizeCommandExecutionItem(item: Record<string, unknown>): string | 
   const command = readStringField(item, "command");
   const exitCode = readNumberField(item, "exitCode");
   const durationMs = readNumberField(item, "durationMs");
+  const output = readStringField(item, "aggregatedOutput");
   const parts: string[] = [];
   if (command !== undefined) {
     parts.push(redact(command));
@@ -4417,7 +4525,63 @@ function summarizeCommandExecutionItem(item: Record<string, unknown>): string | 
   if (durationMs !== undefined) {
     parts.push(`${durationMs}ms`);
   }
+  if (output !== undefined && output.trim().length > 0) {
+    parts.push(`output: ${inlineCommandOutputPreview(output) ?? "attached"}`);
+  }
   return parts.length === 0 ? undefined : parts.join("; ");
+}
+
+function inlineCommandOutputPreview(output: string): string | undefined {
+  const oneLine = redact(output.replace(/\s+/g, " ").trim());
+  if (oneLine.length === 0 || oneLine.length > MAX_INLINE_COMMAND_OUTPUT_CHARS) {
+    return undefined;
+  }
+  return oneLine;
+}
+
+function summarizeMcpToolCallItem(item: Record<string, unknown>): string | undefined {
+  const name = summarizeNamedToolItem(item, "server");
+  return name === undefined ? undefined : summarizeToolDetails(item, name);
+}
+
+function summarizeToolDetails(item: Record<string, unknown>, name: string): string {
+  const parts = [name];
+  const success = readBooleanField(item, "success");
+  if (success !== undefined) {
+    parts.push(`success ${success ? "yes" : "no"}`);
+  }
+  const durationMs = readNumberField(item, "durationMs");
+  if (durationMs !== undefined) {
+    parts.push(`${durationMs}ms`);
+  }
+  const contentItems = readArrayField(item, "contentItems");
+  if (contentItems.length > 0) {
+    const imageCount = contentItems.filter(
+      (contentItem) => readStringField(contentItem, "type") === "inputImage",
+    ).length;
+    const textCount = contentItems.filter(
+      (contentItem) => readStringField(contentItem, "type") === "inputText",
+    ).length;
+    parts.push(
+      `content ${contentItems.length}${textCount > 0 ? ` text ${textCount}` : ""}${
+        imageCount > 0 ? ` image ${imageCount}` : ""
+      }`,
+    );
+  }
+  const error = readRecord(item.error);
+  const result = readRecord(item.result);
+  const text =
+    readStringField(error, "message") ??
+    readStringField(result, "text") ??
+    readStringField(result, "content");
+  if (text !== undefined && text.trim().length > 0) {
+    parts.push(`result: ${truncateItemSummary(redact(text.replace(/\s+/g, " ").trim()))}`);
+  } else if (error !== undefined) {
+    parts.push("error present");
+  } else if (result !== undefined) {
+    parts.push("result present");
+  }
+  return parts.join("; ");
 }
 
 function summarizeNamedToolItem(
@@ -4456,6 +4620,11 @@ function parseTextApprovalAction(value: string | undefined): CallbackTokenAction
 
 function truncateItemSummary(summary: string): string {
   return summary.length <= 180 ? summary : `${summary.slice(0, 157)}...`;
+}
+
+function safeFileToken(value: string): string {
+  const token = value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return token.length === 0 ? "item" : token.slice(0, 80);
 }
 
 function presence(value: string | undefined): "present" | "absent" {

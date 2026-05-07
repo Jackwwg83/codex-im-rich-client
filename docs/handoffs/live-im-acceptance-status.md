@@ -33,10 +33,13 @@
 > materialization is implemented locally through DingTalk's `downloadCode`
 > exchange and now emits common `InboundAttachment[]`; live uploaded file/image
 > acceptance still needs a real DingTalk upload gate.
-> Daemon terminal output can now deliver completed Codex
-> `imageGeneration.savedPath` artifacts as IM files after the text summary;
-> explicit live file-send gates now prove the Telegram and Feishu/Lark platform
-> APIs end to end.
+> Daemon terminal output can now deliver Codex-native artifacts through IM:
+> short command output is inline, long command output becomes a redacted `.log`
+> attachment, file-change diffs become redacted `.patch` attachments,
+> `imageView.path` and `imageGeneration.savedPath` are sent as files/images, and
+> dynamic/MCP/Computer Use items show redacted status/result summaries without
+> raw arguments. Explicit live file-send gates now prove the Telegram and
+> Feishu/Lark platform APIs end to end.
 
 ---
 
@@ -78,7 +81,7 @@ Use this wording for the current enabled-platform acceptance state:
 ```text
 Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, and DingTalk. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
 Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context. DingTalk outbound file/image attachment support is implemented locally through media upload plus session-webhook replies, but still needs an explicit real DingTalk file-send gate before being called live accepted.
-Daemon-side delivery of completed `imageGeneration.savedPath` artifacts is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram and Feishu/Lark.
+Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath` artifacts, long command logs, and file-change patch attachments is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram and Feishu/Lark.
 ```
 
 Do not extend this claim to Slack, DingTalk live attachment acceptance, inbound
@@ -119,6 +122,7 @@ remain separate acceptance tracks.
 | Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
 | Telegram/Lark inbound image/file upload | platform file resources materialize locally, then route to Codex turn input | local pass | Telegram `photo` / `document` and Feishu/Lark `image` / `file` unit coverage proves adapter download + daemon routing; images map to Codex `localImage`, generic files map to local-path text context |
 | Common Codex-native IM control commands | `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp` through daemon common command routing | local pass | Runtime wrappers keep App Server method literals centralized in `CodexRuntime`; daemon output is redacted and shared by Telegram/Lark/DingTalk adapters through the common control plane |
+| Common Codex-native artifact projection | commandExecution, fileChange, imageView/imageGeneration, mcpToolCall, dynamicToolCall/Computer Use terminal items | local pass | shared daemon output summarizes short command output inline, sends long command output as redacted `.log`, sends fileChange diffs as redacted `.patch`, sends image artifacts via `sendFile`, and never renders raw tool arguments |
 | Common approval text fallback | `/approvals` and `/approve <id> <action>` through daemon common command routing | local pass | Fallback only resolves approvals that already have a server-side bound callback token record with a bound approval-card `messageRef`; no raw callback token or approval payload is accepted from IM text |
 | Common identity/access controls | `/whoami` plus config-level reusable access groups | local pass | `/whoami` reports platform, identity-field presence, and current project/thread binding without raw chat/user/topic ids; config access groups expand into existing allowlists and unknown group references fail closed |
 | Common group mention gate | `security.group_policy` through common `SecurityPolicy.checkInboundMessage` daemon routing | local pass | Configured group chats require an explicit mention alias before ordinary inbound text reaches Codex; non-gated chats keep existing user/chat allowlist behavior, and approval callback authorization remains token/messageRef/broker based |
@@ -494,6 +498,13 @@ Stop and treat as a blocker if:
   sends through adapter `sendFile` after publishing the terminal text summary.
   Unsupported adapters skip with audit instead of inventing a fallback
   attachment concept.
+- 2026-05-07 SGT Codex-native artifact detail loop: JAC-261 extends the same
+  shared output path to command logs, file diffs, `imageView` artifacts, and
+  native tool summaries. Short `commandExecution.aggregatedOutput` is inline;
+  long output is sent as a redacted `.log`; `fileChange.changes[].diff` is sent
+  as a redacted `.patch`; `imageView.path` uses `sendFile`; and
+  dynamic/MCP/Computer Use summaries include success, duration, and content
+  presence without raw arguments. Targeted daemon turn-output tests passed.
 - 2026-05-07 SGT live attachment gates: Temporarily stopped launchd to avoid
   Telegram polling contention, then ran explicit Telegram and Feishu/Lark file
   gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless

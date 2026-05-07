@@ -6,7 +6,7 @@ import type {
   Target,
 } from "@codex-im/core";
 import { describe, expect, it, vi } from "vitest";
-import { Daemon } from "../src/index.js";
+import { Daemon, type DaemonMessageRef, type DaemonOutboundFile } from "../src/index.js";
 
 const TARGET: Target = { platform: "telegram", chatId: "-1001" };
 const SENDER: SecurityPolicySender = { userId: "42", displayName: "operator" };
@@ -404,7 +404,7 @@ describe("daemon turn output projection", () => {
       messageId: "bot-output-1",
     }));
     const editText = vi.fn(async () => undefined);
-    const sendFile = vi.fn(async (target: Target) => ({
+    const sendFile = vi.fn(async (target: Target, _file: DaemonOutboundFile) => ({
       target,
       messageId: "bot-file-1",
       kind: "file" as const,
@@ -655,6 +655,395 @@ describe("daemon turn output projection", () => {
         "- dynamicToolCall completed: browser-use.open",
       ].join("\n"),
     );
+
+    await daemon.stop();
+  });
+
+  it("includes short command output and sends file-change diffs as IM attachments", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    const sendFile = vi.fn(async (target: Target, _file: DaemonOutboundFile) => ({
+      target,
+      messageId: "bot-file-1",
+      kind: "file" as const,
+    }));
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        sendFile,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Run command and edit file",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-command",
+      raw: {
+        params: {
+          item: {
+            type: "commandExecution",
+            status: "completed",
+            command: "npm test",
+            aggregatedOutput: "hello from command\n",
+            exitCode: 0,
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-file",
+      raw: {
+        params: {
+          item: {
+            id: "item-file",
+            type: "fileChange",
+            status: "completed",
+            changes: [
+              {
+                path: "src/app.ts",
+                kind: "update",
+                diff: "@@\n-old\n+new\n",
+              },
+            ],
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-agent",
+      deltaText: "done",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => sendFile.mock.calls.length === 1);
+    expect(editText).toHaveBeenLastCalledWith(
+      { target: TARGET, messageId: "bot-output-1" },
+      [
+        "done",
+        "",
+        "Codex items:",
+        "- commandExecution completed: npm test; exit 0; output: hello from command",
+        "- fileChange completed: src/app.ts",
+      ].join("\n"),
+    );
+    expect(sendFile).toHaveBeenCalledWith(TARGET, {
+      filename: "codex-filechange-item-file.patch",
+      bytes: expect.any(Uint8Array),
+      contentType: "text/x-patch",
+    });
+    const fileArg = sendFile.mock.calls[0]?.[1];
+    expect(fileArg?.bytes).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(fileArg?.bytes ?? new Uint8Array())).toContain(
+      "@@\n-old\n+new\n",
+    );
+
+    await daemon.stop();
+  });
+
+  it("attaches long command logs and local image-view artifacts", async () => {
+    const queue = new EventQueue();
+    const screenshotBytes = new Uint8Array([0xff, 0xd8, 0xff]);
+    const readArtifactFile = vi.fn(async () => screenshotBytes);
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    const sendFile = vi.fn(async (target: Target, _file: DaemonOutboundFile) => ({
+      target,
+      messageId: `bot-file-${sendFile.mock.calls.length + 1}`,
+      kind: "file" as const,
+    }));
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        sendFile,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      readArtifactFile,
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Run a noisy command and inspect an image",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-command",
+      raw: {
+        params: {
+          item: {
+            id: "item-command",
+            type: "commandExecution",
+            status: "completed",
+            command: "pnpm test",
+            aggregatedOutput: "very noisy output\n".repeat(40),
+            exitCode: 0,
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-image-view",
+      raw: {
+        params: {
+          item: {
+            type: "imageView",
+            path: "/tmp/codex-im/screenshot.jpg",
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => sendFile.mock.calls.length === 2);
+    expect(editText).toHaveBeenLastCalledWith(
+      { target: TARGET, messageId: "bot-output-1" },
+      [
+        "Codex turn completed.",
+        "",
+        "Codex items:",
+        "- commandExecution completed: pnpm test; exit 0; output: attached",
+        "- imageView: /tmp/codex-im/screenshot.jpg",
+      ].join("\n"),
+    );
+    expect(sendFile.mock.calls[0]?.[1]).toMatchObject({
+      filename: "codex-command-item-command.log",
+      contentType: "text/plain",
+    });
+    const commandLogFile = sendFile.mock.calls[0]?.[1];
+    expect(commandLogFile?.bytes).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(commandLogFile?.bytes ?? new Uint8Array())).toContain(
+      "very noisy output",
+    );
+    expect(readArtifactFile).toHaveBeenCalledWith("/tmp/codex-im/screenshot.jpg");
+    expect(sendFile.mock.calls[1]?.[1]).toEqual({
+      filename: "screenshot.jpg",
+      bytes: screenshotBytes,
+      contentType: "image/jpeg",
+    });
+
+    await daemon.stop();
+  });
+
+  it("summarizes Computer Use dynamic tool output content without exposing arguments", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async (_ref: DaemonMessageRef, _body: string) => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Use Computer Use",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-computer-use",
+      raw: {
+        params: {
+          item: {
+            type: "dynamicToolCall",
+            status: "failed",
+            namespace: null,
+            tool: "computer_use.synthetic",
+            arguments: { token: "should-not-render" },
+            success: false,
+            durationMs: 33,
+            contentItems: [
+              { type: "inputText", text: "blocked by policy" },
+              { type: "inputImage", imageUrl: "/tmp/codex-im/cu.png" },
+            ],
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length >= 1);
+    const body = editText.mock.calls.at(-1)?.[1];
+    expect(body).toContain(
+      "- dynamicToolCall failed: Computer Use computer_use.synthetic; success no; 33ms; content 2 text 1 image 1",
+    );
+    expect(body).not.toContain("should-not-render");
 
     await daemon.stop();
   });
