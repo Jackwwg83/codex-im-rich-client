@@ -128,7 +128,7 @@ remain separate acceptance tracks.
 | Common Codex model selection | `/model <model>` through daemon common command routing | local pass | daemon validates the id/name through `runtime.modelList()`, stores the selected model on the current target binding, and future `turnStart` requests use existing `model` params; no global config mutation |
 | Common Codex MCP login/reload | `/mcp login <server>` and `/mcp reload` through daemon common command routing | local pass | daemon calls centralized CodexRuntime wrappers for App Server `mcpServer/oauth/login` and `config/mcpServer/reload`; `/mcp` with no args still lists server status and IM never calls MCP tools directly |
 | Common Codex-native artifact projection | commandExecution, fileChange, imageView/imageGeneration, mcpToolCall, dynamicToolCall/Computer Use terminal items | local pass | shared daemon output summarizes short command output inline, sends long completed/failed command output as redacted `.log`, sends fileChange diffs as redacted `.patch`, sends image and local dynamic-tool/Computer Use screenshot artifacts via `sendFile`, and never renders raw tool arguments |
-| Common Codex-native lifecycle status projection | token usage, compacted, thread status, model reroute/verification, MCP startup/OAuth, account usage, remote-control status, plan/diff, thread name/goal, skills/apps refresh, warning/error/config warning | local pass | shared daemon output folds selected App Server lifecycle notifications into the active IM turn as concise redacted `Codex status` lines instead of raw JSON, stack traces, patch bodies, or adapter-specific concepts |
+| Common Codex-native lifecycle status projection | token usage, compacted, thread status, model reroute/verification, MCP startup/OAuth, account usage, remote-control status, plan/diff, thread name/goal, skills/apps refresh, warning/error/config warning, MCP progress, terminal interaction | local pass | shared daemon output folds selected App Server lifecycle notifications into the active IM turn as concise redacted `Codex status` lines instead of raw JSON, stack traces, patch bodies, command stdin, tool args, or adapter-specific concepts |
 | Common approval text fallback | `/approvals` and `/approve <id> <action>` through daemon common command routing | local pass | Fallback only resolves approvals that already have a server-side bound callback token record with a bound approval-card `messageRef`; no raw callback token or approval payload is accepted from IM text |
 | Common identity/access controls | `/whoami` plus config-level reusable access groups | local pass | `/whoami` reports platform, identity-field presence, and current project/thread binding without raw chat/user/topic ids; config access groups expand into existing allowlists and unknown group references fail closed |
 | Common group mention gate | `security.group_policy` through common `SecurityPolicy.checkInboundMessage` daemon routing | local pass | Configured group chats require an explicit mention alias before ordinary inbound text reaches Codex; non-gated chats keep existing user/chat allowlist behavior, and approval callback authorization remains token/messageRef/broker based |
@@ -539,6 +539,12 @@ Stop and treat as a blocker if:
   turn as redacted `Codex status` lines. The daemon shows message/code-level
   summaries only and does not render raw JSON payloads, stack traces, tool
   arguments, secrets, chat IDs, user IDs, or message IDs.
+- 2026-05-07 SGT tool progress status loop: JAC-269 projects
+  `item/mcpToolCall/progress` and `item/commandExecution/terminalInteraction`
+  into the active IM turn as redacted `Codex status` lines. MCP progress uses
+  the App Server progress message; command terminal interaction reports that
+  input is requested without rendering raw command output, stdin, process ids,
+  tool args, or raw JSON.
 - 2026-05-07 SGT MCP control loop: JAC-264 adds `/mcp login <server>` and
   `/mcp reload` to the shared IM control plane. Both call centralized
   `CodexRuntime` wrappers for App Server `mcpServer/oauth/login` and

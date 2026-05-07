@@ -870,7 +870,7 @@ describe("daemon turn output projection", () => {
     await daemon.stop();
   });
 
-  it("folds Codex warning and error notices into the active IM turn output", async () => {
+  it("folds Codex warning, error, and tool progress notices into the active IM turn output", async () => {
     const queue = new EventQueue();
     const sendText = vi.fn(async (target: Target, _body: string) => ({
       target,
@@ -960,6 +960,27 @@ describe("daemon turn output projection", () => {
       },
     });
     queue.push({
+      type: "unknown",
+      method: "item/mcpToolCall/progress",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-mcp",
+        message: "GitHub tool is working xoxb-secret-token-1234567890",
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "item/commandExecution/terminalInteraction",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-command",
+        processId: "process-secret",
+        stdin: "password should not be shown",
+      },
+    });
+    queue.push({
       type: "agent_message_delta",
       threadId: "thread-1",
       turnId: "turn-1",
@@ -987,11 +1008,15 @@ describe("daemon turn output projection", () => {
         "- warning: near context limit ***REDACTED:openai-token***",
         "- error: provider failed (E_PROVIDER)",
         "- config warning: deprecated MCP config",
+        "- MCP progress: GitHub tool is working ***REDACTED:slack-token***",
+        "- command interaction: terminal input requested",
       ].join("\n"),
     );
     expect(body).not.toContain("SECRET=");
     expect(body).not.toContain("Authorization");
     expect(body).not.toContain("should-not-be-shown");
+    expect(body).not.toContain("password");
+    expect(body).not.toContain("process-secret");
 
     await daemon.stop();
   });

@@ -4586,6 +4586,10 @@ function summarizeCodexStatusEvent(
       return summarizeRemoteControlStatus(params);
     case "configWarning":
       return summarizeConfigWarningStatus(params);
+    case "item/mcpToolCall/progress":
+      return summarizeMcpToolProgressStatus(params);
+    case "item/commandExecution/terminalInteraction":
+      return "command interaction: terminal input requested";
     case "turn/plan/updated":
       return summarizePlanStatus(params);
     case "turn/diff/updated":
@@ -4678,6 +4682,11 @@ function summarizeRemoteControlStatus(params: Record<string, unknown> | undefine
 function summarizeConfigWarningStatus(params: Record<string, unknown> | undefined): string {
   const message = readNoticeMessage(params);
   return message === undefined ? "config warning" : `config warning: ${message}`;
+}
+
+function summarizeMcpToolProgressStatus(params: Record<string, unknown> | undefined): string {
+  const message = readNoticeMessage(params);
+  return message === undefined ? "MCP progress" : `MCP progress: ${message}`;
 }
 
 function summarizeCodexRuntimeNotice(
