@@ -21,7 +21,7 @@
 
 **Phase 7 状态**：✅ 完成（2026-05-03）。Extended platforms / web console slice 已通过 JAC-165 review/handoff/tag gate；Satori/Koishi 与 Chat SDK 保持 spike-only，fallback renderer、loopback-only read-only web status、team/operator policy、web approval decision gate、multi-channel session handoff 均已落地。**Phase 7 closeout：[`docs/handoffs/phase7-live-status.md`](docs/handoffs/phase7-live-status.md)，Phase 7 → future 交接见 [`docs/handoffs/2026-05-03-phase7-to-future.md`](docs/handoffs/2026-05-03-phase7-to-future.md)。**
 
-**Release Readiness 状态**：✅ release candidate 完成，🟡 真实 IM 验收进行中（2026-05-03）。Phase 7 完成态已提升到本地 Mac mini release candidate：CI、release preflight、launchd/Keychain dry-run、smoke matrix、rollback runbook、outside-voice review 和 tag gate 均已收敛。真实 Telegram/Lark/DingTalk/Codex live smoke 尚未全部完成，不能把 fake/contract/CI green 等同于实际 IM 上线验收完成。SOT：[`docs/handoffs/release-readiness-live-status.md`](docs/handoffs/release-readiness-live-status.md)，live acceptance：[`docs/handoffs/live-im-acceptance-status.md`](docs/handoffs/live-im-acceptance-status.md)，handoff：[`docs/handoffs/2026-05-03-production-readiness.md`](docs/handoffs/2026-05-03-production-readiness.md)，tag：`production-readiness-2026-05-03-r2`。
+**Release Readiness 状态**：✅ release candidate 完成，✅ 已启用真实 IM 验收完成（Telegram / Feishu-Lark / DingTalk，2026-05-07）。Phase 7 完成态已提升到本地 Mac mini release candidate：CI、release preflight、launchd/Keychain dry-run、smoke matrix、rollback runbook、outside-voice review 和 tag gate 均已收敛。真实 Telegram/Lark/DingTalk/Codex live acceptance 已用 redacted evidence 记录；后续仍在推进 Slack、新一轮 direct-use hardening、以及真实 Computer Use provider 的单独验收。SOT：[`docs/handoffs/live-im-acceptance-status.md`](docs/handoffs/live-im-acceptance-status.md)，direct-use hardening：[`docs/handoffs/direct-use-live-status.md`](docs/handoffs/direct-use-live-status.md)，release-candidate baseline：[`docs/handoffs/release-readiness-live-status.md`](docs/handoffs/release-readiness-live-status.md)，handoff：[`docs/handoffs/2026-05-03-production-readiness.md`](docs/handoffs/2026-05-03-production-readiness.md)，baseline tag：`production-readiness-2026-05-03-r2`。
 
 上线运行操作手册：[`docs/ops/production-launch.md`](docs/ops/production-launch.md)。上线前先跑 `pnpm release:check`；默认路径不写 Keychain、不 load/unload launchd、不发起 live IM/Codex/Computer Use。
 
@@ -51,7 +51,7 @@ pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol
 
 # 3. 全量验证
 pnpm typecheck                 # all 14 packages
-pnpm test                      # 1212 tests pass + 1 skipped (unit + contract)
+pnpm test                      # 1403 tests pass + 1 skipped (unit + contract, latest local full gate)
 pnpm lint                      # biome check
 
 # 4. 操作员手动 smoke (非默认测试)

@@ -47,7 +47,8 @@
 
 ## 1. Current State
 
-- **Mode:** Block 4 real production acceptance hardening in progress.
+- **Mode:** Real Telegram / Feishu-Lark / DingTalk acceptance complete for
+  enabled platforms; direct-use hardening and Slack readiness continue.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
@@ -55,7 +56,8 @@
 - **Baseline HEAD:** `a641159`.
 - **Linear:** create a new parent/milestone named
   `Direct Use Completion / Phase 8 - Production usability hardening`.
-- **Current implementation block:** Block 4 - launchd / soak evidence.
+- **Current implementation block:** Codex-native usability hardening after live
+  IM acceptance closeout.
 - **Completed in this effort:**
   - `3bcdcd0` - docs-only Direct Use / Phase 8 plan v2 and live-status anchor.
   - `15dfba6` - A1 launchd dry-run runtime verification.

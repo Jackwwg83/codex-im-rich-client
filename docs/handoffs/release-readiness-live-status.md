@@ -2,15 +2,18 @@
 
 > Single source of truth while bringing Codex IM Rich Client from Phase 7
 > complete to上线运行标准.
-> **Last updated:** 2026-05-03 - JAC-171 complete; release-readiness
-> handoff/tag packet ready for `production-readiness-2026-05-03-r2`; real IM
-> live acceptance continues in `docs/handoffs/live-im-acceptance-status.md`.
+> **Last updated:** 2026-05-07 - JAC-171 remains the release-candidate baseline
+> at `production-readiness-2026-05-03-r2`; subsequent enabled live IM
+> acceptance for Telegram, Feishu/Lark, and DingTalk is complete in
+> `docs/handoffs/live-im-acceptance-status.md`. Slack/direct-use hardening and
+> real Computer Use provider evidence remain separate tracks.
 
 ---
 
 ## 1. Current State
 
-- **Mode:** Release candidate complete; live IM acceptance pending.
+- **Mode:** Release candidate complete; enabled Telegram / Feishu-Lark /
+  DingTalk live IM acceptance complete in the follow-on live-acceptance track.
 - **Plan:** `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
 - **Linear project:** Codex IM Rich Client Release Readiness.
 - **Parent Linear issue:** JAC-166 - Release readiness parent -上线运行标准.
@@ -20,9 +23,9 @@
 - **Version:** `0.1.0-phase7`.
 - **Release tag:** `production-readiness-2026-05-03-r2`.
 - **Handoff:** `docs/handoffs/2026-05-03-production-readiness.md`.
-- **Next exact action:** run live IM acceptance from
-  `docs/handoffs/live-im-acceptance-status.md` and
-  `docs/ops/live-im-acceptance.md`.
+- **Next exact action:** continue direct-use hardening / Slack readiness from
+  `docs/handoffs/direct-use-live-status.md` and Linear project
+  `Codex IM Rich Client Direct Use & Slack Readiness`.
 
 ## 2. Production Readiness Target
 

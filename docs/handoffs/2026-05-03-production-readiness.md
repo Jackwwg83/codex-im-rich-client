@@ -1,6 +1,8 @@
 # 2026-05-03 Production Readiness Handoff
 
-Status: release-ready local Mac mini candidate; real IM live acceptance pending.
+Status: historical release-ready local Mac mini candidate. Subsequent enabled
+Telegram / Feishu-Lark / DingTalk live IM acceptance completed on 2026-05-07;
+see `docs/handoffs/live-im-acceptance-status.md` for current evidence.
 
 ## 1. Release Pointer
 
@@ -18,8 +20,10 @@ Status: release-ready local Mac mini candidate; real IM live acceptance pending.
 
 The repository is ready as a private local Mac mini release candidate. It is not
 a public SaaS deployment and does not expose Codex App Server to the internet by
-default. Real Telegram/Lark/DingTalk/Codex live acceptance is tracked
-separately in `docs/handoffs/live-im-acceptance-status.md`.
+default. Real Telegram/Lark/DingTalk/Codex live acceptance was tracked
+separately in `docs/handoffs/live-im-acceptance-status.md` and is now complete
+for enabled Telegram, Feishu/Lark, and DingTalk paths. Slack and real Computer
+Use provider evidence remain separate future tracks.
 
 The runnable path is:
 

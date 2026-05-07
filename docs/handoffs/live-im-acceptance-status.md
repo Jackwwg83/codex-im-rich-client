@@ -66,16 +66,16 @@
 
 ## 2. Correct Acceptance Language
 
-Use this wording until all enabled live platform smokes pass:
+Use this wording for the current enabled-platform acceptance state:
 
 ```text
-Release candidate complete; Telegram live acceptance passed. Feishu/Lark prompt direct-use, card-schema live acceptance, CardKit card update, and real approval Allow-once/Decline/Abort/Allow-session matrix passed; a 2026-05-05 Feishu Web regression also returned an exact Codex reply after stale-thread recovery. DingTalk Stream live acceptance passed, Card.Instance.Write is open, redacted OpenAPI card send/update now passes with a contact-discovered enterprise userid and the published-template parameter shape, installed DingTalk readiness is green, real DingTalk desktop inbound passes prompt/reply plus /status, and the explicit live CardKit callback probe now passes after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
+Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, and DingTalk. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
 Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context.
 Daemon-side delivery of completed `imageGeneration.savedPath` artifacts is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram and Feishu/Lark.
 ```
 
-Do not claim that the product is actually live-validated or production accepted
-until the matrix below is complete with real credentials and redacted evidence.
+Do not extend this claim to Slack, unsupported DingTalk attachments, or real
+Computer Use provider execution. Those remain separate acceptance tracks.
 
 ## 3. Live Acceptance Matrix
 
@@ -134,6 +134,10 @@ real desktop execution is not part of live IM acceptance until a reviewed real
 provider is implemented.
 
 ## 4. Passing Criteria
+
+As of 2026-05-07, the enabled Telegram / Feishu-Lark / DingTalk live IM
+acceptance matrix is complete with redacted evidence. Future platforms or
+capabilities must satisfy the same criteria before being called live accepted.
 
 Live IM acceptance is complete only when:
 
