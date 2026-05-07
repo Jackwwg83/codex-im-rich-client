@@ -46,13 +46,14 @@
 > daemon attachment directory, and emits `InboundAttachment[]` for the common
 > Codex `localImage` / local-path file routing path. Real DingTalk inbound
 > attachment acceptance still needs a live upload gate.
-> Daemon terminal turn output now maps completed Codex development artifacts
+> Daemon terminal turn output now maps Codex development artifacts
 > through the common IM surface: short command output is summarized inline,
-> long command output is sent as a redacted `.log` attachment, file-change diffs
-> are sent as redacted `.patch` attachments, `imageView.path` and
-> `imageGeneration.savedPath` are sent through adapter `sendFile`, and
-> dynamic/MCP/Computer Use tool items show redacted native status/result
-> summaries without rendering raw arguments.
+> long completed/failed command output is sent as a redacted `.log`
+> attachment, file-change diffs are sent as redacted `.patch` attachments,
+> `imageView.path` and `imageGeneration.savedPath` are sent through adapter
+> `sendFile`, local dynamic-tool / Computer Use `inputImage` artifacts are
+> sent through the same path, and dynamic/MCP/Computer Use tool items show
+> redacted native status/result summaries without rendering raw arguments.
 > Codex App lifecycle/status notifications now fold into the active IM turn
 > output as a low-noise `Codex status` section for token usage, compaction,
 > model reroutes, MCP startup/OAuth, account usage, remote-control status, and
@@ -65,8 +66,8 @@
 > wrappers for the App Server's native MCP OAuth-login and reload surfaces;
 > `/mcp` without args still lists MCP server status/tool counts.
 > Explicit Telegram and Feishu/Lark live file gates passed with redacted
-> evidence; after the JAC-264 bridge reinstall/kickstart, launchd is running
-> under pid `29709` with `pendingApprovals=0`. Common group safety now has a config-level mention
+> evidence; after the JAC-265 bridge reinstall/kickstart, launchd is running
+> under pid `49496` with `pendingApprovals=0`. Common group safety now has a config-level mention
 > gate: configured Telegram/Feishu-Lark/DingTalk group chats must mention a
 > configured alias before ordinary inbound text reaches Codex, while approval
 > callback authorization remains bound to callback tokens, messageRef
@@ -709,6 +710,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT outbound attachment loop | Telegram/Lark adapter-level `sendFile` is implemented and covered by contract tests. Telegram sends image MIME payloads as photos and generic files as documents with topic routing preserved. Feishu/Lark uploads image/file bytes through SDK `im.image.create` / `im.file.create` and sends `image` / `file` messages. DingTalk remains `supportsAttachments=false` until a real supported file-send path is proven. |
 | 2026-05-07 SGT daemon artifact loop | Daemon terminal turn output now collects completed `imageGeneration.savedPath` items and sends the saved local image through adapter `sendFile` after publishing the terminal text summary. Files are capped, empty files are skipped, unsupported adapters audit-skip, and the implementation keeps Codex `imageGeneration` as the source concept. |
 | 2026-05-07 SGT Codex-native artifact detail loop | JAC-261 extends the shared daemon output path for every adapter with `sendFile`: commandExecution short output is summarized inline, long `aggregatedOutput` becomes a redacted `.log` attachment, fileChange `changes[].diff` becomes a redacted `.patch` attachment, `imageView.path` is sent as a local image/file artifact, and dynamic/MCP/Computer Use summaries include success/duration/content presence without raw arguments. Targeted daemon turn-output tests passed. |
+| 2026-05-07 SGT Codex-native GUI artifact loop | JAC-265 extends the shared daemon output path so failed commandExecution items also attach long redacted `.log` output, and dynamicToolCall / Computer Use `contentItems[].inputImage.imageUrl` local paths are sent through adapter `sendFile` as GUI screenshot artifacts. Remote URLs are not fetched, raw tool arguments remain suppressed, and the behavior is platform-aligned through the common adapter contract. Full local gates passed (`pnpm typecheck`, `pnpm typecheck:tests`, `pnpm lint`, `pnpm test`, `pnpm protocol:check`), then the bridge bundle was rebuilt/installed and launchd restarted to pid `49496`; `pnpm im:doctor` reports ready for installed Telegram/Lark/DingTalk and Slack disabled. |
 | 2026-05-07 SGT model selection loop | JAC-262 adds `/model <model>` to the shared IM control plane. The daemon validates the requested id/name against `runtime.modelList()`, updates the current target binding's `defaultModel` through `SessionRouter.bind()`, and subsequent prompt turns carry the selected model in existing `CodexRuntime.turnStart` params. `/model` with no args still lists available models. |
 | 2026-05-07 SGT lifecycle status loop | JAC-263 folds selected Codex App lifecycle notifications that the normalizer preserves as unknown events into the active IM turn output. `thread/tokenUsage/updated`, `thread/compacted`, `thread/status/changed`, `model/rerouted`, `model/verification`, `mcpServer/startupStatus/updated`, `mcpServer/oauthLogin/completed`, `account/rateLimits/updated`, and `remoteControl/status/changed` render as concise redacted `Codex status` lines without raw JSON. |
 | 2026-05-07 SGT MCP control loop | JAC-264 adds `/mcp login <server>` and `/mcp reload` to the shared IM control plane. Both call new centralized `CodexRuntime` wrappers for App Server `mcpServer/oauth/login` and `config/mcpServer/reload`; `/mcp` without args remains the status/tool-count listing. The daemon does not call MCP tools directly from IM. |

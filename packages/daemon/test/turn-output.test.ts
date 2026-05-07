@@ -948,7 +948,7 @@ describe("daemon turn output projection", () => {
     await daemon.stop();
   });
 
-  it("attaches long command logs and local image-view artifacts", async () => {
+  it("attaches failed long command logs and local image-view artifacts", async () => {
     const queue = new EventQueue();
     const screenshotBytes = new Uint8Array([0xff, 0xd8, 0xff]);
     const readArtifactFile = vi.fn(async () => screenshotBytes);
@@ -1028,10 +1028,10 @@ describe("daemon turn output projection", () => {
           item: {
             id: "item-command",
             type: "commandExecution",
-            status: "completed",
+            status: "failed",
             command: "pnpm test",
             aggregatedOutput: "very noisy output\n".repeat(40),
-            exitCode: 0,
+            exitCode: 1,
           },
         },
       },
@@ -1065,7 +1065,7 @@ describe("daemon turn output projection", () => {
         "Codex turn completed.",
         "",
         "Codex items:",
-        "- commandExecution completed: pnpm test; exit 0; output: attached",
+        "- commandExecution failed: pnpm test; exit 1; output: attached",
         "- imageView: /tmp/codex-im/screenshot.jpg",
       ].join("\n"),
     );
@@ -1090,11 +1090,18 @@ describe("daemon turn output projection", () => {
 
   it("summarizes Computer Use dynamic tool output content without exposing arguments", async () => {
     const queue = new EventQueue();
+    const screenshotBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const readArtifactFile = vi.fn(async () => screenshotBytes);
     const sendText = vi.fn(async (target: Target, _body: string) => ({
       target,
       messageId: "bot-output-1",
     }));
     const editText = vi.fn(async (_ref: DaemonMessageRef, _body: string) => undefined);
+    const sendFile = vi.fn(async (target: Target, _file: DaemonOutboundFile) => ({
+      target,
+      messageId: "bot-file-1",
+      kind: "file" as const,
+    }));
     let messageHandler: ((message: unknown) => void) | undefined;
     const route: Extract<SessionRoute, { kind: "bound" }> = {
       kind: "bound",
@@ -1134,9 +1141,11 @@ describe("daemon turn output projection", () => {
         },
         sendText,
         editText,
+        sendFile,
         start: async () => undefined,
         stop: async () => undefined,
       }),
+      readArtifactFile,
       schedulePrune: () => () => undefined,
     });
 
@@ -1186,6 +1195,13 @@ describe("daemon turn output projection", () => {
       "- dynamicToolCall failed: Computer Use computer_use.synthetic; success no; 33ms; content 2 text 1 image 1",
     );
     expect(body).not.toContain("should-not-render");
+    await waitFor(() => sendFile.mock.calls.length === 1);
+    expect(readArtifactFile).toHaveBeenCalledWith("/tmp/codex-im/cu.png");
+    expect(sendFile).toHaveBeenCalledWith(TARGET, {
+      filename: "cu.png",
+      bytes: screenshotBytes,
+      contentType: "image/png",
+    });
 
     await daemon.stop();
   });

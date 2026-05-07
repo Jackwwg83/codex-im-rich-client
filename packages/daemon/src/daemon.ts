@@ -4705,20 +4705,32 @@ function extractCodexItemFiles(raw: unknown): readonly DaemonTurnOutputFile[] {
   }
   const type = readStringField(item, "type");
   const status = readStringField(item, "status");
-  if (status !== undefined && status !== "completed") {
-    return [];
-  }
   if (type === "imageGeneration") {
+    if (status !== undefined && status !== "completed") {
+      return [];
+    }
     return artifactFileFromPath(readStringField(item, "savedPath"));
   }
   if (type === "imageView") {
     return artifactFileFromPath(readStringField(item, "path"));
   }
   if (type === "commandExecution") {
+    if (status === "inProgress") {
+      return [];
+    }
     return commandOutputFile(item);
   }
   if (type === "fileChange") {
+    if (status !== undefined && status !== "completed") {
+      return [];
+    }
     return fileChangePatchFile(item);
+  }
+  if (type === "dynamicToolCall") {
+    if (status === "inProgress") {
+      return [];
+    }
+    return dynamicToolCallImageFiles(item);
   }
   return [];
 }
@@ -4771,6 +4783,22 @@ function fileChangePatchFile(item: Record<string, unknown>): readonly DaemonTurn
       contentType: "text/x-patch",
     },
   ];
+}
+
+function dynamicToolCallImageFiles(item: Record<string, unknown>): readonly DaemonTurnOutputFile[] {
+  const files: DaemonTurnOutputFile[] = [];
+  for (const contentItem of readArrayField(item, "contentItems")) {
+    const record = readRecord(contentItem);
+    if (readStringField(record, "type") !== "inputImage") {
+      continue;
+    }
+    const imageUrl = readStringField(record, "imageUrl");
+    if (imageUrl === undefined || !imageUrl.startsWith("/")) {
+      continue;
+    }
+    files.push(...artifactFileFromPath(imageUrl));
+  }
+  return files;
 }
 
 function buildFileChangePatch(item: Record<string, unknown>): string | undefined {
