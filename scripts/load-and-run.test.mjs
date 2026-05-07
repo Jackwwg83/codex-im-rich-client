@@ -50,6 +50,12 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
     expect(result.stdout).toContain(
       `DINGTALK_CLIENT_SECRET: <set from Keychain/env, length=${TOKEN.length}>`,
     );
+    expect(result.stdout).toContain(
+      `SLACK_BOT_TOKEN: <set from Keychain/env, length=${TOKEN.length}>`,
+    );
+    expect(result.stdout).toContain(
+      `SLACK_APP_TOKEN: <set from Keychain/env, length=${TOKEN.length}>`,
+    );
     expect(result.stdout).toContain("NODE_BIN: /fake/node");
     expect(result.stdout).toContain("DAEMON_ENTRY: /fake/daemon.mjs");
     expect(result.stdout).toContain("CONFIG_PATH: ");
@@ -98,6 +104,8 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
         'echo "token-length:${#IM_TELEGRAM_BOT_TOKEN}"',
         'echo "lark-secret-length:${#IM_LARK_APP_SECRET}"',
         'echo "dingtalk-secret-length:${#DINGTALK_CLIENT_SECRET}"',
+        'echo "slack-bot-token-length:${#SLACK_BOT_TOKEN}"',
+        'echo "slack-app-token-length:${#SLACK_APP_TOKEN}"',
       ].join("\n"),
       { mode: 0o700 },
     );
@@ -127,6 +135,8 @@ describe("load-and-run Keychain wrapper (T29a)", () => {
     expect(result.stdout).toContain(`token-length:${TOKEN.length}`);
     expect(result.stdout).toContain(`lark-secret-length:${TOKEN.length}`);
     expect(result.stdout).toContain(`dingtalk-secret-length:${TOKEN.length}`);
+    expect(result.stdout).toContain(`slack-bot-token-length:${TOKEN.length}`);
+    expect(result.stdout).toContain(`slack-app-token-length:${TOKEN.length}`);
     expect(result.stdout).not.toContain(TOKEN);
   });
 });
