@@ -2032,6 +2032,109 @@ describe("Daemon skeleton (T14)", () => {
     }
   });
 
+  it("sets the current IM binding model and uses it for subsequent turns", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    let route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+      defaultModel: "gpt-old",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => route),
+      bind: vi.fn((boundTarget, input) => {
+        route = { kind: "bound" as const, target: boundTarget, ...input };
+        return route;
+      }),
+      bindThread: vi.fn(),
+    };
+    const runtime = {
+      events: { events: async function* () {} },
+      threadStart: vi.fn(),
+      turnStart: vi.fn(async () => ({ turn: { id: "turn-1" } })),
+      turnSteer: vi.fn(),
+      modelList: vi.fn(async () => ({
+        data: [
+          { id: "model-old", model: "gpt-old", displayName: "GPT Old" },
+          { id: "model-new", model: "gpt-new", displayName: "GPT New" },
+        ],
+        nextCursor: null,
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+      sendText: vi.fn(async () => ({ target, messageId: "bot-output-1" })),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web", defaultModel: "gpt-old" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      schedulePrune: () => () => {},
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/model gpt-new",
+      messageRef: { target, messageId: "msg-model" },
+      receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(sessionRouter.bind).toHaveBeenCalledWith(target, {
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+      defaultModel: "gpt-new",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-model" },
+      "Model set for this IM thread: gpt-new",
+    );
+
+    messageHandler?.({
+      target,
+      sender,
+      text: "Reply exactly: MODEL-OK",
+      messageRef: { target, messageId: "msg-prompt" },
+      receivedAt: new Date("2026-05-03T00:00:01.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      input: [{ type: "text", text: "Reply exactly: MODEL-OK", text_elements: [] }],
+      cwd: "/repo/web",
+      model: "gpt-new",
+    });
+  });
+
   it("lists pending approvals and resolves one through text fallback without raw token input", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-100approval-chat" };

@@ -122,6 +122,7 @@ remain separate acceptance tracks.
 | Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
 | Telegram/Lark inbound image/file upload | platform file resources materialize locally, then route to Codex turn input | local pass | Telegram `photo` / `document` and Feishu/Lark `image` / `file` unit coverage proves adapter download + daemon routing; images map to Codex `localImage`, generic files map to local-path text context |
 | Common Codex-native IM control commands | `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp` through daemon common command routing | local pass | Runtime wrappers keep App Server method literals centralized in `CodexRuntime`; daemon output is redacted and shared by Telegram/Lark/DingTalk adapters through the common control plane |
+| Common Codex model selection | `/model <model>` through daemon common command routing | local pass | daemon validates the id/name through `runtime.modelList()`, stores the selected model on the current target binding, and future `turnStart` requests use existing `model` params; no global config mutation |
 | Common Codex-native artifact projection | commandExecution, fileChange, imageView/imageGeneration, mcpToolCall, dynamicToolCall/Computer Use terminal items | local pass | shared daemon output summarizes short command output inline, sends long command output as redacted `.log`, sends fileChange diffs as redacted `.patch`, sends image artifacts via `sendFile`, and never renders raw tool arguments |
 | Common approval text fallback | `/approvals` and `/approve <id> <action>` through daemon common command routing | local pass | Fallback only resolves approvals that already have a server-side bound callback token record with a bound approval-card `messageRef`; no raw callback token or approval payload is accepted from IM text |
 | Common identity/access controls | `/whoami` plus config-level reusable access groups | local pass | `/whoami` reports platform, identity-field presence, and current project/thread binding without raw chat/user/topic ids; config access groups expand into existing allowlists and unknown group references fail closed |
@@ -505,6 +506,11 @@ Stop and treat as a blocker if:
   as a redacted `.patch`; `imageView.path` uses `sendFile`; and
   dynamic/MCP/Computer Use summaries include success, duration, and content
   presence without raw arguments. Targeted daemon turn-output tests passed.
+- 2026-05-07 SGT model selection loop: JAC-262 adds `/model <model>` to the
+  shared IM control plane. The daemon validates the requested id/name through
+  `runtime.modelList()`, stores the selected model on the current target
+  binding, and subsequent prompts use the selected model through existing
+  `CodexRuntime.turnStart` params. `/model` without args still lists models.
 - 2026-05-07 SGT live attachment gates: Temporarily stopped launchd to avoid
   Telegram polling contention, then ran explicit Telegram and Feishu/Lark file
   gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless

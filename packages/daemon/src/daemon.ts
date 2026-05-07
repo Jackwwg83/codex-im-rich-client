@@ -2146,7 +2146,7 @@ export class Daemon {
     }
 
     if (command.name === "model") {
-      await this.#routeModelCommand(inbound);
+      await this.#routeModelCommand(inbound, command);
       return;
     }
 
@@ -2218,7 +2218,7 @@ export class Daemon {
         "/alias <title> - Rename current thread for IM display.",
         "/fork [thread] - Fork the current or selected Codex thread.",
         "/stop - Interrupt the active Codex turn.",
-        "/model - List available Codex models.",
+        "/model [model] - List available Codex models or set this IM thread model.",
         "/compact - Start Codex compaction for the current thread.",
         "/usage - Show Codex account usage/rate-limit status.",
         "/diagnostics - Show runtime, IM, tool, and Computer Use readiness.",
@@ -2465,10 +2465,14 @@ export class Daemon {
     await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
   }
 
-  async #routeModelCommand(inbound: {
-    target: Target;
-    messageRef?: DaemonMessageRef;
-  }): Promise<void> {
+  async #routeModelCommand(
+    inbound: {
+      target: Target;
+      sender: SecurityPolicySender;
+      messageRef?: DaemonMessageRef;
+    },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
     const runtime = this.#currentRuntime();
     if (runtime?.modelList === undefined) {
       await this.#editInboundMessage(inbound.messageRef, "Codex model list unavailable.");
@@ -2478,6 +2482,11 @@ export class Daemon {
     try {
       const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
       const response = await runtime.modelList({ limit: 20, includeHidden: false });
+      const [selector] = command.args;
+      if (selector !== undefined) {
+        await this.#setCurrentModel(inbound, response, selector);
+        return;
+      }
       await this.#editInboundMessage(
         inbound.messageRef,
         formatModelList(response, route?.kind === "bound" ? route.defaultModel : undefined),
@@ -2490,6 +2499,49 @@ export class Daemon {
       });
       await this.#editInboundMessage(inbound.messageRef, "Codex model list failed.");
     }
+  }
+
+  async #setCurrentModel(
+    inbound: {
+      target: Target;
+      sender: SecurityPolicySender;
+      messageRef?: DaemonMessageRef;
+    },
+    modelListResponse: unknown,
+    selector: string,
+  ): Promise<void> {
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const route = sessionRouter?.resolve(inbound.target);
+    if (route?.kind !== "bound") {
+      await this.#editInboundMessage(inbound.messageRef, "No current Codex project.");
+      return;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+    if (sessionRouter?.bind === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Model selection store unavailable.");
+      return;
+    }
+
+    const selectedModel = selectModelIdentifier(modelListResponse, selector);
+    if (selectedModel === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, `Unknown model: ${redact(selector)}`);
+      return;
+    }
+
+    sessionRouter.bind(inbound.target, {
+      projectId: route.projectId,
+      cwd: route.cwd,
+      ...(route.codexThreadId === undefined ? {} : { codexThreadId: route.codexThreadId }),
+      defaultModel: selectedModel,
+      ...(route.activeTurnId === undefined ? {} : { activeTurnId: route.activeTurnId }),
+    });
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      `Model set for this IM thread: ${redact(selectedModel)}`,
+    );
   }
 
   async #routeCompactCommand(inbound: {
@@ -4112,6 +4164,24 @@ function formatModelList(value: unknown, currentModel: string | undefined): stri
       }${suffix.length === 0 ? "" : ` - ${suffix}`}`;
     }),
   ].join("\n");
+}
+
+function selectModelIdentifier(value: unknown, selector: string): string | undefined {
+  const wanted = selector.toLowerCase();
+  const models = readArrayField(value, "data").map(readRecord).filter(isDefined);
+  for (const model of models) {
+    const id = readStringField(model, "id");
+    const modelId = readStringField(model, "model");
+    const displayName = readStringField(model, "displayName");
+    if (
+      id?.toLowerCase() === wanted ||
+      modelId?.toLowerCase() === wanted ||
+      displayName?.toLowerCase() === wanted
+    ) {
+      return modelId ?? id ?? displayName;
+    }
+  }
+  return undefined;
 }
 
 function formatModelProviderCapabilities(value: unknown): string {
