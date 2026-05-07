@@ -508,6 +508,13 @@ Stop and treat as a blocker if:
   explicit live gate and waits for a fresh inbound DingTalk message before
   sending the harmless attachment. This is not yet a real DingTalk file-send
   acceptance claim.
+- 2026-05-07 SGT DingTalk file live gate attempt: `DINGTALK_LIVE_FILE=1`
+  connected to DingTalk Stream, but Computer Use / macOS automation could not
+  surface a usable DingTalk or Chrome chat window to send the required fresh
+  inbound message. The gate ended fail-closed with redacted `status=blocked`,
+  `robotEvents=0`, and `targetSource=missing`; no attachment was sent and no
+  private identifiers were recorded. Launchd was restored under pid `15382`,
+  `pendingApprovals=0`, and `pnpm im:doctor` remained ready.
 - 2026-05-07 SGT Codex-native control loop: The common IM command plane now
   exposes Codex App Server-native surfaces for model listing, thread
   compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,

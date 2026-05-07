@@ -362,6 +362,13 @@
     `outbound files/images supported after inbound session reply URL`. This is
     local implementation evidence only until a real DingTalk file-send gate
     passes.
+  - latest live gate attempt - DingTalk file send: `DINGTALK_LIVE_FILE=1`
+    connected to DingTalk Stream and waited for a fresh inbound robot message,
+    but local DingTalk Desktop exposed no usable chat window and Chrome only had
+    DingTalk non-chat pages. The smoke exited fail-closed with redacted
+    `status=blocked`, `robotEvents=0`, and `targetSource=missing`; no attachment
+    was sent. Launchd was restored under pid `15382`, `pendingApprovals=0`, and
+    `pnpm im:doctor` remained ready.
   - latest patch - daemon artifact delivery: completed Codex
     `imageGeneration.savedPath` items are read as bounded local artifacts and
     sent through adapter `sendFile` after terminal text output. Unsupported
