@@ -92,6 +92,7 @@ const MAX_IM_TEXT_CHARS = 3_800;
 const MAX_IM_TEXT_CHUNKS = 6;
 const MAX_IM_TEXT_BUFFER_CHARS = MAX_IM_TEXT_CHARS * MAX_IM_TEXT_CHUNKS;
 const MAX_IM_ITEM_SUMMARIES = 6;
+const MAX_IM_STATUS_SUMMARIES = 6;
 const MAX_IM_ARTIFACT_FILES = 3;
 const MAX_IM_ARTIFACT_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_INLINE_COMMAND_OUTPUT_CHARS = 240;
@@ -339,7 +340,9 @@ interface DaemonRuntimeProvider {
 
 interface DaemonTurnOutputState {
   readonly target: Target;
+  readonly threadId: string;
   readonly turnId: string;
+  readonly statusSummaries: string[];
   readonly itemSummaries: string[];
   readonly files: DaemonTurnOutputFile[];
   messageRef?: DaemonMessageRef;
@@ -1688,6 +1691,21 @@ export class Daemon {
       return;
     }
 
+    if (event.type === "unknown") {
+      const state = this.#turnOutputStateForStatusEvent(event);
+      const summary = summarizeCodexStatusEvent(event);
+      if (
+        state !== undefined &&
+        summary !== undefined &&
+        state.statusSummaries.length < MAX_IM_STATUS_SUMMARIES &&
+        !state.statusSummaries.includes(summary)
+      ) {
+        state.statusSummaries.push(summary);
+        await this.#maybeEditTurnProgress(state);
+      }
+      return;
+    }
+
     if (
       event.type !== "turn_completed" &&
       event.type !== "turn_failed" &&
@@ -1705,9 +1723,32 @@ export class Daemon {
     this.#clearTerminalActiveTurn(state.target, event.threadId, event.turnId);
     await this.#publishTerminalTurnOutput(
       state,
-      this.#terminalTurnOutputBody(event, state.text, state.itemSummaries),
+      this.#terminalTurnOutputBody(event, state.text, state.statusSummaries, state.itemSummaries),
     );
     await this.#publishTerminalTurnFiles(state);
+  }
+
+  #turnOutputStateForStatusEvent(
+    event: Extract<CodexRichEvent, { type: "unknown" }>,
+  ): DaemonTurnOutputState | undefined {
+    const params = readRecord(event.params);
+    const threadId = readStringField(params, "threadId");
+    const turnId = readStringField(params, "turnId");
+    if (threadId !== undefined && turnId !== undefined) {
+      return this.#turnOutputs.get(turnOutputKey(threadId, turnId));
+    }
+    if (threadId !== undefined) {
+      for (const state of this.#turnOutputs.values()) {
+        if (state.threadId === threadId) {
+          return state;
+        }
+      }
+      return undefined;
+    }
+    if (isGlobalRuntimeStatusMethod(event.method) && this.#turnOutputs.size === 1) {
+      return this.#turnOutputs.values().next().value;
+    }
+    return undefined;
   }
 
   #clearTerminalActiveTurn(target: Target, threadId: string, turnId: string): void {
@@ -1736,7 +1777,9 @@ export class Daemon {
   async #openTurnOutput(target: Target, threadId: string, turnId: string): Promise<void> {
     const state: DaemonTurnOutputState = {
       target,
+      threadId,
       turnId,
+      statusSummaries: [],
       itemSummaries: [],
       files: [],
       text: "",
@@ -1879,7 +1922,11 @@ export class Daemon {
   }
 
   async #maybeEditTurnProgress(state: DaemonTurnOutputState): Promise<void> {
-    if (state.text.length === 0) {
+    if (
+      state.text.length === 0 &&
+      state.statusSummaries.length === 0 &&
+      state.itemSummaries.length === 0
+    ) {
       return;
     }
     if (isAppendOnlyTextRef(state.messageRef)) {
@@ -1897,19 +1944,18 @@ export class Daemon {
   }
 
   #inProgressTurnOutputBody(state: DaemonTurnOutputState): string {
-    if (state.itemSummaries.length === 0) {
+    if (state.statusSummaries.length === 0 && state.itemSummaries.length === 0) {
       return state.text.length === 0 ? "Codex is working..." : truncateImText(state.text);
     }
     return truncateImText(
-      `${state.text.length === 0 ? "Codex is working..." : state.text}\n\nCodex items:\n${state.itemSummaries
-        .map((summary) => `- ${summary}`)
-        .join("\n")}`,
+      turnOutputBodyWithSections(state.text, state.statusSummaries, state.itemSummaries),
     );
   }
 
   #terminalTurnOutputBody(
     event: CodexRichEvent,
     text: string,
+    statusSummaries: readonly string[] = [],
     itemSummaries: readonly string[] = [],
   ): string {
     let body: string;
@@ -1920,12 +1966,10 @@ export class Daemon {
     } else {
       body = text.length === 0 ? "Codex turn failed." : `${text}\n\n[turn failed]`;
     }
-    if (itemSummaries.length === 0) {
+    if (statusSummaries.length === 0 && itemSummaries.length === 0) {
       return body;
     }
-    return truncateImText(
-      `${body}\n\nCodex items:\n${itemSummaries.map((summary) => `- ${summary}`).join("\n")}`,
-    );
+    return truncateImText(turnOutputBodyWithSections(body, statusSummaries, itemSummaries));
   }
 
   async #routeComputerUse(
@@ -4080,6 +4124,21 @@ function appendImText(base: string, delta: string): string {
   return `${next.slice(0, MAX_IM_TEXT_BUFFER_CHARS - 24)}\n\n[truncated for IM]`;
 }
 
+function turnOutputBodyWithSections(
+  text: string,
+  statusSummaries: readonly string[],
+  itemSummaries: readonly string[],
+): string {
+  const sections = [text.length === 0 ? "Codex is working..." : text];
+  if (statusSummaries.length > 0) {
+    sections.push(`Codex status:\n${statusSummaries.map((summary) => `- ${summary}`).join("\n")}`);
+  }
+  if (itemSummaries.length > 0) {
+    sections.push(`Codex items:\n${itemSummaries.map((summary) => `- ${summary}`).join("\n")}`);
+  }
+  return sections.join("\n\n");
+}
+
 function splitImText(text: string): readonly string[] {
   if (text.length <= MAX_IM_TEXT_CHARS) {
     return [text];
@@ -4323,6 +4382,109 @@ function formatMcpToolLines(value: unknown): string[] {
         : ` - ${toolNames.slice(0, 4).join(", ")}${toolNames.length > 4 ? " ..." : ""}`;
     return `- ${name}: auth ${auth}, tools ${toolNames.length}${sample}`;
   });
+}
+
+function summarizeCodexStatusEvent(
+  event: Extract<CodexRichEvent, { type: "unknown" }>,
+): string | undefined {
+  const params = readRecord(event.params);
+  switch (event.method) {
+    case "thread/tokenUsage/updated":
+      return summarizeTokenUsageStatus(params);
+    case "thread/compacted":
+      return "thread compacted";
+    case "thread/status/changed":
+      return summarizeThreadStatus(params);
+    case "model/rerouted":
+      return summarizeModelReroute(params);
+    case "model/verification":
+      return summarizeModelVerification(params);
+    case "mcpServer/startupStatus/updated":
+      return summarizeMcpStartupStatus(params);
+    case "mcpServer/oauthLogin/completed":
+      return summarizeMcpOauthStatus(params);
+    case "account/rateLimits/updated":
+      return "usage updated";
+    case "remoteControl/status/changed":
+      return summarizeRemoteControlStatus(params);
+    default:
+      return undefined;
+  }
+}
+
+function isGlobalRuntimeStatusMethod(method: string): boolean {
+  return (
+    method === "mcpServer/startupStatus/updated" ||
+    method === "mcpServer/oauthLogin/completed" ||
+    method === "account/rateLimits/updated" ||
+    method === "remoteControl/status/changed"
+  );
+}
+
+function summarizeTokenUsageStatus(params: Record<string, unknown> | undefined): string {
+  const tokenUsage = readRecord(params?.tokenUsage);
+  const totalTokens = readNumberField(readRecord(tokenUsage?.total), "totalTokens");
+  const lastTokens = readNumberField(readRecord(tokenUsage?.last), "totalTokens");
+  const contextWindow = readNumberField(tokenUsage, "modelContextWindow");
+  const parts = [
+    totalTokens === undefined ? undefined : `total ${formatInteger(totalTokens)}`,
+    lastTokens === undefined ? undefined : `last ${formatInteger(lastTokens)}`,
+    totalTokens === undefined || contextWindow === undefined || contextWindow <= 0
+      ? undefined
+      : `context ${Math.round((totalTokens / contextWindow) * 100)}%`,
+  ].filter((part): part is string => part !== undefined);
+  return parts.length === 0 ? "token usage updated" : `token usage: ${parts.join(", ")}`;
+}
+
+function summarizeThreadStatus(params: Record<string, unknown> | undefined): string {
+  const statusType = readStringField(readRecord(params?.status), "type") ?? "unknown";
+  return `thread status: ${safeStatusText(statusType)}`;
+}
+
+function summarizeModelReroute(params: Record<string, unknown> | undefined): string {
+  const fromModel = safeStatusText(readStringField(params, "fromModel") ?? "unknown");
+  const toModel = safeStatusText(readStringField(params, "toModel") ?? "unknown");
+  const reason = readStringField(params, "reason");
+  return `model rerouted: ${fromModel} -> ${toModel}${
+    reason === undefined ? "" : ` (${safeStatusText(reason)})`
+  }`;
+}
+
+function summarizeModelVerification(params: Record<string, unknown> | undefined): string {
+  const verifications = readArrayField(params, "verifications");
+  return `model verification: ${verifications.length} result${verifications.length === 1 ? "" : "s"}`;
+}
+
+function summarizeMcpStartupStatus(params: Record<string, unknown> | undefined): string {
+  const name = safeStatusText(readStringField(params, "name") ?? "unknown");
+  const status = safeStatusText(readStringField(params, "status") ?? "unknown");
+  const error = readStringField(params, "error");
+  return `MCP ${name}: ${status}${
+    status === "failed" && error !== undefined ? ` (${safeStatusText(error)})` : ""
+  }`;
+}
+
+function summarizeMcpOauthStatus(params: Record<string, unknown> | undefined): string {
+  const name = safeStatusText(readStringField(params, "name") ?? "unknown");
+  const success = readBooleanField(params, "success");
+  const error = readStringField(params, "error");
+  return `MCP ${name} OAuth: ${
+    success === true
+      ? "connected"
+      : `failed${error === undefined ? "" : ` (${safeStatusText(error)})`}`
+  }`;
+}
+
+function summarizeRemoteControlStatus(params: Record<string, unknown> | undefined): string {
+  return `remote control: ${safeStatusText(readStringField(params, "status") ?? "unknown")}`;
+}
+
+function safeStatusText(value: string): string {
+  return truncateItemSummary(redact(value.replace(/\s+/g, " ").trim()));
+}
+
+function formatInteger(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Math.round(value));
 }
 
 function yesNo(value: boolean | undefined): string {

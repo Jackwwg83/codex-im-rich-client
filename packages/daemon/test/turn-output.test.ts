@@ -659,6 +659,148 @@ describe("daemon turn output projection", () => {
     await daemon.stop();
   });
 
+  it("folds Codex lifecycle status notices into the active IM turn output", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Use status-producing tools",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "unknown",
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        tokenUsage: {
+          total: {
+            totalTokens: 1234,
+            inputTokens: 1000,
+            cachedInputTokens: 200,
+            outputTokens: 234,
+            reasoningOutputTokens: 34,
+          },
+          last: {
+            totalTokens: 56,
+            inputTokens: 45,
+            cachedInputTokens: 5,
+            outputTokens: 11,
+            reasoningOutputTokens: 1,
+          },
+          modelContextWindow: 8000,
+        },
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "model/rerouted",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        fromModel: "gpt-old",
+        toModel: "gpt-new",
+        reason: "capacity",
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "mcpServer/startupStatus/updated",
+      params: {
+        name: "github",
+        status: "ready",
+        error: "token-like sk-test-secret should not be shown",
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-agent",
+      deltaText: "done",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length >= 2);
+    const lastEdit = editText.mock.calls.at(-1);
+    expect(lastEdit).toBeDefined();
+    const [, body] = lastEdit as unknown as [DaemonMessageRef, string];
+    expect(body).toBe(
+      [
+        "done",
+        "",
+        "Codex status:",
+        "- token usage: total 1234, last 56, context 15%",
+        "- model rerouted: gpt-old -> gpt-new (capacity)",
+        "- MCP github: ready",
+      ].join("\n"),
+    );
+    expect(body).not.toContain("sk-test-secret");
+    expect(body).not.toContain("token-like");
+
+    await daemon.stop();
+  });
+
   it("includes short command output and sends file-change diffs as IM attachments", async () => {
     const queue = new EventQueue();
     const sendText = vi.fn(async (target: Target, _body: string) => ({
