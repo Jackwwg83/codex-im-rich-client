@@ -623,6 +623,14 @@ Stop and treat as a blocker if:
   installed Telegram/Lark/DingTalk with Slack disabled. JAC-273 tracks the real
   DingTalk file/image attachment acceptance gate; DingTalk attachments must not
   be called live-accepted until redacted `status=file_sent` evidence exists.
+- 2026-05-07 SGT DingTalk attachment UI blocker refresh: launchd remained
+  healthy and `pnpm im:doctor` remained ready, but DingTalk Desktop was not in
+  an authenticated bot chat. A screenshot-guided local UI attempt cleared the
+  macOS microphone permission prompt and reached DingTalk quick-login; selecting
+  the saved account required mobile-device confirmation. Without that
+  authenticated session, the daemon cannot receive the fresh inbound robot
+  message needed to capture a session reply URL, so JAC-273 remains blocked and
+  no DingTalk attachment live-acceptance claim was made.
 - 2026-05-07 SGT DingTalk inbound attachment implementation: robot image/file
   messages with `downloadCode` now materialize through
   `/v1.0/robot/messageFiles/download`, save bytes under the daemon attachment
