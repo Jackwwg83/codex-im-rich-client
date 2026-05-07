@@ -56,4 +56,30 @@ describe("SlackChannelAdapter text output (JAC-245)", () => {
       text: "done",
     });
   });
+
+  it("replies to slash-command refs by posting a new Slack message", async () => {
+    const webClient = {
+      chatPostMessage: vi.fn(async () => ({ channel: "C_TEST", ts: "1715000003.000100" })),
+    };
+    const adapter = new SlackChannelAdapter({
+      socketClient: { start: async () => {}, disconnect: async () => {} },
+      webClient,
+    });
+
+    await adapter.start();
+    await adapter.editText(
+      {
+        target: { platform: "slack", chatId: "T_TEST:C_TEST" },
+        messageId: "slash:trigger-1",
+        kind: "inbound",
+        textUpdateMode: "append",
+      },
+      "Codex status",
+    );
+
+    expect(webClient.chatPostMessage).toHaveBeenCalledWith({
+      channel: "C_TEST",
+      text: "Codex status",
+    });
+  });
 });

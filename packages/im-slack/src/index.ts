@@ -39,3 +39,9 @@ export type {
   SlackRawMessageEvent,
   SlackRawMessagePayload,
 } from "./message.js";
+export {
+  encodeSlackSlashCommandMessageId,
+  isSlackSlashCommandMessageId,
+  normalizeSlackRawSlashCommand,
+} from "./slash-command.js";
+export type { SlackRawSlashCommandPayload } from "./slash-command.js";

@@ -12,6 +12,7 @@ import { decodeSlackCallbackHandle, normalizeSlackRawBlockAction } from "./actio
 import { SLACK_CAPABILITIES } from "./capabilities.js";
 import { type SlackApprovalCardBlock, renderSlackApprovalCard } from "./card.js";
 import { type SlackRawMessagePayload, normalizeSlackRawMessage } from "./message.js";
+import { isSlackSlashCommandMessageId, normalizeSlackRawSlashCommand } from "./slash-command.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
@@ -189,6 +190,19 @@ export class SlackChannelAdapter implements ChannelAdapter {
   async editText(ref: MessageRef, body: string): Promise<void> {
     this.#assertStarted("editText");
     const webClient = this.#webClient("editText");
+    if (isSlackSlashCommandMessageId(ref.messageId)) {
+      if (webClient.chatPostMessage === undefined) {
+        throw new Error(
+          "SlackChannelAdapter.editText slash replies require webClient.chatPostMessage",
+        );
+      }
+      await webClient.chatPostMessage({
+        channel: slackChannelFromTarget(ref.target),
+        text: body,
+        ...(ref.target.threadKey === undefined ? {} : { thread_ts: ref.target.threadKey }),
+      });
+      return;
+    }
     if (webClient.chatUpdate === undefined) {
       throw new Error("SlackChannelAdapter.editText requires webClient.chatUpdate");
     }
@@ -248,6 +262,7 @@ export class SlackChannelAdapter implements ChannelAdapter {
   #installInboundHandlers(socketClient: SlackSocketModeClientLike): void {
     socketClient.on?.("message", (payload) => this.#emitRawMessage(payload));
     socketClient.on?.("app_mention", (payload) => this.#emitRawMessage(payload));
+    socketClient.on?.("slash_commands", (payload) => this.#emitRawSlashCommand(payload));
     socketClient.on?.("interactive", (payload) => this.#emitRawAction(payload));
   }
 
@@ -277,6 +292,19 @@ export class SlackChannelAdapter implements ChannelAdapter {
     }
     for (const handler of this.#onActionHandlers) {
       handler(action);
+    }
+  }
+
+  async #emitRawSlashCommand(payload: unknown): Promise<void> {
+    if (this.#inboundPaused) {
+      return;
+    }
+    const message = await normalizeSlackRawSlashCommand(payload, this._nowForTest().getTime());
+    if (message === undefined) {
+      return;
+    }
+    for (const handler of this.#onMessageHandlers) {
+      handler(message);
     }
   }
 
