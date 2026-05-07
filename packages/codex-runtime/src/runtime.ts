@@ -49,6 +49,9 @@ import type {
   GetAccountRateLimitsResponse,
   ListMcpServerStatusParams,
   ListMcpServerStatusResponse,
+  McpServerOauthLoginParams,
+  McpServerOauthLoginResponse,
+  McpServerRefreshResponse,
   ModelListParams,
   ModelListResponse,
   ModelProviderCapabilitiesReadParams,
@@ -101,6 +104,8 @@ const REQUEST_METHODS = {
   reviewStart: "review/start",
   modelList: "model/list",
   modelProviderCapabilitiesRead: "modelProvider/capabilities/read",
+  mcpServerOauthLogin: "mcpServer/oauth/login",
+  mcpServerReload: "config/mcpServer/reload",
   mcpServerStatusList: "mcpServerStatus/list",
   accountRateLimitsRead: "account/rateLimits/read",
 } as const satisfies Record<string, ClientRequest["method"]>;
@@ -213,6 +218,17 @@ export class CodexRuntime {
       REQUEST_METHODS.mcpServerStatusList,
       params,
     );
+  }
+
+  mcpServerOauthLogin(params: McpServerOauthLoginParams): Promise<McpServerOauthLoginResponse> {
+    return this.#client.request<McpServerOauthLoginResponse>(
+      REQUEST_METHODS.mcpServerOauthLogin,
+      params,
+    );
+  }
+
+  mcpServerReload(): Promise<McpServerRefreshResponse> {
+    return this.#client.request<McpServerRefreshResponse>(REQUEST_METHODS.mcpServerReload);
   }
 
   accountRateLimitsRead(): Promise<GetAccountRateLimitsResponse> {

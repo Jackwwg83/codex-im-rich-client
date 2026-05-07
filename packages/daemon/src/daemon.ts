@@ -331,6 +331,12 @@ interface DaemonCodexRuntime {
     readonly limit?: number;
     readonly detail?: unknown;
   }): MaybePromise<unknown>;
+  mcpServerOauthLogin?(params: {
+    readonly name: string;
+    readonly scopes?: readonly string[] | null;
+    readonly timeoutSecs?: bigint | null;
+  }): MaybePromise<unknown>;
+  mcpServerReload?(): MaybePromise<unknown>;
   accountRateLimitsRead?(): MaybePromise<unknown>;
 }
 
@@ -2230,7 +2236,7 @@ export class Daemon {
     }
 
     if (command.name === "mcp") {
-      await this.#routeMcpCommand(inbound);
+      await this.#routeMcpCommand(inbound, command);
       return;
     }
 
@@ -2270,7 +2276,7 @@ export class Daemon {
         "/skills - List Codex skills visible to the current project.",
         "/plugins - List Codex plugins visible to the current project.",
         "/apps - List Codex app/connectors visible to the current thread.",
-        "/mcp - List MCP server status and exposed tool counts.",
+        "/mcp [login <server>|reload] - List MCP server status or start native MCP auth.",
         "/approvals - List pending approvals for this chat.",
         "/approve <id> <action> - Text fallback for approval buttons.",
         "Completed file, command, and tool activity may appear as Codex items.",
@@ -2839,10 +2845,29 @@ export class Daemon {
     }
   }
 
-  async #routeMcpCommand(inbound: {
-    target: Target;
-    messageRef?: DaemonMessageRef;
-  }): Promise<void> {
+  async #routeMcpCommand(
+    inbound: {
+      target: Target;
+      sender: SecurityPolicySender;
+      messageRef?: DaemonMessageRef;
+    },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const [subcommand, ...args] = command.args;
+    if (subcommand !== undefined) {
+      const normalized = subcommand.toLowerCase();
+      if (normalized === "login") {
+        await this.#routeMcpLoginCommand(inbound, args);
+        return;
+      }
+      if (normalized === "reload") {
+        await this.#routeMcpReloadCommand(inbound);
+        return;
+      }
+      await this.#editInboundMessage(inbound.messageRef, "Usage: /mcp [login <server>|reload]");
+      return;
+    }
+
     const runtime = this.#currentRuntime();
     if (runtime?.mcpServerStatusList === undefined) {
       await this.#editInboundMessage(inbound.messageRef, "Codex MCP status unavailable.");
@@ -2864,6 +2889,89 @@ export class Daemon {
       });
       await this.#editInboundMessage(inbound.messageRef, "Codex MCP status failed.");
     }
+  }
+
+  async #routeMcpLoginCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    args: readonly string[],
+  ): Promise<void> {
+    const [serverName] = args;
+    if (serverName === undefined || serverName.length === 0) {
+      await this.#editInboundMessage(inbound.messageRef, "Usage: /mcp login <server>");
+      return;
+    }
+    const runtime = this.#currentRuntime();
+    if (runtime?.mcpServerOauthLogin === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex MCP login unavailable.");
+      return;
+    }
+    if (!(await this.#currentProjectAllowed(inbound))) {
+      return;
+    }
+
+    try {
+      const response = await runtime.mcpServerOauthLogin({ name: serverName });
+      const authorizationUrl = readStringField(response, "authorizationUrl");
+      if (authorizationUrl === undefined || authorizationUrl.length === 0) {
+        await this.#editInboundMessage(inbound.messageRef, "Codex MCP login did not return a URL.");
+        return;
+      }
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `MCP login for ${redact(serverName)}:\n${authorizationUrl}`,
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.mcp_login_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), server: serverName },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex MCP login failed.");
+    }
+  }
+
+  async #routeMcpReloadCommand(inbound: {
+    target: Target;
+    sender: SecurityPolicySender;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.mcpServerReload === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex MCP reload unavailable.");
+      return;
+    }
+    if (!(await this.#currentProjectAllowed(inbound))) {
+      return;
+    }
+
+    try {
+      await runtime.mcpServerReload();
+      await this.#editInboundMessage(inbound.messageRef, "MCP servers reloaded.");
+    } catch (error) {
+      this.#emitAuditEvent("runtime.mcp_reload_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex MCP reload failed.");
+    }
+  }
+
+  async #currentProjectAllowed(inbound: {
+    target: Target;
+    sender: SecurityPolicySender;
+    messageRef?: DaemonMessageRef;
+  }): Promise<boolean> {
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    if (route?.kind !== "bound") {
+      await this.#editInboundMessage(inbound.messageRef, "No current Codex project.");
+      return false;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return false;
+    }
+    return true;
   }
 
   async #routeApprovalsCommand(inbound: {

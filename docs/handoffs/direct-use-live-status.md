@@ -61,9 +61,12 @@
 > subsequent Codex turns from Telegram/Feishu-Lark/DingTalk use the selected
 > model through existing `CodexRuntime` request params; `/model` without args
 > remains the model-listing surface.
+> `/mcp login <server>` and `/mcp reload` now call centralized CodexRuntime
+> wrappers for the App Server's native MCP OAuth-login and reload surfaces;
+> `/mcp` without args still lists MCP server status/tool counts.
 > Explicit Telegram and Feishu/Lark live file gates passed with redacted
-> evidence; after the JAC-263 bridge reinstall/kickstart, launchd is running
-> under pid `13356` with `pendingApprovals=0`. Common group safety now has a config-level mention
+> evidence; after the JAC-264 bridge reinstall/kickstart, launchd is running
+> under pid `29709` with `pendingApprovals=0`. Common group safety now has a config-level mention
 > gate: configured Telegram/Feishu-Lark/DingTalk group chats must mention a
 > configured alias before ordinary inbound text reaches Codex, while approval
 > callback authorization remains bound to callback tokens, messageRef
@@ -708,6 +711,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Codex-native artifact detail loop | JAC-261 extends the shared daemon output path for every adapter with `sendFile`: commandExecution short output is summarized inline, long `aggregatedOutput` becomes a redacted `.log` attachment, fileChange `changes[].diff` becomes a redacted `.patch` attachment, `imageView.path` is sent as a local image/file artifact, and dynamic/MCP/Computer Use summaries include success/duration/content presence without raw arguments. Targeted daemon turn-output tests passed. |
 | 2026-05-07 SGT model selection loop | JAC-262 adds `/model <model>` to the shared IM control plane. The daemon validates the requested id/name against `runtime.modelList()`, updates the current target binding's `defaultModel` through `SessionRouter.bind()`, and subsequent prompt turns carry the selected model in existing `CodexRuntime.turnStart` params. `/model` with no args still lists available models. |
 | 2026-05-07 SGT lifecycle status loop | JAC-263 folds selected Codex App lifecycle notifications that the normalizer preserves as unknown events into the active IM turn output. `thread/tokenUsage/updated`, `thread/compacted`, `thread/status/changed`, `model/rerouted`, `model/verification`, `mcpServer/startupStatus/updated`, `mcpServer/oauthLogin/completed`, `account/rateLimits/updated`, and `remoteControl/status/changed` render as concise redacted `Codex status` lines without raw JSON. |
+| 2026-05-07 SGT MCP control loop | JAC-264 adds `/mcp login <server>` and `/mcp reload` to the shared IM control plane. Both call new centralized `CodexRuntime` wrappers for App Server `mcpServer/oauth/login` and `config/mcpServer/reload`; `/mcp` without args remains the status/tool-count listing. The daemon does not call MCP tools directly from IM. |
 | 2026-05-07 SGT live attachment gates | Temporarily stopped launchd to avoid Telegram polling contention, then ran explicit live file gates. Telegram `TELEGRAM_LIVE_FILE=1` sent a harmless `codex-im-live-attachment.txt`; Feishu/Lark `LARK_LIVE_FILE=1` sent a harmless file and returned redacted `messageId=present`. Launchd was bootstrapped/kickstarted back to pid `94243`; `pnpm launchd:status` and `pnpm im:doctor` are ready. |
 | 2026-05-07 SGT inbound attachment loop | Telegram inbound `photo` / `document` and Feishu/Lark inbound `image` / `file` messages now materialize platform resources to local daemon attachment directories before routing. Daemon maps image attachments to Codex `localImage` inputs and appends generic file paths to the prompt text instead of inventing a non-existent Codex file input. Targeted tests passed: Telegram on-message, Lark on-message + SDK client, and daemon routing (135 tests total), plus `pnpm typecheck:tests` and `pnpm lint`. DingTalk remains explicit unsupported for attachments. |
 | 2026-05-07 SGT Codex-native control loop | Common daemon routing now exposes `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, and `/mcp` for every supported IM adapter. `CodexRuntime` keeps the new App Server method wrappers centralized, daemon replies redact local paths/targets, and Computer Use dynamic tool calls are summarized as Codex-native GUI activity. Full local gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150 files, 1401 pass, 1 skipped), and `pnpm lint`. |

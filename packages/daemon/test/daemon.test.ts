@@ -2032,6 +2032,74 @@ describe("Daemon skeleton (T14)", () => {
     }
   });
 
+  it("routes MCP login and reload through Codex native runtime wrappers", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+    };
+    const runtime = {
+      events: { events: async function* () {} },
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      mcpServerStatusList: vi.fn(async () => ({ data: [], nextCursor: null })),
+      mcpServerOauthLogin: vi.fn(async () => ({
+        authorizationUrl: "https://example.test/oauth?state=abc123",
+      })),
+      mcpServerReload: vi.fn(async () => ({})),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { web: { cwd: "/repo/web" } } }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => route) }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      schedulePrune: () => () => {},
+    });
+
+    await daemon.start();
+    for (const text of ["/mcp login github", "/mcp reload"]) {
+      messageHandler?.({
+        target,
+        sender,
+        text,
+        messageRef: { target, messageId: `msg-${text.replace(/\s+/g, "-")}` },
+        receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+      });
+      await flushDaemonHandlers();
+    }
+
+    expect(runtime.mcpServerOauthLogin).toHaveBeenCalledWith({ name: "github" });
+    expect(runtime.mcpServerReload).toHaveBeenCalledWith();
+    const bodies = adapter.editText.mock.calls.map(([, body]) => body as string);
+    expect(bodies[0]).toBe("MCP login for github:\nhttps://example.test/oauth?state=abc123");
+    expect(bodies[1]).toBe("MCP servers reloaded.");
+  });
+
   it("sets the current IM binding model and uses it for subsequent turns", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
