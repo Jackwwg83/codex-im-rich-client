@@ -1795,6 +1795,181 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).not.toContain("-allowed");
   });
 
+  it("routes Codex-native capability commands through the common IM control plane", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-100secret-chat" };
+    const sender = { userId: "u-secret-user" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/Users/alice/private/web",
+      codexThreadId: "thread-abcdefghijklmnopqrstuvwxyz",
+      defaultModel: "gpt-test",
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+    const runtime = {
+      events: { events: async function* () {} },
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      threadCompactStart: vi.fn(async () => ({})),
+      modelList: vi.fn(async () => ({
+        data: [
+          {
+            id: "model-1",
+            model: "gpt-test",
+            displayName: "GPT Test",
+            hidden: false,
+            isDefault: true,
+          },
+        ],
+        nextCursor: null,
+      })),
+      modelProviderCapabilitiesRead: vi.fn(async () => ({
+        namespaceTools: true,
+        imageGeneration: true,
+        webSearch: false,
+      })),
+      skillsList: vi.fn(async () => ({
+        data: [
+          {
+            cwd: "/Users/alice/private/web",
+            skills: [
+              {
+                name: "browser",
+                description: "Browser automation",
+                shortDescription: "Browser automation",
+                enabled: true,
+                path: "/Users/alice/.codex/skills/browser",
+              },
+            ],
+            errors: [],
+          },
+        ],
+      })),
+      pluginList: vi.fn(async () => ({
+        marketplaces: [
+          {
+            name: "curated",
+            path: "/Users/alice/private/marketplace.json",
+            plugins: [{ id: "linear", name: "Linear", installed: true, enabled: true }],
+          },
+        ],
+        marketplaceLoadErrors: [],
+        featuredPluginIds: [],
+      })),
+      appsList: vi.fn(async () => ({
+        data: [{ id: "github", name: "GitHub", isAccessible: true, isEnabled: true }],
+        nextCursor: null,
+      })),
+      mcpServerStatusList: vi.fn(async () => ({
+        data: [
+          {
+            name: "github",
+            authStatus: "oAuth",
+            tools: { createPullRequest: {}, searchIssues: {} },
+            resources: [],
+            resourceTemplates: [],
+          },
+        ],
+        nextCursor: null,
+      })),
+      accountRateLimitsRead: vi.fn(async () => ({
+        rateLimits: {
+          limitId: "codex",
+          limitName: "Codex",
+          primary: { usedPercent: 12, windowDurationMins: 300, resetsAt: null },
+          secondary: null,
+          credits: { hasCredits: true, unlimited: false, balance: "10" },
+          planType: null,
+          rateLimitReachedType: null,
+        },
+        rateLimitsByLimitId: null,
+      })),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/Users/alice/private/web", defaultModel: "gpt-test" },
+        },
+        computerUse: { enabled: true, defaultApp: "Google Chrome", allowedApps: ["Google Chrome"] },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => route) }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      schedulePrune: () => () => {},
+    });
+
+    await daemon.start();
+    for (const text of [
+      "/model",
+      "/compact",
+      "/usage",
+      "/diagnostics",
+      "/tools",
+      "/skills",
+      "/plugins",
+      "/apps",
+      "/mcp",
+    ]) {
+      messageHandler?.({
+        target,
+        sender,
+        text,
+        messageRef: { target, messageId: `msg-${text.slice(1)}` },
+        receivedAt: new Date("2026-05-03T00:00:00.000Z"),
+      });
+      await flushDaemonHandlers();
+    }
+
+    const bodies = adapter.editText.mock.calls.map(([, body]) => body as string);
+    expect(bodies[0]).toContain("Models:");
+    expect(bodies[0]).toContain("GPT Test (gpt-test)");
+    expect(bodies[1]).toContain("Codex compaction started for thread-abcde...");
+    expect(bodies[2]).toContain("Usage:");
+    expect(bodies[2]).toContain("Codex: primary 12%/300m");
+    expect(bodies[3]).toContain("Diagnostics:");
+    expect(bodies[3]).toContain("computer use: enabled, default app Google Chrome");
+    expect(bodies[4]).toContain("model provider: namespace tools yes");
+    expect(bodies[4]).toContain("github: auth oAuth, tools 2");
+    expect(bodies[5]).toContain("Skills:");
+    expect(bodies[5]).toContain("browser (enabled)");
+    expect(bodies[6]).toContain("Plugins:");
+    expect(bodies[6]).toContain("Linear (installed, enabled)");
+    expect(bodies[7]).toContain("Apps:");
+    expect(bodies[7]).toContain("GitHub (accessible, enabled)");
+    expect(bodies[8]).toContain("MCP servers:");
+    expect(bodies[8]).toContain("github: auth oAuth, tools 2");
+    expect(runtime.threadCompactStart).toHaveBeenCalledWith({
+      threadId: "thread-abcdefghijklmnopqrstuvwxyz",
+    });
+    for (const body of bodies) {
+      expect(body).not.toContain("-100secret-chat");
+      expect(body).not.toContain("u-secret-user");
+      expect(body).not.toContain("/Users/alice/private");
+      expect(body).not.toContain("thread-abcdefghijklmnopqrstuvwxyz");
+    }
+  });
+
   it("routes /status to the current binding without leaking raw target or path data", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-100secret-chat", threadKey: "topic-secret" };

@@ -47,8 +47,23 @@ export type {
 // ─── Phase 1 — v2 thread/turn/review request params + responses
 // (consumed by CodexRuntime typed wrappers — plan T8 / TODOS P1.1)
 export type {
+  AppsListParams,
+  AppsListResponse,
+  GetAccountRateLimitsResponse,
+  ListMcpServerStatusParams,
+  ListMcpServerStatusResponse,
+  ModelListParams,
+  ModelListResponse,
+  ModelProviderCapabilitiesReadParams,
+  ModelProviderCapabilitiesReadResponse,
+  PluginListParams,
+  PluginListResponse,
   ReviewStartParams,
   ReviewStartResponse,
+  SkillsListParams,
+  SkillsListResponse,
+  ThreadCompactStartParams,
+  ThreadCompactStartResponse,
   ThreadForkParams,
   ThreadForkResponse,
   ThreadReadParams,

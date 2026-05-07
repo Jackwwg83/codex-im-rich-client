@@ -659,6 +659,100 @@ describe("daemon turn output projection", () => {
     await daemon.stop();
   });
 
+  it("projects Computer Use dynamic tool calls as Codex-native GUI activity", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Summarize the visible page",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-computer-use",
+      raw: {
+        params: {
+          item: {
+            type: "dynamicToolCall",
+            status: "completed",
+            namespace: null,
+            tool: "computer_use.synthetic",
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length >= 1);
+    expect(editText).toHaveBeenLastCalledWith(
+      { target: TARGET, messageId: "bot-output-1" },
+      "Codex turn completed.\n\nCodex items:\n- dynamicToolCall completed: Computer Use computer_use.synthetic",
+    );
+
+    await daemon.stop();
+  });
+
   it("splits long terminal Codex output into continuation IM messages", async () => {
     const queue = new EventQueue();
     const sendText = vi.fn(async (target: Target, _body: string) => ({

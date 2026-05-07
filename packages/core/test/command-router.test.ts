@@ -19,6 +19,15 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
       "fork",
       "status",
       "stop",
+      "model",
+      "compact",
+      "usage",
+      "diagnostics",
+      "tools",
+      "skills",
+      "plugins",
+      "apps",
+      "mcp",
     ];
     expect(COMMAND_ROUTER_COMMANDS).toEqual(expected);
 

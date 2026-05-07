@@ -110,6 +110,7 @@ until the matrix below is complete with real credentials and redacted evidence.
 | Lark approval allow session | exact same shell command sent twice, first tap `Allow session` | pass | first command wrote 13 bytes; second identical prompt ran without a new Lark callback token and the file grew to 26 bytes; `approval-2 allow_session=used`, siblings revoked |
 | Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
 | Telegram/Lark inbound image/file upload | platform file resources materialize locally, then route to Codex turn input | local pass | Telegram `photo` / `document` and Feishu/Lark `image` / `file` unit coverage proves adapter download + daemon routing; images map to Codex `localImage`, generic files map to local-path text context |
+| Common Codex-native IM control commands | `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp` through daemon common command routing | local pass | Runtime wrappers keep App Server method literals centralized in `CodexRuntime`; daemon output is redacted and shared by Telegram/Lark/DingTalk adapters through the common control plane |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
@@ -482,6 +483,16 @@ Stop and treat as a blocker if:
   `codex-im-live-attachment.txt`; Feishu/Lark `LARK_LIVE_FILE=1` returned
   redacted `messageId=present`. Launchd was bootstrapped/kickstarted back to
   pid `94243`, `pendingApprovals=0`, and `pnpm im:doctor` is ready.
+- 2026-05-07 SGT Codex-native control loop: The common IM command plane now
+  exposes Codex App Server-native surfaces for model listing, thread
+  compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,
+  skills, plugins, apps/connectors, and MCP server status. This is implemented
+  once in daemon routing and reaches Telegram/Lark/DingTalk uniformly.
+  `CodexRuntime` owns the new App Server wrappers so downstream code does not
+  scatter ClientRequest method literals. Computer Use dynamic tool calls are
+  projected as Codex-native GUI activity in terminal IM summaries. Full local
+  gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150
+  files, 1401 pass, 1 skipped), and `pnpm lint`.
 - 2026-05-04: The latest bridge bundle was rebuilt, installed, and restarted
   through `launchctl kickstart -k gui/501/io.codex-im-bridge`. `pnpm
   launchd:status` reported pid `62312`, `pendingApprovals=0`, and the installed

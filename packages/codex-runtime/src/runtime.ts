@@ -43,9 +43,24 @@
 
 import type { AppServerClient } from "@codex-im/app-server-client";
 import type {
+  AppsListParams,
+  AppsListResponse,
   ClientRequest,
+  GetAccountRateLimitsResponse,
+  ListMcpServerStatusParams,
+  ListMcpServerStatusResponse,
+  ModelListParams,
+  ModelListResponse,
+  ModelProviderCapabilitiesReadParams,
+  ModelProviderCapabilitiesReadResponse,
+  PluginListParams,
+  PluginListResponse,
   ReviewStartParams,
   ReviewStartResponse,
+  SkillsListParams,
+  SkillsListResponse,
+  ThreadCompactStartParams,
+  ThreadCompactStartResponse,
   ThreadForkParams,
   ThreadForkResponse,
   ThreadReadParams,
@@ -74,12 +89,20 @@ const REQUEST_METHODS = {
   threadStart: "thread/start",
   threadResume: "thread/resume",
   threadFork: "thread/fork",
+  threadCompactStart: "thread/compact/start",
   threadTurnsList: "thread/turns/list",
   threadRead: "thread/read",
+  skillsList: "skills/list",
+  pluginList: "plugin/list",
+  appsList: "app/list",
   turnStart: "turn/start",
   turnSteer: "turn/steer",
   turnInterrupt: "turn/interrupt",
   reviewStart: "review/start",
+  modelList: "model/list",
+  modelProviderCapabilitiesRead: "modelProvider/capabilities/read",
+  mcpServerStatusList: "mcpServerStatus/list",
+  accountRateLimitsRead: "account/rateLimits/read",
 } as const satisfies Record<string, ClientRequest["method"]>;
 
 export type CodexRuntimeOptions = {
@@ -123,6 +146,13 @@ export class CodexRuntime {
     return this.#client.request<ThreadForkResponse>(REQUEST_METHODS.threadFork, params);
   }
 
+  threadCompactStart(params: ThreadCompactStartParams): Promise<ThreadCompactStartResponse> {
+    return this.#client.request<ThreadCompactStartResponse>(
+      REQUEST_METHODS.threadCompactStart,
+      params,
+    );
+  }
+
   threadTurnsList(params: ThreadTurnsListParams): Promise<ThreadTurnsListResponse> {
     return this.#client.request<ThreadTurnsListResponse>(REQUEST_METHODS.threadTurnsList, params);
   }
@@ -149,5 +179,46 @@ export class CodexRuntime {
 
   reviewStart(params: ReviewStartParams): Promise<ReviewStartResponse> {
     return this.#client.request<ReviewStartResponse>(REQUEST_METHODS.reviewStart, params);
+  }
+
+  // ─── app/native capability surfaces ─────────────────────────────────
+
+  modelList(params: ModelListParams): Promise<ModelListResponse> {
+    return this.#client.request<ModelListResponse>(REQUEST_METHODS.modelList, params);
+  }
+
+  modelProviderCapabilitiesRead(
+    params: ModelProviderCapabilitiesReadParams,
+  ): Promise<ModelProviderCapabilitiesReadResponse> {
+    return this.#client.request<ModelProviderCapabilitiesReadResponse>(
+      REQUEST_METHODS.modelProviderCapabilitiesRead,
+      params,
+    );
+  }
+
+  skillsList(params: SkillsListParams): Promise<SkillsListResponse> {
+    return this.#client.request<SkillsListResponse>(REQUEST_METHODS.skillsList, params);
+  }
+
+  pluginList(params: PluginListParams): Promise<PluginListResponse> {
+    return this.#client.request<PluginListResponse>(REQUEST_METHODS.pluginList, params);
+  }
+
+  appsList(params: AppsListParams): Promise<AppsListResponse> {
+    return this.#client.request<AppsListResponse>(REQUEST_METHODS.appsList, params);
+  }
+
+  mcpServerStatusList(params: ListMcpServerStatusParams): Promise<ListMcpServerStatusResponse> {
+    return this.#client.request<ListMcpServerStatusResponse>(
+      REQUEST_METHODS.mcpServerStatusList,
+      params,
+    );
+  }
+
+  accountRateLimitsRead(): Promise<GetAccountRateLimitsResponse> {
+    return this.#client.request<GetAccountRateLimitsResponse>(
+      REQUEST_METHODS.accountRateLimitsRead,
+      undefined,
+    );
   }
 }

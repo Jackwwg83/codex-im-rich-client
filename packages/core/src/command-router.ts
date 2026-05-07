@@ -17,6 +17,15 @@ export const COMMAND_ROUTER_COMMANDS = Object.freeze([
   "fork",
   "status",
   "stop",
+  "model",
+  "compact",
+  "usage",
+  "diagnostics",
+  "tools",
+  "skills",
+  "plugins",
+  "apps",
+  "mcp",
 ] as const);
 
 export type CommandRouterCommandName = (typeof COMMAND_ROUTER_COMMANDS)[number];

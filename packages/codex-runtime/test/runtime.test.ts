@@ -19,8 +19,22 @@
 
 import { AppServerClient } from "@codex-im/app-server-client";
 import type {
+  AppsListParams,
+  AppsListResponse,
+  GetAccountRateLimitsResponse,
+  ListMcpServerStatusParams,
+  ListMcpServerStatusResponse,
+  ModelListParams,
+  ModelListResponse,
+  ModelProviderCapabilitiesReadResponse,
+  PluginListParams,
+  PluginListResponse,
   ReviewStartParams,
   ReviewStartResponse,
+  SkillsListParams,
+  SkillsListResponse,
+  ThreadCompactStartParams,
+  ThreadCompactStartResponse,
   ThreadForkParams,
   ThreadForkResponse,
   ThreadReadParams,
@@ -259,6 +273,92 @@ describe("CodexRuntime — review/* wrappers (T8)", () => {
     const r = await h.runtime.reviewStart(params);
     expect(received).toEqual(params);
     expect(r.reviewThreadId).toBe("thread-1");
+
+    await teardown(h);
+  });
+});
+
+describe("CodexRuntime — native app/capability wrappers", () => {
+  it("forwards thread compaction, catalog, tool, MCP, and usage requests", async () => {
+    const h = await harness();
+    const received = new Map<string, unknown>();
+
+    h.fake.respondTo("thread/compact/start", (params) => {
+      received.set("compact", params);
+      return {} as ThreadCompactStartResponse;
+    });
+    h.fake.respondTo("model/list", (params) => {
+      received.set("model", params);
+      return { data: [], nextCursor: null } as ModelListResponse;
+    });
+    h.fake.respondTo("modelProvider/capabilities/read", (params) => {
+      received.set("capabilities", params);
+      return {
+        namespaceTools: true,
+        imageGeneration: true,
+        webSearch: false,
+      } as ModelProviderCapabilitiesReadResponse;
+    });
+    h.fake.respondTo("skills/list", (params) => {
+      received.set("skills", params);
+      return { data: [] } as SkillsListResponse;
+    });
+    h.fake.respondTo("plugin/list", (params) => {
+      received.set("plugins", params);
+      return {
+        marketplaces: [],
+        marketplaceLoadErrors: [],
+        featuredPluginIds: [],
+      } as PluginListResponse;
+    });
+    h.fake.respondTo("app/list", (params) => {
+      received.set("apps", params);
+      return { data: [], nextCursor: null } as AppsListResponse;
+    });
+    h.fake.respondTo("mcpServerStatus/list", (params) => {
+      received.set("mcp", params);
+      return { data: [], nextCursor: null } as ListMcpServerStatusResponse;
+    });
+    h.fake.respondTo("account/rateLimits/read", (params) => {
+      received.set("usage", params);
+      return {
+        rateLimits: {
+          limitId: "codex",
+          limitName: "Codex",
+          primary: null,
+          secondary: null,
+          credits: null,
+          planType: null,
+          rateLimitReachedType: null,
+        },
+        rateLimitsByLimitId: null,
+      } as GetAccountRateLimitsResponse;
+    });
+
+    const compactParams: ThreadCompactStartParams = { threadId: "thread-1" };
+    const modelParams: ModelListParams = { limit: 20, includeHidden: false };
+    const skillsParams: SkillsListParams = { cwds: ["/tmp/project"] };
+    const pluginParams: PluginListParams = { cwds: ["/tmp/project"] };
+    const appsParams: AppsListParams = { limit: 20, threadId: "thread-1" };
+    const mcpParams: ListMcpServerStatusParams = { limit: 20, detail: "toolsAndAuthOnly" };
+
+    await expect(h.runtime.threadCompactStart(compactParams)).resolves.toEqual({});
+    await h.runtime.modelList(modelParams);
+    await h.runtime.modelProviderCapabilitiesRead({});
+    await h.runtime.skillsList(skillsParams);
+    await h.runtime.pluginList(pluginParams);
+    await h.runtime.appsList(appsParams);
+    await h.runtime.mcpServerStatusList(mcpParams);
+    await h.runtime.accountRateLimitsRead();
+
+    expect(received.get("compact")).toEqual(compactParams);
+    expect(received.get("model")).toEqual(modelParams);
+    expect(received.get("capabilities")).toEqual({});
+    expect(received.get("skills")).toEqual(skillsParams);
+    expect(received.get("plugins")).toEqual(pluginParams);
+    expect(received.get("apps")).toEqual(appsParams);
+    expect(received.get("mcp")).toEqual(mcpParams);
+    expect(received.get("usage")).toBeUndefined();
 
     await teardown(h);
   });

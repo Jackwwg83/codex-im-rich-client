@@ -286,9 +286,30 @@ interface DaemonCodexRuntime {
   threadStart(params: DaemonThreadStartParams): MaybePromise<DaemonThreadStartResult>;
   threadResume?(params: DaemonThreadResumeParams): MaybePromise<unknown>;
   threadFork?(params: DaemonThreadForkParams): MaybePromise<DaemonThreadStartResult>;
+  threadCompactStart?(params: { readonly threadId: string }): MaybePromise<unknown>;
   turnStart(params: DaemonTurnStartParams): MaybePromise<DaemonTurnStartResult>;
   turnSteer(params: DaemonTurnSteerParams): MaybePromise<unknown>;
   turnInterrupt?(params: DaemonTurnInterruptParams): MaybePromise<unknown>;
+  modelList?(params: {
+    readonly limit?: number;
+    readonly includeHidden?: boolean;
+  }): MaybePromise<unknown>;
+  modelProviderCapabilitiesRead?(params: Record<string, never>): MaybePromise<unknown>;
+  skillsList?(params: {
+    readonly cwds?: readonly string[];
+    readonly forceReload?: boolean;
+  }): MaybePromise<unknown>;
+  pluginList?(params: { readonly cwds?: readonly string[] | null }): MaybePromise<unknown>;
+  appsList?(params: {
+    readonly limit?: number;
+    readonly threadId?: string | null;
+    readonly forceRefetch?: boolean;
+  }): MaybePromise<unknown>;
+  mcpServerStatusList?(params: {
+    readonly limit?: number;
+    readonly detail?: unknown;
+  }): MaybePromise<unknown>;
+  accountRateLimitsRead?(): MaybePromise<unknown>;
 }
 
 interface DaemonRuntimeProvider {
@@ -1179,6 +1200,15 @@ export class Daemon {
     ].join("\n");
   }
 
+  #computerUseStatusLine(policy: ComputerUsePolicy): string {
+    const snapshot = policy.snapshot;
+    const enabled = snapshot.enabled && snapshot.valid ? "enabled" : "disabled";
+    const defaultApp = snapshot.defaultApp ?? "<none>";
+    return `${enabled}, default app ${defaultApp}, live smoke ${
+      snapshot.liveSmokeEnabled ? "enabled" : "disabled"
+    }`;
+  }
+
   #resolveErrorMessage(error: ResolveError): string {
     switch (error.kind) {
       case "wrong_actor":
@@ -2039,6 +2069,51 @@ export class Daemon {
       await this.#routeStopCommand(inbound);
       return;
     }
+
+    if (command.name === "model") {
+      await this.#routeModelCommand(inbound);
+      return;
+    }
+
+    if (command.name === "compact") {
+      await this.#routeCompactCommand(inbound);
+      return;
+    }
+
+    if (command.name === "usage") {
+      await this.#routeUsageCommand(inbound);
+      return;
+    }
+
+    if (command.name === "diagnostics") {
+      await this.#routeDiagnosticsCommand(inbound);
+      return;
+    }
+
+    if (command.name === "tools") {
+      await this.#routeToolsCommand(inbound);
+      return;
+    }
+
+    if (command.name === "skills") {
+      await this.#routeSkillsCommand(inbound);
+      return;
+    }
+
+    if (command.name === "plugins") {
+      await this.#routePluginsCommand(inbound);
+      return;
+    }
+
+    if (command.name === "apps") {
+      await this.#routeAppsCommand(inbound);
+      return;
+    }
+
+    if (command.name === "mcp") {
+      await this.#routeMcpCommand(inbound);
+      return;
+    }
   }
 
   async #routeHelpCommand(inbound: { messageRef?: DaemonMessageRef }): Promise<void> {
@@ -2057,6 +2132,15 @@ export class Daemon {
         "/alias <title> - Rename current thread for IM display.",
         "/fork [thread] - Fork the current or selected Codex thread.",
         "/stop - Interrupt the active Codex turn.",
+        "/model - List available Codex models.",
+        "/compact - Start Codex compaction for the current thread.",
+        "/usage - Show Codex account usage/rate-limit status.",
+        "/diagnostics - Show runtime, IM, tool, and Computer Use readiness.",
+        "/tools - Show model-provider and MCP tool capabilities.",
+        "/skills - List Codex skills visible to the current project.",
+        "/plugins - List Codex plugins visible to the current project.",
+        "/apps - List Codex app/connectors visible to the current thread.",
+        "/mcp - List MCP server status and exposed tool counts.",
         "Completed file, command, and tool activity may appear as Codex items.",
       ].join("\n"),
     );
@@ -2269,6 +2353,311 @@ export class Daemon {
     lines.push(`active turn: ${this.#shortId(route.activeTurnId)}`);
     lines.push(`pending approvals: ${this.#pendingApprovalCount()}`);
     await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
+  }
+
+  async #routeModelCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.modelList === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex model list unavailable.");
+      return;
+    }
+
+    try {
+      const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+      const response = await runtime.modelList({ limit: 20, includeHidden: false });
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        formatModelList(response, route?.kind === "bound" ? route.defaultModel : undefined),
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.model_list_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex model list failed.");
+    }
+  }
+
+  async #routeCompactCommand(inbound: {
+    target: Target;
+    sender: SecurityPolicySender;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const runtime = this.#currentRuntime();
+    if (runtime?.threadCompactStart === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread compaction unavailable.");
+      return;
+    }
+    const route = sessionRouter?.resolve(inbound.target);
+    if (route?.kind !== "bound" || route.codexThreadId === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "No current Codex thread.");
+      return;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+
+    try {
+      await runtime.threadCompactStart({ threadId: route.codexThreadId });
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `Codex compaction started for ${this.#shortId(route.codexThreadId)}.`,
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_compact_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: route.codexThreadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex compaction failed to start.");
+    }
+  }
+
+  async #routeUsageCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.accountRateLimitsRead === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex usage status unavailable.");
+      return;
+    }
+
+    try {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        formatUsage(await runtime.accountRateLimitsRead()),
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.usage_read_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex usage status failed.");
+    }
+  }
+
+  async #routeDiagnosticsCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    const lines = [
+      "Diagnostics:",
+      `target: ${this.#targetLabel(inbound.target)}`,
+      `binding: ${route?.kind === "bound" ? "bound" : "unbound"}`,
+      `runtime: ${runtime === undefined ? "unavailable" : "available"}`,
+      `pending approvals: ${this.#pendingApprovalCount()}`,
+      `computer use: ${this.#computerUseStatusLine(this.#computerUsePolicy ?? new ComputerUsePolicy())}`,
+    ];
+    if (route?.kind === "bound") {
+      lines.push(`project: ${route.projectId}`);
+      lines.push(`thread: ${this.#shortId(route.codexThreadId)}`);
+      lines.push(`active turn: ${this.#shortId(route.activeTurnId)}`);
+    }
+
+    if (runtime?.modelProviderCapabilitiesRead !== undefined) {
+      try {
+        lines.push(
+          `capabilities: ${formatModelProviderCapabilities(await runtime.modelProviderCapabilitiesRead({}))}`,
+        );
+      } catch (error) {
+        this.#emitAuditEvent("runtime.capabilities_read_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(error) },
+        });
+        lines.push("capabilities: unavailable");
+      }
+    }
+
+    if (runtime?.mcpServerStatusList !== undefined) {
+      try {
+        const servers = readArrayField(
+          await runtime.mcpServerStatusList({ limit: 20, detail: "toolsAndAuthOnly" }),
+          "data",
+        );
+        lines.push(`mcp servers: ${servers.length}`);
+      } catch (error) {
+        this.#emitAuditEvent("runtime.mcp_status_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(error) },
+        });
+        lines.push("mcp servers: unavailable");
+      }
+    }
+
+    await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
+  }
+
+  async #routeToolsCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    const lines = ["Tools:"];
+    if (runtime?.modelProviderCapabilitiesRead !== undefined) {
+      try {
+        lines.push(
+          `model provider: ${formatModelProviderCapabilities(
+            await runtime.modelProviderCapabilitiesRead({}),
+          )}`,
+        );
+      } catch (error) {
+        this.#emitAuditEvent("runtime.capabilities_read_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(error) },
+        });
+        lines.push("model provider: unavailable");
+      }
+    } else {
+      lines.push("model provider: unavailable");
+    }
+
+    if (runtime?.mcpServerStatusList !== undefined) {
+      try {
+        lines.push(
+          ...formatMcpToolLines(
+            await runtime.mcpServerStatusList({ limit: 20, detail: "toolsAndAuthOnly" }),
+          ),
+        );
+      } catch (error) {
+        this.#emitAuditEvent("runtime.mcp_status_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(error) },
+        });
+        lines.push("MCP: unavailable");
+      }
+    } else {
+      lines.push("MCP: unavailable");
+    }
+
+    await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
+  }
+
+  async #routeSkillsCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.skillsList === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex skills list unavailable.");
+      return;
+    }
+
+    try {
+      const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+      const cwds = route?.kind === "bound" ? [route.cwd] : undefined;
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        formatSkillsList(await runtime.skillsList({ ...(cwds === undefined ? {} : { cwds }) })),
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.skills_list_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex skills list failed.");
+    }
+  }
+
+  async #routePluginsCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.pluginList === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex plugin list unavailable.");
+      return;
+    }
+
+    try {
+      const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+      const cwds = route?.kind === "bound" ? [route.cwd] : undefined;
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        formatPluginList(await runtime.pluginList({ ...(cwds === undefined ? {} : { cwds }) })),
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.plugin_list_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex plugin list failed.");
+    }
+  }
+
+  async #routeAppsCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.appsList === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex app list unavailable.");
+      return;
+    }
+
+    try {
+      const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        formatAppsList(
+          await runtime.appsList({
+            limit: 20,
+            ...(route?.kind === "bound" && route.codexThreadId !== undefined
+              ? { threadId: route.codexThreadId }
+              : {}),
+          }),
+        ),
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.apps_list_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex app list failed.");
+    }
+  }
+
+  async #routeMcpCommand(inbound: {
+    target: Target;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.mcpServerStatusList === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex MCP status unavailable.");
+      return;
+    }
+
+    try {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        formatMcpStatus(
+          await runtime.mcpServerStatusList({ limit: 20, detail: "toolsAndAuthOnly" }),
+        ),
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.mcp_status_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex MCP status failed.");
+    }
   }
 
   async #routeAliasCommand(
@@ -2671,7 +3060,8 @@ export class Daemon {
       commandName !== "use" &&
       commandName !== "new" &&
       commandName !== "switch" &&
-      commandName !== "fork"
+      commandName !== "fork" &&
+      commandName !== "compact"
     ) {
       return undefined;
     }
@@ -3434,6 +3824,211 @@ function readStringField(value: unknown, key: string): string | undefined {
   return typeof field === "string" ? field : undefined;
 }
 
+function readBooleanField(value: unknown, key: string): boolean | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "boolean" ? field : undefined;
+}
+
+function readNumberField(value: unknown, key: string): number | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "number" && Number.isFinite(field) ? field : undefined;
+}
+
+function readArrayField(value: unknown, key: string): unknown[] {
+  if (typeof value !== "object" || value === null) {
+    return [];
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return Array.isArray(field) ? field : [];
+}
+
+function formatModelList(value: unknown, currentModel: string | undefined): string {
+  const models = readArrayField(value, "data").map(readRecord).filter(isDefined).slice(0, 20);
+  if (models.length === 0) {
+    return "Models:\nNo models returned.";
+  }
+  return [
+    "Models:",
+    ...models.map((model) => {
+      const display =
+        readStringField(model, "displayName") ??
+        readStringField(model, "model") ??
+        readStringField(model, "id") ??
+        "unknown";
+      const modelId = readStringField(model, "model") ?? readStringField(model, "id");
+      const isDefault = readBooleanField(model, "isDefault") === true;
+      const hidden = readBooleanField(model, "hidden") === true;
+      const current =
+        currentModel !== undefined && (modelId === currentModel || display === currentModel);
+      const suffix = [
+        current ? "current project default" : undefined,
+        isDefault ? "default" : undefined,
+        hidden ? "hidden" : undefined,
+      ]
+        .filter(isDefined)
+        .join(", ");
+      return `${current ? "*" : " "} ${display}${
+        modelId !== undefined && modelId !== display ? ` (${modelId})` : ""
+      }${suffix.length === 0 ? "" : ` - ${suffix}`}`;
+    }),
+  ].join("\n");
+}
+
+function formatModelProviderCapabilities(value: unknown): string {
+  return [
+    `namespace tools ${yesNo(readBooleanField(value, "namespaceTools"))}`,
+    `image generation ${yesNo(readBooleanField(value, "imageGeneration"))}`,
+    `web search ${yesNo(readBooleanField(value, "webSearch"))}`,
+  ].join(", ");
+}
+
+function formatUsage(value: unknown): string {
+  const byLimit = readRecord(readRecord(value)?.rateLimitsByLimitId);
+  const snapshots =
+    byLimit === undefined
+      ? [readRecord(readRecord(value)?.rateLimits)].filter(isDefined)
+      : Object.values(byLimit).map(readRecord).filter(isDefined);
+  if (snapshots.length === 0) {
+    return "Usage:\nNo rate-limit data returned.";
+  }
+  return [
+    "Usage:",
+    ...snapshots.slice(0, 8).map((snapshot) => {
+      const name =
+        readStringField(snapshot, "limitName") ?? readStringField(snapshot, "limitId") ?? "default";
+      const primary = formatRateLimitWindow(readRecord(snapshot.primary));
+      const secondary = formatRateLimitWindow(readRecord(snapshot.secondary));
+      const credits = formatCredits(readRecord(snapshot.credits));
+      const reached = readStringField(snapshot, "rateLimitReachedType");
+      return `- ${name}: primary ${primary}; secondary ${secondary}; credits ${credits}${
+        reached === undefined ? "" : `; limit ${reached}`
+      }`;
+    }),
+  ].join("\n");
+}
+
+function formatRateLimitWindow(value: Record<string, unknown> | undefined): string {
+  if (value === undefined) {
+    return "unknown";
+  }
+  const usedPercent = readNumberField(value, "usedPercent");
+  const duration = readNumberField(value, "windowDurationMins");
+  return `${usedPercent === undefined ? "unknown" : `${Math.round(usedPercent)}%`}${
+    duration === undefined ? "" : `/${duration}m`
+  }`;
+}
+
+function formatCredits(value: Record<string, unknown> | undefined): string {
+  if (value === undefined) {
+    return "unknown";
+  }
+  if (readBooleanField(value, "unlimited") === true) {
+    return "unlimited";
+  }
+  if (readBooleanField(value, "hasCredits") === false) {
+    return "depleted";
+  }
+  return "available";
+}
+
+function formatSkillsList(value: unknown): string {
+  const entries = readArrayField(value, "data").map(readRecord).filter(isDefined);
+  const skills = entries
+    .flatMap((entry) => readArrayField(entry, "skills"))
+    .map(readRecord)
+    .filter(isDefined);
+  if (skills.length === 0) {
+    return "Skills:\nNo skills returned.";
+  }
+  return [
+    "Skills:",
+    ...skills.slice(0, 20).map((skill) => {
+      const enabled = readBooleanField(skill, "enabled") === false ? "disabled" : "enabled";
+      const name = readStringField(skill, "name") ?? "unknown";
+      const desc =
+        readStringField(skill, "shortDescription") ?? readStringField(skill, "description") ?? "";
+      return `- ${name} (${enabled})${desc.length === 0 ? "" : ` - ${truncateItemSummary(desc)}`}`;
+    }),
+  ].join("\n");
+}
+
+function formatPluginList(value: unknown): string {
+  const marketplaces = readArrayField(value, "marketplaces").map(readRecord).filter(isDefined);
+  const plugins = marketplaces
+    .flatMap((marketplace) => readArrayField(marketplace, "plugins"))
+    .map(readRecord)
+    .filter(isDefined);
+  if (plugins.length === 0) {
+    return "Plugins:\nNo plugins returned.";
+  }
+  return [
+    "Plugins:",
+    ...plugins.slice(0, 20).map((plugin) => {
+      const name = readStringField(plugin, "name") ?? readStringField(plugin, "id") ?? "unknown";
+      const flags = [
+        readBooleanField(plugin, "installed") === true ? "installed" : "not installed",
+        readBooleanField(plugin, "enabled") === true ? "enabled" : "disabled",
+      ].join(", ");
+      return `- ${name} (${flags})`;
+    }),
+  ].join("\n");
+}
+
+function formatAppsList(value: unknown): string {
+  const apps = readArrayField(value, "data").map(readRecord).filter(isDefined);
+  if (apps.length === 0) {
+    return "Apps:\nNo apps returned.";
+  }
+  return [
+    "Apps:",
+    ...apps.slice(0, 20).map((app) => {
+      const name = readStringField(app, "name") ?? readStringField(app, "id") ?? "unknown";
+      const flags = [
+        readBooleanField(app, "isAccessible") === true ? "accessible" : "not accessible",
+        readBooleanField(app, "isEnabled") === true ? "enabled" : "disabled",
+      ].join(", ");
+      return `- ${name} (${flags})`;
+    }),
+  ].join("\n");
+}
+
+function formatMcpStatus(value: unknown): string {
+  const lines = ["MCP servers:", ...formatMcpToolLines(value)];
+  return lines.length === 1 ? "MCP servers:\nNo MCP servers returned." : lines.join("\n");
+}
+
+function formatMcpToolLines(value: unknown): string[] {
+  const servers = readArrayField(value, "data").map(readRecord).filter(isDefined);
+  if (servers.length === 0) {
+    return ["MCP: no servers returned"];
+  }
+  return servers.slice(0, 20).map((server) => {
+    const name = readStringField(server, "name") ?? "unknown";
+    const auth = readStringField(server, "authStatus") ?? "unknown";
+    const tools = readRecord(server.tools);
+    const toolNames = tools === undefined ? [] : Object.keys(tools).sort();
+    const sample =
+      toolNames.length === 0
+        ? ""
+        : ` - ${toolNames.slice(0, 4).join(", ")}${toolNames.length > 4 ? " ..." : ""}`;
+    return `- ${name}: auth ${auth}, tools ${toolNames.length}${sample}`;
+  });
+}
+
+function yesNo(value: boolean | undefined): string {
+  return value === true ? "yes" : value === false ? "no" : "unknown";
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
+}
+
 function summarizeCodexItem(raw: unknown): string | undefined {
   const item = readRawItem(raw);
   if (item === undefined) {
@@ -3494,7 +4089,7 @@ function summarizeItemDetail(item: Record<string, unknown>, type: string): strin
     return summarizeNamedToolItem(item, "server");
   }
   if (type === "dynamicToolCall") {
-    return summarizeNamedToolItem(item, "namespace");
+    return summarizeDynamicToolCallItem(item);
   }
   if (type === "collabAgentToolCall") {
     return readStringField(item, "tool");
@@ -3514,6 +4109,18 @@ function summarizeItemDetail(item: Record<string, unknown>, type: string): strin
     return text === undefined ? undefined : redact(text.replace(/\s+/g, " ").trim());
   }
   return undefined;
+}
+
+function summarizeDynamicToolCallItem(item: Record<string, unknown>): string | undefined {
+  const name = summarizeNamedToolItem(item, "namespace");
+  if (name === undefined) {
+    return undefined;
+  }
+  const normalized = name.toLowerCase();
+  if (normalized.includes("computer_use") || normalized.includes("computer-use")) {
+    return `Computer Use ${name}`;
+  }
+  return name;
 }
 
 function extractCodexItemFile(raw: unknown): DaemonTurnOutputFile | undefined {
@@ -3614,14 +4221,6 @@ function summarizeNamedToolItem(
     return namespace;
   }
   return `${namespace}.${tool}`;
-}
-
-function readNumberField(value: unknown, key: string): number | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "number" && Number.isFinite(field) ? field : undefined;
 }
 
 function truncateItemSummary(summary: string): string {
