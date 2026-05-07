@@ -93,7 +93,9 @@ Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath`
 
 Do not extend this claim to Slack, DingTalk live attachment acceptance, inbound
 DingTalk user attachments, or real Computer Use provider execution. Those
-remain separate acceptance tracks.
+remain separate acceptance tracks. Real Computer Use provider evidence/live
+execution is tracked separately by JAC-274; current `/cu` support is
+control/status/policy/audit/output projection, not verified desktop execution.
 
 ## 3. Live Acceptance Matrix
 
