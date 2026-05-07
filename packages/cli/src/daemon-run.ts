@@ -39,6 +39,7 @@ import {
   DingTalkChannelAdapter,
   createDingTalkNoopActionClient,
   createDingTalkOpenApiCardClient,
+  createDingTalkRobotFileClient,
   createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
 } from "@codex-im/im-dingtalk";
@@ -360,6 +361,12 @@ export function createProductionAdapter(
         textClient: createDingTalkSessionReplyTextClient({
           clientId: config.adapters.dingtalk.clientId,
           clientSecret: secrets.dingtalkClientSecret,
+        }),
+        fileClient: createDingTalkRobotFileClient({
+          clientId: config.adapters.dingtalk.clientId,
+          clientSecret: secrets.dingtalkClientSecret,
+          robotCode: dingTalkRobotCode,
+          attachmentDir: join(config.daemon.dataDir, "attachments", "dingtalk"),
         }),
       }),
     });

@@ -40,8 +40,12 @@
 > real session-webhook media path: files/images upload to DingTalk media and
 > then send as `file` / `image` session replies after a recent inbound message
 > seeds the reply URL. A real DingTalk file-send gate still needs to pass before
-> calling DingTalk attachments live-accepted; inbound DingTalk user attachments
-> remain unsupported pending a real delivery/download shape.
+> calling DingTalk attachments live-accepted. Inbound DingTalk image/file
+> materialization is now implemented locally through DingTalk's `downloadCode`
+> exchange: the adapter gets a temporary download URL, saves bytes into the
+> daemon attachment directory, and emits `InboundAttachment[]` for the common
+> Codex `localImage` / local-path file routing path. Real DingTalk inbound
+> attachment acceptance still needs a live upload gate.
 > Daemon terminal turn output now maps completed Codex `imageGeneration`
 > items with `savedPath` to IM attachments through `sendFile`, preserving the
 > text terminal summary as the Codex-native primary surface.
@@ -369,6 +373,14 @@
     `status=blocked`, `robotEvents=0`, and `targetSource=missing`; no attachment
     was sent. Launchd was restored under pid `15382`, `pendingApprovals=0`, and
     `pnpm im:doctor` remained ready.
+  - latest patch - DingTalk inbound attachment materialization: image/file robot
+    messages with `downloadCode` now materialize through
+    `/v1.0/robot/messageFiles/download` into the daemon attachment directory and
+    emit `InboundAttachment[]` without leaking download codes, temporary URLs,
+    tokens, user ids, or chat ids. Full local gates passed; the rebuilt bridge
+    was installed and kickstarted under launchd pid `36792`,
+    `pendingApprovals=0`, and `pnpm im:doctor` remained ready. Live uploaded
+    file/image acceptance remains pending.
   - latest patch - daemon artifact delivery: completed Codex
     `imageGeneration.savedPath` items are read as bounded local artifacts and
     sent through adapter `sendFile` after terminal text output. Unsupported

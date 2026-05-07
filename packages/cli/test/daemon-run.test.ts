@@ -113,6 +113,7 @@ describe("daemon run safety rails", () => {
     expect(source).toContain("createSlackSdkChannelAdapter");
     expect(source).toContain("createDingTalkOpenApiCardClient");
     expect(source).toContain("createDingTalkNoopActionClient");
+    expect(source).toContain("createDingTalkRobotFileClient");
     expect(source).toContain("createDingTalkSessionReplyTextClient");
     expect(source).toContain("clientId: config.adapters.dingtalk.clientId");
     expect(source).toContain("clientSecret: secrets.dingtalkClientSecret");
@@ -122,6 +123,9 @@ describe("daemon run safety rails", () => {
     );
     expect(source).toContain("botToken: secrets.slackBotToken");
     expect(source).toContain("appToken: secrets.slackAppToken");
+    expect(source).toContain(
+      'attachmentDir: join(config.daemon.dataDir, "attachments", "dingtalk")',
+    );
   });
 
   it("does not enable DingTalk SDK client-side WebSocket ping in production daemon", () => {

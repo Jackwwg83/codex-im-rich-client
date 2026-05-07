@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import type { ActionAck, MessageRef, Target } from "@codex-im/channel-core";
 import { DWClient, EventAck, TOPIC_CARD, TOPIC_ROBOT } from "dingtalk-stream";
 import type { DingTalkApprovalCardJson } from "./card.js";
@@ -9,6 +12,7 @@ const DINGTALK_OPENAPI_BASE_URL = "https://api.dingtalk.com";
 const DINGTALK_OAPI_BASE_URL = "https://oapi.dingtalk.com";
 const DINGTALK_ACCESS_TOKEN_PATH = "/v1.0/oauth2/accessToken";
 const DINGTALK_MEDIA_UPLOAD_PATH = "/media/upload";
+const DINGTALK_ROBOT_MESSAGE_FILE_DOWNLOAD_PATH = "/v1.0/robot/messageFiles/download";
 const DINGTALK_CREATE_AND_DELIVER_CARD_PATH = "/v1.0/card/instances/createAndDeliver";
 const DINGTALK_UPDATE_CARD_PATH = "/v1.0/card/instances";
 const DINGTALK_ACCESS_TOKEN_REFRESH_SKEW_MS = 60_000;
@@ -71,6 +75,35 @@ export interface DingTalkSessionReplyTextClientLike {
       readonly contentType: string;
     };
   }): Promise<{ readonly messageId?: string }>;
+}
+
+export interface DingTalkRobotFileDownloadRequest {
+  readonly downloadCode: string;
+  readonly filename: string;
+  readonly contentType: string;
+  readonly kind: "image" | "file";
+}
+
+export interface DingTalkRobotDownloadedFile {
+  readonly localPath: string;
+  readonly sizeBytes?: number;
+}
+
+export interface DingTalkRobotFileClientLike {
+  downloadMessageFile(
+    input: DingTalkRobotFileDownloadRequest,
+  ): Promise<DingTalkRobotDownloadedFile>;
+}
+
+export interface DingTalkRobotFileClientDeps {
+  readonly fetch?: typeof fetch;
+  readonly clientId: string;
+  readonly clientSecret: string;
+  readonly robotCode: string;
+  readonly attachmentDir?: string;
+  readonly baseUrl?: string;
+  readonly now?: () => number;
+  readonly randomId?: () => string;
 }
 
 export interface DingTalkSessionReplyTextClientDeps {
@@ -237,6 +270,79 @@ export function createDingTalkSessionReplyTextClient(
       }
       const messageId = stringField(replyBody, "messageId") ?? stringField(replyBody, "msgId");
       return messageId === undefined ? {} : { messageId };
+    },
+  };
+}
+
+export function createDingTalkRobotFileClient(
+  deps: DingTalkRobotFileClientDeps,
+): DingTalkRobotFileClientLike {
+  const fetchImpl = deps.fetch ?? globalThis.fetch;
+  const baseUrl = deps.baseUrl ?? DINGTALK_OPENAPI_BASE_URL;
+  const attachmentDir = deps.attachmentDir ?? defaultDingTalkAttachmentDir();
+  const now = deps.now ?? Date.now;
+  const randomId = deps.randomId ?? randomUUID;
+  const tokenCache: { token?: string; expiresAtMs?: number } = {};
+
+  async function accessToken(): Promise<string> {
+    if (
+      tokenCache.token !== undefined &&
+      tokenCache.expiresAtMs !== undefined &&
+      now() < tokenCache.expiresAtMs
+    ) {
+      return tokenCache.token;
+    }
+    const body = await requestJson(fetchImpl, `${baseUrl}${DINGTALK_ACCESS_TOKEN_PATH}`, {
+      operation: "robotFileAccessToken",
+      method: "POST",
+      body: {
+        appKey: deps.clientId,
+        appSecret: deps.clientSecret,
+      },
+    });
+    const token = stringField(body, "accessToken");
+    if (token === undefined) {
+      throw new Error("DingTalk robot file accessToken failed: missing accessToken");
+    }
+    const expireInSeconds = numericField(body, "expireIn") ?? 7200;
+    tokenCache.token = token;
+    tokenCache.expiresAtMs =
+      now() + Math.max(0, expireInSeconds * 1000 - DINGTALK_ACCESS_TOKEN_REFRESH_SKEW_MS);
+    return token;
+  }
+
+  return {
+    async downloadMessageFile(input) {
+      const token = await accessToken();
+      const body = await requestJson(
+        fetchImpl,
+        `${baseUrl}${DINGTALK_ROBOT_MESSAGE_FILE_DOWNLOAD_PATH}`,
+        {
+          operation: "robotMessageFileDownload",
+          method: "POST",
+          token,
+          body: {
+            downloadCode: input.downloadCode,
+            robotCode: deps.robotCode,
+          },
+        },
+      );
+      const downloadUrl = stringField(body, "downloadUrl");
+      if (downloadUrl === undefined) {
+        throw new Error("DingTalk robot message file download failed: missing downloadUrl");
+      }
+      const response = await fetchImpl(downloadUrl, { method: "GET" });
+      if (!response.ok) {
+        throw new Error(`DingTalk robot message file fetch failed with HTTP ${response.status}`);
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      await mkdir(attachmentDir, { recursive: true });
+      const localPath = join(
+        attachmentDir,
+        `${now()}-${randomId()}-${safeDingTalkFilename(input.filename)}`,
+      );
+      await writeFile(localPath, bytes);
+      return { localPath, sizeBytes: bytes.byteLength };
     },
   };
 }
@@ -430,6 +536,18 @@ function assertDingTalkSessionFile(file: {
 
 function dingTalkMediaType(contentType: string): "image" | "file" {
   return contentType.toLowerCase().startsWith("image/") ? "image" : "file";
+}
+
+function defaultDingTalkAttachmentDir(): string {
+  return join(tmpdir(), "codex-im-dingtalk-attachments");
+}
+
+function safeDingTalkFilename(filename: string): string {
+  const base = basename(filename)
+    .replace(/[^\w .@+-]/gu, "_")
+    .trim();
+  const safe = base.length === 0 || base === "." || base === ".." ? "attachment" : base;
+  return safe.slice(0, 160);
 }
 
 interface CreateAndDeliverInput {

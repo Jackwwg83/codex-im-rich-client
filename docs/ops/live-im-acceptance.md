@@ -221,6 +221,10 @@ Passing criteria:
   message to seed the session reply URL and must prove the adapter uploads media
   then sends an `image` / `file` session webhook reply without printing
   credentials or private target identifiers;
+- live inbound attachment acceptance, when run, must upload/send one real
+  DingTalk image or file to the bot and prove the daemon materializes it into a
+  local attachment path without printing `downloadCode`, temporary download URL,
+  tokens, or private target identifiers;
 - output does not print client ID, client secret, tokens, user IDs, chat IDs, or
   callback payloads.
 

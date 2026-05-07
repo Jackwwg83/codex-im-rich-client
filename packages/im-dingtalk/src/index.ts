@@ -34,6 +34,7 @@ export {
   DINGTALK_TOPIC_ROBOT,
   createDingTalkNoopActionClient,
   createDingTalkOpenApiCardClient,
+  createDingTalkRobotFileClient,
   createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
 } from "./client.js";
@@ -44,6 +45,10 @@ export type {
   DingTalkDwClientLike,
   DingTalkOpenApiCardClientConfig,
   DingTalkOpenApiCardClientDeps,
+  DingTalkRobotDownloadedFile,
+  DingTalkRobotFileClientLike,
+  DingTalkRobotFileClientDeps,
+  DingTalkRobotFileDownloadRequest,
   DingTalkSessionReplyTextClientDeps,
   DingTalkSessionReplyTextClientLike,
   DingTalkStreamClientConfig,
@@ -53,11 +58,13 @@ export type {
   DingTalkStreamEventLike,
 } from "./client.js";
 export {
+  dingtalkRobotAttachmentDescriptor,
   dingtalkRobotIdempotencyKey,
   extractDingTalkRobotSessionReply,
   normalizeDingTalkRawRobotMessage,
 } from "./message.js";
 export type {
+  DingTalkRobotAttachmentDescriptor,
   DingTalkInboundMessage,
   DingTalkRawRobotMessage,
   DingTalkRobotSessionReply,

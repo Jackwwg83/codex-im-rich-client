@@ -29,8 +29,10 @@
 > DingTalk outbound attachment support is implemented locally through its real
 > media-upload + session-webhook delivery path after a recent inbound robot
 > message seeds the session reply URL. DingTalk attachment live acceptance still
-> needs an explicit real file-send gate; inbound DingTalk user attachments
-> remain unsupported pending a real delivery/download shape.
+> needs an explicit real file-send gate. Inbound DingTalk image/file
+> materialization is implemented locally through DingTalk's `downloadCode`
+> exchange and now emits common `InboundAttachment[]`; live uploaded file/image
+> acceptance still needs a real DingTalk upload gate.
 > Daemon terminal output can now deliver completed Codex
 > `imageGeneration.savedPath` artifacts as IM files after the text summary;
 > explicit live file-send gates now prove the Telegram and Feishu/Lark platform
@@ -132,6 +134,7 @@ remain separate acceptance tracks.
 | DingTalk failed send/bind token cleanup | restart daemon after issued-only callback token residue | pass | startup now revokes both `issued` and `bound` callback tokens before adapter input; this covers the invalid local `callback_route_key` experiment that left unbound issued tokens after no card delivery |
 | DingTalk real callback click | real user/client approval-card click reaches adapter callback flow | pass | adapter accepts `cardPrivateData.params.token = v1:<opaque>` plus the official public-template `cardPrivateData.params.action = accept/reject`; real private callbacks with `spaceType=IM` map target/messageRef through the sender `userId`; daemon lookup stays scoped by token or `messageRef + action` |
 | DingTalk outbound image/file attachment | `DingTalkChannelAdapter.sendFile` after one inbound robot message seeds a session reply URL | local pass | client obtains a DingTalk access token, uploads bytes through `/media/upload`, sends `image` / `file` via the captured session webhook, and returns a file `MessageRef`; explicit `DINGTALK_LIVE_FILE=1` live gate exists and remains pending |
+| DingTalk inbound image/file attachment | robot `image` / `file` message with `downloadCode` | local pass | adapter exchanges `downloadCode` for a temporary download URL, saves bytes under the local daemon attachment directory, and emits `InboundAttachment[]`; explicit live uploaded file/image gate remains pending |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -515,6 +518,14 @@ Stop and treat as a blocker if:
   `robotEvents=0`, and `targetSource=missing`; no attachment was sent and no
   private identifiers were recorded. Launchd was restored under pid `15382`,
   `pendingApprovals=0`, and `pnpm im:doctor` remained ready.
+- 2026-05-07 SGT DingTalk inbound attachment implementation: robot image/file
+  messages with `downloadCode` now materialize through
+  `/v1.0/robot/messageFiles/download`, save bytes under the daemon attachment
+  directory, and emit common `InboundAttachment[]` for the shared Codex
+  `localImage` / local-path file prompt path. Full local gates passed; the
+  rebuilt bridge was installed and kickstarted under launchd pid `36792`,
+  `pendingApprovals=0`, and `pnpm im:doctor` remained ready. No real DingTalk
+  uploaded file/image gate has been run yet.
 - 2026-05-07 SGT Codex-native control loop: The common IM command plane now
   exposes Codex App Server-native surfaces for model listing, thread
   compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,

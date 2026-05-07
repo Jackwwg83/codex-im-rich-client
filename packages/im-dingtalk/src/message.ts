@@ -1,4 +1,4 @@
-import type { InboundMessage, Sender, Target } from "@codex-im/channel-core";
+import type { InboundAttachment, InboundMessage, Sender, Target } from "@codex-im/channel-core";
 import { DINGTALK_TOPIC_ROBOT, type DingTalkStreamEventLike } from "./client.js";
 
 const REDACTED_DINGTALK_ID = "[redacted]";
@@ -13,6 +13,12 @@ export interface DingTalkRawRobotMessage {
   readonly createAt?: number | string;
   readonly conversationType?: string;
   readonly msgtype?: string;
+  readonly downloadCode?: string;
+  readonly pictureDownloadCode?: string;
+  readonly fileName?: string;
+  readonly filename?: string;
+  readonly fileSize?: number | string;
+  readonly content?: unknown;
   readonly text?: {
     readonly content?: string;
   };
@@ -37,9 +43,18 @@ export interface DingTalkRobotSessionReply {
   readonly url: string;
 }
 
+export interface DingTalkRobotAttachmentDescriptor {
+  readonly downloadCode: string;
+  readonly filename: string;
+  readonly contentType: string;
+  readonly kind: "image" | "file";
+  readonly sizeBytes?: number;
+}
+
 export function normalizeDingTalkRawRobotMessage(
   event: DingTalkStreamEventLike,
   nowMs: number,
+  attachments: readonly InboundAttachment[] = [],
 ): DingTalkInboundMessage {
   const topic = event.headers?.topic;
   const streamMessageId = event.headers?.messageId;
@@ -71,9 +86,10 @@ export function normalizeDingTalkRawRobotMessage(
   return {
     target,
     sender,
-    text: extractRobotText(raw),
+    text: extractRobotText(raw, attachments),
     receivedAt: dingTalkReceivedAt(raw.createAt, nowMs),
     messageRef: { target, messageId: robotMsgId, kind: "inbound" },
+    ...(attachments.length === 0 ? {} : { attachments }),
     idempotencyKey: dingtalkRobotIdempotencyKey(streamMessageId, robotMsgId),
     raw: {
       topic,
@@ -83,6 +99,54 @@ export function normalizeDingTalkRawRobotMessage(
       conversationType,
       msgtype,
     },
+  };
+}
+
+export function dingtalkRobotAttachmentDescriptor(
+  event: DingTalkStreamEventLike,
+): DingTalkRobotAttachmentDescriptor | undefined {
+  let raw: DingTalkRawRobotMessage;
+  try {
+    raw = parseRobotData(event.data);
+  } catch {
+    return undefined;
+  }
+  if (
+    event.headers?.topic !== DINGTALK_TOPIC_ROBOT ||
+    raw.msgId === undefined ||
+    raw.msgtype === undefined
+  ) {
+    return undefined;
+  }
+  const kind = dingTalkAttachmentKind(raw.msgtype);
+  if (kind === undefined) {
+    return undefined;
+  }
+  const content = parseRobotContent(raw.content);
+  const downloadCode =
+    nonEmptyString(raw.downloadCode) ??
+    nonEmptyString(raw.pictureDownloadCode) ??
+    stringField(content, "downloadCode") ??
+    stringField(content, "pictureDownloadCode");
+  if (downloadCode === undefined) {
+    return undefined;
+  }
+  const filename =
+    nonEmptyString(raw.fileName) ??
+    nonEmptyString(raw.filename) ??
+    stringField(content, "fileName") ??
+    stringField(content, "filename") ??
+    defaultDingTalkAttachmentFilename(kind, raw.msgId);
+  const sizeBytes =
+    numericValue(raw.fileSize) ??
+    numericField(content, "fileSize") ??
+    numericField(content, "size");
+  return {
+    kind,
+    downloadCode,
+    filename,
+    contentType: kind === "image" ? "image/jpeg" : "application/octet-stream",
+    ...(sizeBytes === undefined ? {} : { sizeBytes }),
   };
 }
 
@@ -132,11 +196,66 @@ function parseRobotData(data: string | undefined): DingTalkRawRobotMessage {
   return parsed;
 }
 
-function extractRobotText(raw: DingTalkRawRobotMessage): string {
+function extractRobotText(
+  raw: DingTalkRawRobotMessage,
+  attachments: readonly InboundAttachment[],
+): string {
+  if (attachments.length > 0 && (raw.msgtype === "image" || raw.msgtype === "file")) {
+    return "";
+  }
   if (raw.msgtype !== "text") {
     return `Unsupported DingTalk message type: ${raw.msgtype ?? "<missing>"}`;
   }
   return raw.text?.content ?? "";
+}
+
+function dingTalkAttachmentKind(msgtype: string): "image" | "file" | undefined {
+  if (msgtype === "image") return "image";
+  if (msgtype === "file") return "file";
+  return undefined;
+}
+
+function defaultDingTalkAttachmentFilename(kind: "image" | "file", msgId: string): string {
+  return kind === "image" ? `dingtalk-image-${msgId}.jpg` : `dingtalk-file-${msgId}`;
+}
+
+function parseRobotContent(content: unknown): Record<string, unknown> | undefined {
+  if (typeof content === "string") {
+    try {
+      const parsed: unknown = JSON.parse(content);
+      return isRecord(parsed) ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return isRecord(content) ? content : undefined;
+}
+
+function stringField(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return nonEmptyString(value);
+}
+
+function numericField(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  return numericValue(record?.[key]);
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function numericValue(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  }
+  return undefined;
 }
 
 function targetFromRobotMessage(raw: DingTalkRawRobotMessage): Target {

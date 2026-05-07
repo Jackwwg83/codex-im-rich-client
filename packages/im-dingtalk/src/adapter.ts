@@ -21,12 +21,14 @@ import {
   DINGTALK_TOPIC_ROBOT,
   type DingTalkActionClientLike,
   type DingTalkCardClientLike,
+  type DingTalkRobotFileClientLike,
   type DingTalkSessionReplyTextClientLike,
   type DingTalkStreamClientLike,
   type DingTalkStreamEventLike,
 } from "./client.js";
 import {
   type DingTalkInboundMessage,
+  dingtalkRobotAttachmentDescriptor,
   extractDingTalkRobotSessionReply,
   normalizeDingTalkRawRobotMessage,
 } from "./message.js";
@@ -42,6 +44,7 @@ export interface DingTalkChannelAdapterOptions {
   readonly cardClient?: DingTalkCardClientLike;
   readonly actionClient?: DingTalkActionClientLike;
   readonly textClient?: DingTalkSessionReplyTextClientLike;
+  readonly fileClient?: DingTalkRobotFileClientLike;
 }
 
 export class DingTalkChannelAdapter implements ChannelAdapter {
@@ -283,7 +286,8 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     await this.#ackStreamCallback(streamClient, _event);
     let msg: DingTalkInboundMessage;
     try {
-      msg = normalizeDingTalkRawRobotMessage(_event, this.#nowMs());
+      const attachments = await this.#materializeRobotAttachments(_event);
+      msg = normalizeDingTalkRawRobotMessage(_event, this.#nowMs(), attachments);
     } catch {
       return;
     }
@@ -341,6 +345,37 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
       await streamClient.ackCallback?.(messageId);
     } catch {
       // Stream ack is platform receipt only; business handling still fails closed above.
+    }
+  }
+
+  async #materializeRobotAttachments(
+    event: DingTalkStreamEventLike,
+  ): Promise<NonNullable<DingTalkInboundMessage["attachments"]>> {
+    const descriptor = dingtalkRobotAttachmentDescriptor(event);
+    const fileClient = this.#options.fileClient;
+    if (descriptor === undefined || fileClient === undefined) {
+      return [];
+    }
+    try {
+      const downloaded = await fileClient.downloadMessageFile({
+        downloadCode: descriptor.downloadCode,
+        filename: descriptor.filename,
+        contentType: descriptor.contentType,
+        kind: descriptor.kind,
+      });
+      const sizeBytes = downloaded.sizeBytes ?? descriptor.sizeBytes;
+      return [
+        {
+          kind: descriptor.kind,
+          filename: descriptor.filename,
+          contentType: descriptor.contentType,
+          localPath: downloaded.localPath,
+          ...(sizeBytes === undefined ? {} : { sizeBytes }),
+        },
+      ];
+    } catch {
+      // Download URLs and codes are sensitive; keep text routing alive without logging them.
+      return [];
     }
   }
 
