@@ -16,10 +16,11 @@ Fresh local evidence:
 
 ```text
 branch: codex/live-im-acceptance
-last verified HEAD before this unblock packet: c6b331c docs(handoff): sync blocked goal audit
+last verified HEAD before this recheck: 9e12c9f docs(handoff): add blocked acceptance unblock packet
 working tree: clean
 launchd: running pid=16732, codexThreads=0, pendingApprovals=0
 pnpm im:doctor: ready for Telegram / Lark / DingTalk, Slack disabled
+pnpm dingtalk:readiness: ready
 ```
 
 Fresh gate/blocker checks:
@@ -28,8 +29,24 @@ Fresh gate/blocker checks:
 pnpm smoke:slack-live
 -> status=skip, gate=disabled, botToken=missing
 
+security find-generic-password -s codex-im-bridge-slack-bot -a "$USER"
+security find-generic-password -s codex-im-bridge-slack-app -a "$USER"
+-> both missing
+
+DingTalk Desktop/Web preflight
+-> open -a DingTalk returned exit 0, but System Events reports frontmost=false
+   and windows=0; Computer Use get_app_state timed out after 120s; latest
+   DingTalk inbound audit rows are still from 2026-05-05.
+
 pnpm smoke:computer-use-live
 -> status=skip, gate=disabled
+
+COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 \
+COMPUTER_USE_LIVE_DRY_RUN=1 \
+COMPUTER_USE_LIVE_APP="Google Chrome" \
+COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
+pnpm smoke:computer-use-live
+-> status=ready_dry_run
 
 COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 \
 COMPUTER_USE_LIVE_APP="Google Chrome" \
