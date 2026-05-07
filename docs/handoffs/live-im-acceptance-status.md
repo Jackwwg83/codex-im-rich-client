@@ -32,10 +32,15 @@
 > media delivery when `DINGTALK_TARGET_CHAT_ID` is configured. DingTalk
 > attachment live acceptance now passes for both file and image gates with
 > redacted `status=file_sent`, `targetSource=env`, and message id presence only.
-> Inbound DingTalk image/file
-> materialization is implemented locally through DingTalk's `downloadCode`
-> exchange and now emits common `InboundAttachment[]`; live uploaded file/image
-> acceptance still needs a real DingTalk upload gate.
+> Inbound DingTalk image materialization now also has a passing real live gate:
+> a real DingTalk Desktop image send reached Stream with
+> `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, and
+> `attachmentEvents=1`; the adapter recognized the live `content.downloadCode`
+> / `content.pictureDownloadCode` shape, used the generic `downloadCode` for
+> `/v1.0/robot/messageFiles/download`, saved a local file, and emitted common
+> `InboundAttachment[]` with only redacted presence evidence. DingTalk inbound
+> generic file upload still needs the same explicit live gate before claiming
+> file-upload parity.
 > Daemon terminal output can now deliver Codex-native artifacts through IM:
 > short command output is inline, long completed/failed command output becomes
 > a redacted `.log` attachment, file-change diffs become redacted `.patch`
@@ -158,7 +163,8 @@ control/status/policy/audit/output projection, not verified desktop execution.
 | DingTalk real callback click | real user/client approval-card click reaches adapter callback flow | pass | adapter accepts `cardPrivateData.params.token = v1:<opaque>` plus the official public-template `cardPrivateData.params.action = accept/reject`; real private callbacks with `spaceType=IM` map target/messageRef through the sender `userId`; daemon lookup stays scoped by token or `messageRef + action` |
 | DingTalk outbound image/file attachment | `DingTalkChannelAdapter.sendFile` through a session reply URL or proactive `DINGTALK_TARGET_CHAT_ID` target | pass | client obtains a DingTalk access token, uploads bytes through `/media/upload`, sends `image` / `file` via the captured session webhook when available, or sends proactive robot group/user media when no session reply URL exists; explicit `DINGTALK_LIVE_FILE=1` file and image gates both returned redacted `status=file_sent`, `targetSource=env`, and `messageId=present` |
 | Installed DingTalk proactive attachment bundle | `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k ... && pnpm launchd:status && pnpm im:doctor` | pass | installed daemon restarted to pid `53319` with `pendingApprovals=0`; doctor is ready and reports DingTalk file support through session reply URL or proactive target; installed bridge redaction scan returned `redaction scan ok` |
-| DingTalk inbound image/file attachment | robot `image` / `file` message with `downloadCode` | local pass | adapter exchanges `downloadCode` for a temporary download URL, saves bytes under the local daemon attachment directory, and emits `InboundAttachment[]`; explicit live uploaded file/image gate remains pending |
+| DingTalk inbound image attachment | real DingTalk Desktop image upload through `DINGTALK_LIVE_INBOUND_ATTACHMENT=1` | pass | live gate returned redacted `status=inbound_attachment_received`, `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, `attachmentDownloadAttempts=1`, `attachmentDownloadSuccesses=1`, and local path/filename/size presence only; parser now handles DingTalk's live `msgtype=<other>` plus `content.downloadCode` / `content.pictureDownloadCode` shape and uses the generic `downloadCode` for the robot file download API |
+| DingTalk inbound generic file attachment | real DingTalk Desktop file upload through `DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND=file` | local pass; live pending | same materialization path covers robot `file` messages locally; run one real file-upload gate before claiming DingTalk generic-file parity |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -654,6 +660,28 @@ Stop and treat as a blocker if:
   rebuilt bridge was installed and kickstarted under launchd pid `36792`,
   `pendingApprovals=0`, and `pnpm im:doctor` remained ready. No real DingTalk
   uploaded file/image gate has been run yet.
+- 2026-05-07 SGT DingTalk inbound attachment live-gate diagnosis: added an
+  explicit `DINGTALK_LIVE_INBOUND_ATTACHMENT=1` live smoke path that starts
+  DingTalk Stream, injects the robot file client, waits for image/file robot
+  callbacks, and reports only redacted counters/presence fields. Two real
+  image-gate attempts connected to Stream but ended blocked with
+  `rawStreamEvents=0`, `rawRobotCallbacks=0`, `robotEvents=0`, and
+  `attachmentEvents=0`; a real text send in the visible DingTalk client also
+  produced no daemon audit row after launchd was restored. Launchd was restarted
+  and `pnpm im:doctor` returned ready. Keep DingTalk inbound upload acceptance
+  open until one real robot `image` or `file` callback reaches Stream.
+- 2026-05-07 SGT DingTalk inbound image live acceptance: a later real
+  DingTalk Desktop image send reached the live gate. First diagnostic pass
+  showed the raw robot callback shape uses `content.downloadCode` plus
+  `content.pictureDownloadCode` while `msgtype` is not the fixture's literal
+  `image`; the adapter parser now treats `pictureDownloadCode` as an image
+  hint but uses the generic `downloadCode` for
+  `/v1.0/robot/messageFiles/download`. Final gate returned
+  `status=inbound_attachment_received`, `rawStreamEvents=1`,
+  `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`,
+  `attachmentDownloadAttempts=1`, `attachmentDownloadSuccesses=1`,
+  `attachmentDownloadFailures=0`, and only path/filename/size presence fields.
+  DingTalk inbound generic file live acceptance remains pending separately.
 - 2026-05-07 SGT Codex-native control loop: The common IM command plane now
   exposes Codex App Server-native surfaces for model listing, thread
   compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,

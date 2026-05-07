@@ -41,12 +41,14 @@
 > after a recent inbound robot message seeds the reply URL, or through
 > proactive robot group/user media delivery when `DINGTALK_TARGET_CHAT_ID` is
 > configured. Explicit real file and image gates both returned redacted
-> `status=file_sent` with message-id presence only. Inbound DingTalk image/file
-> materialization is implemented locally through DingTalk's `downloadCode`
-> exchange: the adapter gets a temporary download URL, saves bytes into the
-> daemon attachment directory, and emits `InboundAttachment[]` for the common
-> Codex `localImage` / local-path file routing path. Real DingTalk inbound
-> attachment acceptance still needs a live upload gate.
+> `status=file_sent` with message-id presence only. Inbound DingTalk image
+> materialization is also live-accepted: a real DingTalk Desktop image upload
+> reached Stream, exposed the live `content.downloadCode` /
+> `content.pictureDownloadCode` shape, downloaded via
+> `/v1.0/robot/messageFiles/download`, saved a local file, and emitted common
+> `InboundAttachment[]` for the Codex `localImage` routing path with only
+> redacted presence evidence. DingTalk inbound generic file upload remains a
+> separate live gate before claiming file-upload parity.
 > Daemon terminal turn output now maps Codex development artifacts
 > through the common IM surface: short command output is summarized inline,
 > long completed/failed command output is sent as a redacted `.log`
@@ -88,13 +90,17 @@
 > live-smoke gate.
 > Explicit Telegram, Feishu/Lark, and DingTalk live file gates passed with
 > redacted evidence; after the latest Codex-native IM output loop bridge
-> reinstall/kickstart, launchd is running under pid `60935` with
-> `pendingApprovals=0`, `pnpm im:doctor` is ready for installed
+> reinstall/kickstart and the DingTalk inbound image upload gate restore, launchd is
+> running under pid `91940` with `pendingApprovals=0`, `pnpm im:doctor` is
+> ready for installed
 > Telegram/Lark/DingTalk with Slack disabled, and the bridge redaction scan
-> returned `redaction scan ok`. JAC-273 is now Done: DingTalk `DINGTALK_LIVE_FILE=1`
-> file and image gates both returned redacted `status=file_sent` through the
-> proactive target path, so the attachment live gate no longer depends on a
-> visible DingTalk client window. Common group
+> returned `redaction scan ok`. JAC-273 is now Done for outbound DingTalk
+> attachments: `DINGTALK_LIVE_FILE=1` file and image gates both returned
+> redacted `status=file_sent` through the proactive target path, so outbound
+> attachment live acceptance no longer depends on a visible DingTalk client
+> window. DingTalk inbound image user-upload acceptance is now green under
+> JAC-277; DingTalk inbound generic file user-upload still needs the same
+> explicit real gate. Common group
 > safety now has a config-level mention
 > gate: configured Telegram/Feishu-Lark/DingTalk group chats must mention a
 > configured alias before ordinary inbound text reaches Codex, while approval
@@ -117,7 +123,9 @@
 > with Slack `files[]` metadata are downloaded with the bot token into the local
 > daemon attachment directory, then emitted as `InboundAttachment[]` so daemon
 > routing can reuse the existing Codex `localImage` / local-path file context
-> behavior. Slack live workspace acceptance remains pending. JAC-274 now tracks
+> behavior. Slack live workspace acceptance remains pending. JAC-274 remains
+> the Computer Use parent, now split into JAC-278 official provider-contract
+> evidence and JAC-279 local experimental provider POC. It tracks
 > the remaining real Computer Use provider/live execution acceptance gap:
 > current `/cu` control, status, policy, fake/unsupported provider, audit, and
 > IM output/artifact projection are implemented, but non-dry-run real desktop
@@ -136,8 +144,11 @@
 
 ## 1. Current State
 
-- **Mode:** Real Telegram / Feishu-Lark / DingTalk acceptance complete for
-  enabled platforms; direct-use hardening and Slack readiness continue.
+- **Mode:** Real Telegram / Feishu-Lark / DingTalk direct-use acceptance
+  complete for enabled text/approval/outbound-artifact paths and DingTalk
+  inbound image upload; DingTalk inbound generic-file upload, Slack live
+  workspace acceptance, and real Computer Use provider execution continue as
+  explicit follow-up tracks.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Slack plan:** `docs/superpowers/plans/2026-05-07-slack-core-platform-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
@@ -790,6 +801,8 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT DingTalk proactive attachment fallback loop | JAC-273 no longer depends only on a fresh session reply URL for outbound file/image tests. `DingTalkChannelAdapter.sendFile` now falls back to a proactive media client when no session webhook is known: it uploads media through DingTalk OAPI, then sends image/file payloads through the robot group or private-user proactive APIs based on `DINGTALK_TARGET_CHAT_ID`. Production `daemon run` injects this client, and `pnpm smoke:dingtalk-live` can now run `DINGTALK_LIVE_FILE=1` with a configured target instead of waiting for a fresh inbound message. Targeted DingTalk/CLI tests, `pnpm typecheck`, and `git diff --check` passed before the live gates below. |
 | 2026-05-07 SGT DingTalk attachment live acceptance loop | JAC-273 live acceptance is now green for outbound file and image delivery. Using config/Keychain/SQLite-derived values without printing secrets, `DINGTALK_LIVE=1 DINGTALK_LIVE_FILE=1 DINGTALK_LIVE_FILE_KIND=file pnpm smoke:dingtalk-live` and the same gate with `DINGTALK_LIVE_FILE_KIND=image` both exited 0 with redacted `status=file_sent`, `targetChatId=present`, `targetSource=env`, `messageId=present`, and `robotEvents=0`. No client secret, target id, message id, or media id bytes were recorded. |
 | 2026-05-07 SGT installed proactive DingTalk bundle | After commits `347abac`, `0d107e2`, and `40fba7e`, rebuilt and installed the bridge bundle, then `launchctl kickstart -k gui/501/io.codex-im-bridge` restarted the installed daemon to pid `53319` with `pendingApprovals=0`. `pnpm im:doctor` is ready for installed Telegram/Lark/DingTalk with Slack disabled and now reports DingTalk file support as `outbound files/images supported through session reply URL or proactive target`. Installed bridge redaction scan returned `redaction scan ok`. |
+| 2026-05-07 SGT DingTalk inbound upload gate loop | Added `DINGTALK_LIVE_INBOUND_ATTACHMENT=1` plus `DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND=image/file/any` to the DingTalk live smoke harness. The gate uses DingTalk Stream plus the robot file client and reports only redacted counters/presence fields. For isolation, launchd was temporarily stopped; both image-gate attempts connected to Stream and timed out with `rawStreamEvents=0`, `rawRobotCallbacks=0`, `robotEvents=0`, and `attachmentEvents=0`. After launchd was restored to pid `78170`, `pnpm im:doctor` was ready; daemon logs/audit also showed no new DingTalk inbound row from the user's late image send. This is now tracked as a DingTalk platform/robot Stream delivery diagnosis, not as a local attachment materialization failure. |
+| 2026-05-07 SGT DingTalk inbound image live acceptance | JAC-277 image path is green. A real DingTalk Desktop image upload first exposed the live raw shape: Stream delivered one robot callback with `content.downloadCode` and `content.pictureDownloadCode` while `msgtype` was not the older fixture's literal `image`. The parser now treats `pictureDownloadCode` as an image hint and uses the generic `downloadCode` for `/v1.0/robot/messageFiles/download`; the final live gate returned redacted `status=inbound_attachment_received`, `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, `attachmentDownloadAttempts=1`, `attachmentDownloadSuccesses=1`, `attachmentDownloadFailures=0`, and local path/filename/size presence only. Launchd was restored to pid `91940`; `pnpm im:doctor` is ready. DingTalk inbound generic file upload remains a separate live gate. |
 | 2026-05-07 SGT official Computer Use docs recheck | JAC-274 official-doc evidence was refreshed against `developers.openai.com/codex/app/computer-use` and `developers.openai.com/codex/app-server`. The Codex App page documents Computer Use as an interactive Codex app/plugin feature requiring macOS Screen Recording/Accessibility and app approvals; the App Server page documents experimental `dynamicTools` / `item/tool/call` callbacks, but not a daemon-facing Computer Use provider registration method, namespace/tool contract, argument schema, or permission bridge. This keeps `UnsupportedComputerUseProvider` as the correct production behavior while preserving downstream IM rendering of `dynamicToolCall` screenshots/artifacts. |
 | 2026-05-07 SGT command/CU detail refresh | Shared daemon item summaries now include command risk when App Server supplies `riskLevel` / `risk`, and Computer Use dynamic-tool summaries can expose app, step/action, policy decision, blocked reason, and approval-required state while continuing to suppress raw tool arguments. Targeted RED/GREEN `packages/daemon/test/turn-output.test.ts` passed; the rebuilt bundle was installed/kickstarted under launchd pid `60935`, `pnpm im:doctor` stayed ready, and the bridge redaction scan returned `redaction scan ok`. |
 

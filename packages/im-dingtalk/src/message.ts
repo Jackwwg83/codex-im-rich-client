@@ -118,16 +118,30 @@ export function dingtalkRobotAttachmentDescriptor(
   ) {
     return undefined;
   }
-  const kind = dingTalkAttachmentKind(raw.msgtype);
+  const content = parseRobotContent(raw.content);
+  const genericDownloadCode =
+    nonEmptyString(raw.downloadCode) ?? stringField(content, "downloadCode");
+  const pictureDownloadCode =
+    nonEmptyString(raw.pictureDownloadCode) ?? stringField(content, "pictureDownloadCode");
+  const hasPictureDownloadCode = pictureDownloadCode !== undefined;
+  const hasFileShape =
+    nonEmptyString(raw.fileName) !== undefined ||
+    nonEmptyString(raw.filename) !== undefined ||
+    numericValue(raw.fileSize) !== undefined ||
+    stringField(content, "fileName") !== undefined ||
+    stringField(content, "filename") !== undefined ||
+    numericField(content, "fileSize") !== undefined;
+  const kind = dingTalkAttachmentKind(raw.msgtype, {
+    hasPictureDownloadCode,
+    hasFileShape,
+  });
   if (kind === undefined) {
     return undefined;
   }
-  const content = parseRobotContent(raw.content);
   const downloadCode =
-    nonEmptyString(raw.downloadCode) ??
-    nonEmptyString(raw.pictureDownloadCode) ??
-    stringField(content, "downloadCode") ??
-    stringField(content, "pictureDownloadCode");
+    kind === "image"
+      ? (genericDownloadCode ?? pictureDownloadCode)
+      : (genericDownloadCode ?? pictureDownloadCode);
   if (downloadCode === undefined) {
     return undefined;
   }
@@ -200,7 +214,7 @@ function extractRobotText(
   raw: DingTalkRawRobotMessage,
   attachments: readonly InboundAttachment[],
 ): string {
-  if (attachments.length > 0 && (raw.msgtype === "image" || raw.msgtype === "file")) {
+  if (attachments.length > 0) {
     return "";
   }
   if (raw.msgtype !== "text") {
@@ -209,9 +223,17 @@ function extractRobotText(
   return raw.text?.content ?? "";
 }
 
-function dingTalkAttachmentKind(msgtype: string): "image" | "file" | undefined {
+function dingTalkAttachmentKind(
+  msgtype: string,
+  hints: {
+    readonly hasPictureDownloadCode: boolean;
+    readonly hasFileShape: boolean;
+  } = { hasPictureDownloadCode: false, hasFileShape: false },
+): "image" | "file" | undefined {
   if (msgtype === "image") return "image";
   if (msgtype === "file") return "file";
+  if (hints.hasPictureDownloadCode) return "image";
+  if (hints.hasFileShape) return "file";
   return undefined;
 }
 

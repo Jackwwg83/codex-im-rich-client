@@ -90,6 +90,23 @@ describe("DingTalk live smoke harness gate (JAC-89)", () => {
     expect(source).toContain('targetSource: "env"');
   });
 
+  it("wires DingTalk inbound attachment smoke to robot file download without printing secrets", () => {
+    const source = readFileSync(SCRIPT, "utf8");
+
+    expect(source).toContain("DINGTALK_LIVE_INBOUND_ATTACHMENT");
+    expect(source).toMatch(/import[\s\S]*DINGTALK_TOPIC_ROBOT[\s\S]*from "\.\.\/src\/index\.js"/);
+    expect(source).toContain("createDingTalkRobotFileClient");
+    expect(source).toContain('"inbound_attachment_received"');
+    expect(source).toContain("inboundAttachmentLocalPath:");
+    expect(source).toContain("attachmentEvents");
+    expect(source).toContain("rawStreamEvents");
+    expect(source).toContain("inboundRobotRawShape");
+    expect(source).toContain("attachmentDownloadAttempts");
+    expect(source).toContain("inboundAttachmentDownloadError");
+    expect(source).toContain("summarizeRobotMessageShape");
+    expect(source).toContain("observeLiveInboundRobotEvents");
+  });
+
   it("allows a two-minute manual callback window for real client clicks", () => {
     const result = runLiveSmoke({
       DINGTALK_LIVE: "1",
@@ -173,6 +190,8 @@ function runLiveSmoke(env: Record<string, string>) {
     "DINGTALK_LIVE_DRY_RUN",
     "DINGTALK_LIVE_FILE",
     "DINGTALK_LIVE_FILE_KIND",
+    "DINGTALK_LIVE_INBOUND_ATTACHMENT",
+    "DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND",
     "DINGTALK_LIVE_DURATION_MS",
     "DINGTALK_ROBOT_CODE",
     "DINGTALK_TARGET_CHAT_ID",

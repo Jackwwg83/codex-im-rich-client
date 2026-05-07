@@ -1,0 +1,13 @@
+{
+  "specVersion": "1.0",
+  "type": "CALLBACK",
+  "headers": {
+    "appId": "ding_test_app",
+    "connectionId": "conn_test_picture",
+    "contentType": "application/json",
+    "messageId": "stream_msg_picture_001",
+    "time": "1777751004000",
+    "topic": "/v1.0/im/bot/messages/get"
+  },
+  "data": "{\"conversationId\":\"cid_test_picture\",\"chatbotCorpId\":\"corp_test\",\"chatbotUserId\":\"bot_test\",\"msgId\":\"msg_test_picture\",\"senderNick\":\"Marie\",\"isAdmin\":false,\"senderStaffId\":\"staff_test_picture\",\"sessionWebhookExpiredTime\":1777754604000,\"createAt\":1777751004000,\"senderCorpId\":\"corp_test\",\"conversationType\":\"2\",\"senderId\":\"sender_test_picture\",\"robotCode\":\"robot_code_test\",\"msgtype\":\"picture\",\"content\":{\"downloadCode\":\"content_download_code_must_not_leak\",\"pictureDownloadCode\":\"picture_download_code_must_not_leak\"}}"
+}

@@ -3,12 +3,15 @@
 import type { Target } from "@codex-im/channel-core";
 import {
   DINGTALK_TOPIC_CARD,
+  DINGTALK_TOPIC_ROBOT,
   DingTalkChannelAdapter,
   type DingTalkInboundAction,
+  type DingTalkRobotFileClientLike,
   type DingTalkStreamClientLike,
   type DingTalkStreamEventHandler,
   createDingTalkOpenApiCardClient,
   createDingTalkProactiveMessageClient,
+  createDingTalkRobotFileClient,
   createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
   renderDingTalkApprovalCard,
@@ -28,6 +31,7 @@ type SmokeStatus =
   | "connected"
   | "card_updated"
   | "card_callback_seen"
+  | "inbound_attachment_received"
   | "file_sent";
 
 interface RedactedStatus {
@@ -40,6 +44,8 @@ interface RedactedStatus {
   readonly robotEvents?: number;
   readonly cardEvents?: number;
   readonly streamEvents?: number;
+  readonly rawStreamEvents?: number;
+  readonly rawRobotCallbacks?: number;
   readonly rawCardCallbacks?: number;
   readonly normalizedCardActions?: number;
   readonly rawCardCallbackMessageId?: "present";
@@ -55,7 +61,36 @@ interface RedactedStatus {
   readonly callbackRawActionId?: "present";
   readonly callbackRawSpaceType?: "IM_GROUP" | "IM_ROBOT" | "unknown";
   readonly fileKind?: "file" | "image";
+  readonly attachmentEvents?: number;
+  readonly inboundAttachmentKind?: "file" | "image";
+  readonly inboundAttachmentLocalPath?: "present";
+  readonly inboundAttachmentSizeBytes?: "present" | "missing";
+  readonly inboundAttachmentFilename?: "present";
+  readonly inboundRobotRawShape?: SanitizedRobotMessageShape;
+  readonly attachmentDownloadAttempts?: number;
+  readonly attachmentDownloadSuccesses?: number;
+  readonly attachmentDownloadFailures?: number;
+  readonly inboundAttachmentDownloadError?:
+    | "access_token_failed"
+    | "missing_download_url"
+    | "http_error"
+    | "other";
   readonly missing?: readonly string[];
+}
+
+interface SanitizedRobotMessageShape {
+  readonly dataKeys: readonly string[];
+  readonly msgtype: "text" | "image" | "file" | "other" | "missing";
+  readonly contentKind: "json_string" | "object" | "missing" | "other";
+  readonly contentKeys: readonly string[];
+  readonly textKeys: readonly string[];
+  readonly imageKeys: readonly string[];
+  readonly fileKeys: readonly string[];
+  readonly hasDownloadCode: boolean;
+  readonly hasPictureDownloadCode: boolean;
+  readonly hasFileName: boolean;
+  readonly hasFileSize: boolean;
+  readonly hasSessionWebhook: boolean;
 }
 
 interface SanitizedCardCallbackShape {
@@ -97,6 +132,10 @@ async function main(): Promise<void> {
   if (process.env.DINGTALK_LIVE_DRY_RUN === "1") {
     printStatus({ ...redactedStatus("ready_dry_run"), durationMs });
     console.log("[dingtalk-live-smoke] READY_DRY_RUN: live env is present; no network call made.");
+    return;
+  }
+  if (process.env.DINGTALK_LIVE_INBOUND_ATTACHMENT === "1") {
+    await runLiveInboundAttachmentSmoke({ durationMs });
     return;
   }
   if (process.env.DINGTALK_LIVE_FILE === "1") {
@@ -209,6 +248,146 @@ async function main(): Promise<void> {
   }
 }
 
+async function runLiveInboundAttachmentSmoke(input: {
+  readonly durationMs: number;
+}): Promise<void> {
+  const wantedKind = liveInboundAttachmentKind();
+  const counters = {
+    rawStreamEvents: 0,
+    rawRobotCallbacks: 0,
+    robotEvents: 0,
+    attachmentEvents: 0,
+    attachmentDownloadAttempts: 0,
+    attachmentDownloadSuccesses: 0,
+    attachmentDownloadFailures: 0,
+  };
+  let inboundAttachmentDownloadError:
+    | "access_token_failed"
+    | "missing_download_url"
+    | "http_error"
+    | "other"
+    | undefined;
+  let received:
+    | {
+        readonly kind: "file" | "image";
+        readonly hasLocalPath: boolean;
+        readonly hasSizeBytes: boolean;
+        readonly hasFilename: boolean;
+      }
+    | undefined;
+  let inboundRobotRawShape: SanitizedRobotMessageShape | undefined;
+  const streamClient = observeLiveInboundRobotEvents(
+    createDingTalkStreamClient({
+      clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+      clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+      debug: false,
+    }),
+    {
+      onRawRobotCallback(event) {
+        counters.rawRobotCallbacks++;
+        inboundRobotRawShape = summarizeRobotMessageShape(event);
+      },
+      onRawStreamEvent() {
+        counters.rawStreamEvents++;
+      },
+    },
+  );
+  const adapter = new DingTalkChannelAdapter({
+    streamClient,
+    fileClient: observeRobotFileDownloads(
+      createDingTalkRobotFileClient({
+        clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+        clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+        robotCode: process.env.DINGTALK_ROBOT_CODE ?? requiredEnv("DINGTALK_CLIENT_ID"),
+      }),
+      {
+        onAttempt() {
+          counters.attachmentDownloadAttempts++;
+        },
+        onSuccess() {
+          counters.attachmentDownloadSuccesses++;
+        },
+        onFailure(error) {
+          counters.attachmentDownloadFailures++;
+          inboundAttachmentDownloadError = classifyRobotFileDownloadError(error);
+        },
+      },
+    ),
+  });
+  const unsubscribe = adapter.onMessage((message) => {
+    counters.robotEvents++;
+    for (const attachment of message.attachments ?? []) {
+      if (wantedKind !== "any" && attachment.kind !== wantedKind) {
+        continue;
+      }
+      counters.attachmentEvents++;
+      if (received === undefined) {
+        received = {
+          kind: attachment.kind,
+          hasLocalPath: attachment.localPath.length > 0,
+          hasSizeBytes: attachment.sizeBytes !== undefined,
+          hasFilename: attachment.filename.length > 0,
+        };
+      }
+    }
+  });
+
+  try {
+    await adapter.start();
+    console.log(
+      "[dingtalk-live-smoke] INBOUND_ATTACHMENT_WAITING: send one DingTalk image/file message to the bot during the smoke window. In group chats, @ the bot.",
+    );
+    await waitFor(() => received !== undefined, input.durationMs);
+    if (received === undefined) {
+      printStatus({
+        ...redactedStatus("blocked"),
+        durationMs: input.durationMs,
+        rawStreamEvents: counters.rawStreamEvents,
+        rawRobotCallbacks: counters.rawRobotCallbacks,
+        robotEvents: counters.robotEvents,
+        attachmentEvents: counters.attachmentEvents,
+        inboundAttachmentKind: wantedKind === "any" ? undefined : wantedKind,
+        inboundRobotRawShape,
+        attachmentDownloadAttempts: counters.attachmentDownloadAttempts,
+        attachmentDownloadSuccesses: counters.attachmentDownloadSuccesses,
+        attachmentDownloadFailures: counters.attachmentDownloadFailures,
+        inboundAttachmentDownloadError,
+      });
+      console.error(
+        "[dingtalk-live-smoke] BLOCKED: no DingTalk inbound image/file attachment arrived before timeout.",
+      );
+      process.exitCode = 3;
+      return;
+    }
+    printStatus({
+      ...redactedStatus("inbound_attachment_received"),
+      durationMs: input.durationMs,
+      rawStreamEvents: counters.rawStreamEvents,
+      rawRobotCallbacks: counters.rawRobotCallbacks,
+      robotEvents: counters.robotEvents,
+      attachmentEvents: counters.attachmentEvents,
+      inboundAttachmentKind: received.kind,
+      inboundAttachmentLocalPath: received.hasLocalPath ? "present" : undefined,
+      inboundAttachmentSizeBytes: received.hasSizeBytes ? "present" : "missing",
+      inboundAttachmentFilename: received.hasFilename ? "present" : undefined,
+      inboundRobotRawShape,
+      attachmentDownloadAttempts: counters.attachmentDownloadAttempts,
+      attachmentDownloadSuccesses: counters.attachmentDownloadSuccesses,
+      attachmentDownloadFailures: counters.attachmentDownloadFailures,
+    });
+    console.log(
+      "[dingtalk-live-smoke] INBOUND_ATTACHMENT_RECEIVED: redacted live inbound attachment smoke completed.",
+    );
+  } catch (error) {
+    printStatus({ ...redactedStatus("blocked"), durationMs: input.durationMs });
+    console.error(`[dingtalk-live-smoke] BLOCKED: ${redactKnownValues(errorMessage(error))}`);
+    process.exitCode = 3;
+  } finally {
+    unsubscribe();
+    await adapter.stop();
+  }
+}
+
 async function runLiveFileSmoke(input: { readonly durationMs: number }): Promise<void> {
   const counters = { robotEvents: 0 };
   const envTarget =
@@ -283,6 +462,45 @@ async function runLiveFileSmoke(input: { readonly durationMs: number }): Promise
     unsubscribe();
     await adapter.stop();
   }
+}
+
+function observeRobotFileDownloads(
+  fileClient: DingTalkRobotFileClientLike,
+  observers: {
+    readonly onAttempt: () => void;
+    readonly onSuccess: () => void;
+    readonly onFailure: (error: unknown) => void;
+  },
+): DingTalkRobotFileClientLike {
+  return {
+    async downloadMessageFile(input) {
+      observers.onAttempt();
+      try {
+        const downloaded = await fileClient.downloadMessageFile(input);
+        observers.onSuccess();
+        return downloaded;
+      } catch (error) {
+        observers.onFailure(error);
+        throw error;
+      }
+    },
+  };
+}
+
+function classifyRobotFileDownloadError(
+  error: unknown,
+): "access_token_failed" | "missing_download_url" | "http_error" | "other" {
+  const message = errorMessage(error);
+  if (message.includes("accessToken")) {
+    return "access_token_failed";
+  }
+  if (message.includes("missing downloadUrl")) {
+    return "missing_download_url";
+  }
+  if (message.includes("HTTP")) {
+    return "http_error";
+  }
+  return "other";
 }
 
 async function runLiveCardCallbackSmoke(input: {
@@ -476,6 +694,85 @@ function summarizeCardCallbackShape(
   };
 }
 
+function summarizeRobotMessageShape(
+  event: Parameters<DingTalkStreamEventHandler>[0],
+): SanitizedRobotMessageShape {
+  const data = parseJsonObject(event.data);
+  const contentRaw = data === undefined ? undefined : data.content;
+  const content =
+    typeof contentRaw === "string"
+      ? parseJsonObject(contentRaw)
+      : isRecord(contentRaw)
+        ? contentRaw
+        : undefined;
+  const contentKind =
+    typeof contentRaw === "string"
+      ? content === undefined
+        ? "other"
+        : "json_string"
+      : contentRaw === undefined
+        ? "missing"
+        : isRecord(contentRaw)
+          ? "object"
+          : "other";
+  const text = firstRecord(data?.text, content?.text);
+  const image = firstRecord(data?.image, content?.image);
+  const file = firstRecord(data?.file, content?.file);
+  return {
+    dataKeys: sortedKeys(data),
+    msgtype: sanitizedRobotMsgtype(data?.msgtype),
+    contentKind,
+    contentKeys: sortedKeys(content),
+    textKeys: sortedKeys(text),
+    imageKeys: sortedKeys(image),
+    fileKeys: sortedKeys(file),
+    hasDownloadCode:
+      hasNonEmptyString(data?.downloadCode) ||
+      hasNonEmptyString(content?.downloadCode) ||
+      hasNonEmptyString(image?.downloadCode) ||
+      hasNonEmptyString(file?.downloadCode),
+    hasPictureDownloadCode:
+      hasNonEmptyString(data?.pictureDownloadCode) ||
+      hasNonEmptyString(content?.pictureDownloadCode) ||
+      hasNonEmptyString(image?.pictureDownloadCode),
+    hasFileName:
+      hasNonEmptyString(data?.fileName) ||
+      hasNonEmptyString(data?.filename) ||
+      hasNonEmptyString(content?.fileName) ||
+      hasNonEmptyString(content?.filename) ||
+      hasNonEmptyString(file?.fileName) ||
+      hasNonEmptyString(file?.filename),
+    hasFileSize:
+      hasSizeLike(data?.fileSize) || hasSizeLike(content?.fileSize) || hasSizeLike(file?.fileSize),
+    hasSessionWebhook: hasNonEmptyString(data?.sessionWebhook),
+  };
+}
+
+function firstRecord(...values: readonly unknown[]): Record<string, unknown> | undefined {
+  return values.find(isRecord);
+}
+
+function sanitizedRobotMsgtype(value: unknown): "text" | "image" | "file" | "other" | "missing" {
+  if (value === undefined) {
+    return "missing";
+  }
+  if (value === "text" || value === "image" || value === "file") {
+    return value;
+  }
+  return "other";
+}
+
+function hasNonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value.length > 0;
+}
+
+function hasSizeLike(value: unknown): boolean {
+  return (
+    (typeof value === "number" && Number.isFinite(value) && value >= 0) ||
+    (typeof value === "string" && value.length > 0)
+  );
+}
+
 function sortedKeys(record: Record<string, unknown> | undefined): string[] {
   return record === undefined ? [] : Object.keys(record).sort();
 }
@@ -581,6 +878,41 @@ function observeLiveCardCallbacks(
   };
 }
 
+function observeLiveInboundRobotEvents(
+  streamClient: DingTalkStreamClientLike,
+  observers: {
+    readonly onRawRobotCallback: (event: Parameters<DingTalkStreamEventHandler>[0]) => void;
+    readonly onRawStreamEvent: (event: Parameters<DingTalkStreamEventHandler>[0]) => void;
+  },
+): DingTalkStreamClientLike {
+  return {
+    registerCallbackListener(topic, handler) {
+      return streamClient.registerCallbackListener(topic, async (event) => {
+        observers.onRawStreamEvent(event);
+        if (topic === DINGTALK_TOPIC_ROBOT) {
+          observers.onRawRobotCallback(event);
+        }
+        await handler(event);
+      });
+    },
+    registerAllEventListener(handler) {
+      return streamClient.registerAllEventListener?.((event) => {
+        observers.onRawStreamEvent(event);
+        return handler(event);
+      });
+    },
+    connect() {
+      return streamClient.connect();
+    },
+    disconnect() {
+      return streamClient.disconnect();
+    },
+    ackCallback(messageId) {
+      return streamClient.ackCallback?.(messageId);
+    },
+  };
+}
+
 function redactedStatus(status: SmokeStatus): RedactedStatus {
   const secretEnvName = process.env.DINGTALK_CLIENT_SECRET_ENV;
   return {
@@ -634,6 +966,14 @@ function liveFilePayload(): {
     };
   }
   throw new Error("DINGTALK_LIVE_FILE_KIND must be file or image");
+}
+
+function liveInboundAttachmentKind(): "any" | "file" | "image" {
+  const kind = process.env.DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND ?? "any";
+  if (kind === "any" || kind === "file" || kind === "image") {
+    return kind;
+  }
+  throw new Error("DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND must be any, file, or image");
 }
 
 function printStatus(status: RedactedStatus): void {

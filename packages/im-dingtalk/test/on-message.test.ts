@@ -103,6 +103,17 @@ describe("DingTalk message receive fixtures (JAC-81)", () => {
     expect(JSON.stringify(msg.raw)).not.toContain("file_download_code_must_not_leak");
   });
 
+  it("describes live-shaped picture robot messages using content download codes", () => {
+    expect(
+      dingtalkRobotAttachmentDescriptor(fixture("picture-content-image-message.json")),
+    ).toEqual({
+      downloadCode: "content_download_code_must_not_leak",
+      filename: "dingtalk-image-msg_test_picture.jpg",
+      contentType: "image/jpeg",
+      kind: "image",
+    });
+  });
+
   it("keeps debug raw fields sanitized while preserving idempotency outside raw", () => {
     const msg = normalizeDingTalkRawRobotMessage(fixture("private-text-message.json"), 0);
     const rawJson = JSON.stringify(msg.raw);
@@ -188,6 +199,51 @@ describe("DingTalk message receive fixtures (JAC-81)", () => {
       },
     ]);
     expect(JSON.stringify(received[0])).not.toContain("download_code_must_not_leak");
+  });
+
+  it("materializes live-shaped picture robot messages as inbound image attachments", async () => {
+    const streamClient = new FakeDingTalkStreamClient();
+    const downloadCalls: unknown[] = [];
+    const fileClient: DingTalkRobotFileClientLike = {
+      async downloadMessageFile(input) {
+        downloadCalls.push(input);
+        return { localPath: "/tmp/codex-im-dingtalk/picture-001.jpg", sizeBytes: 456 };
+      },
+    };
+    const adapter = new DingTalkChannelAdapter({
+      streamClient,
+      fileClient,
+      now: () => new Date(1777751004000),
+    });
+    const received: DingTalkInboundMessage[] = [];
+
+    adapter.onMessage((msg) => {
+      received.push(msg as DingTalkInboundMessage);
+    });
+
+    await adapter.start();
+    await streamClient.inject(DINGTALK_TOPIC_ROBOT, fixture("picture-content-image-message.json"));
+
+    expect(downloadCalls).toEqual([
+      {
+        downloadCode: "content_download_code_must_not_leak",
+        filename: "dingtalk-image-msg_test_picture.jpg",
+        contentType: "image/jpeg",
+        kind: "image",
+      },
+    ]);
+    expect(received).toHaveLength(1);
+    expect(received[0]?.text).toBe("");
+    expect(received[0]?.attachments?.[0]).toMatchObject({
+      kind: "image",
+      filename: "dingtalk-image-msg_test_picture.jpg",
+      contentType: "image/jpeg",
+      localPath: "/tmp/codex-im-dingtalk/picture-001.jpg",
+      sizeBytes: 456,
+    });
+    expect(JSON.stringify(received[0])).not.toMatch(
+      /content_download_code_must_not_leak|picture_download_code_must_not_leak/,
+    );
   });
 
   it("fails closed for malformed robot events without throwing from Stream handlers", async () => {
