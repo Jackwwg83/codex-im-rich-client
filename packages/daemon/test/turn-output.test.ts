@@ -766,6 +766,66 @@ describe("daemon turn output projection", () => {
       },
     });
     queue.push({
+      type: "unknown",
+      method: "turn/plan/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        plan: [
+          { step: "Inspect status projection", status: "completed" },
+          { step: "Patch daemon output", status: "in_progress" },
+        ],
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "turn/diff/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        diff: {
+          files: [
+            { path: "packages/daemon/src/daemon.ts" },
+            { path: "packages/daemon/test/turn-output.test.ts" },
+          ],
+          unifiedDiff: "SECRET=abcdefghijklmnopqrstuvwxyz should not be shown",
+        },
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "thread/name/updated",
+      params: {
+        threadId: "thread-1",
+        name: "debug ghp_abcdefghijklmnopqrstuvwxyz123456",
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "thread/goal/updated",
+      params: {
+        threadId: "thread-1",
+        goal: { title: "ship IM status projection", status: "active" },
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "thread/goal/cleared",
+      params: {
+        threadId: "thread-1",
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "skills/changed",
+      params: {},
+    });
+    queue.push({
+      type: "unknown",
+      method: "app/list/updated",
+      params: {},
+    });
+    queue.push({
       type: "agent_message_delta",
       threadId: "thread-1",
       turnId: "turn-1",
@@ -793,10 +853,19 @@ describe("daemon turn output projection", () => {
         "- token usage: total 1234, last 56, context 15%",
         "- model rerouted: gpt-old -> gpt-new (capacity)",
         "- MCP github: ready",
+        "- plan updated: 2 steps, 1 completed, 1 in progress",
+        "- diff updated: 2 files",
+        "- thread renamed: debug ***REDACTED:github-token***",
+        "- goal updated: ship IM status projection (active)",
+        "- goal cleared",
+        "- skills changed",
+        "- apps updated",
       ].join("\n"),
     );
     expect(body).not.toContain("sk-test-secret");
     expect(body).not.toContain("token-like");
+    expect(body).not.toContain("SECRET=");
+    expect(body).not.toContain("abcdefghijklmnopqrstuvwxyz");
 
     await daemon.stop();
   });

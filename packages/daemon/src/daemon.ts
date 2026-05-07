@@ -92,7 +92,7 @@ const MAX_IM_TEXT_CHARS = 3_800;
 const MAX_IM_TEXT_CHUNKS = 6;
 const MAX_IM_TEXT_BUFFER_CHARS = MAX_IM_TEXT_CHARS * MAX_IM_TEXT_CHUNKS;
 const MAX_IM_ITEM_SUMMARIES = 6;
-const MAX_IM_STATUS_SUMMARIES = 6;
+const MAX_IM_STATUS_SUMMARIES = 12;
 const MAX_IM_ARTIFACT_FILES = 3;
 const MAX_IM_ARTIFACT_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_INLINE_COMMAND_OUTPUT_CHARS = 240;
@@ -4515,6 +4515,20 @@ function summarizeCodexStatusEvent(
       return "usage updated";
     case "remoteControl/status/changed":
       return summarizeRemoteControlStatus(params);
+    case "turn/plan/updated":
+      return summarizePlanStatus(params);
+    case "turn/diff/updated":
+      return summarizeDiffStatus(params);
+    case "thread/name/updated":
+      return summarizeThreadNameStatus(params);
+    case "thread/goal/updated":
+      return summarizeGoalStatus(params);
+    case "thread/goal/cleared":
+      return "goal cleared";
+    case "skills/changed":
+      return "skills changed";
+    case "app/list/updated":
+      return "apps updated";
     default:
       return undefined;
   }
@@ -4525,7 +4539,9 @@ function isGlobalRuntimeStatusMethod(method: string): boolean {
     method === "mcpServer/startupStatus/updated" ||
     method === "mcpServer/oauthLogin/completed" ||
     method === "account/rateLimits/updated" ||
-    method === "remoteControl/status/changed"
+    method === "remoteControl/status/changed" ||
+    method === "skills/changed" ||
+    method === "app/list/updated"
   );
 }
 
@@ -4585,6 +4601,116 @@ function summarizeMcpOauthStatus(params: Record<string, unknown> | undefined): s
 
 function summarizeRemoteControlStatus(params: Record<string, unknown> | undefined): string {
   return `remote control: ${safeStatusText(readStringField(params, "status") ?? "unknown")}`;
+}
+
+function summarizePlanStatus(params: Record<string, unknown> | undefined): string {
+  const steps = readPlanSteps(params);
+  if (steps.length === 0) {
+    return "plan updated";
+  }
+
+  const completed = countStatus(steps, ["completed", "complete", "done", "success", "succeeded"]);
+  const inProgress = countStatus(steps, [
+    "in_progress",
+    "in-progress",
+    "in progress",
+    "running",
+    "active",
+  ]);
+  const parts = [
+    `${steps.length} ${plural(steps.length, "step", "steps")}`,
+    completed > 0 ? `${completed} completed` : undefined,
+    inProgress > 0 ? `${inProgress} in progress` : undefined,
+  ].filter((part): part is string => part !== undefined);
+  return `plan updated: ${parts.join(", ")}`;
+}
+
+function summarizeDiffStatus(params: Record<string, unknown> | undefined): string {
+  const files = readDiffFiles(params);
+  return files === undefined
+    ? "diff updated"
+    : `diff updated: ${files} ${plural(files, "file", "files")}`;
+}
+
+function summarizeThreadNameStatus(params: Record<string, unknown> | undefined): string {
+  const thread = readRecord(params?.thread);
+  const name =
+    readStringField(params, "name") ??
+    readStringField(params, "title") ??
+    readStringField(thread, "name") ??
+    readStringField(thread, "title");
+  return name === undefined ? "thread renamed" : `thread renamed: ${safeStatusText(name)}`;
+}
+
+function summarizeGoalStatus(params: Record<string, unknown> | undefined): string {
+  const goal = readRecord(params?.goal);
+  const title =
+    readStringField(params, "title") ??
+    readStringField(params, "name") ??
+    readStringField(params, "text") ??
+    readStringField(goal, "title") ??
+    readStringField(goal, "name") ??
+    readStringField(goal, "text");
+  const status = readStringField(params, "status") ?? readStringField(goal, "status");
+  if (title !== undefined && status !== undefined) {
+    return `goal updated: ${safeStatusText(title)} (${safeStatusText(status)})`;
+  }
+  if (title !== undefined) {
+    return `goal updated: ${safeStatusText(title)}`;
+  }
+  if (status !== undefined) {
+    return `goal updated: ${safeStatusText(status)}`;
+  }
+  return "goal updated";
+}
+
+function readPlanSteps(
+  params: Record<string, unknown> | undefined,
+): readonly Record<string, unknown>[] {
+  const plan = readRecord(params?.plan);
+  const candidates = [params?.plan, plan?.steps, params?.steps];
+  for (const candidate of candidates) {
+    const array = Array.isArray(candidate) ? candidate : undefined;
+    if (array !== undefined) {
+      return array.filter(
+        (step): step is Record<string, unknown> => readRecord(step) !== undefined,
+      );
+    }
+  }
+  return [];
+}
+
+function readDiffFiles(params: Record<string, unknown> | undefined): number | undefined {
+  const diff = readRecord(params?.diff);
+  const candidates = [
+    params?.files,
+    params?.changes,
+    params?.fileChanges,
+    diff?.files,
+    diff?.changes,
+    diff?.fileChanges,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.length;
+    }
+  }
+  return undefined;
+}
+
+function countStatus(
+  steps: readonly Record<string, unknown>[],
+  statuses: readonly string[],
+): number {
+  const normalized = new Set(statuses);
+  return steps.filter((step) => {
+    const status = readStringField(step, "status");
+    return status !== undefined && normalized.has(status.trim().toLowerCase());
+  }).length;
+}
+
+function plural(count: number, singular: string, pluralText: string): string {
+  return count === 1 ? singular : pluralText;
 }
 
 function safeStatusText(value: string): string {
