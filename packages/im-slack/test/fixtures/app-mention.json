@@ -1,0 +1,11 @@
+{
+  "team_id": "T_TEST",
+  "event": {
+    "type": "app_mention",
+    "user": "U_TEST_USER",
+    "channel": "C_TEST_CHANNEL",
+    "text": "<@U_TEST_BOT> status",
+    "ts": "1715000000.000100",
+    "event_ts": "1715000000.000100"
+  }
+}

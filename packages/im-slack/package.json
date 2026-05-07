@@ -1,0 +1,16 @@
+{
+  "name": "@codex-im/im-slack",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "cd ../.. && vitest run --config vitest.config.ts --project unit packages/im-slack/test/skeleton.test.ts packages/im-slack/test/no-boundary-imports.test.ts"
+  },
+  "dependencies": {
+    "@codex-im/channel-core": "workspace:*"
+  }
+}
