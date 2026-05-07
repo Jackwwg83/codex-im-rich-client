@@ -1435,7 +1435,82 @@ describe("Daemon skeleton (T14)", () => {
       { target, messageId: "msg-cu-status" },
       expect.stringContaining("Computer Use: enabled"),
     );
-    expect(JSON.stringify(adapter.editText.mock.calls)).toContain("Google Chrome");
+    const [, body] = adapter.editText.mock.calls[0] as [
+      { target: typeof target; messageId: string },
+      string,
+    ];
+    expect(body).toContain("Provider: unavailable");
+    expect(body).toContain("Readiness: blocked: provider_unavailable");
+    expect(body).toContain("Policy: valid phase6, explicit /cu required");
+    expect(body).toContain("Default app: Google Chrome");
+    expect(body).toContain("Allowed apps: Google Chrome");
+    expect(body).toContain("Denied apps: Keychain Access");
+    expect(body).toContain("Sensitive approval keywords: login, token");
+    expect(body).toContain("Live smoke: disabled");
+    expect(runtime.threadStart).not.toHaveBeenCalled();
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(runtime.turnSteer).not.toHaveBeenCalled();
+  });
+
+  it("reports /cu status as ready when policy and provider are both configured", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        computerUse: {
+          enabled: true,
+          requireExplicitPrefix: true,
+          defaultApp: "Google Chrome",
+          allowedApps: ["Google Chrome"],
+          denyApps: ["Keychain Access"],
+          requireApprovalKeywords: ["login"],
+          liveSmokeEnabled: true,
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn() }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      computerUseProvider: new FakeComputerUseProvider(),
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/cu status",
+      messageRef: { target, messageId: "msg-cu-status-ready" },
+      receivedAt: new Date("2026-05-02T00:00:06.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const [, body] = adapter.editText.mock.calls[0] as [
+      { target: typeof target; messageId: string },
+      string,
+    ];
+    expect(body).toContain("Provider: configured");
+    expect(body).toContain("Readiness: ready");
+    expect(body).toContain("Live smoke: enabled");
     expect(runtime.threadStart).not.toHaveBeenCalled();
     expect(runtime.turnStart).not.toHaveBeenCalled();
     expect(runtime.turnSteer).not.toHaveBeenCalled();
@@ -2010,7 +2085,9 @@ describe("Daemon skeleton (T14)", () => {
     expect(bodies[2]).toContain("Usage:");
     expect(bodies[2]).toContain("Codex: primary 12%/300m");
     expect(bodies[3]).toContain("Diagnostics:");
-    expect(bodies[3]).toContain("computer use: enabled, default app Google Chrome");
+    expect(bodies[3]).toContain(
+      "computer use: enabled, blocked: provider_unavailable, default app Google Chrome",
+    );
     expect(bodies[4]).toContain("model provider: namespace tools yes");
     expect(bodies[4]).toContain("github: auth oAuth, tools 2");
     expect(bodies[5]).toContain("Skills:");

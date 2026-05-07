@@ -123,7 +123,8 @@ remain separate acceptance tracks.
 | Lark approval allow session | exact same shell command sent twice, first tap `Allow session` | pass | first command wrote 13 bytes; second identical prompt ran without a new Lark callback token and the file grew to 26 bytes; `approval-2 allow_session=used`, siblings revoked |
 | Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
 | Telegram/Lark inbound image/file upload | platform file resources materialize locally, then route to Codex turn input | local pass | Telegram `photo` / `document` and Feishu/Lark `image` / `file` unit coverage proves adapter download + daemon routing; images map to Codex `localImage`, generic files map to local-path text context |
-| Common Codex-native IM control commands | `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp` through daemon common command routing | local pass | Runtime wrappers keep App Server method literals centralized in `CodexRuntime`; daemon output is redacted and shared by Telegram/Lark/DingTalk adapters through the common control plane |
+| Common Codex-native IM control commands | `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp`, `/cu status` through daemon common command routing | local pass | Runtime wrappers keep App Server method literals centralized in `CodexRuntime`; daemon output is redacted and shared by Telegram/Lark/DingTalk adapters through the common control plane |
+| Common Computer Use readiness status | `/cu status` and `/diagnostics` policy/provider/readiness surface | local pass | shared daemon output reports enabled state, provider configured/unavailable, readiness or blocked reason, explicit `/cu` requirement, default/allowed/denied apps, sensitive approval keywords, and live-smoke gate without starting Codex work or desktop actions |
 | Common Codex model selection | `/model <model>` through daemon common command routing | local pass | daemon validates the id/name through `runtime.modelList()`, stores the selected model on the current target binding, and future `turnStart` requests use existing `model` params; no global config mutation |
 | Common Codex MCP login/reload | `/mcp login <server>` and `/mcp reload` through daemon common command routing | local pass | daemon calls centralized CodexRuntime wrappers for App Server `mcpServer/oauth/login` and `config/mcpServer/reload`; `/mcp` with no args still lists server status and IM never calls MCP tools directly |
 | Common Codex-native artifact projection | commandExecution, fileChange, imageView/imageGeneration, mcpToolCall, dynamicToolCall/Computer Use terminal items | local pass | shared daemon output summarizes short command output inline, sends long completed/failed command output as redacted `.log`, sends fileChange diffs as redacted `.patch`, sends image and local dynamic-tool/Computer Use screenshot artifacts via `sendFile`, and never renders raw tool arguments |
@@ -526,6 +527,13 @@ Stop and treat as a blocker if:
   list refreshes. The IM output shows counts/status/title-level information
   only and does not render raw patch bodies, full JSON payloads, tokens, chat
   IDs, user IDs, or message IDs.
+- 2026-05-07 SGT Computer Use status loop: JAC-267 enriches `/cu status` and
+  `/diagnostics` with provider/readiness details without starting a Codex turn
+  or desktop action. The common IM output now distinguishes policy state,
+  provider configured/unavailable, readiness or blocked reason, explicit `/cu`
+  requirement, default/allowed/denied apps, sensitive approval keywords, and
+  live-smoke gate. This is a readiness/status surface only; real provider
+  execution remains a separate acceptance track.
 - 2026-05-07 SGT MCP control loop: JAC-264 adds `/mcp login <server>` and
   `/mcp reload` to the shared IM control plane. Both call centralized
   `CodexRuntime` wrappers for App Server `mcpServer/oauth/login` and

@@ -1235,13 +1235,28 @@ export class Daemon {
   #computerUseStatusText(policy: ComputerUsePolicy): string {
     const snapshot = policy.snapshot;
     const enabled = snapshot.enabled && snapshot.valid ? "enabled" : "disabled";
-    const defaultApp = snapshot.defaultApp ?? "<none>";
+    const provider = this.options.computerUseProvider === undefined ? "unavailable" : "configured";
+    const readiness = this.#computerUseReadiness(policy);
+    const defaultApp = snapshot.defaultApp === undefined ? "<none>" : redact(snapshot.defaultApp);
     const allowedApps =
-      snapshot.allowedApps.length === 0 ? "<none>" : snapshot.allowedApps.join(", ");
+      snapshot.allowedApps.length === 0 ? "<none>" : snapshot.allowedApps.map(redact).join(", ");
+    const denyApps =
+      snapshot.denyApps.length === 0 ? "<none>" : snapshot.denyApps.map(redact).join(", ");
+    const approvalKeywords =
+      snapshot.requireApprovalKeywords.length === 0
+        ? "<none>"
+        : snapshot.requireApprovalKeywords.map(redact).join(", ");
     return [
       `Computer Use: ${enabled}`,
+      `Provider: ${provider}`,
+      `Readiness: ${readiness}`,
+      `Policy: ${snapshot.valid ? "valid" : "invalid"} ${snapshot.version}, explicit /cu ${
+        snapshot.requireExplicitPrefix ? "required" : "not required"
+      }`,
       `Default app: ${defaultApp}`,
       `Allowed apps: ${allowedApps}`,
+      `Denied apps: ${denyApps}`,
+      `Sensitive approval keywords: ${approvalKeywords}`,
       `Live smoke: ${snapshot.liveSmokeEnabled ? "enabled" : "disabled"}`,
     ].join("\n");
   }
@@ -1249,10 +1264,28 @@ export class Daemon {
   #computerUseStatusLine(policy: ComputerUsePolicy): string {
     const snapshot = policy.snapshot;
     const enabled = snapshot.enabled && snapshot.valid ? "enabled" : "disabled";
-    const defaultApp = snapshot.defaultApp ?? "<none>";
-    return `${enabled}, default app ${defaultApp}, live smoke ${
+    const defaultApp = snapshot.defaultApp === undefined ? "<none>" : redact(snapshot.defaultApp);
+    return `${enabled}, ${this.#computerUseReadiness(policy)}, default app ${defaultApp}, live smoke ${
       snapshot.liveSmokeEnabled ? "enabled" : "disabled"
     }`;
+  }
+
+  #computerUseReadiness(policy: ComputerUsePolicy): string {
+    const snapshot = policy.snapshot;
+    if (!snapshot.valid) {
+      return `blocked: ${snapshot.invalidReason ?? "invalid_policy"}`;
+    }
+    if (!snapshot.enabled) {
+      return "blocked: policy_disabled";
+    }
+    const policyDecision = policy.check({ task: "readiness probe" });
+    if (policyDecision.kind === "deny") {
+      return `blocked: ${policyDecision.reason}`;
+    }
+    if (this.options.computerUseProvider === undefined) {
+      return "blocked: provider_unavailable";
+    }
+    return "ready";
   }
 
   #resolveErrorMessage(error: ResolveError): string {
