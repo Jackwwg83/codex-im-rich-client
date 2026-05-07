@@ -16,7 +16,7 @@ Fresh local evidence:
 
 ```text
 branch: codex/live-im-acceptance
-HEAD: a8dcce4 docs(computer-use): record provider evidence gap
+HEAD: 0f0ba3c docs(handoff): add codex native im goal audit
 working tree: clean
 launchd: running pid=16732, codexThreads=0, pendingApprovals=0
 pnpm im:doctor: ready for Telegram / Lark / DingTalk, Slack disabled
@@ -57,7 +57,7 @@ pnpm smoke:computer-use-live
 | Outbound images/files/artifacts | Telegram and Feishu/Lark live file gates passed. DingTalk `sendFile` is implemented locally through media upload plus session webhook, but live file/image acceptance is pending. | Telegram/Lark live green; DingTalk local green, live blocked by JAC-273 |
 | Inbound images/files | Telegram and Feishu/Lark inbound image/file materialization local tests pass; DingTalk inbound `downloadCode` materialization local implementation is recorded. | Local green; DingTalk live upload gate pending |
 | Computer Use output/artifacts | Dynamic-tool / Computer Use `inputImage` artifacts are projected through `sendFile`; summaries hide raw tool args. | Output projection local green |
-| Real desktop Computer Use execution | Generated `TurnStartParams` has no verified dynamic-tool registration field, `ToolsV2` exposes only `web_search` / `view_image`, and non-dry-run live smoke is blocked. | Not achieved; tracked by JAC-274 |
+| Real desktop Computer Use execution | Generated `ClientRequest`, `ServerRequest`, `ServerNotification`, `Config`, `ProfileV2`, `TurnStartParams`, `ToolsV2`, `UserInput`, and `ThreadItem` were re-scanned. They support dynamic tool-call callbacks and downstream GUI/image artifact rendering, but no reviewed daemon-facing provider registration surface. Non-dry-run live smoke is blocked. | Not achieved; tracked by JAC-274 |
 | Identity and group safety | JAC-240 and JAC-241 complete. `/whoami` is redacted; access groups and mention-required group policy are implemented. | Local green |
 | Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264 are Done; JAC-273 and JAC-274 are In Progress/blocker tracks; JAC-248 remains Slack live acceptance. | Green tracking, with open blockers explicit |
 | Repo handoff tracking | `docs/handoffs/direct-use-live-status.md`, `docs/handoffs/live-im-acceptance-status.md`, and `docs/phase-6/computer-use-capability-evidence.md` record current state and blockers. | Green |
@@ -83,7 +83,11 @@ These are not code-complete acceptance claims:
 3. **Real desktop Computer Use provider execution (JAC-274).**
    The IM `/cu` control and output surfaces are implemented, but real desktop
    execution is not verified. The current generated App Server protocol does
-   not expose a verified daemon-facing provider registration surface.
+   not expose a verified daemon-facing provider registration surface. The latest
+   scan distinguishes Codex App's interactive Computer Use product capability
+   from this project's App Server integration boundary: downstream
+   `dynamicToolCall` / `imageView` / `imageGeneration` rendering is supported,
+   but upstream real provider execution still lacks a contract.
 
 ## 4. Completion Verdict
 

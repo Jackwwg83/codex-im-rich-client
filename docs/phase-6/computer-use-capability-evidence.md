@@ -120,6 +120,47 @@ Observed local protocol facts:
 - `codex app-server --help` exposes app-server transport / generation tooling,
   but no documented Computer Use provider registration command.
 
+### JAC-274 protocol surface scan
+
+Follow-up scan at HEAD `0f0ba3c` checked the generated protocol request,
+notification, config, input, thread-item, and dynamic-tool surfaces:
+
+- `ClientRequest` has `turn/start`, `turn/steer`, `mcpServer/tool/call`,
+  config read/write, plugin/app/skill listing, and filesystem helper methods,
+  but no request that registers a daemon-owned `DynamicToolSpec` with a thread,
+  turn, profile, or running App Server process.
+- `ServerRequest` exposes `item/tool/call` with `DynamicToolCallParams`. This is
+  an execution callback from App Server to the client for a dynamic tool that
+  App Server already decided to call; it is not a registration surface.
+- `ServerNotification` exposes `item/completed`, `rawResponseItem/completed`,
+  MCP progress, status, compaction, warning, realtime, hook, and guardian
+  notifications. It does not expose a provider-registration negotiation event.
+- `Config` and `ProfileV2` have `tools: ToolsV2 | null`; `ToolsV2` contains
+  only `web_search` and `view_image`, so a Computer Use provider cannot be
+  enabled there without an untyped, unsupported extension.
+- `UserInput` supports text, URL image, local image, skill, and mention. This
+  validates the IM image-upload path, but not generic file input or desktop
+  provider execution.
+- `ThreadItem` can report completed `dynamicToolCall`, `imageView`, and
+  `imageGeneration` items. This validates downstream IM rendering of GUI-like
+  artifacts, not upstream desktop execution.
+
+The only safe conclusion for the current pin is therefore:
+
+```text
+Codex App / Codex desktop may have Computer Use as an interactive product
+capability, but the checked App Server protocol does not currently expose a
+reviewed daemon-facing surface for this project to register and execute a real
+desktop provider.
+```
+
+Any future real-provider implementation must start with new protocol evidence
+or an official/local App Server contract that names the provider registration
+method, namespace/tool values, argument schema, redaction obligations, and
+bounded live smoke path. It must not depend on parsing Codex UI/CLI output or
+calling this Codex session's own Computer Use MCP tool as a hidden production
+backend.
+
 Observed smoke behavior:
 
 ```text

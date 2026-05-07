@@ -121,7 +121,13 @@
 > current `/cu` control, status, policy, fake/unsupported provider, audit, and
 > IM output/artifact projection are implemented, but non-dry-run real desktop
 > execution still intentionally blocks until current Codex App Server
-> namespace/tool capability evidence exists. Current completion audit:
+> namespace/tool capability evidence exists. A follow-up protocol surface scan
+> at HEAD `0f0ba3c` checked `ClientRequest`, `ServerRequest`,
+> `ServerNotification`, `Config`, `ProfileV2`, `TurnStartParams`, `ToolsV2`,
+> `UserInput`, and `ThreadItem`: the protocol supports downstream
+> dynamic-tool/image artifact rendering and an `item/tool/call` callback
+> response path, but still has no reviewed daemon-facing surface for
+> registering a real desktop provider. Current completion audit:
 > `docs/handoffs/2026-05-07-codex-native-im-goal-audit.md`.
 
 ## 1. Current State
