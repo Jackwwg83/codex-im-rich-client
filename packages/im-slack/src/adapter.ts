@@ -9,6 +9,7 @@ import type {
   Target,
 } from "@codex-im/channel-core";
 import { SLACK_CAPABILITIES } from "./capabilities.js";
+import { type SlackRawMessagePayload, normalizeSlackRawMessage } from "./message.js";
 
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 
@@ -84,6 +85,7 @@ export class SlackChannelAdapter implements ChannelAdapter {
       throw new Error("SlackChannelAdapter.start requires an injected socketClient");
     }
     this.#socketClient = socketClient;
+    this.#installInboundHandlers(socketClient);
     await socketClient.start();
     this.#started = true;
     this.#inboundPaused = false;
@@ -202,6 +204,27 @@ export class SlackChannelAdapter implements ChannelAdapter {
       messages: this.#onMessageHandlers.size,
       actions: this.#onActionHandlers.size,
     };
+  }
+
+  #installInboundHandlers(socketClient: SlackSocketModeClientLike): void {
+    socketClient.on?.("message", (payload) => this.#emitRawMessage(payload));
+    socketClient.on?.("app_mention", (payload) => this.#emitRawMessage(payload));
+  }
+
+  #emitRawMessage(payload: unknown): void {
+    if (this.#inboundPaused) {
+      return;
+    }
+    const message = normalizeSlackRawMessage(
+      payload as SlackRawMessagePayload,
+      this._nowForTest().getTime(),
+    );
+    if (message === undefined) {
+      return;
+    }
+    for (const handler of this.#onMessageHandlers) {
+      handler(message);
+    }
   }
 
   #assertStarted(method: string): void {
