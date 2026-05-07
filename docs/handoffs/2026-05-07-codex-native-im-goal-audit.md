@@ -16,7 +16,7 @@ Fresh local evidence:
 
 ```text
 branch: codex/live-im-acceptance
-HEAD: 60e6419 docs(handoff): refresh dingtalk attachment blocker
+last verified HEAD before this unblock packet: c6b331c docs(handoff): sync blocked goal audit
 working tree: clean
 launchd: running pid=16732, codexThreads=0, pendingApprovals=0
 pnpm im:doctor: ready for Telegram / Lark / DingTalk, Slack disabled
@@ -105,3 +105,156 @@ productive work requires one of these external conditions:
   can seed `DINGTALK_LIVE_FILE=1`.
 - Slack test app bot/app tokens and enabled bridge config.
 - Codex App Server capability evidence for a real Computer Use provider.
+
+## 5. Blocker Unblock Packet
+
+This packet is the handoff-safe way to resume the three open tracks without
+reconstructing context. Keep all output redacted: no IM tokens, Keychain values,
+private IDs, raw callback payloads, private file URLs, cookies, or desktop
+screenshots containing secrets should be copied into docs or Linear.
+
+### JAC-273 - DingTalk live attachment acceptance
+
+Unblock condition:
+
+- DingTalk Desktop/Web is authenticated and a bot chat is visible, or a fresh
+  DingTalk robot message can be sent to the bot during the live gate window.
+- The fresh inbound robot message must seed a session reply URL. Old persisted
+  rows are not enough for live acceptance.
+
+Preflight checks:
+
+```bash
+pnpm dingtalk:readiness
+pnpm launchd:status
+osascript -e 'tell application "System Events" to if exists process "DingTalk" then get {frontmost of process "DingTalk", count of windows of process "DingTalk", name of windows of process "DingTalk"} else get "not-running"'
+sqlite3 "$HOME/.codex-im-bridge/state.db" "select created_at, action, result from audit_log where action like 'inbound.%' and target_key like 'dingtalk:%' order by created_at desc limit 3;"
+```
+
+Live file/image gates:
+
+```bash
+DINGTALK_LIVE=1 \
+DINGTALK_LIVE_FILE=1 \
+DINGTALK_CLIENT_ID="$CLIENT_ID" \
+DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET \
+DINGTALK_LIVE_DURATION_MS=120000 \
+pnpm smoke:dingtalk-live
+
+DINGTALK_LIVE=1 \
+DINGTALK_LIVE_FILE=1 \
+DINGTALK_LIVE_FILE_KIND=image \
+DINGTALK_CLIENT_ID="$CLIENT_ID" \
+DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET \
+DINGTALK_LIVE_DURATION_MS=120000 \
+pnpm smoke:dingtalk-live
+```
+
+Acceptance evidence:
+
+- The smoke reaches redacted `status=file_sent` for a file and an image.
+- No client secret, user id, chat id, message id, session webhook, or
+  `downloadCode` is printed.
+- `pnpm launchd:status` still reports the daemon running with
+  `pendingApprovals=0`.
+- Update JAC-273 and this audit with the commit SHA and redacted command
+  results only.
+
+### JAC-248 - Slack real workspace acceptance
+
+Unblock condition:
+
+- A test Slack app is installed with Socket Mode, `/codex`, interactivity,
+  `message.im`, and `app_mention` enabled.
+- Bot and app tokens are present through Keychain or local env, not docs.
+- Slack is enabled in `~/.codex-im-bridge/config.toml` with redacted
+  allowlisted test user/channel entries.
+
+Secret-presence checks that do not print token bytes:
+
+```bash
+security find-generic-password -s codex-im-bridge-slack-bot -a "$USER" >/dev/null
+security find-generic-password -s codex-im-bridge-slack-app -a "$USER" >/dev/null
+pnpm im:doctor
+```
+
+If config or wrapper inputs changed, reinstall the daemon bundle:
+
+```bash
+pnpm bridge:build
+pnpm bridge:install
+launchctl kickstart -k gui/501/io.codex-im-bridge
+pnpm launchd:status
+```
+
+Live gates:
+
+```bash
+SLACK_LIVE=1 SLACK_LIVE_DRY_RUN=1 pnpm smoke:slack-live
+SLACK_LIVE=1 pnpm smoke:slack-live
+SLACK_LIVE=1 SLACK_LIVE_TEXT=1 SLACK_TARGET_CHANNEL_ID=C_TEST pnpm smoke:slack-live
+SLACK_LIVE=1 SLACK_LIVE_FILE=1 SLACK_TARGET_CHANNEL_ID=C_TEST pnpm smoke:slack-live
+```
+
+Client acceptance checklist:
+
+- DM the bot or mention the app in the allowed test channel.
+- Run `/codex status`, `/codex projects`, and `/codex use codex-im`.
+- Send one harmless prompt and verify a Codex reply returns in Slack.
+- Upload one harmless image/file and verify the daemon materializes it without
+  leaking Slack private file URLs or token bytes.
+- Trigger one harmless approval card and click it in Slack; the daemon must
+  validate callback token plus `messageRef`, then render a terminal card.
+
+Acceptance evidence:
+
+- Record command names, pass/fail, redacted token presence, message-id
+  presence, launchd pid, `pendingApprovals`, JAC-248, and commit SHA.
+- Do not record raw workspace IDs, channel IDs, user IDs, timestamps, token
+  bytes, or raw Socket Mode payloads.
+
+### JAC-274 - Real Computer Use provider execution
+
+Unblock condition:
+
+- There is current Codex App Server capability evidence or an official/local
+  provider contract that names the provider registration method or namespace,
+  the tool/argument schema, the screenshot/artifact shape, and the approval or
+  policy boundary for real desktop actions.
+- Until then, `UnsupportedComputerUseProvider` remains the correct fail-closed
+  production behavior even though `/cu status`, `/cu <task>` gating, audit, and
+  GUI artifact projection are implemented.
+
+Evidence scan:
+
+```bash
+rg -n "computer|Computer|dynamicToolCall|item/tool/call|provider|Tool" \
+  packages/codex-protocol/src/generated \
+  packages/codex-protocol/schema \
+  docs/phase-6/computer-use-capability-evidence.md
+pnpm smoke:computer-use-live
+COMPUTER_USE_LIVE=1 \
+COMPUTER_USE_PROVIDER_VERIFIED=1 \
+COMPUTER_USE_LIVE_DRY_RUN=1 \
+COMPUTER_USE_LIVE_APP="Google Chrome" \
+COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
+pnpm smoke:computer-use-live
+```
+
+Non-dry-run gate, only after the provider contract exists:
+
+```bash
+COMPUTER_USE_LIVE=1 \
+COMPUTER_USE_PROVIDER_VERIFIED=1 \
+COMPUTER_USE_LIVE_APP="Google Chrome" \
+COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
+pnpm smoke:computer-use-live
+```
+
+Acceptance evidence:
+
+- A real `/cu` task can execute through the reviewed provider boundary.
+- The IM output shows app, step/status, policy decision, screenshots/artifacts
+  where appropriate, and any approval request through the existing card path.
+- Normal prompts still do not trigger Computer Use.
+- Unknown, denied, stale, or security-uncertain desktop actions fail closed.

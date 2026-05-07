@@ -128,7 +128,10 @@
 > dynamic-tool/image artifact rendering and an `item/tool/call` callback
 > response path, but still has no reviewed daemon-facing surface for
 > registering a real desktop provider. Current completion audit:
-> `docs/handoffs/2026-05-07-codex-native-im-goal-audit.md`.
+> `docs/handoffs/2026-05-07-codex-native-im-goal-audit.md`. The audit includes
+> a blocker unblock packet with exact DingTalk attachment, Slack live workspace,
+> and real Computer Use provider preflight commands plus acceptance evidence
+> rules.
 
 ## 1. Current State
 
