@@ -36,12 +36,13 @@
 > daemon attachment directories; images are forwarded to Codex as native
 > `UserInput.localImage`, while generic files are passed as explicit local-path
 > context because Codex App Server has no generic `UserInput.file` shape.
-> DingTalk outbound attachment support is now implemented locally through the
-> real session-webhook media path: files/images upload to DingTalk media and
-> then send as `file` / `image` session replies after a recent inbound message
-> seeds the reply URL. A real DingTalk file-send gate still needs to pass before
-> calling DingTalk attachments live-accepted. Inbound DingTalk image/file
-> materialization is now implemented locally through DingTalk's `downloadCode`
+> DingTalk outbound attachment support is now implemented and live-accepted.
+> The adapter can deliver files/images through the session-webhook media path
+> after a recent inbound robot message seeds the reply URL, or through
+> proactive robot group/user media delivery when `DINGTALK_TARGET_CHAT_ID` is
+> configured. Explicit real file and image gates both returned redacted
+> `status=file_sent` with message-id presence only. Inbound DingTalk image/file
+> materialization is implemented locally through DingTalk's `downloadCode`
 > exchange: the adapter gets a temporary download URL, saves bytes into the
 > daemon attachment directory, and emits `InboundAttachment[]` for the common
 > Codex `localImage` / local-path file routing path. Real DingTalk inbound
@@ -53,7 +54,11 @@
 > `imageView.path` and `imageGeneration.savedPath` are sent through adapter
 > `sendFile`, local dynamic-tool / Computer Use `inputImage` artifacts are
 > sent through the same path, and dynamic/MCP/Computer Use tool items show
-> redacted native status/result summaries without rendering raw arguments.
+> redacted native status/result summaries without rendering raw arguments. The
+> shared item summary now includes command risk when App Server supplies it,
+> and Computer Use dynamic-tool summaries can expose app, step, policy
+> decision, blocked reason, and approval-required state without rendering raw
+> arguments.
 > Codex App lifecycle/status notifications now fold into the active IM turn
 > output as a low-noise `Codex status` section for token usage, compaction,
 > model reroutes, MCP startup/OAuth, account usage, remote-control status,
@@ -83,7 +88,7 @@
 > live-smoke gate.
 > Explicit Telegram, Feishu/Lark, and DingTalk live file gates passed with
 > redacted evidence; after the latest Codex-native IM output loop bridge
-> reinstall/kickstart, launchd is running under pid `16732` with
+> reinstall/kickstart, launchd is running under pid `60935` with
 > `pendingApprovals=0`, `pnpm im:doctor` is ready for installed
 > Telegram/Lark/DingTalk with Slack disabled, and the bridge redaction scan
 > returned `redaction scan ok`. JAC-273 is now Done: DingTalk `DINGTALK_LIVE_FILE=1`
@@ -786,6 +791,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT DingTalk attachment live acceptance loop | JAC-273 live acceptance is now green for outbound file and image delivery. Using config/Keychain/SQLite-derived values without printing secrets, `DINGTALK_LIVE=1 DINGTALK_LIVE_FILE=1 DINGTALK_LIVE_FILE_KIND=file pnpm smoke:dingtalk-live` and the same gate with `DINGTALK_LIVE_FILE_KIND=image` both exited 0 with redacted `status=file_sent`, `targetChatId=present`, `targetSource=env`, `messageId=present`, and `robotEvents=0`. No client secret, target id, message id, or media id bytes were recorded. |
 | 2026-05-07 SGT installed proactive DingTalk bundle | After commits `347abac`, `0d107e2`, and `40fba7e`, rebuilt and installed the bridge bundle, then `launchctl kickstart -k gui/501/io.codex-im-bridge` restarted the installed daemon to pid `53319` with `pendingApprovals=0`. `pnpm im:doctor` is ready for installed Telegram/Lark/DingTalk with Slack disabled and now reports DingTalk file support as `outbound files/images supported through session reply URL or proactive target`. Installed bridge redaction scan returned `redaction scan ok`. |
 | 2026-05-07 SGT official Computer Use docs recheck | JAC-274 official-doc evidence was refreshed against `developers.openai.com/codex/app/computer-use` and `developers.openai.com/codex/app-server`. The Codex App page documents Computer Use as an interactive Codex app/plugin feature requiring macOS Screen Recording/Accessibility and app approvals; the App Server page documents experimental `dynamicTools` / `item/tool/call` callbacks, but not a daemon-facing Computer Use provider registration method, namespace/tool contract, argument schema, or permission bridge. This keeps `UnsupportedComputerUseProvider` as the correct production behavior while preserving downstream IM rendering of `dynamicToolCall` screenshots/artifacts. |
+| 2026-05-07 SGT command/CU detail refresh | Shared daemon item summaries now include command risk when App Server supplies `riskLevel` / `risk`, and Computer Use dynamic-tool summaries can expose app, step/action, policy decision, blocked reason, and approval-required state while continuing to suppress raw tool arguments. Targeted RED/GREEN `packages/daemon/test/turn-output.test.ts` passed; the rebuilt bundle was installed/kickstarted under launchd pid `60935`, `pnpm im:doctor` stayed ready, and the bridge redaction scan returned `redaction scan ok`. |
 
 Latest live Telegram acceptance evidence:
 

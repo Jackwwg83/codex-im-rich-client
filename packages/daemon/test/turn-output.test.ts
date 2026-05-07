@@ -1295,6 +1295,7 @@ describe("daemon turn output projection", () => {
             type: "commandExecution",
             status: "completed",
             command: "npm test",
+            riskLevel: "high",
             aggregatedOutput: "hello from command\n",
             exitCode: 0,
           },
@@ -1346,7 +1347,7 @@ describe("daemon turn output projection", () => {
         "done",
         "",
         "Codex items:",
-        "- commandExecution completed: npm test; exit 0; output: hello from command",
+        "- commandExecution completed: npm test; risk high; exit 0; output: hello from command",
         "- fileChange completed: src/app.ts",
       ].join("\n"),
     );
@@ -1586,6 +1587,11 @@ describe("daemon turn output projection", () => {
             status: "failed",
             namespace: null,
             tool: "computer_use.synthetic",
+            app: "Google Chrome",
+            step: "click allow",
+            policyDecision: "deny",
+            blockedReason: "policy_denied",
+            requiresApproval: true,
             arguments: { token: "should-not-render" },
             success: false,
             durationMs: 33,
@@ -1608,7 +1614,7 @@ describe("daemon turn output projection", () => {
     await waitFor(() => editText.mock.calls.length >= 1);
     const body = editText.mock.calls.at(-1)?.[1];
     expect(body).toContain(
-      "- dynamicToolCall failed: Computer Use computer_use.synthetic; success no; 33ms; content 2 text 1 image 1",
+      "- dynamicToolCall failed: Computer Use computer_use.synthetic; app Google Chrome; step click allow; policy deny; blocked policy_denied; requires approval yes; success no; 33ms; content 2 text 1 image 1",
     );
     expect(body).not.toContain("should-not-render");
     await waitFor(() => sendFile.mock.calls.length === 1);

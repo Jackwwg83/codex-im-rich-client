@@ -5026,11 +5026,9 @@ function summarizeDynamicToolCallItem(item: Record<string, unknown>): string | u
     return undefined;
   }
   const normalized = name.toLowerCase();
-  const displayName =
-    normalized.includes("computer_use") || normalized.includes("computer-use")
-      ? `Computer Use ${name}`
-      : name;
-  return summarizeToolDetails(item, displayName);
+  const isComputerUse = normalized.includes("computer_use") || normalized.includes("computer-use");
+  const displayName = isComputerUse ? `Computer Use ${name}` : name;
+  return summarizeToolDetails(item, displayName, { computerUse: isComputerUse });
 }
 
 function extractCodexItemFiles(raw: unknown): readonly DaemonTurnOutputFile[] {
@@ -5215,12 +5213,16 @@ function optionalMessageRefTextUpdateMode(
 
 function summarizeCommandExecutionItem(item: Record<string, unknown>): string | undefined {
   const command = readStringField(item, "command");
+  const risk = readStringField(item, "riskLevel") ?? readStringField(item, "risk");
   const exitCode = readNumberField(item, "exitCode");
   const durationMs = readNumberField(item, "durationMs");
   const output = readStringField(item, "aggregatedOutput");
   const parts: string[] = [];
   if (command !== undefined) {
     parts.push(redact(command));
+  }
+  if (risk !== undefined) {
+    parts.push(`risk ${safeStatusText(risk)}`);
   }
   if (exitCode !== undefined) {
     parts.push(`exit ${exitCode}`);
@@ -5247,8 +5249,15 @@ function summarizeMcpToolCallItem(item: Record<string, unknown>): string | undef
   return name === undefined ? undefined : summarizeToolDetails(item, name);
 }
 
-function summarizeToolDetails(item: Record<string, unknown>, name: string): string {
+function summarizeToolDetails(
+  item: Record<string, unknown>,
+  name: string,
+  opts: { readonly computerUse?: boolean } = {},
+): string {
   const parts = [name];
+  if (opts.computerUse === true) {
+    appendComputerUseDetails(parts, item);
+  }
   const success = readBooleanField(item, "success");
   if (success !== undefined) {
     parts.push(`success ${success ? "yes" : "no"}`);
@@ -5287,6 +5296,43 @@ function summarizeToolDetails(item: Record<string, unknown>, name: string): stri
   return parts.join("; ");
 }
 
+function appendComputerUseDetails(parts: string[], item: Record<string, unknown>): void {
+  const computerUse = readRecord(item.computerUse);
+  const app = readStringField(item, "app") ?? readStringField(computerUse, "app");
+  const step =
+    readStringField(item, "step") ??
+    readStringField(item, "action") ??
+    readStringField(computerUse, "step") ??
+    readStringField(computerUse, "action");
+  const policy =
+    readStringField(item, "policyDecision") ??
+    readStringField(item, "policy") ??
+    readStringField(computerUse, "policyDecision") ??
+    readStringField(computerUse, "policy");
+  const blocked =
+    readStringField(item, "blockedReason") ??
+    readStringField(item, "blocked") ??
+    readStringField(computerUse, "blockedReason") ??
+    readStringField(computerUse, "blocked");
+  const requiresApproval =
+    readBooleanField(item, "requiresApproval") ?? readBooleanField(computerUse, "requiresApproval");
+  if (app !== undefined) {
+    parts.push(`app ${safeStatusText(app)}`);
+  }
+  if (step !== undefined) {
+    parts.push(`step ${safeStatusText(step)}`);
+  }
+  if (policy !== undefined) {
+    parts.push(`policy ${safeStatusText(policy)}`);
+  }
+  if (blocked !== undefined) {
+    parts.push(`blocked ${safeStatusText(blocked)}`);
+  }
+  if (requiresApproval !== undefined) {
+    parts.push(`requires approval ${requiresApproval ? "yes" : "no"}`);
+  }
+}
+
 function summarizeNamedToolItem(
   item: Record<string, unknown>,
   namespaceKey: string,
@@ -5322,7 +5368,7 @@ function parseTextApprovalAction(value: string | undefined): CallbackTokenAction
 }
 
 function truncateItemSummary(summary: string): string {
-  return summary.length <= 180 ? summary : `${summary.slice(0, 157)}...`;
+  return summary.length <= 240 ? summary : `${summary.slice(0, 217)}...`;
 }
 
 function safeFileToken(value: string): string {

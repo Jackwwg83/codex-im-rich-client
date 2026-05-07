@@ -42,9 +42,12 @@
 > attachments, `imageView.path` and `imageGeneration.savedPath` are sent as
 > files/images, local dynamic-tool / Computer Use `inputImage` artifacts are
 > sent as GUI screenshot files, and dynamic/MCP/Computer Use items show
-> redacted status/result summaries without raw arguments. Explicit live
-> file-send gates now prove the Telegram and Feishu/Lark platform APIs end to
-> end.
+> redacted status/result summaries without raw arguments. Command execution
+> summaries include risk when App Server supplies it; Computer Use dynamic-tool
+> summaries can include app, step/action, policy decision, blocked reason, and
+> approval-required state without rendering raw arguments. Explicit live
+> file-send gates now prove the Telegram, Feishu/Lark, and DingTalk platform
+> APIs end to end.
 > Codex-native lifecycle/status projection now also covers token usage,
 > compaction, model/MCP/account status, plan/diff/thread/goal updates,
 > warning/error/config notices, MCP progress, terminal interaction,
@@ -91,7 +94,7 @@ Use this wording for the current enabled-platform acceptance state:
 ```text
 Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, and DingTalk. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
 Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context. DingTalk outbound file/image attachment support is implemented locally through media upload plus session-webhook replies or proactive robot group/user delivery with `DINGTALK_TARGET_CHAT_ID`; explicit real DingTalk file and image send gates now pass with redacted `status=file_sent` evidence.
-Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath` artifacts, completed/failed long command logs, local dynamic-tool / Computer Use screenshot artifacts, and file-change patch attachments is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram and Feishu/Lark.
+Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath` artifacts, completed/failed long command logs, local dynamic-tool / Computer Use screenshot artifacts, and file-change patch attachments is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram, Feishu/Lark, and DingTalk.
 ```
 
 Do not extend this claim to Slack live workspace acceptance, inbound DingTalk
@@ -137,7 +140,7 @@ control/status/policy/audit/output projection, not verified desktop execution.
 | Common Computer Use readiness status | `/cu status` and `/diagnostics` policy/provider/readiness surface | local pass | shared daemon output reports enabled state, provider configured/unavailable, readiness or blocked reason, explicit `/cu` requirement, default/allowed/denied apps, sensitive approval keywords, and live-smoke gate without starting Codex work or desktop actions |
 | Common Codex model selection | `/model <model>` through daemon common command routing | local pass | daemon validates the id/name through `runtime.modelList()`, stores the selected model on the current target binding, and future `turnStart` requests use existing `model` params; no global config mutation |
 | Common Codex MCP login/reload | `/mcp login <server>` and `/mcp reload` through daemon common command routing | local pass | daemon calls centralized CodexRuntime wrappers for App Server `mcpServer/oauth/login` and `config/mcpServer/reload`; `/mcp` with no args still lists server status and IM never calls MCP tools directly |
-| Common Codex-native artifact projection | commandExecution, fileChange, imageView/imageGeneration, mcpToolCall, dynamicToolCall/Computer Use terminal items | local pass | shared daemon output summarizes short command output inline, sends long completed/failed command output as redacted `.log`, sends fileChange diffs as redacted `.patch`, sends image and local dynamic-tool/Computer Use screenshot artifacts via `sendFile`, and never renders raw tool arguments |
+| Common Codex-native artifact projection | commandExecution, fileChange, imageView/imageGeneration, mcpToolCall, dynamicToolCall/Computer Use terminal items | local pass | shared daemon output summarizes short command output inline with risk when present, sends long completed/failed command output as redacted `.log`, sends fileChange diffs as redacted `.patch`, sends image and local dynamic-tool/Computer Use screenshot artifacts via `sendFile`, can show Computer Use app/step/policy/blocked/approval-required summary fields, and never renders raw tool arguments |
 | Common Codex-native lifecycle status projection | token usage, compacted, thread status, model reroute/verification, MCP startup/OAuth, account usage, remote-control status, plan/diff, thread name/goal, skills/apps refresh, warning/error/config warning, MCP progress, terminal interaction, guardian/deprecation/hook notices, auto-approval-review started/completed | local pass | shared daemon output folds selected App Server lifecycle notifications into the active IM turn as concise redacted `Codex status` lines instead of raw JSON, stack traces, hook paths/output entries, patch bodies, command stdin, tool args, approval review command/cwd/host/rationale, or adapter-specific concepts |
 | Common approval text fallback | `/approvals` and `/approve <id> <action>` through daemon common command routing | local pass | Fallback only resolves approvals that already have a server-side bound callback token record with a bound approval-card `messageRef`; no raw callback token or approval payload is accepted from IM text |
 | Common identity/access controls | `/whoami` plus config-level reusable access groups | local pass | `/whoami` reports platform, identity-field presence, and current project/thread binding without raw chat/user/topic ids; config access groups expand into existing allowlists and unknown group references fail closed |
@@ -522,6 +525,12 @@ Stop and treat as a blocker if:
   as a redacted `.patch`; `imageView.path` uses `sendFile`; and
   dynamic/MCP/Computer Use summaries include success, duration, and content
   presence without raw arguments. Targeted daemon turn-output tests passed.
+- 2026-05-07 SGT Codex-native command/Computer Use detail refresh:
+  commandExecution item summaries now include `riskLevel` / `risk` when the
+  App Server item carries it, and Computer Use dynamic-tool summaries can show
+  app, step/action, policy decision, blocked reason, and approval-required state
+  without rendering raw `arguments`. Targeted RED/GREEN daemon turn-output test
+  passed.
 - 2026-05-07 SGT model selection loop: JAC-262 adds `/model <model>` to the
   shared IM control plane. The daemon validates the requested id/name through
   `runtime.modelList()`, stores the selected model on the current target
