@@ -54,6 +54,7 @@
 - **Mode:** Real Telegram / Feishu-Lark / DingTalk acceptance complete for
   enabled platforms; direct-use hardening and Slack readiness continue.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
+- **Slack plan:** `docs/superpowers/plans/2026-05-07-slack-core-platform-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
 - **Branch:** `codex/live-im-acceptance`.
@@ -646,6 +647,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT approval fallback loop | Common daemon routing now exposes `/approvals` and `/approve <id> <action>`. The fallback path is intentionally server-state based: it only resolves a pending approval when SQLite has a bound callback-token record for that approval, target, action, and approval-card `messageRef`; the IM text never carries raw callback tokens or message refs. Full local gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150 files, 1403 pass, 1 skipped), `pnpm lint`, and `pnpm protocol:check`. |
 | 2026-05-07 SGT identity/access loop | `/whoami` now reports redacted IM identity presence and current project/thread binding across supported adapters without leaking raw chat, user, topic, display-name, cwd, or full thread ids. Config parsing also supports reusable `security.access_groups` referenced by global `default_access_groups` or project-level `access_groups`; unknown group references fail closed and groups expand into the existing `SecurityPolicy` allowlist shape. |
 | 2026-05-07 SGT group mention-gate loop | `security.group_policy` now supports configured `mention_required_chats` plus `mention_aliases`. Daemon inbound routing calls `SecurityPolicy.checkInboundMessage()` before command/prompt routing, so configured group chats without an alias are audited and dropped before Codex sees the text; non-gated chats keep the existing allowlist behavior. Targeted tests passed for core policy, config parsing, and daemon denial audit. |
+| 2026-05-07 SGT Slack T0 plan loop | Added `docs/superpowers/plans/2026-05-07-slack-core-platform-plan.md` as the Slack plan-of-record. The plan chooses Socket Mode by default to avoid public listeners, maps Slack `team/channel/thread_ts/ts` into existing `Target` and `MessageRef`, keeps `/codex` as ingress to existing daemon commands, and scopes JAC-244 through JAC-248 without implementation code. |
 
 Latest live Telegram acceptance evidence:
 
