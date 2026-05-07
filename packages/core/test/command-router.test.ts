@@ -18,6 +18,7 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
       "alias",
       "fork",
       "status",
+      "whoami",
       "stop",
       "model",
       "compact",

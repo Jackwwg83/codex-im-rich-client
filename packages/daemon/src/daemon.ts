@@ -2068,6 +2068,11 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "whoami") {
+      await this.#routeWhoamiCommand(inbound);
+      return;
+    }
+
     if (command.name === "new") {
       await this.#routeNewCommand(inbound, command);
       return;
@@ -2159,6 +2164,7 @@ export class Daemon {
         "/projects - List available projects.",
         "/use <project> - Bind this chat to a project.",
         "/status - Show current Codex IM status.",
+        "/whoami - Show redacted IM identity and current binding.",
         "/new [title] - Start a new Codex thread.",
         "/threads [project] - List known Codex threads.",
         "/switch <thread> - Resume and switch to a known Codex thread.",
@@ -2387,6 +2393,28 @@ export class Daemon {
     }
     lines.push(`active turn: ${this.#shortId(route.activeTurnId)}`);
     lines.push(`pending approvals: ${this.#pendingApprovalCount()}`);
+    await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
+  }
+
+  async #routeWhoamiCommand(inbound: {
+    target: Target;
+    sender: SecurityPolicySender;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    const lines = [
+      "Who am I:",
+      `platform: ${inbound.target.platform}`,
+      `chat id: ${presence(inbound.target.chatId)}`,
+      `thread key: ${presence(inbound.target.threadKey)}`,
+      `topic id: ${presence(inbound.target.topicId)}`,
+      `sender id: ${presence(inbound.sender.userId)}`,
+      `binding: ${route?.kind === "bound" ? "bound" : "unbound"}`,
+    ];
+    if (route?.kind === "bound") {
+      lines.push(`project: ${route.projectId}`);
+      lines.push(`thread: ${this.#shortId(route.codexThreadId)}`);
+    }
     await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
   }
 
@@ -4403,6 +4431,10 @@ function parseTextApprovalAction(value: string | undefined): CallbackTokenAction
 
 function truncateItemSummary(summary: string): string {
   return summary.length <= 180 ? summary : `${summary.slice(0, 157)}...`;
+}
+
+function presence(value: string | undefined): "present" | "absent" {
+  return value === undefined || value.length === 0 ? "absent" : "present";
 }
 
 function targetEqual(a: Target, b: Target): boolean {

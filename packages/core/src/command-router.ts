@@ -16,6 +16,7 @@ export const COMMAND_ROUTER_COMMANDS = Object.freeze([
   "alias",
   "fork",
   "status",
+  "whoami",
   "stop",
   "model",
   "compact",

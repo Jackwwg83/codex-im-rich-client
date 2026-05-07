@@ -2272,6 +2272,74 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).not.toContain("/Users/alice/private/web");
   });
 
+  it("routes /whoami without leaking raw chat, topic, thread, or sender identifiers", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = {
+      platform: "telegram",
+      chatId: "-100secret-chat",
+      threadKey: "secret-thread-key",
+      topicId: "secret-topic-id",
+    };
+    const sender = { userId: "u-secret-user", displayName: "Alice Secret" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/Users/alice/private/web",
+        codexThreadId: "thread-abcdefghijklmnopqrstuvwxyz",
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({}),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/whoami",
+      messageRef: { target, messageId: "msg-whoami" },
+      receivedAt: new Date("2026-05-03T12:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("Who am I:");
+    expect(body).toContain("platform: telegram");
+    expect(body).toContain("chat id: present");
+    expect(body).toContain("thread key: present");
+    expect(body).toContain("topic id: present");
+    expect(body).toContain("sender id: present");
+    expect(body).toContain("binding: bound");
+    expect(body).toContain("project: web");
+    expect(body).toContain("thread: thread-abcde...");
+    expect(body).not.toContain("-100secret-chat");
+    expect(body).not.toContain("secret-thread-key");
+    expect(body).not.toContain("secret-topic-id");
+    expect(body).not.toContain("u-secret-user");
+    expect(body).not.toContain("Alice Secret");
+    expect(body).not.toContain("/Users/alice/private/web");
+    expect(body).not.toContain("thread-abcdefghijklmnopqrstuvwxyz");
+  });
+
   it("routes /new to threadStart, durable thread session upsert, and current binding update", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const now = new Date("2026-05-03T12:00:00.000Z");
