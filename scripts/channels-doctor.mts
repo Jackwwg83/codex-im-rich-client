@@ -258,7 +258,12 @@ function evaluateDingTalk(
       detail:
         "text refs append by lifecycle contract with progress edits suppressed; card refs update through CardKit",
     },
-    { name: "file", status: "info", detail: "attachments unsupported" },
+    {
+      name: "file",
+      status: "info",
+      detail:
+        "outbound files/images supported after inbound session reply URL; live send not checked by default",
+    },
   ]);
 }
 

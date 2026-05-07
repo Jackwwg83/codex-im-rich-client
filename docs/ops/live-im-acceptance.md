@@ -216,6 +216,10 @@ Passing criteria:
 - live card send/update reaches `card_updated` using either explicit
   `DINGTALK_TARGET_CHAT_ID`, captured target, or redacted
   `DINGTALK_LIVE_DISCOVER_USER=1`;
+- live file/image acceptance, when run, must use a fresh inbound DingTalk robot
+  message to seed the session reply URL and must prove the adapter uploads media
+  then sends an `image` / `file` session webhook reply without printing
+  credentials or private target identifiers;
 - output does not print client ID, client secret, tokens, user IDs, chat IDs, or
   callback payloads.
 

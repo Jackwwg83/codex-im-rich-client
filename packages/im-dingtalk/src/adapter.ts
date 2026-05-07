@@ -34,6 +34,7 @@ import {
 type ApprovalCardInput = Parameters<ChannelAdapter["sendCard"]>[1];
 const MAX_SEEN_ROBOT_KEYS = 4096;
 const DINGTALK_TEXT_MESSAGE_REF_PREFIX = "dingtalk-text:";
+const DINGTALK_FILE_MESSAGE_REF_PREFIX = "dingtalk-file:";
 
 export interface DingTalkChannelAdapterOptions {
   readonly now?: () => Date;
@@ -211,7 +212,29 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
   }
 
   async sendFile(_target: Target, _file: OutboundFile): Promise<MessageRef> {
-    throw this.#notImplemented("sendFile", "future attachment slice");
+    this.#assertStarted("sendFile");
+    assertDingTalkOutboundFile(_file);
+    const textClient = this.#options.textClient;
+    if (textClient?.sendFile === undefined) {
+      throw new Error("DingTalkChannelAdapter.sendFile requires an injected textClient.sendFile");
+    }
+    const sessionWebhook = this.#sessionReplyUrlsByChatId.get(_target.chatId);
+    if (sessionWebhook === undefined) {
+      throw new Error(
+        "DingTalkChannelAdapter.sendFile requires a recent inbound session reply URL",
+      );
+    }
+    try {
+      const sent = await textClient.sendFile({ sessionWebhook, file: _file });
+      return {
+        target: _target,
+        messageId: `${DINGTALK_FILE_MESSAGE_REF_PREFIX}${sent.messageId ?? this.#nowMs()}`,
+        kind: "file",
+        textUpdateMode: "append",
+      };
+    } catch (error) {
+      throw new Error(`DingTalkChannelAdapter.sendFile failed: ${describeError(error)}`);
+    }
   }
 
   _startedForTest(): boolean {
@@ -224,10 +247,6 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
 
   _nowForTest(): Date {
     return this.#options.now?.() ?? new Date();
-  }
-
-  #notImplemented(method: string, issue: string): Error {
-    return new Error(`DingTalkChannelAdapter.${method} is not implemented until ${issue}`);
   }
 
   #assertStarted(method: string): void {
@@ -346,6 +365,15 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
 
   #nowMs(): number {
     return this.#options.now?.().getTime() ?? Date.now();
+  }
+}
+
+function assertDingTalkOutboundFile(file: OutboundFile): void {
+  if (file.filename.trim().length === 0) {
+    throw new Error("DingTalkChannelAdapter.sendFile requires a filename");
+  }
+  if (file.bytes.byteLength === 0) {
+    throw new Error("DingTalkChannelAdapter.sendFile refuses empty files");
   }
 }
 

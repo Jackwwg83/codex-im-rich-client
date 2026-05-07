@@ -357,7 +357,10 @@ export function createProductionAdapter(
         }),
         ...(dingTalkCardClient === undefined ? {} : { cardClient: dingTalkCardClient }),
         actionClient: createDingTalkNoopActionClient(),
-        textClient: createDingTalkSessionReplyTextClient(),
+        textClient: createDingTalkSessionReplyTextClient({
+          clientId: config.adapters.dingtalk.clientId,
+          clientSecret: secrets.dingtalkClientSecret,
+        }),
       }),
     });
   }

@@ -26,7 +26,11 @@
 > implemented at the adapter contract layer. Inbound images are passed to Codex
 > as native `UserInput.localImage`; inbound generic files are passed as local
 > path context because Codex App Server has no generic `UserInput.file` shape.
-> DingTalk attachments remain unsupported pending a real platform delivery path.
+> DingTalk outbound attachment support is implemented locally through its real
+> media-upload + session-webhook delivery path after a recent inbound robot
+> message seeds the session reply URL. DingTalk attachment live acceptance still
+> needs an explicit real file-send gate; inbound DingTalk user attachments
+> remain unsupported pending a real delivery/download shape.
 > Daemon terminal output can now deliver completed Codex
 > `imageGeneration.savedPath` artifacts as IM files after the text summary;
 > explicit live file-send gates now prove the Telegram and Feishu/Lark platform
@@ -71,12 +75,13 @@ Use this wording for the current enabled-platform acceptance state:
 
 ```text
 Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, and DingTalk. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
-Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context.
+Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context. DingTalk outbound file/image attachment support is implemented locally through media upload plus session-webhook replies, but still needs an explicit real DingTalk file-send gate before being called live accepted.
 Daemon-side delivery of completed `imageGeneration.savedPath` artifacts is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram and Feishu/Lark.
 ```
 
-Do not extend this claim to Slack, unsupported DingTalk attachments, or real
-Computer Use provider execution. Those remain separate acceptance tracks.
+Do not extend this claim to Slack, DingTalk live attachment acceptance, inbound
+DingTalk user attachments, or real Computer Use provider execution. Those
+remain separate acceptance tracks.
 
 ## 3. Live Acceptance Matrix
 
@@ -126,6 +131,7 @@ Computer Use provider execution. Those remain separate acceptance tracks.
 | DingTalk live callback probe | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_CARD_CALLBACK=1 ... pnpm smoke:dingtalk-live` | pass | 2026-05-06 real DingTalk Desktop click produced `card_callback_seen` with redacted `messageId=present`, `targetSource=env`, `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`, `callbackMessageRef=present`, `callbackAction=present`, `callbackRaw=present`, and no secret bytes |
 | DingTalk failed send/bind token cleanup | restart daemon after issued-only callback token residue | pass | startup now revokes both `issued` and `bound` callback tokens before adapter input; this covers the invalid local `callback_route_key` experiment that left unbound issued tokens after no card delivery |
 | DingTalk real callback click | real user/client approval-card click reaches adapter callback flow | pass | adapter accepts `cardPrivateData.params.token = v1:<opaque>` plus the official public-template `cardPrivateData.params.action = accept/reject`; real private callbacks with `spaceType=IM` map target/messageRef through the sender `userId`; daemon lookup stays scoped by token or `messageRef + action` |
+| DingTalk outbound image/file attachment | `DingTalkChannelAdapter.sendFile` after one inbound robot message seeds a session reply URL | local pass | client obtains a DingTalk access token, uploads bytes through `/media/upload`, sends `image` / `file` via the captured session webhook, and returns a file `MessageRef`; explicit live file-send gate remains pending |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |
 | Keychain | `security find-generic-password -s codex-im-bridge -a "$USER"` | pass | presence verified; token bytes never printed |
@@ -491,6 +497,15 @@ Stop and treat as a blocker if:
   `codex-im-live-attachment.txt`; Feishu/Lark `LARK_LIVE_FILE=1` returned
   redacted `messageId=present`. Launchd was bootstrapped/kickstarted back to
   pid `94243`, `pendingApprovals=0`, and `pnpm im:doctor` is ready.
+- 2026-05-07 SGT DingTalk outbound attachment implementation: local tests now
+  cover `sendFile` after an inbound DingTalk robot message seeds a session
+  reply URL. The production client fetches a DingTalk access token, uploads
+  media through DingTalk OAPI, and sends `image` / `file` session webhook
+  replies without logging secret material. Full local gates passed; the rebuilt
+  bridge was installed and kickstarted under launchd pid `2165`,
+  `pendingApprovals=0`, and `pnpm im:doctor` reports DingTalk file support as
+  needing an inbound session reply URL. This is not yet a real DingTalk
+  file-send acceptance claim.
 - 2026-05-07 SGT Codex-native control loop: The common IM command plane now
   exposes Codex App Server-native surfaces for model listing, thread
   compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,

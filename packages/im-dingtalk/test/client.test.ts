@@ -112,6 +112,46 @@ describe("DingTalk Stream client wrapper (JAC-90 P1 fix)", () => {
     ]);
     expect(JSON.stringify(calls)).not.toContain("clientSecret");
   });
+
+  it("uploads image bytes and sends them through the session reply URL", async () => {
+    const calls: { readonly url: string; readonly init: RequestInit | undefined }[] = [];
+    const client = createDingTalkSessionReplyTextClient({
+      clientId: "ding_test_client_id",
+      clientSecret: "ding_test_secret",
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init });
+        if (String(url).endsWith("/v1.0/oauth2/accessToken")) {
+          return jsonResponse({ accessToken: "token_for_media", expireIn: 7200 });
+        }
+        if (String(url).startsWith("https://oapi.dingtalk.com/media/upload")) {
+          return jsonResponse({ errcode: 0, media_id: "@media_image_001" });
+        }
+        return jsonResponse({ errcode: 0, messageId: "ding_media_msg_001" });
+      },
+    });
+
+    await expect(
+      client.sendFile?.({
+        sessionWebhook: "https://dingtalk.example.test/session-reply",
+        file: {
+          filename: "diagram.png",
+          bytes: new Uint8Array([1, 2, 3]),
+          contentType: "image/png",
+        },
+      }),
+    ).resolves.toEqual({ messageId: "ding_media_msg_001" });
+
+    expect(calls.map((call) => [call.url, call.init?.method])).toEqual([
+      ["https://api.dingtalk.com/v1.0/oauth2/accessToken", "POST"],
+      ["https://oapi.dingtalk.com/media/upload?access_token=token_for_media&type=image", "POST"],
+      ["https://dingtalk.example.test/session-reply", "POST"],
+    ]);
+    expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
+      msgtype: "image",
+      image: { media_id: "@media_image_001" },
+    });
+    expect(String(calls[1]?.init?.body)).not.toContain("ding_test_secret");
+  });
 });
 
 describe("DingTalk OpenAPI card client", () => {

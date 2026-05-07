@@ -136,6 +136,10 @@ function makeHarness(): ContractHarness {
       textCalls.push(input);
       return { messageId: "ding_text_private_001" };
     },
+    async sendFile(input) {
+      textCalls.push(input);
+      return { messageId: "ding_file_private_001" };
+    },
   };
   return {
     adapter: new DingTalkChannelAdapter({
@@ -218,7 +222,7 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
     expect(channel.capabilities).toEqual({
       supportsButtons: true,
       canEditMessage: true,
-      supportsAttachments: false,
+      supportsAttachments: true,
       maxCallbackDataBytes: 64,
     });
     expect(Object.isFrozen(channel.capabilities)).toBe(true);
@@ -242,6 +246,10 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
     const sentText = await adapter.sendText(
       { platform: "dingtalk", chatId: "staff_test_private" },
       "Codex is working...",
+    );
+    const sentFile = await adapter.sendFile(
+      { platform: "dingtalk", chatId: "staff_test_private" },
+      FILE,
     );
     await adapter.editText(sentText, "Done");
     const sentCard = await adapter.sendCard(TARGET, CARD);
@@ -273,6 +281,12 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       target: { platform: "dingtalk", chatId: "staff_test_private" },
       messageId: "dingtalk-text:ding_text_private_001",
       kind: "text",
+      textUpdateMode: "append",
+    });
+    expect(sentFile).toEqual({
+      target: { platform: "dingtalk", chatId: "staff_test_private" },
+      messageId: "dingtalk-file:ding_file_private_001",
+      kind: "file",
       textUpdateMode: "append",
     });
     expect(seenActions).toHaveBeenCalledWith(
@@ -321,6 +335,10 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
       },
       {
         sessionWebhook: "https://dingtalk.example.test/session-reply",
+        file: FILE,
+      },
+      {
+        sessionWebhook: "https://dingtalk.example.test/session-reply",
         text: "Done",
       },
     ]);
@@ -333,11 +351,14 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
     ]);
   });
 
-  it("fails closed for unsupported attachment sends", async () => {
+  it("fails closed for attachment sends before a session reply URL is known", async () => {
     const { adapter, cardCalls } = makeHarness();
     const channel: ChannelAdapter = adapter;
 
-    await expect(channel.sendFile(TARGET, FILE)).rejects.toThrow(/sendFile/);
+    await adapter.start();
+    await expect(channel.sendFile(TARGET, FILE)).rejects.toThrow(
+      /requires a recent inbound session reply URL/,
+    );
 
     expect(cardCalls).toEqual([]);
   });

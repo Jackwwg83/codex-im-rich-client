@@ -6,7 +6,9 @@ import type { DingTalkApprovalCardJson } from "./card.js";
 export const DINGTALK_TOPIC_ROBOT = TOPIC_ROBOT;
 export const DINGTALK_TOPIC_CARD = TOPIC_CARD;
 const DINGTALK_OPENAPI_BASE_URL = "https://api.dingtalk.com";
+const DINGTALK_OAPI_BASE_URL = "https://oapi.dingtalk.com";
 const DINGTALK_ACCESS_TOKEN_PATH = "/v1.0/oauth2/accessToken";
+const DINGTALK_MEDIA_UPLOAD_PATH = "/media/upload";
 const DINGTALK_CREATE_AND_DELIVER_CARD_PATH = "/v1.0/card/instances/createAndDeliver";
 const DINGTALK_UPDATE_CARD_PATH = "/v1.0/card/instances";
 const DINGTALK_ACCESS_TOKEN_REFRESH_SKEW_MS = 60_000;
@@ -61,10 +63,23 @@ export interface DingTalkSessionReplyTextClientLike {
     readonly sessionWebhook: string;
     readonly text: string;
   }): Promise<{ readonly messageId?: string }>;
+  sendFile?(input: {
+    readonly sessionWebhook: string;
+    readonly file: {
+      readonly filename: string;
+      readonly bytes: Uint8Array;
+      readonly contentType: string;
+    };
+  }): Promise<{ readonly messageId?: string }>;
 }
 
 export interface DingTalkSessionReplyTextClientDeps {
   readonly fetch?: typeof fetch;
+  readonly clientId?: string;
+  readonly clientSecret?: string;
+  readonly baseUrl?: string;
+  readonly oapiBaseUrl?: string;
+  readonly now?: () => number;
 }
 
 export interface DingTalkCardClientLike {
@@ -120,6 +135,41 @@ export function createDingTalkSessionReplyTextClient(
   deps: DingTalkSessionReplyTextClientDeps = {},
 ): DingTalkSessionReplyTextClientLike {
   const fetchImpl = deps.fetch ?? globalThis.fetch;
+  const baseUrl = deps.baseUrl ?? DINGTALK_OPENAPI_BASE_URL;
+  const oapiBaseUrl = deps.oapiBaseUrl ?? DINGTALK_OAPI_BASE_URL;
+  const now = deps.now ?? Date.now;
+  const tokenCache: { token?: string; expiresAtMs?: number } = {};
+
+  async function accessToken(): Promise<string> {
+    if (
+      tokenCache.token !== undefined &&
+      tokenCache.expiresAtMs !== undefined &&
+      now() < tokenCache.expiresAtMs
+    ) {
+      return tokenCache.token;
+    }
+    if (deps.clientId === undefined || deps.clientSecret === undefined) {
+      throw new Error("DingTalk session media send requires clientId and clientSecret");
+    }
+    const body = await requestJson(fetchImpl, `${baseUrl}${DINGTALK_ACCESS_TOKEN_PATH}`, {
+      operation: "sessionAccessToken",
+      method: "POST",
+      body: {
+        appKey: deps.clientId,
+        appSecret: deps.clientSecret,
+      },
+    });
+    const token = stringField(body, "accessToken");
+    if (token === undefined) {
+      throw new Error("DingTalk session accessToken failed: missing accessToken");
+    }
+    const expireInSeconds = numericField(body, "expireIn") ?? 7200;
+    tokenCache.token = token;
+    tokenCache.expiresAtMs =
+      now() + Math.max(0, expireInSeconds * 1000 - DINGTALK_ACCESS_TOKEN_REFRESH_SKEW_MS);
+    return token;
+  }
+
   return {
     async sendText(input) {
       const response = await fetchImpl(input.sessionWebhook, {
@@ -139,6 +189,53 @@ export function createDingTalkSessionReplyTextClient(
         throw new Error(`DingTalk session reply failed with code ${errorCode}`);
       }
       const messageId = stringField(body, "messageId") ?? stringField(body, "msgId");
+      return messageId === undefined ? {} : { messageId };
+    },
+    async sendFile(input) {
+      assertDingTalkSessionFile(input.file);
+      const token = await accessToken();
+      const mediaType = dingTalkMediaType(input.file.contentType);
+      const uploadUrl = `${oapiBaseUrl}${DINGTALK_MEDIA_UPLOAD_PATH}?access_token=${encodeURIComponent(token)}&type=${mediaType}`;
+      const form = new FormData();
+      form.append(
+        "media",
+        new Blob([input.file.bytes], { type: input.file.contentType }),
+        input.file.filename,
+      );
+      const uploadResponse = await fetchImpl(uploadUrl, {
+        method: "POST",
+        body: form,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error(`DingTalk media upload failed with HTTP ${uploadResponse.status}`);
+      }
+      const uploadBody = await readJsonBody(uploadResponse);
+      const uploadCode = numericField(uploadBody, "errcode") ?? numericField(uploadBody, "code");
+      if (uploadCode !== undefined && uploadCode !== 0) {
+        throw new Error(`DingTalk media upload failed with code ${uploadCode}`);
+      }
+      const mediaId = stringField(uploadBody, "media_id");
+      if (mediaId === undefined) {
+        throw new Error("DingTalk media upload failed: missing media_id");
+      }
+      const body =
+        mediaType === "image"
+          ? { msgtype: "image", image: { media_id: mediaId } }
+          : { msgtype: "file", file: { media_id: mediaId } };
+      const response = await fetchImpl(input.sessionWebhook, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        throw new Error(`DingTalk session media reply failed with HTTP ${response.status}`);
+      }
+      const replyBody = await readJsonBody(response);
+      const errorCode = numericField(replyBody, "errcode") ?? numericField(replyBody, "code");
+      if (errorCode !== undefined && errorCode !== 0) {
+        throw new Error(`DingTalk session media reply failed with code ${errorCode}`);
+      }
+      const messageId = stringField(replyBody, "messageId") ?? stringField(replyBody, "msgId");
       return messageId === undefined ? {} : { messageId };
     },
   };
@@ -316,6 +413,23 @@ function numericField(record: Record<string, unknown>, key: string): number | un
 function stringField(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function assertDingTalkSessionFile(file: {
+  readonly filename: string;
+  readonly bytes: Uint8Array;
+  readonly contentType: string;
+}): void {
+  if (file.filename.trim().length === 0) {
+    throw new Error("DingTalk session media reply requires a filename");
+  }
+  if (file.bytes.byteLength === 0) {
+    throw new Error("DingTalk session media reply refuses empty files");
+  }
+}
+
+function dingTalkMediaType(contentType: string): "image" | "file" {
+  return contentType.toLowerCase().startsWith("image/") ? "image" : "file";
 }
 
 interface CreateAndDeliverInput {

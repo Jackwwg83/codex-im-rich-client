@@ -36,8 +36,12 @@
 > daemon attachment directories; images are forwarded to Codex as native
 > `UserInput.localImage`, while generic files are passed as explicit local-path
 > context because Codex App Server has no generic `UserInput.file` shape.
-> DingTalk attachments remain unsupported until a real DingTalk file delivery
-> API path is proven.
+> DingTalk outbound attachment support is now implemented locally through the
+> real session-webhook media path: files/images upload to DingTalk media and
+> then send as `file` / `image` session replies after a recent inbound message
+> seeds the reply URL. A real DingTalk file-send gate still needs to pass before
+> calling DingTalk attachments live-accepted; inbound DingTalk user attachments
+> remain unsupported pending a real delivery/download shape.
 > Daemon terminal turn output now maps completed Codex `imageGeneration`
 > items with `savedPath` to IM attachments through `sendFile`, preserving the
 > text terminal summary as the Codex-native primary surface.
@@ -347,6 +351,17 @@
     two platforms. DingTalk stays explicitly unsupported for attachments. Full
     gates passed; the rebuilt bridge was installed and kickstarted under
     launchd pid `80748` with `pendingApprovals=0`.
+  - latest patch - DingTalk outbound attachment support: `sendFile` now uses
+    DingTalk's real session media path after an inbound robot message provides a
+    session reply URL. The production daemon injects DingTalk client credentials
+    into the text/media client, the client fetches a DingTalk access token,
+    uploads image/file bytes to DingTalk media, and sends `image` / `file`
+    session webhook replies. Full local gates passed; the rebuilt bridge was
+    installed and kickstarted under launchd pid `2165`, `pendingApprovals=0`,
+    and `pnpm im:doctor` reports DingTalk file support as
+    `outbound files/images supported after inbound session reply URL`. This is
+    local implementation evidence only until a real DingTalk file-send gate
+    passes.
   - latest patch - daemon artifact delivery: completed Codex
     `imageGeneration.savedPath` items are read as bounded local artifacts and
     sent through adapter `sendFile` after terminal text output. Unsupported
@@ -357,10 +372,9 @@
     `TELEGRAM_LIVE_FILE=1`; Feishu/Lark live file mode sent the same harmless
     text attachment through SDK `sendFile`. Both gates emitted only redacted
     status evidence. Launchd was restored under pid `94243`.
-- **Next exact action:** Design inbound IM image/file ingestion against Codex
-  `UserInput` (`image` / `localImage`) without introducing a generic chat-media
-  abstraction; keep non-image arbitrary file ingestion scoped until Codex App
-  Server exposes a native file input shape.
+- **Next exact action:** Finish DingTalk outbound attachment verification,
+  rebuild/install the bridge, and run an explicit real DingTalk file-send gate
+  only after a fresh inbound DingTalk message seeds the session reply URL.
 
 ## 2. Why This Exists
 
