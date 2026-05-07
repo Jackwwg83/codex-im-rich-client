@@ -42,6 +42,11 @@
 > redacted status/result summaries without raw arguments. Explicit live
 > file-send gates now prove the Telegram and Feishu/Lark platform APIs end to
 > end.
+> Codex-native lifecycle/status projection now also covers token usage,
+> compaction, model/MCP/account status, plan/diff/thread/goal updates,
+> warning/error/config notices, MCP progress, terminal interaction,
+> guardian/deprecation/hook notices, and auto-approval-review started/completed
+> notices with redacted summary-only output.
 
 ---
 
@@ -128,7 +133,7 @@ remain separate acceptance tracks.
 | Common Codex model selection | `/model <model>` through daemon common command routing | local pass | daemon validates the id/name through `runtime.modelList()`, stores the selected model on the current target binding, and future `turnStart` requests use existing `model` params; no global config mutation |
 | Common Codex MCP login/reload | `/mcp login <server>` and `/mcp reload` through daemon common command routing | local pass | daemon calls centralized CodexRuntime wrappers for App Server `mcpServer/oauth/login` and `config/mcpServer/reload`; `/mcp` with no args still lists server status and IM never calls MCP tools directly |
 | Common Codex-native artifact projection | commandExecution, fileChange, imageView/imageGeneration, mcpToolCall, dynamicToolCall/Computer Use terminal items | local pass | shared daemon output summarizes short command output inline, sends long completed/failed command output as redacted `.log`, sends fileChange diffs as redacted `.patch`, sends image and local dynamic-tool/Computer Use screenshot artifacts via `sendFile`, and never renders raw tool arguments |
-| Common Codex-native lifecycle status projection | token usage, compacted, thread status, model reroute/verification, MCP startup/OAuth, account usage, remote-control status, plan/diff, thread name/goal, skills/apps refresh, warning/error/config warning, MCP progress, terminal interaction, guardian/deprecation/hook notices | local pass | shared daemon output folds selected App Server lifecycle notifications into the active IM turn as concise redacted `Codex status` lines instead of raw JSON, stack traces, hook paths/output entries, patch bodies, command stdin, tool args, or adapter-specific concepts |
+| Common Codex-native lifecycle status projection | token usage, compacted, thread status, model reroute/verification, MCP startup/OAuth, account usage, remote-control status, plan/diff, thread name/goal, skills/apps refresh, warning/error/config warning, MCP progress, terminal interaction, guardian/deprecation/hook notices, auto-approval-review started/completed | local pass | shared daemon output folds selected App Server lifecycle notifications into the active IM turn as concise redacted `Codex status` lines instead of raw JSON, stack traces, hook paths/output entries, patch bodies, command stdin, tool args, approval review command/cwd/host/rationale, or adapter-specific concepts |
 | Common approval text fallback | `/approvals` and `/approve <id> <action>` through daemon common command routing | local pass | Fallback only resolves approvals that already have a server-side bound callback token record with a bound approval-card `messageRef`; no raw callback token or approval payload is accepted from IM text |
 | Common identity/access controls | `/whoami` plus config-level reusable access groups | local pass | `/whoami` reports platform, identity-field presence, and current project/thread binding without raw chat/user/topic ids; config access groups expand into existing allowlists and unknown group references fail closed |
 | Common group mention gate | `security.group_policy` through common `SecurityPolicy.checkInboundMessage` daemon routing | local pass | Configured group chats require an explicit mention alias before ordinary inbound text reaches Codex; non-gated chats keep existing user/chat allowlist behavior, and approval callback authorization remains token/messageRef/broker based |
@@ -551,6 +556,18 @@ Stop and treat as a blocker if:
   Hook summaries include event/status/duration only and deliberately omit hook
   source paths, output entries, raw JSON, secrets, chat IDs, user IDs, and
   message IDs. Realtime/voice notifications remain out of scope for this pass.
+- 2026-05-07 SGT auto-approval review status loop: JAC-272 projects
+  `item/autoApprovalReview/started` and
+  `item/autoApprovalReview/completed` into the active IM turn as redacted
+  `Codex status` lines. Summaries include only action type, review status,
+  risk, user authorization, and decision source; raw command text, cwd, host,
+  rationale, review ids, raw JSON, and secrets remain suppressed. RED/GREEN
+  targeted turn-output test passed, then full local gates passed: `pnpm
+  typecheck`, `pnpm typecheck:tests`, `pnpm lint`, `pnpm test` (160 files,
+  1481 pass, 1 skipped), and `pnpm protocol:check`. The bridge bundle was
+  rebuilt/installed/kickstarted to launchd pid `16732`; `pnpm im:doctor`
+  reports Telegram/Lark/DingTalk ready with Slack disabled, and the bridge
+  redaction scan returned `redaction scan ok`.
 - 2026-05-07 SGT MCP control loop: JAC-264 adds `/mcp login <server>` and
   `/mcp reload` to the shared IM control plane. Both call centralized
   `CodexRuntime` wrappers for App Server `mcpServer/oauth/login` and

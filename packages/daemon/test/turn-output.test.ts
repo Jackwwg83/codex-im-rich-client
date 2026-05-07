@@ -1073,6 +1073,150 @@ describe("daemon turn output projection", () => {
     await daemon.stop();
   });
 
+  it("projects auto-approval review lifecycle into redacted status output", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async () => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "Run a command with guardian review",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "unknown",
+      method: "item/autoApprovalReview/started",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        reviewId: "review-secret-id",
+        targetItemId: "item-secret-id",
+        action: {
+          type: "command",
+          source: "shell",
+          command: "curl https://example.invalid?token=ghp_abcdefghijklmnopqrstuvwxyz123456",
+          cwd: "/Users/alice/private/project",
+        },
+        review: {
+          status: "inProgress",
+          riskLevel: "high",
+          userAuthorization: "medium",
+          rationale: "contains secret path /Users/alice/private/project",
+        },
+      },
+    });
+    queue.push({
+      type: "unknown",
+      method: "item/autoApprovalReview/completed",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        reviewId: "review-secret-id",
+        targetItemId: "item-secret-id",
+        decisionSource: "agent",
+        action: {
+          type: "networkAccess",
+          target: "https://secret.example.invalid/api?key=xoxb-secret-token-1234567890",
+          host: "secret.example.invalid",
+          protocol: "https",
+          port: 443,
+        },
+        review: {
+          status: "denied",
+          riskLevel: "critical",
+          userAuthorization: "low",
+          rationale: "do not show raw network target",
+        },
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-agent",
+      deltaText: "blocked",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length >= 1);
+    const lastEdit = editText.mock.calls.at(-1);
+    expect(lastEdit).toBeDefined();
+    const [, body] = lastEdit as unknown as [DaemonMessageRef, string];
+    expect(body).toContain(
+      "- approval review started: command; status inProgress; risk high; user auth medium",
+    );
+    expect(body).toContain(
+      "- approval review completed: networkAccess; status denied; risk critical; user auth low; decision source agent",
+    );
+    expect(body).not.toContain("curl");
+    expect(body).not.toContain("secret.example.invalid");
+    expect(body).not.toContain("review-secret-id");
+    expect(body).not.toContain("item-secret-id");
+    expect(body).not.toContain("/Users/alice");
+    expect(body).not.toContain("xoxb-secret-token");
+    expect(body).not.toContain("rationale");
+
+    await daemon.stop();
+  });
+
   it("includes short command output and sends file-change diffs as IM attachments", async () => {
     const queue = new EventQueue();
     const sendText = vi.fn(async (target: Target, _body: string) => ({

@@ -4605,6 +4605,10 @@ function summarizeCodexStatusEvent(
       return summarizeMcpToolProgressStatus(params);
     case "item/commandExecution/terminalInteraction":
       return "command interaction: terminal input requested";
+    case "item/autoApprovalReview/started":
+      return summarizeAutoApprovalReviewStatus(params, "started");
+    case "item/autoApprovalReview/completed":
+      return summarizeAutoApprovalReviewStatus(params, "completed");
     case "guardianWarning":
       return summarizeGuardianWarningStatus(params);
     case "deprecationNotice":
@@ -4747,6 +4751,28 @@ function summarizeHookStatus(
   return `hook completed: ${safeStatusText(eventName)}${
     parts.length === 0 ? "" : ` (${parts.join(", ")})`
   }`;
+}
+
+function summarizeAutoApprovalReviewStatus(
+  params: Record<string, unknown> | undefined,
+  phase: "started" | "completed",
+): string {
+  const action = readRecord(params?.action);
+  const review = readRecord(params?.review);
+  const actionType = safeStatusText(readStringField(action, "type") ?? "unknown");
+  const parts = [
+    `status ${safeStatusText(readStringField(review, "status") ?? "unknown")}`,
+    readStringField(review, "riskLevel") === undefined
+      ? undefined
+      : `risk ${safeStatusText(readStringField(review, "riskLevel") ?? "")}`,
+    readStringField(review, "userAuthorization") === undefined
+      ? undefined
+      : `user auth ${safeStatusText(readStringField(review, "userAuthorization") ?? "")}`,
+    phase === "completed" && readStringField(params, "decisionSource") !== undefined
+      ? `decision source ${safeStatusText(readStringField(params, "decisionSource") ?? "")}`
+      : undefined,
+  ].filter((part): part is string => part !== undefined);
+  return `approval review ${phase}: ${actionType}${parts.length === 0 ? "" : `; ${parts.join("; ")}`}`;
 }
 
 function summarizeCodexRuntimeNotice(
