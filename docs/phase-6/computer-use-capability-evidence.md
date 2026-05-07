@@ -199,3 +199,40 @@ Next evidence needed before any real provider:
 3. A bounded Chrome-only live smoke that returns redacted `DynamicToolCallResponse`
    content and, if screenshots are produced, sends them through the existing IM
    artifact path.
+
+## 7. Official Docs Recheck
+
+Generated: 2026-05-07
+
+Official OpenAI developer docs were checked after the local protocol scan to
+avoid treating stale repository evidence as final:
+
+- `https://developers.openai.com/codex/app/computer-use`
+- `https://developers.openai.com/codex/app-server`
+
+Observed official-doc facts:
+
+- The Codex App Computer Use page describes a Codex app feature/plugin on
+  macOS. The documented usage path is interactive: install the Computer Use
+  plugin in Codex settings, grant Screen Recording and Accessibility, mention
+  `@Computer` / an app name in a Codex prompt, and approve app permissions.
+- The same page states app approvals and macOS permissions are separate from
+  file/shell approvals, and that the feature cannot automate terminal apps or
+  Codex itself.
+- The App Server page documents `dynamicTools` on `thread/start` and
+  `item/tool/call` as experimental APIs. The flow is an App Server callback to
+  the client after a dynamic tool is invoked; it does not document a
+  daemon-facing Computer Use provider registration method, provider namespace,
+  Computer Use tool name, argument schema, or permission bridge.
+- The App Server page documents MCP/app tool-call approvals through
+  `tool/requestUserInput`, but that is separate from registering a local
+  desktop Computer Use provider.
+
+Decision:
+
+The official docs reinforce the local scan. This project can render downstream
+Computer Use-like `dynamicToolCall` output and can keep `/cu` as an explicit
+policy-gated command, but it still must not implement real desktop execution by
+calling the current Codex session's Computer Use MCP tools or parsing Codex UI /
+CLI output. JAC-274 remains blocked until an official/local App Server contract
+names a provider registration surface and a bounded smoke path.
