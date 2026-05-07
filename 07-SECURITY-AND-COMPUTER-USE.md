@@ -25,6 +25,32 @@ allowed_chats = [
 admin_users = ["telegram:123456789"]
 ```
 
+重复的用户 / chat allowlist 可以抽成 access group，再由全局或项目显式引用：
+
+```toml
+[security]
+allowed_users = []
+allowed_chats = []
+admin_users = ["telegram:123456789"]
+default_access_groups = ["operators"]
+
+[security.access_groups.operators]
+allowed_users = [
+  "telegram:123456789",
+  "lark:ou_xxx",
+  "dingtalk:staff_xxx"
+]
+allowed_chats = [
+  "telegram:-100123456",
+  "lark:oc_xxx",
+  "dingtalk:cid_xxx"
+]
+```
+
+未知 group 引用会 fail closed；解析器会把 group 展开到现有
+`allowed_users` / `allowed_chats`，因此运行时仍沿用同一套
+`SecurityPolicy` 校验，不引入 first-actor-wins。
+
 检查顺序：
 
 1. platform 是否启用。
@@ -40,6 +66,7 @@ admin_users = ["telegram:123456789"]
 cwd = "/Users/mini/code/web"
 allowed_users = ["telegram:123456789"]
 allowed_chats = ["telegram:-100123456"]
+access_groups = ["operators"]
 writable_roots = ["/Users/mini/code/web"]
 ```
 

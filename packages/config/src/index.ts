@@ -18,6 +18,8 @@ export interface CodexImConfig {
     allowedUsers: string[];
     allowedChats: string[];
     adminUsers: string[];
+    defaultAccessGroups?: string[];
+    accessGroups?: Record<string, CodexImAccessGroupConfig>;
     commands: {
       denyPatterns: string[];
       requireAdminPatterns: string[];
@@ -62,9 +64,15 @@ export interface CodexImConfig {
       cwd: string;
       allowedUsers: string[];
       allowedChats: string[];
+      accessGroups?: string[];
       writableRoots: string[];
     }
   >;
+}
+
+export interface CodexImAccessGroupConfig {
+  allowedUsers: string[];
+  allowedChats: string[];
 }
 
 export interface EnvResolverOptions {
@@ -123,6 +131,13 @@ const computerUseConfigDefaults = {
   live_smoke_enabled: false,
 };
 
+const rawAccessGroupSchema = z
+  .object({
+    allowed_users: z.array(z.string()).default([]),
+    allowed_chats: z.array(z.string()).default([]),
+  })
+  .strict();
+
 const rawConfigSchema = z
   .object({
     daemon: z
@@ -148,6 +163,8 @@ const rawConfigSchema = z
         allowed_users: z.array(z.string()),
         allowed_chats: z.array(z.string()),
         admin_users: z.array(z.string()),
+        default_access_groups: z.array(z.string()).default([]),
+        access_groups: z.record(z.string(), rawAccessGroupSchema).default({}),
         commands: z
           .object({
             deny_patterns: z.array(z.string()),
@@ -218,6 +235,7 @@ const rawConfigSchema = z
           cwd: z.string().min(1),
           allowed_users: z.array(z.string()),
           allowed_chats: z.array(z.string()),
+          access_groups: z.array(z.string()).default([]),
           writable_roots: z.array(z.string()),
         })
         .strict(),
@@ -227,6 +245,22 @@ const rawConfigSchema = z
 
 export function parseConfigToml(source: string): CodexImConfig {
   const parsed = rawConfigSchema.parse(parseToml(source));
+  const accessGroups = Object.fromEntries(
+    Object.entries(parsed.security.access_groups).map(([name, group]) => [
+      name,
+      {
+        allowedUsers: group.allowed_users,
+        allowedChats: group.allowed_chats,
+      },
+    ]),
+  );
+  const securityAccess = expandAccessGroups({
+    scope: "security.default_access_groups",
+    allowedUsers: parsed.security.allowed_users,
+    allowedChats: parsed.security.allowed_chats,
+    groupNames: parsed.security.default_access_groups,
+    accessGroups,
+  });
   return {
     daemon: {
       dataDir: parsed.daemon.data_dir,
@@ -241,9 +275,11 @@ export function parseConfigToml(source: string): CodexImConfig {
       versionPin: parsed.codex.version_pin,
     },
     security: {
-      allowedUsers: parsed.security.allowed_users,
-      allowedChats: parsed.security.allowed_chats,
+      allowedUsers: securityAccess.allowedUsers,
+      allowedChats: securityAccess.allowedChats,
       adminUsers: parsed.security.admin_users,
+      defaultAccessGroups: parsed.security.default_access_groups,
+      accessGroups,
       commands: {
         denyPatterns: parsed.security.commands.deny_patterns,
         requireAdminPatterns: parsed.security.commands.require_admin_patterns,
@@ -293,17 +329,54 @@ export function parseConfigToml(source: string): CodexImConfig {
       },
     },
     projects: Object.fromEntries(
-      Object.entries(parsed.projects).map(([name, project]) => [
-        name,
-        {
-          cwd: project.cwd,
+      Object.entries(parsed.projects).map(([name, project]) => {
+        const projectAccess = expandAccessGroups({
+          scope: `projects.${name}.access_groups`,
           allowedUsers: project.allowed_users,
           allowedChats: project.allowed_chats,
-          writableRoots: project.writable_roots,
-        },
-      ]),
+          groupNames: project.access_groups,
+          accessGroups,
+        });
+        return [
+          name,
+          {
+            cwd: project.cwd,
+            allowedUsers: projectAccess.allowedUsers,
+            allowedChats: projectAccess.allowedChats,
+            accessGroups: project.access_groups,
+            writableRoots: project.writable_roots,
+          },
+        ];
+      }),
     ),
   };
+}
+
+function expandAccessGroups(input: {
+  readonly scope: string;
+  readonly allowedUsers: readonly string[];
+  readonly allowedChats: readonly string[];
+  readonly groupNames: readonly string[];
+  readonly accessGroups: Record<string, CodexImAccessGroupConfig>;
+}): { allowedUsers: string[]; allowedChats: string[] } {
+  const users = [...input.allowedUsers];
+  const chats = [...input.allowedChats];
+  for (const name of input.groupNames) {
+    const group = input.accessGroups[name];
+    if (group === undefined) {
+      throw new Error(`Unknown access group ${name} in ${input.scope}`);
+    }
+    users.push(...group.allowedUsers);
+    chats.push(...group.allowedChats);
+  }
+  return {
+    allowedUsers: uniqueStrings(users),
+    allowedChats: uniqueStrings(chats),
+  };
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 const ENV_REF = /\$\{ENV\.([A-Za-z_][A-Za-z0-9_]*)\}/g;

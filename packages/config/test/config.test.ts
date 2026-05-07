@@ -255,4 +255,90 @@ describe("@codex-im/config (T7-T8)", () => {
     expect(logLines.join("\n")).toContain("DINGTALK_CLIENT_SECRET");
     expect(() => resolveConfigSecrets(config, { env: {} })).toThrow(/IM_TELEGRAM_BOT_TOKEN/);
   });
+
+  it("expands reusable access groups into global and project allowlists", () => {
+    const config = parseConfigToml(`
+      [daemon]
+      data_dir = "/tmp/codex-im"
+      log_dir = "/tmp/codex-im/logs"
+
+      [storage]
+      sqlite_path = "/tmp/codex-im/state.db"
+      auto_migrate = true
+
+      [codex]
+      binary = "codex"
+      version_pin = "0.128.0"
+
+      [security]
+      allowed_users = ["telegram:explicit-user"]
+      allowed_chats = ["telegram:explicit-chat"]
+      admin_users = []
+      default_access_groups = ["operators"]
+
+      [security.commands]
+      deny_patterns = []
+      require_admin_patterns = []
+
+      [security.access_groups.operators]
+      allowed_users = ["telegram:group-user", "lark:group-user"]
+      allowed_chats = ["telegram:group-chat", "lark:group-chat"]
+
+      [adapters.telegram]
+      enabled = false
+      bot_token_env = "IM_TELEGRAM_BOT_TOKEN"
+
+      [adapters.lark]
+      enabled = false
+      app_id = "cli_test_app_id"
+      app_secret_env = "LARK_APP_SECRET"
+      domain = "feishu"
+      allowed_chat_ids = []
+
+      [adapters.dingtalk]
+      enabled = false
+      client_id = "disabled"
+      client_secret_env = "DINGTALK_CLIENT_SECRET"
+
+      [projects.web]
+      cwd = "/tmp/project"
+      allowed_users = []
+      allowed_chats = []
+      access_groups = ["operators"]
+      writable_roots = ["/tmp/project"]
+    `);
+
+    expect(config.security.accessGroups).toEqual({
+      operators: {
+        allowedUsers: ["telegram:group-user", "lark:group-user"],
+        allowedChats: ["telegram:group-chat", "lark:group-chat"],
+      },
+    });
+    expect(config.security.allowedUsers).toEqual([
+      "telegram:explicit-user",
+      "telegram:group-user",
+      "lark:group-user",
+    ]);
+    expect(config.security.allowedChats).toEqual([
+      "telegram:explicit-chat",
+      "telegram:group-chat",
+      "lark:group-chat",
+    ]);
+    expect(config.projects.web.allowedUsers).toEqual(["telegram:group-user", "lark:group-user"]);
+    expect(config.projects.web.allowedChats).toEqual(["telegram:group-chat", "lark:group-chat"]);
+  });
+
+  it("fails closed when a global or project access group reference is unknown", () => {
+    const globalReference = EXAMPLE_CONFIG.replace(
+      'admin_users   = ["telegram:123456789"]',
+      'admin_users   = ["telegram:123456789"]\ndefault_access_groups = ["missing"]',
+    );
+    const projectReference = EXAMPLE_CONFIG.replace(
+      "writable_roots =",
+      'access_groups = ["missing"]\nwritable_roots =',
+    );
+
+    expect(() => parseConfigToml(globalReference)).toThrow(/Unknown access group missing/);
+    expect(() => parseConfigToml(projectReference)).toThrow(/Unknown access group missing/);
+  });
 });
