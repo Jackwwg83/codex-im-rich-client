@@ -21,6 +21,7 @@ import {
   DINGTALK_TOPIC_ROBOT,
   type DingTalkActionClientLike,
   type DingTalkCardClientLike,
+  type DingTalkProactiveMessageClientLike,
   type DingTalkRobotFileClientLike,
   type DingTalkSessionReplyTextClientLike,
   type DingTalkStreamClientLike,
@@ -44,6 +45,7 @@ export interface DingTalkChannelAdapterOptions {
   readonly cardClient?: DingTalkCardClientLike;
   readonly actionClient?: DingTalkActionClientLike;
   readonly textClient?: DingTalkSessionReplyTextClientLike;
+  readonly proactiveClient?: DingTalkProactiveMessageClientLike;
   readonly fileClient?: DingTalkRobotFileClientLike;
 }
 
@@ -218,17 +220,29 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
     this.#assertStarted("sendFile");
     assertDingTalkOutboundFile(_file);
     const textClient = this.#options.textClient;
-    if (textClient?.sendFile === undefined) {
+    const proactiveClient = this.#options.proactiveClient;
+    const sessionWebhook = this.#sessionReplyUrlsByChatId.get(_target.chatId);
+    if (
+      sessionWebhook !== undefined &&
+      textClient?.sendFile === undefined &&
+      proactiveClient === undefined
+    ) {
       throw new Error("DingTalkChannelAdapter.sendFile requires an injected textClient.sendFile");
     }
-    const sessionWebhook = this.#sessionReplyUrlsByChatId.get(_target.chatId);
-    if (sessionWebhook === undefined) {
+    if (sessionWebhook === undefined && proactiveClient === undefined) {
       throw new Error(
         "DingTalkChannelAdapter.sendFile requires a recent inbound session reply URL",
       );
     }
     try {
-      const sent = await textClient.sendFile({ sessionWebhook, file: _file });
+      let sent: { readonly messageId?: string };
+      if (sessionWebhook !== undefined && textClient?.sendFile !== undefined) {
+        sent = await textClient.sendFile({ sessionWebhook, file: _file });
+      } else if (proactiveClient !== undefined) {
+        sent = await proactiveClient.sendFile({ target: _target, file: _file });
+      } else {
+        throw new Error("DingTalkChannelAdapter.sendFile has no available media send path");
+      }
       return {
         target: _target,
         messageId: `${DINGTALK_FILE_MESSAGE_REF_PREFIX}${sent.messageId ?? this.#nowMs()}`,

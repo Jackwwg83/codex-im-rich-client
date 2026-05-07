@@ -71,27 +71,19 @@ pnpm smoke:computer-use-live
 | `fileChange` / diff output | JAC-261 records redacted `.patch` attachments for file-change diffs through common `sendFile`. | Local green |
 | MCP/plugin/skill/tool status output | JAC-263/JAC-269/JAC-271/JAC-272 record low-noise redacted Codex status projection for lifecycle, MCP progress, terminal interaction, guardian/deprecation/hook, and auto-approval-review events. | Local green |
 | Approval request cards and callbacks | Telegram and Feishu/Lark live approval matrices passed. DingTalk live CardKit callback probe passed with callback token/messageRef validation fail-closed. | Green for enabled platforms |
-| Outbound images/files/artifacts | Telegram and Feishu/Lark live file gates passed. DingTalk `sendFile` is implemented locally through media upload plus session webhook, but live file/image acceptance is pending. | Telegram/Lark live green; DingTalk local green, live blocked by JAC-273 |
+| Outbound images/files/artifacts | Telegram and Feishu/Lark live file gates passed. DingTalk `sendFile` is implemented locally through media upload plus session webhook when a fresh inbound robot message exists, and through proactive robot group/user media delivery when `DINGTALK_TARGET_CHAT_ID` is configured. DingTalk live file and image gates now both return redacted `status=file_sent`. | Telegram/Lark/DingTalk live green |
 | Inbound images/files | Telegram and Feishu/Lark inbound image/file materialization local tests pass; DingTalk inbound `downloadCode` materialization local implementation is recorded. | Local green; DingTalk live upload gate pending |
 | Computer Use output/artifacts | Dynamic-tool / Computer Use `inputImage` artifacts are projected through `sendFile`; summaries hide raw tool args. | Output projection local green |
 | Real desktop Computer Use execution | Generated `ClientRequest`, `ServerRequest`, `ServerNotification`, `Config`, `ProfileV2`, `TurnStartParams`, `ToolsV2`, `UserInput`, and `ThreadItem` were re-scanned. They support dynamic tool-call callbacks and downstream GUI/image artifact rendering, but no reviewed daemon-facing provider registration surface. Non-dry-run live smoke is blocked. | Not achieved; tracked by JAC-274 |
 | Identity and group safety | JAC-240 and JAC-241 complete. `/whoami` is redacted; access groups and mention-required group policy are implemented. | Local green |
-| Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264 are Done; JAC-273, JAC-274, and JAC-248 are open and carry the `Blocked` label because the team workflow has no dedicated Blocked state. | Green tracking, with open blockers explicit |
+| Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264 are Done; JAC-273 is ready to close after the proactive DingTalk file/image live gates; JAC-274 and JAC-248 remain open and carry the `Blocked` label because the team workflow has no dedicated Blocked state. | Green tracking, with open blockers explicit |
 | Repo handoff tracking | `docs/handoffs/direct-use-live-status.md`, `docs/handoffs/live-im-acceptance-status.md`, and `docs/phase-6/computer-use-capability-evidence.md` record current state and blockers. | Green |
 
 ## 3. Open Requirements
 
 These are not code-complete acceptance claims:
 
-1. **DingTalk live attachment acceptance (JAC-273).**
-   Local outbound and inbound attachment implementations exist, but real
-   `DINGTALK_LIVE_FILE=1` still needs an authenticated DingTalk client session
-   and one fresh inbound robot message to capture the session reply URL.
-   Latest attempts reached mobile-device confirmation and then a DingTalk
-   process with zero visible windows after quit/reopen; no `status=file_sent`
-   evidence exists.
-
-2. **Slack real workspace acceptance (JAC-248).**
+1. **Slack real workspace acceptance (JAC-248).**
    Slack is implemented and wired as disabled-by-default readiness, but local
    config is disabled and Keychain services `codex-im-bridge-slack-bot` /
    `codex-im-bridge-slack-app` are absent. Live Slack acceptance requires a test
@@ -99,7 +91,7 @@ These are not code-complete acceptance claims:
    and file gate evidence. Linear JAC-248 now carries `Blocked` and
    `Operator-Gated` labels to make this explicit.
 
-3. **Real desktop Computer Use provider execution (JAC-274).**
+2. **Real desktop Computer Use provider execution (JAC-274).**
    The IM `/cu` control and output surfaces are implemented, but real desktop
    execution is not verified. The current generated App Server protocol does
    not expose a verified daemon-facing provider registration surface. The latest
@@ -110,34 +102,34 @@ These are not code-complete acceptance claims:
 
 ## 4. Completion Verdict
 
-The active goal is **not complete** because DingTalk live attachments and real
-Computer Use provider execution remain unaccepted, and Slack live acceptance is
-an explicitly open extension track.
+The active goal is **not complete** because real Computer Use provider
+execution remains unaccepted, and Slack live acceptance is an explicitly open
+extension track. DingTalk outbound file/image live attachment acceptance is now
+green through the proactive robot media path.
 
 The supported Telegram / Feishu-Lark / DingTalk IM control plane is otherwise
 aligned with the requested Codex-native command and output model. Further
 productive work requires one of these external conditions:
 
-- DingTalk authenticated desktop/mobile confirmation so a fresh robot message
-  can seed `DINGTALK_LIVE_FILE=1`.
 - Slack test app bot/app tokens and enabled bridge config.
 - Codex App Server capability evidence for a real Computer Use provider.
 
 ## 5. Blocker Unblock Packet
 
-This packet is the handoff-safe way to resume the three open tracks without
+This packet is the handoff-safe way to resume the two open tracks and reproduce
+DingTalk attachment evidence without
 reconstructing context. Keep all output redacted: no IM tokens, Keychain values,
 private IDs, raw callback payloads, private file URLs, cookies, or desktop
 screenshots containing secrets should be copied into docs or Linear.
 
 ### JAC-273 - DingTalk live attachment acceptance
 
-Unblock condition:
+Accepted condition:
 
-- DingTalk Desktop/Web is authenticated and a bot chat is visible, or a fresh
-  DingTalk robot message can be sent to the bot during the live gate window.
-- The fresh inbound robot message must seed a session reply URL. Old persisted
-  rows are not enough for live acceptance.
+- `DINGTALK_TARGET_CHAT_ID` is configured to a DingTalk robot group/private
+  target usable by the proactive media API.
+- Both live gates reach redacted `status=file_sent`: one generic file and one
+  image.
 
 Preflight checks:
 
@@ -155,6 +147,7 @@ DINGTALK_LIVE=1 \
 DINGTALK_LIVE_FILE=1 \
 DINGTALK_CLIENT_ID="$CLIENT_ID" \
 DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET \
+DINGTALK_TARGET_CHAT_ID="$REDACTED_TARGET" \
 DINGTALK_LIVE_DURATION_MS=120000 \
 pnpm smoke:dingtalk-live
 
@@ -163,19 +156,21 @@ DINGTALK_LIVE_FILE=1 \
 DINGTALK_LIVE_FILE_KIND=image \
 DINGTALK_CLIENT_ID="$CLIENT_ID" \
 DINGTALK_CLIENT_SECRET_ENV=DINGTALK_CLIENT_SECRET \
+DINGTALK_TARGET_CHAT_ID="$REDACTED_TARGET" \
 DINGTALK_LIVE_DURATION_MS=120000 \
 pnpm smoke:dingtalk-live
 ```
 
 Acceptance evidence:
 
-- The smoke reaches redacted `status=file_sent` for a file and an image.
+- The smoke reached redacted `status=file_sent` for a file and an image on
+  2026-05-07 SGT with `targetSource=env` and `messageId=present`.
 - No client secret, user id, chat id, message id, session webhook, or
   `downloadCode` is printed.
 - `pnpm launchd:status` still reports the daemon running with
   `pendingApprovals=0`.
-- Update JAC-273 and this audit with the commit SHA and redacted command
-  results only.
+- JAC-273 can be closed once Linear is updated with the commit SHA and redacted
+  command results.
 
 ### JAC-248 - Slack real workspace acceptance
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import type { ActionAck, MessageRef, Target } from "@codex-im/channel-core";
 import { DWClient, EventAck, TOPIC_CARD, TOPIC_ROBOT } from "dingtalk-stream";
 import type { DingTalkApprovalCardJson } from "./card.js";
@@ -13,6 +13,8 @@ const DINGTALK_OAPI_BASE_URL = "https://oapi.dingtalk.com";
 const DINGTALK_ACCESS_TOKEN_PATH = "/v1.0/oauth2/accessToken";
 const DINGTALK_MEDIA_UPLOAD_PATH = "/media/upload";
 const DINGTALK_ROBOT_MESSAGE_FILE_DOWNLOAD_PATH = "/v1.0/robot/messageFiles/download";
+const DINGTALK_ROBOT_GROUP_MESSAGE_SEND_PATH = "/v1.0/robot/groupMessages/send";
+const DINGTALK_ROBOT_USER_MESSAGE_BATCH_SEND_PATH = "/v1.0/robot/oToMessages/batchSend";
 const DINGTALK_CREATE_AND_DELIVER_CARD_PATH = "/v1.0/card/instances/createAndDeliver";
 const DINGTALK_UPDATE_CARD_PATH = "/v1.0/card/instances";
 const DINGTALK_ACCESS_TOKEN_REFRESH_SKEW_MS = 60_000;
@@ -77,6 +79,17 @@ export interface DingTalkSessionReplyTextClientLike {
   }): Promise<{ readonly messageId?: string }>;
 }
 
+export interface DingTalkProactiveMessageClientLike {
+  sendFile(input: {
+    readonly target: Target;
+    readonly file: {
+      readonly filename: string;
+      readonly bytes: Uint8Array;
+      readonly contentType: string;
+    };
+  }): Promise<{ readonly messageId?: string }>;
+}
+
 export interface DingTalkRobotFileDownloadRequest {
   readonly downloadCode: string;
   readonly filename: string;
@@ -110,6 +123,16 @@ export interface DingTalkSessionReplyTextClientDeps {
   readonly fetch?: typeof fetch;
   readonly clientId?: string;
   readonly clientSecret?: string;
+  readonly baseUrl?: string;
+  readonly oapiBaseUrl?: string;
+  readonly now?: () => number;
+}
+
+export interface DingTalkProactiveMessageClientDeps {
+  readonly fetch?: typeof fetch;
+  readonly clientId: string;
+  readonly clientSecret: string;
+  readonly robotCode: string;
   readonly baseUrl?: string;
   readonly oapiBaseUrl?: string;
   readonly now?: () => number;
@@ -227,30 +250,12 @@ export function createDingTalkSessionReplyTextClient(
     async sendFile(input) {
       assertDingTalkSessionFile(input.file);
       const token = await accessToken();
-      const mediaType = dingTalkMediaType(input.file.contentType);
-      const uploadUrl = `${oapiBaseUrl}${DINGTALK_MEDIA_UPLOAD_PATH}?access_token=${encodeURIComponent(token)}&type=${mediaType}`;
-      const form = new FormData();
-      form.append(
-        "media",
-        new Blob([input.file.bytes], { type: input.file.contentType }),
-        input.file.filename,
-      );
-      const uploadResponse = await fetchImpl(uploadUrl, {
-        method: "POST",
-        body: form,
+      const { mediaId, mediaType } = await uploadDingTalkMedia({
+        fetchImpl,
+        oapiBaseUrl,
+        token,
+        file: input.file,
       });
-      if (!uploadResponse.ok) {
-        throw new Error(`DingTalk media upload failed with HTTP ${uploadResponse.status}`);
-      }
-      const uploadBody = await readJsonBody(uploadResponse);
-      const uploadCode = numericField(uploadBody, "errcode") ?? numericField(uploadBody, "code");
-      if (uploadCode !== undefined && uploadCode !== 0) {
-        throw new Error(`DingTalk media upload failed with code ${uploadCode}`);
-      }
-      const mediaId = stringField(uploadBody, "media_id");
-      if (mediaId === undefined) {
-        throw new Error("DingTalk media upload failed: missing media_id");
-      }
       const body =
         mediaType === "image"
           ? { msgtype: "image", image: { media_id: mediaId } }
@@ -269,6 +274,79 @@ export function createDingTalkSessionReplyTextClient(
         throw new Error(`DingTalk session media reply failed with code ${errorCode}`);
       }
       const messageId = stringField(replyBody, "messageId") ?? stringField(replyBody, "msgId");
+      return messageId === undefined ? {} : { messageId };
+    },
+  };
+}
+
+export function createDingTalkProactiveMessageClient(
+  deps: DingTalkProactiveMessageClientDeps,
+): DingTalkProactiveMessageClientLike {
+  const fetchImpl = deps.fetch ?? globalThis.fetch;
+  const baseUrl = deps.baseUrl ?? DINGTALK_OPENAPI_BASE_URL;
+  const oapiBaseUrl = deps.oapiBaseUrl ?? DINGTALK_OAPI_BASE_URL;
+  const now = deps.now ?? Date.now;
+  const tokenCache: { token?: string; expiresAtMs?: number } = {};
+
+  async function accessToken(): Promise<string> {
+    if (
+      tokenCache.token !== undefined &&
+      tokenCache.expiresAtMs !== undefined &&
+      now() < tokenCache.expiresAtMs
+    ) {
+      return tokenCache.token;
+    }
+    const body = await requestJson(fetchImpl, `${baseUrl}${DINGTALK_ACCESS_TOKEN_PATH}`, {
+      operation: "proactiveAccessToken",
+      method: "POST",
+      body: {
+        appKey: deps.clientId,
+        appSecret: deps.clientSecret,
+      },
+    });
+    const token = stringField(body, "accessToken");
+    if (token === undefined) {
+      throw new Error("DingTalk proactive accessToken failed: missing accessToken");
+    }
+    const expireInSeconds = numericField(body, "expireIn") ?? 7200;
+    tokenCache.token = token;
+    tokenCache.expiresAtMs =
+      now() + Math.max(0, expireInSeconds * 1000 - DINGTALK_ACCESS_TOKEN_REFRESH_SKEW_MS);
+    return token;
+  }
+
+  return {
+    async sendFile(input) {
+      assertDingTalkSessionFile(input.file);
+      const token = await accessToken();
+      const { mediaId, mediaType } = await uploadDingTalkMedia({
+        fetchImpl,
+        oapiBaseUrl,
+        token,
+        file: input.file,
+      });
+      const target = proactiveTargetForDingTalk(input.target);
+      const response = await requestJson(
+        fetchImpl,
+        `${baseUrl}${
+          target.kind === "group"
+            ? DINGTALK_ROBOT_GROUP_MESSAGE_SEND_PATH
+            : DINGTALK_ROBOT_USER_MESSAGE_BATCH_SEND_PATH
+        }`,
+        {
+          operation: "proactiveMessageSend",
+          method: "POST",
+          token,
+          body: {
+            robotCode: deps.robotCode,
+            ...proactiveFileMessagePayload(input.file, mediaId, mediaType),
+            ...(target.kind === "group"
+              ? { openConversationId: target.openConversationId }
+              : { userIds: [target.userId] }),
+          },
+        },
+      );
+      const messageId = dingTalkDeliveryMessageId(response);
       return messageId === undefined ? {} : { messageId };
     },
   };
@@ -536,6 +614,104 @@ function assertDingTalkSessionFile(file: {
 
 function dingTalkMediaType(contentType: string): "image" | "file" {
   return contentType.toLowerCase().startsWith("image/") ? "image" : "file";
+}
+
+async function uploadDingTalkMedia(input: {
+  readonly fetchImpl: typeof fetch;
+  readonly oapiBaseUrl: string;
+  readonly token: string;
+  readonly file: {
+    readonly filename: string;
+    readonly bytes: Uint8Array;
+    readonly contentType: string;
+  };
+}): Promise<{ readonly mediaId: string; readonly mediaType: "image" | "file" }> {
+  const mediaType = dingTalkMediaType(input.file.contentType);
+  const uploadUrl = `${input.oapiBaseUrl}${DINGTALK_MEDIA_UPLOAD_PATH}?access_token=${encodeURIComponent(input.token)}&type=${mediaType}`;
+  const form = new FormData();
+  form.append(
+    "media",
+    new Blob([input.file.bytes], { type: input.file.contentType }),
+    input.file.filename,
+  );
+  const uploadResponse = await input.fetchImpl(uploadUrl, {
+    method: "POST",
+    body: form,
+  });
+  if (!uploadResponse.ok) {
+    throw new Error(`DingTalk media upload failed with HTTP ${uploadResponse.status}`);
+  }
+  const uploadBody = await readJsonBody(uploadResponse);
+  const uploadCode = numericField(uploadBody, "errcode") ?? numericField(uploadBody, "code");
+  if (uploadCode !== undefined && uploadCode !== 0) {
+    throw new Error(`DingTalk media upload failed with code ${uploadCode}`);
+  }
+  const mediaId = stringField(uploadBody, "media_id");
+  if (mediaId === undefined) {
+    throw new Error("DingTalk media upload failed: missing media_id");
+  }
+  return { mediaId, mediaType };
+}
+
+function proactiveTargetForDingTalk(target: Target):
+  | { readonly kind: "group"; readonly openConversationId: string }
+  | {
+      readonly kind: "user";
+      readonly userId: string;
+    } {
+  if (target.chatId.startsWith("dtv1.card//IM_GROUP.")) {
+    return {
+      kind: "group",
+      openConversationId: target.chatId.slice("dtv1.card//IM_GROUP.".length),
+    };
+  }
+  if (target.chatId.startsWith("dtv1.card//IM_ROBOT.")) {
+    return { kind: "user", userId: target.chatId.slice("dtv1.card//IM_ROBOT.".length) };
+  }
+  if (target.chatId.startsWith("cid")) {
+    return { kind: "group", openConversationId: target.chatId };
+  }
+  return { kind: "user", userId: target.chatId };
+}
+
+function proactiveFileMessagePayload(
+  file: { readonly filename: string; readonly contentType: string },
+  mediaId: string,
+  mediaType: "image" | "file",
+): { readonly msgKey: string; readonly msgParam: string } {
+  if (mediaType === "image") {
+    return { msgKey: "sampleImageMsg", msgParam: JSON.stringify({ photoURL: mediaId }) };
+  }
+  return {
+    msgKey: "sampleFile",
+    msgParam: JSON.stringify({
+      mediaId,
+      fileName: safeDingTalkFilename(file.filename),
+      fileType: dingTalkFileType(file.filename, file.contentType),
+    }),
+  };
+}
+
+function dingTalkFileType(filename: string, contentType: string): string {
+  const extension = extname(filename).slice(1).trim();
+  if (/^[A-Za-z0-9]{1,16}$/.test(extension)) {
+    return extension;
+  }
+  const subtype = contentType.split("/")[1]?.split(/[;+]/u)[0]?.trim();
+  return subtype !== undefined && /^[A-Za-z0-9]{1,16}$/.test(subtype) ? subtype : "file";
+}
+
+function dingTalkDeliveryMessageId(response: Record<string, unknown>): string | undefined {
+  const result = asRecord(response.result);
+  return (
+    stringField(response, "messageId") ??
+    stringField(response, "msgId") ??
+    stringField(response, "processQueryKey") ??
+    stringField(response, "outTrackId") ??
+    stringField(result ?? {}, "messageId") ??
+    stringField(result ?? {}, "processQueryKey") ??
+    stringField(result ?? {}, "outTrackId")
+  );
 }
 
 function defaultDingTalkAttachmentDir(): string {

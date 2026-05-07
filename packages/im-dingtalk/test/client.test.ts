@@ -9,6 +9,7 @@ import {
   type DingTalkDwClientLike,
   type DingTalkStreamEventHandler,
   createDingTalkOpenApiCardClient,
+  createDingTalkProactiveMessageClient,
   createDingTalkRobotFileClient,
   createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
@@ -155,6 +156,99 @@ describe("DingTalk Stream client wrapper (JAC-90 P1 fix)", () => {
       image: { media_id: "@media_image_001" },
     });
     expect(String(calls[1]?.init?.body)).not.toContain("ding_test_secret");
+  });
+
+  it("uploads image bytes and proactively sends them to a group conversation", async () => {
+    const calls: { readonly url: string; readonly init: RequestInit | undefined }[] = [];
+    const client = createDingTalkProactiveMessageClient({
+      clientId: "ding_test_client_id",
+      clientSecret: "ding_test_secret",
+      robotCode: "ding_test_robot",
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init });
+        if (String(url).endsWith("/v1.0/oauth2/accessToken")) {
+          return jsonResponse({ accessToken: "token_for_proactive", expireIn: 7200 });
+        }
+        if (String(url).startsWith("https://oapi.dingtalk.com/media/upload")) {
+          return jsonResponse({ errcode: 0, media_id: "@media_image_001" });
+        }
+        return jsonResponse({ success: true, processQueryKey: "group_process_key_001" });
+      },
+    });
+
+    await expect(
+      client.sendFile({
+        target: { platform: "dingtalk", chatId: "cid_test_group" },
+        file: {
+          filename: "diagram.png",
+          bytes: new Uint8Array([1, 2, 3]),
+          contentType: "image/png",
+        },
+      }),
+    ).resolves.toEqual({ messageId: "group_process_key_001" });
+
+    expect(calls.map((call) => [call.url, call.init?.method])).toEqual([
+      ["https://api.dingtalk.com/v1.0/oauth2/accessToken", "POST"],
+      [
+        "https://oapi.dingtalk.com/media/upload?access_token=token_for_proactive&type=image",
+        "POST",
+      ],
+      ["https://api.dingtalk.com/v1.0/robot/groupMessages/send", "POST"],
+    ]);
+    expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
+      robotCode: "ding_test_robot",
+      msgKey: "sampleImageMsg",
+      msgParam: JSON.stringify({ photoURL: "@media_image_001" }),
+      openConversationId: "cid_test_group",
+    });
+    expect(String(calls[2]?.init?.body)).not.toContain("ding_test_secret");
+  });
+
+  it("uploads file bytes and proactively sends them to a private robot user", async () => {
+    const calls: { readonly url: string; readonly init: RequestInit | undefined }[] = [];
+    const client = createDingTalkProactiveMessageClient({
+      clientId: "ding_test_client_id",
+      clientSecret: "ding_test_secret",
+      robotCode: "ding_test_robot",
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init });
+        if (String(url).endsWith("/v1.0/oauth2/accessToken")) {
+          return jsonResponse({ accessToken: "token_for_proactive", expireIn: 7200 });
+        }
+        if (String(url).startsWith("https://oapi.dingtalk.com/media/upload")) {
+          return jsonResponse({ errcode: 0, media_id: "@media_file_001" });
+        }
+        return jsonResponse({ success: true, result: { messageId: "private_msg_001" } });
+      },
+    });
+
+    await expect(
+      client.sendFile({
+        target: { platform: "dingtalk", chatId: "staff_test_private" },
+        file: {
+          filename: "report.txt",
+          bytes: new Uint8Array([1, 2, 3]),
+          contentType: "text/plain",
+        },
+      }),
+    ).resolves.toEqual({ messageId: "private_msg_001" });
+
+    expect(calls.map((call) => [call.url, call.init?.method])).toEqual([
+      ["https://api.dingtalk.com/v1.0/oauth2/accessToken", "POST"],
+      ["https://oapi.dingtalk.com/media/upload?access_token=token_for_proactive&type=file", "POST"],
+      ["https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend", "POST"],
+    ]);
+    expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
+      robotCode: "ding_test_robot",
+      msgKey: "sampleFile",
+      msgParam: JSON.stringify({
+        mediaId: "@media_file_001",
+        fileName: "report.txt",
+        fileType: "txt",
+      }),
+      userIds: ["staff_test_private"],
+    });
+    expect(String(calls[2]?.init?.body)).not.toContain("ding_test_secret");
   });
 
   it("downloads robot message files through redacted downloadCode exchange", async () => {

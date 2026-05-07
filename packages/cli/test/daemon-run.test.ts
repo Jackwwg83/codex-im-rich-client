@@ -115,6 +115,7 @@ describe("daemon run safety rails", () => {
     expect(source).toContain("createDingTalkNoopActionClient");
     expect(source).toContain("createDingTalkRobotFileClient");
     expect(source).toContain("createDingTalkSessionReplyTextClient");
+    expect(source).toContain("createDingTalkProactiveMessageClient");
     expect(source).toContain("clientId: config.adapters.dingtalk.clientId");
     expect(source).toContain("clientSecret: secrets.dingtalkClientSecret");
     expect(source).toContain("createDingTalkStreamClient");

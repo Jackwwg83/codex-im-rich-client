@@ -27,9 +27,12 @@
 > as native `UserInput.localImage`; inbound generic files are passed as local
 > path context because Codex App Server has no generic `UserInput.file` shape.
 > DingTalk outbound attachment support is implemented locally through its real
-> media-upload + session-webhook delivery path after a recent inbound robot
-> message seeds the session reply URL. DingTalk attachment live acceptance still
-> needs an explicit real file-send gate. Inbound DingTalk image/file
+> media-upload + session-webhook delivery path when a recent inbound robot
+> message seeds the session reply URL, and through proactive robot group/user
+> media delivery when `DINGTALK_TARGET_CHAT_ID` is configured. DingTalk
+> attachment live acceptance now passes for both file and image gates with
+> redacted `status=file_sent`, `targetSource=env`, and message id presence only.
+> Inbound DingTalk image/file
 > materialization is implemented locally through DingTalk's `downloadCode`
 > exchange and now emits common `InboundAttachment[]`; live uploaded file/image
 > acceptance still needs a real DingTalk upload gate.
@@ -87,14 +90,14 @@ Use this wording for the current enabled-platform acceptance state:
 
 ```text
 Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, and DingTalk. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
-Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context. DingTalk outbound file/image attachment support is implemented locally through media upload plus session-webhook replies, but still needs an explicit real DingTalk file-send gate before being called live accepted.
+Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context. DingTalk outbound file/image attachment support is implemented locally through media upload plus session-webhook replies or proactive robot group/user delivery with `DINGTALK_TARGET_CHAT_ID`; explicit real DingTalk file and image send gates now pass with redacted `status=file_sent` evidence.
 Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath` artifacts, completed/failed long command logs, local dynamic-tool / Computer Use screenshot artifacts, and file-change patch attachments is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram and Feishu/Lark.
 ```
 
-Do not extend this claim to Slack, DingTalk live attachment acceptance, inbound
-DingTalk user attachments, or real Computer Use provider execution. Those
-remain separate acceptance tracks. Real Computer Use provider evidence/live
-execution is tracked separately by JAC-274; current `/cu` support is
+Do not extend this claim to Slack live workspace acceptance, inbound DingTalk
+user-upload acceptance, or real Computer Use provider execution. Those remain
+separate acceptance tracks. Real Computer Use provider evidence/live execution
+is tracked separately by JAC-274; current `/cu` support is
 control/status/policy/audit/output projection, not verified desktop execution.
 
 ## 3. Live Acceptance Matrix
@@ -150,7 +153,7 @@ control/status/policy/audit/output projection, not verified desktop execution.
 | DingTalk live callback probe | `DINGTALK_LIVE=1 DINGTALK_LIVE_CARD=1 DINGTALK_LIVE_CARD_CALLBACK=1 ... pnpm smoke:dingtalk-live` | pass | 2026-05-06 real DingTalk Desktop click produced `card_callback_seen` with redacted `messageId=present`, `targetSource=env`, `rawCardCallbacks=1`, `normalizedCardActions=1`, `cardEvents=1`, `callbackMessageRef=present`, `callbackAction=present`, `callbackRaw=present`, and no secret bytes |
 | DingTalk failed send/bind token cleanup | restart daemon after issued-only callback token residue | pass | startup now revokes both `issued` and `bound` callback tokens before adapter input; this covers the invalid local `callback_route_key` experiment that left unbound issued tokens after no card delivery |
 | DingTalk real callback click | real user/client approval-card click reaches adapter callback flow | pass | adapter accepts `cardPrivateData.params.token = v1:<opaque>` plus the official public-template `cardPrivateData.params.action = accept/reject`; real private callbacks with `spaceType=IM` map target/messageRef through the sender `userId`; daemon lookup stays scoped by token or `messageRef + action` |
-| DingTalk outbound image/file attachment | `DingTalkChannelAdapter.sendFile` after one inbound robot message seeds a session reply URL | local pass | client obtains a DingTalk access token, uploads bytes through `/media/upload`, sends `image` / `file` via the captured session webhook, and returns a file `MessageRef`; explicit `DINGTALK_LIVE_FILE=1` live gate exists and remains pending |
+| DingTalk outbound image/file attachment | `DingTalkChannelAdapter.sendFile` through a session reply URL or proactive `DINGTALK_TARGET_CHAT_ID` target | pass | client obtains a DingTalk access token, uploads bytes through `/media/upload`, sends `image` / `file` via the captured session webhook when available, or sends proactive robot group/user media when no session reply URL exists; explicit `DINGTALK_LIVE_FILE=1` file and image gates both returned redacted `status=file_sent`, `targetSource=env`, and `messageId=present` |
 | DingTalk inbound image/file attachment | robot `image` / `file` message with `downloadCode` | local pass | adapter exchanges `downloadCode` for a temporary download URL, saves bytes under the local daemon attachment directory, and emits `InboundAttachment[]`; explicit live uploaded file/image gate remains pending |
 | bridge install preflight | `pnpm bridge:build && pnpm bridge:install -- --home <temp>` | pass | app daemon, wrapper, migrations, and native runtime deps installed; daemon preflight `ok` |
 | launchd dry-run | `pnpm launchd:install --dry-run && ~/.codex-im-bridge/bin/load-and-run.sh --dry-run` | pass | covered by `pnpm release:check`, exit 0 |

@@ -39,6 +39,7 @@ import {
   DingTalkChannelAdapter,
   createDingTalkNoopActionClient,
   createDingTalkOpenApiCardClient,
+  createDingTalkProactiveMessageClient,
   createDingTalkRobotFileClient,
   createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
@@ -361,6 +362,11 @@ export function createProductionAdapter(
         textClient: createDingTalkSessionReplyTextClient({
           clientId: config.adapters.dingtalk.clientId,
           clientSecret: secrets.dingtalkClientSecret,
+        }),
+        proactiveClient: createDingTalkProactiveMessageClient({
+          clientId: config.adapters.dingtalk.clientId,
+          clientSecret: secrets.dingtalkClientSecret,
+          robotCode: dingTalkRobotCode,
         }),
         fileClient: createDingTalkRobotFileClient({
           clientId: config.adapters.dingtalk.clientId,

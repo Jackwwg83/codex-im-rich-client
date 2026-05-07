@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const SCRIPT = "packages/im-dingtalk/scripts/live-smoke.mts";
@@ -79,6 +80,14 @@ describe("DingTalk live smoke harness gate (JAC-89)", () => {
     expect(result.stdout).toContain("[dingtalk-live-smoke] READY_DRY_RUN");
     expect(output(result)).not.toContain(SECRET);
     expect(output(result)).not.toContain(CLIENT_ID);
+  });
+
+  it("wires DingTalk file smoke to proactive media when a target is configured", () => {
+    const source = readFileSync(SCRIPT, "utf8");
+
+    expect(source).toContain("createDingTalkProactiveMessageClient");
+    expect(source).toContain("DINGTALK_TARGET_CHAT_ID");
+    expect(source).toContain('targetSource: "env"');
   });
 
   it("allows a two-minute manual callback window for real client clicks", () => {

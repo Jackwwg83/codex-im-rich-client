@@ -10,6 +10,7 @@ import {
   type DingTalkCardClientLike,
   DingTalkChannelAdapter,
   type DingTalkInboundAction,
+  type DingTalkProactiveMessageClientLike,
   type DingTalkSessionReplyTextClientLike,
   type DingTalkStreamClientLike,
   type DingTalkStreamEventHandler,
@@ -106,13 +107,15 @@ type ContractHarness = {
   readonly streamClient: FakeDingTalkStreamClient;
   readonly cardCalls: unknown[];
   readonly actionCalls: unknown[];
+  readonly proactiveCalls: unknown[];
   readonly textCalls: unknown[];
 };
 
-function makeHarness(): ContractHarness {
+function makeHarness(opts: { readonly proactive?: boolean } = {}): ContractHarness {
   const streamClient = new FakeDingTalkStreamClient();
   const cardCalls: unknown[] = [];
   const actionCalls: unknown[] = [];
+  const proactiveCalls: unknown[] = [];
   const textCalls: unknown[] = [];
   const cardClient: DingTalkCardClientLike = {
     async sendCard(input) {
@@ -141,17 +144,25 @@ function makeHarness(): ContractHarness {
       return { messageId: "ding_file_private_001" };
     },
   };
+  const proactiveClient: DingTalkProactiveMessageClientLike = {
+    async sendFile(input) {
+      proactiveCalls.push(input);
+      return { messageId: "ding_proactive_file_001" };
+    },
+  };
   return {
     adapter: new DingTalkChannelAdapter({
       streamClient,
       cardClient,
       actionClient,
       textClient,
+      ...(opts.proactive === false ? {} : { proactiveClient }),
       now: () => NOW,
     }),
     streamClient,
     cardCalls,
     actionCalls,
+    proactiveCalls,
     textCalls,
   };
 }
@@ -352,7 +363,7 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
   });
 
   it("fails closed for attachment sends before a session reply URL is known", async () => {
-    const { adapter, cardCalls } = makeHarness();
+    const { adapter, cardCalls } = makeHarness({ proactive: false });
     const channel: ChannelAdapter = adapter;
 
     await adapter.start();
@@ -361,6 +372,22 @@ describe("DingTalkChannelAdapter contract and boundaries (JAC-87)", () => {
     );
 
     expect(cardCalls).toEqual([]);
+  });
+
+  it("falls back to proactive media when no session reply URL is known", async () => {
+    const { adapter, proactiveCalls, textCalls } = makeHarness();
+
+    await adapter.start();
+    const sentFile = await adapter.sendFile(TARGET, FILE);
+
+    expect(sentFile).toEqual({
+      target: TARGET,
+      messageId: "dingtalk-file:ding_proactive_file_001",
+      kind: "file",
+      textUpdateMode: "append",
+    });
+    expect(textCalls).toEqual([]);
+    expect(proactiveCalls).toEqual([{ target: TARGET, file: FILE }]);
   });
 
   it("production source has no webhook, public listener, HTTP server, or logging sink", () => {

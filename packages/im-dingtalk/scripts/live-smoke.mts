@@ -8,6 +8,7 @@ import {
   type DingTalkStreamClientLike,
   type DingTalkStreamEventHandler,
   createDingTalkOpenApiCardClient,
+  createDingTalkProactiveMessageClient,
   createDingTalkSessionReplyTextClient,
   createDingTalkStreamClient,
   renderDingTalkApprovalCard,
@@ -210,7 +211,12 @@ async function main(): Promise<void> {
 
 async function runLiveFileSmoke(input: { readonly durationMs: number }): Promise<void> {
   const counters = { robotEvents: 0 };
-  let capturedTarget: Target | undefined;
+  const envTarget =
+    process.env.DINGTALK_TARGET_CHAT_ID === undefined
+      ? undefined
+      : { platform: "dingtalk", chatId: process.env.DINGTALK_TARGET_CHAT_ID };
+  let capturedTarget: Target | undefined = envTarget;
+  let targetSource: "env" | "captured" | "missing" = envTarget === undefined ? "missing" : "env";
   const streamClient = createDingTalkStreamClient({
     clientId: requiredEnv("DINGTALK_CLIENT_ID"),
     clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
@@ -222,19 +228,29 @@ async function runLiveFileSmoke(input: { readonly durationMs: number }): Promise
       clientId: requiredEnv("DINGTALK_CLIENT_ID"),
       clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
     }),
+    proactiveClient: createDingTalkProactiveMessageClient({
+      clientId: requiredEnv("DINGTALK_CLIENT_ID"),
+      clientSecret: requiredEnv(requiredEnv("DINGTALK_CLIENT_SECRET_ENV")),
+      robotCode: process.env.DINGTALK_ROBOT_CODE ?? requiredEnv("DINGTALK_CLIENT_ID"),
+    }),
   });
   const unsubscribe = adapter.onMessage((message) => {
     counters.robotEvents++;
-    capturedTarget ??= message.target;
+    if (capturedTarget === undefined) {
+      capturedTarget = message.target;
+      targetSource = "captured";
+    }
   });
 
   try {
     const file = liveFilePayload();
     await adapter.start();
-    console.log(
-      "[dingtalk-live-smoke] FILE_WAITING: send one fresh DingTalk message to the bot to seed a session reply URL.",
-    );
-    await waitForTarget(() => capturedTarget, input.durationMs);
+    if (capturedTarget === undefined) {
+      console.log(
+        "[dingtalk-live-smoke] FILE_WAITING: set DINGTALK_TARGET_CHAT_ID for proactive send or send one fresh DingTalk message to seed a session reply URL.",
+      );
+      await waitForTarget(() => capturedTarget, input.durationMs);
+    }
     if (capturedTarget === undefined) {
       printStatus({
         ...redactedStatus("blocked"),
@@ -244,7 +260,7 @@ async function runLiveFileSmoke(input: { readonly durationMs: number }): Promise
         fileKind: file.kind,
       });
       console.error(
-        "[dingtalk-live-smoke] BLOCKED: no fresh DingTalk inbound robot message arrived before timeout; cannot seed session reply URL for file send.",
+        "[dingtalk-live-smoke] BLOCKED: missing DINGTALK_TARGET_CHAT_ID and no fresh DingTalk inbound robot message arrived before timeout.",
       );
       process.exitCode = 3;
       return;
@@ -254,7 +270,7 @@ async function runLiveFileSmoke(input: { readonly durationMs: number }): Promise
       ...redactedStatus("file_sent"),
       durationMs: input.durationMs,
       robotEvents: counters.robotEvents,
-      targetSource: "captured",
+      targetSource,
       messageId: "present",
       fileKind: file.kind,
     });
