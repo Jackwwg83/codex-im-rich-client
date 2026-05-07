@@ -86,7 +86,11 @@
 > reinstall/kickstart, launchd is running under pid `16732` with
 > `pendingApprovals=0`, `pnpm im:doctor` is ready for installed
 > Telegram/Lark/DingTalk with Slack disabled, and the bridge redaction scan
-> returned `redaction scan ok`. Common group safety now has a config-level mention
+> returned `redaction scan ok`. A fresh DingTalk `DINGTALK_LIVE_FILE=1`
+> attachment gate attempt is tracked by JAC-273 and remains blocked on a usable
+> DingTalk client session: Stream connected, but no fresh inbound robot message
+> arrived during the 120s window, so no session reply URL was captured and no
+> attachment was sent. Common group safety now has a config-level mention
 > gate: configured Telegram/Feishu-Lark/DingTalk group chats must mention a
 > configured alias before ordinary inbound text reaches Codex, while approval
 > callback authorization remains bound to callback tokens, messageRef

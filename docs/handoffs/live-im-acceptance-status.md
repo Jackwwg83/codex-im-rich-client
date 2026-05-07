@@ -611,6 +611,18 @@ Stop and treat as a blocker if:
   `robotEvents=0`, and `targetSource=missing`; no attachment was sent and no
   private identifiers were recorded. Launchd was restored under pid `15382`,
   `pendingApprovals=0`, and `pnpm im:doctor` remained ready.
+- 2026-05-07 SGT DingTalk file live gate re-attempt / JAC-273: A second
+  `DINGTALK_LIVE_FILE=1` run connected to DingTalk Stream and waited 120s for a
+  fresh inbound robot message. It ended fail-closed with redacted
+  `status=blocked`, `robotEvents=0`, `targetSource=missing`, and no attachment
+  sent. Root cause evidence: the available DingTalk Desktop window was on a
+  login / expired-QR screen rather than a bot chat; Computer Use accessibility
+  tree reads timed out, and low-level coordinate clicks could not restore a
+  usable session. `pnpm launchd:status` separately remained healthy at pid
+  `16732` with `pendingApprovals=0`, and `pnpm im:doctor` remained ready for
+  installed Telegram/Lark/DingTalk with Slack disabled. JAC-273 tracks the real
+  DingTalk file/image attachment acceptance gate; DingTalk attachments must not
+  be called live-accepted until redacted `status=file_sent` evidence exists.
 - 2026-05-07 SGT DingTalk inbound attachment implementation: robot image/file
   messages with `downloadCode` now materialize through
   `/v1.0/robot/messageFiles/download`, save bytes under the daemon attachment
