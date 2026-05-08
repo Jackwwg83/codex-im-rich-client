@@ -1,149 +1,114 @@
 # Codex IM Rich Client
 
-基于 Codex App Server 的 IM rich client。Mac mini 上常驻 daemon，通过 Telegram/飞书/钉钉等 IM 远程控制 Codex，**保留 thread/turn、流式事件、命令执行、文件变更、review、approval、Computer Use 等结构化 rich event，不降维成普通 chat completion**。
+Codex IM Rich Client lets you use Codex App from IM. A local daemon runs on
+your Mac, connects to Codex App Server, and projects Codex-native threads,
+turns, approvals, files, diffs, status, and bounded Computer Use events into
+Telegram, Feishu/Lark, DingTalk, or Slack.
 
-**Phase 0 状态**：✅ 完成（2026-04-29）。bottom-up vertical slice 已端到端跑通真 codex 0.125.0。详见 `docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md` + `docs/phase-0/`。
-
-**Phase 1 状态**：✅ 完成（2026-05-01）。Codex Runtime Core — 无 IM 情况下完成 thread/turn/event/approval 内核。三个新包：
-- `@codex-im/codex-runtime` — `CodexRuntime` typed wrappers + `EventNormalizer` (single-FIFO + class-aware walk-and-drop overflow)
-- `@codex-im/core` — `ApprovalBroker` with B-clean single-completion-promise lifecycle (race-free across handler / expirePending / failPendingAsTransportLost)
-- `@codex-im/daemon` — `Supervisor` with ONE-SHOT lifecycle, exponential-backoff recovery (500ms → 1s → 2s → 4s → 8s), halt-on-spawn-failure
-
-10 codex outside-voice review reports under `docs/phase-1/` plus a tag-gate re-review. 测试数 73 → 320 (315 at T12 close + 5 from tag-gate fix arc: Supervisor cleanup + ClientRequest grep guard). 详见 `docs/superpowers/plans/2026-04-30-phase-1-runtime.md` + `docs/handoffs/2026-05-01-phase1-to-phase2.md`.
-
-**Phase 3 状态**：✅ 完成（2026-05-02）。Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter + launchd/ops/smoke slice 已通过 JAC-64 / T39-T40 tag gate。**当前 single source of truth：[`docs/handoffs/phase3-live-status.md`](docs/handoffs/phase3-live-status.md)，Phase 3 → Phase 4 交接见 [`docs/handoffs/2026-05-02-phase3-to-phase4.md`](docs/handoffs/2026-05-02-phase3-to-phase4.md)。**
-
-**Phase 4 状态**：✅ 完成（2026-05-02）。Feishu/Lark native adapter 已通过 JAC-162 review/handoff/tag gate，包含 long-connection receive、text/card send/update、opaque callback action、fake smoke、env-gated live smoke。**Phase 4 closeout：[`docs/handoffs/phase4-live-status.md`](docs/handoffs/phase4-live-status.md)，Phase 4 → Phase 5 交接见 [`docs/handoffs/2026-05-02-phase4-to-phase5.md`](docs/handoffs/2026-05-02-phase4-to-phase5.md)。**
-
-**Phase 5 状态**：✅ 完成（2026-05-02）。DingTalk Stream adapter 已通过 JAC-90 review/handoff/tag gate，包含 Stream receive、card send/update、opaque callback action、adapter-level Stream ack、duplicate robot delivery suppression、fake smoke、env-gated live smoke。**Phase 5 closeout：[`docs/handoffs/phase5-live-status.md`](docs/handoffs/phase5-live-status.md)，Phase 5 → Phase 6 交接见 [`docs/handoffs/2026-05-02-phase5-to-phase6.md`](docs/handoffs/2026-05-02-phase5-to-phase6.md)。**
-
-**Phase 6 状态**：✅ 完成（2026-05-03）。Computer Use 显式 `/cu` / `/computer-use` flow 已通过 JAC-101 review/handoff/tag gate；normal prompts 不触发 CU，dynamic tool calls 需要 active scoped `/cu` session，audit/redaction/default-skip live smoke 均已落地；后续 live-acceptance track 已补 bounded macOS Chrome provider smoke，但不声称任意桌面自动化、secret entry、外部网站控制或无人值守敏感操作。**Phase 6 closeout：[`docs/handoffs/phase6-live-status.md`](docs/handoffs/phase6-live-status.md)，Phase 6 → Phase 7 交接见 [`docs/handoffs/2026-05-03-phase6-to-phase7.md`](docs/handoffs/2026-05-03-phase6-to-phase7.md)。**
-
-**Phase 7 状态**：✅ 完成（2026-05-03）。Extended platforms / web console slice 已通过 JAC-165 review/handoff/tag gate；Satori/Koishi 与 Chat SDK 保持 spike-only，fallback renderer、loopback-only read-only web status、team/operator policy、web approval decision gate、multi-channel session handoff 均已落地。**Phase 7 closeout：[`docs/handoffs/phase7-live-status.md`](docs/handoffs/phase7-live-status.md)，Phase 7 → future 交接见 [`docs/handoffs/2026-05-03-phase7-to-future.md`](docs/handoffs/2026-05-03-phase7-to-future.md)。**
-
-**Release Readiness 状态**：✅ release candidate 完成，✅ 已启用真实 IM 验收完成（Telegram / Feishu-Lark / DingTalk / bounded Slack workspace，2026-05-08）。Phase 7 完成态已提升到本地 Mac mini release candidate：local full gates、release preflight、launchd/Keychain dry-run、smoke matrix、rollback runbook、outside-voice review 和 tag gate 均已收敛；GitHub Actions workflow 内容已纳入本地审查，具体 GitHub-run 状态以 GitHub 页面为准。真实 Telegram/Lark/DingTalk/Slack/Codex live acceptance 已用 redacted evidence 记录；Slack strict exact-output UX 已收敛；Computer Use 已证明显式 `/cu` contract + bounded macOS Chrome provider smoke，但不声称任意桌面自动化、secret entry、外部网站控制或无人值守敏感操作。上线范围一页纸：[`docs/ops/launch-scope.md`](docs/ops/launch-scope.md)。SOT：[`docs/handoffs/live-im-acceptance-status.md`](docs/handoffs/live-im-acceptance-status.md)，direct-use hardening：[`docs/handoffs/direct-use-live-status.md`](docs/handoffs/direct-use-live-status.md)，release-candidate baseline：[`docs/handoffs/release-readiness-live-status.md`](docs/handoffs/release-readiness-live-status.md)，handoff：[`docs/handoffs/2026-05-03-production-readiness.md`](docs/handoffs/2026-05-03-production-readiness.md)，baseline tag：`production-readiness-2026-05-03-r2`，live acceptance tag：`live-im-acceptance-2026-05-08`。
-
-首次本地接入：[`docs/setup/getting-started.md`](docs/setup/getting-started.md)，使用 `pnpm setup:im` 生成本机配置并写入 Keychain。上线运行操作手册：[`docs/ops/production-launch.md`](docs/ops/production-launch.md)。上线前先跑 `pnpm release:check`；默认路径不写 Keychain、不 load/unload launchd、不发起 live IM/Codex/Computer Use。
-
-**Phase 2 状态**：✅ 实现完成（2026-05-02）。Approval & IM Surface — broker 公开面、平台无关渲染、fake e2e。两个新包 + Phase 1 包扩展：
-- `@codex-im/render` — `RichBlock` (text/approval/unknown) + `ApprovalCard` + `projectAsRichBlock` (per-`ApprovalRequestKind`，零协议 method 字面量) + `formatPlainText` (capability fallback) + `truncate` + `redact` (re-export from core)
-- `@codex-im/channel-core` — closed `ChannelAdapter` 接口 (D14) + `TelegramShapeFakeChannelAdapter` (callback_data ≤62B + 60s answerCallbackQuery deadline + parse_mode unsupported, all cited from Telegram Bot API)
-- `@codex-im/core` 扩展：`enablePendingMode<M>` (D18 三模式 dispatcher) + `bindActorPolicy` (D19 per-card actor 绑定) + `resolve()` (happy + 9 `ResolveError` 分支 + lazy expiry + actor validation) + `actionToDecision` + `mapDecisionForPending` (D11 per-kind wire 映射) + `AuditEmitter` (D13 12 个枚举 kind) + `redact` 14 patterns + `isAttached()` + `approvalTtlMs` 构造函数选项
-
-测试数 320 → 720 (+400 across approval surface + render + channel-core + e2e)。9 个包 (Phase 1 7 → +render +channel-core)。详见 `docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md` + `docs/handoffs/2026-05-02-phase2-to-phase3.md`. 后续实际 Phase 3 已合并 Telegram MVP + production daemon + SecurityPolicy ACL 并进入 tag gate。
-
-> ⚠️ **Production = Supervisor; runtime-send = dev/operator only.** Daemon 生产入口必须先 `broker.attach()` 再交给 `Supervisor`。`runtime-send` smoke 是 dev/operator 工具，不是产品入口。Codex Q6 / D16 / T22 invariant fires at `Supervisor.#spawnFresh` head if broker isn't pre-attached.
-
-## Phase 0 quick start
-
-```bash
-# 0. 装运行时（一次性，不在 repo 范围）
-node --version    # need >=24 (Node 20 EOL 2026-04-30; bumped in chore/node-24-bump)
-pnpm --version    # need >=10
-codex --version   # need 0.128.0 (pinned in CODEX_VERSION)
-
-# 1. 安装依赖 + 验证版本闸
-pnpm install
-pnpm check:codex-version       # OK: 0.128.0
-
-# 2. 重新生成协议（已经 commit 过；只在 codex 升级时跑）
-pnpm protocol:generate         # 488 TS + 227 schema 入 packages/codex-protocol/
-
-# 3. 全量验证
-pnpm typecheck                 # all 14 packages
-pnpm test                      # 1403 tests pass + 1 skipped (unit + contract, latest local full gate)
-pnpm lint                      # biome check
-
-# 4. 操作员手动 smoke (非默认测试)
-CODEX_SMOKE=1 pnpm smoke:app-server      # initialize-only, 安全
-CODEX_REAL_SMOKE=1 pnpm smoke:real-turn  # 真模型调用 ~$0.01，请先确认 codex login 与配额
-CODEX_REAL_SMOKE=1 pnpm runtime:send -- --prompt 'Reply OK'   # Phase 1 runtime kernel smoke
-pnpm smoke:dingtalk-fake       # Phase 5 fake DingTalk daemon smoke, no network / no credentials
-pnpm smoke:dingtalk-live       # Phase 5 live harness default skip unless DINGTALK_LIVE=1
-pnpm smoke:computer-use-live   # Phase 6 live harness default skip unless COMPUTER_USE_LIVE=1
-```
-
-## Phase 0 安全边界
-
-详见 `packages/cli/README.md`。要点：
-
-- 默认 `pnpm test` 永不 spawn `codex app-server` 子进程
-- `pnpm smoke:*` 全部 env-gated，明确开关后才跑
-- `smoke:real-turn` 锁死 `sandbox_mode=read-only` + `approval_policy=on-request` + 客户端 default-reject 所有 server request
-- `pnpm check:codex-version` 在 codex 升级时 fail-stop，强制 review 生成产物 + 重新捕获 wire fixtures
-
-## Repo 结构
-
-```
-packages/
-  codex-protocol/      generated TS + JSON schema (codex 0.128 stable, no --experimental)
-  app-server-client/   JSONL + JSON-RPC lite + Transport iface + StdioTransport + handshake + AppServerClient
-  testkit/             InMemoryTransport + FakeAppServer + replayFixture + codex-0.125 wire fixtures
-  cli/                 codex-im smoke / runtime / ops commands
-  storage-sqlite/      SQLite migrations + repositories
-  config/              TOML/zod config + env secret resolver
-  render/              IM-rich projection and plain-text fallback
-  channel-core/        platform-neutral ChannelAdapter contract
-  im-telegram/         real Telegram adapter package
-  im-lark/             real Feishu/Lark adapter package
-  daemon/              production-shaped daemon / supervisor / status
-docs/
-  handoffs/            phase live-status + phase-to-phase handoffs
-  phase-*/             review evidence and implementation reports
-  superpowers/plans/   phase plans-of-record
-scripts/
-  check-codex-version.mjs  3-way version gate
-  canonicalize-schema.mjs  deterministic JSON schema sort
-```
-
-## 文档蓝图（原始包）
-
-### 推荐阅读顺序
-
-1. `01-PRD.md`：产品目标、用户故事、范围与验收标准。
-2. `02-TECHNICAL-DECISIONS.md`：关键技术选型，尤其是 Chat SDK、Koishi/Satori、native adapter 的取舍。
-3. `03-ARCHITECTURE.md`：整体架构、部署拓扑、数据流、核心边界。
-4. `04-MODULE-DESIGN.md`：分模块设计。
-5. `05-CODEX-APP-SERVER-PROTOCOL.md`：App Server 协议接入策略、事件归一化、审批流。
-6. `06-IM-ADAPTERS.md`：Telegram、飞书、钉钉、Satori/Koishi、Vercel Chat SDK 的接入方式。
-7. `07-SECURITY-AND-COMPUTER-USE.md`：权限、审批、安全边界、Computer Use 风险控制。
-8. `08-DATA-MODEL.md`：SQLite 表结构与状态模型。
-9. `09-ROADMAP.md`：MVP 到可用版本的迭代计划。
-10. `10-CLAUDE-CODE-CODEX-WORKFLOW.md`：如何使用 Claude Code + gstack + Superpowers + Codex CLI 完成本项目开发。
-11. `11-TESTING-AND-QA.md`：测试矩阵、模拟 App Server、真实 smoke test。
-12. `12-OPERATIONS.md`：Mac mini 常驻运行、launchd、日志、监控、备份。
-13. `13-IMPLEMENTATION-SKELETON.md`：建议目录结构、接口、配置、脚本。
-14. `CLAUDE.md`：可以直接复制到项目根目录的 Claude Code 项目说明。
-15. `.claude/commands/*`：建议创建的 Claude Code 自定义命令草案。
-
-## 一句话架构
+This is not a generic chatbot, not an OpenClaw plugin, and not a Codex CLI/TUI
+screen parser. The runtime path stays:
 
 ```text
-IM 平台
-  -> 本地 codex-im-bridge daemon
-  -> Codex App Server JSON-RPC client
-  -> codex app-server / Codex App runtime / Computer Use
-  -> Codex events, approval requests, diffs, status cards
-  -> IM rich UI
+IM Adapter -> ChannelAdapter -> Core -> CodexRuntime -> AppServerClient -> codex app-server
 ```
 
-## 核心原则
+## Current Support
 
-- App Server rich client 核心自研，不套普通 LLM chat 框架。
-- IM 平台接入不完全从零写：Telegram 用 grammY 或原生 Bot API；飞书用官方 Node SDK；钉钉用官方 Stream SDK；Satori/Koishi 作为长尾平台兼容层；Vercel Chat SDK 作为 Slack/Discord/Teams 等后续适配候选。
-- 默认 stdio 连接 `codex app-server`，不要公网暴露 App Server。
-- 所有敏感操作必须走 approval broker，Computer Use 必须有更严格的二次安全策略。
-- Claude Code 是主开发入口；Codex CLI 用于协议生成、独立 review、非交互验证和 App Server smoke test。
+| Area | Status |
+|---|---|
+| Telegram | Primary personal entry. Text, approvals, files/images, and direct Codex use are live-accepted. |
+| Feishu/Lark | Primary team entry. Text, cards/approvals, files/images, and direct Codex use are live-accepted. |
+| DingTalk | Compatibility entry. Text, CardKit approvals, files/images, and direct Codex use are live-accepted. |
+| Slack | Bounded workspace support. Socket Mode, slash command, approvals, files, and exact-output UX are live-accepted for the tested workspace path. |
+| Computer Use | Explicit `/cu` only. Current accepted scope is bounded local macOS Chrome provider behavior, not arbitrary desktop automation. |
 
-## 补充：第一次 AI 协作操作手册
+## Installation Mode
 
-本 v2 文档包新增：
+Current public setup is a source-based local install. You do not need to modify
+the code, but this release installs from a local checkout so it can build the
+daemon bundle, generate local config, store IM secrets in macOS Keychain, and
+install the current-user launchd service.
 
-- `14-OPERATION-GUIDE-AND-PROMPTS.md`：完整开发操作指南。
-- `15-PHASE-BY-PHASE-PROMPTS.md`：Phase 0-8 的 Claude Code / Codex CLI 提示词。
-- `16-CODEX-CLI-PROMPTS.md`：Codex CLI 独立验证、review、debug、测试生成提示词。
-- `17-CLAUDE-CODE-RUNBOOK.md`：Claude Code 日常 session runbook。
-- `18-HOOKS-AND-GUARDRAILS.md`：hooks 与安全 guardrails 建议。
-- `prompts/`：可复制提示词库。
-- `hooks/`：stop check 脚本草案。
-- `.claude/commands/`：更完整的项目 slash commands。
+Supported scope:
+
+- officially supported production target: macOS local daemon;
+- secrets live in macOS Keychain;
+- background service uses launchd under the current macOS user;
+- Node.js `>=24` and pnpm `>=10 <11` are required;
+- Codex version is pinned by `CODEX_VERSION`;
+- Linux and Windows are not production deployment targets for this release.
+
+There is no hosted SaaS credential store, no binary installer, and no automated
+IM-platform app provisioning in this version.
+
+## Quick Start
+
+Start with one platform.
+
+```bash
+git clone <repo-url>
+cd codex-im-rich-client
+pnpm install
+pnpm codex-im:install --platform telegram
+```
+
+Then open the configured IM chat and send:
+
+```text
+/use codex-im
+Reply exactly: OK
+```
+
+For the full user path, read [docs/user/README.md](docs/user/README.md).
+
+The install command is a transparent wrapper around the safety boundaries:
+Codex version check, `setup:im`, `im:doctor`, bridge build/install, and
+launchd install/status. To run those steps manually, follow
+[docs/user/quickstart.md](docs/user/quickstart.md).
+
+## User Documentation
+
+- [Quick start](docs/user/quickstart.md)
+- [Platform setup fields](docs/user/platform-setup.md)
+- [IM commands](docs/user/commands.md)
+- [Admin guide](docs/user/admin-guide.md)
+- [Troubleshooting](docs/user/troubleshooting.md)
+
+## Security Model
+
+- IM credentials stay local in macOS Keychain.
+- `config.toml` stores non-secret settings only.
+- Codex App Server is local; do not expose it publicly.
+- Every IM actor and chat must be allowlisted.
+- Approval buttons/cards are the primary approval path.
+- `/approve` is only a fallback for already-bound pending approvals.
+- Computer Use cannot be triggered by ordinary prompt text; it requires `/cu`.
+- The daemon redacts tokens, private payloads, and sensitive tool arguments.
+
+## Maintainer Documentation
+
+The repository keeps detailed development history, phase plans, review reports,
+live acceptance evidence, and smoke-test runbooks for open-source transparency.
+Those documents are useful for maintainers, but they are not the first-use
+customer path.
+
+Start here:
+
+- [Maintainer documentation index](docs/maintainer/README.md)
+- [Launch scope](docs/ops/launch-scope.md)
+- [Production launch runbook](docs/ops/production-launch.md)
+- [Release readiness preflight](docs/ops/release-readiness.md)
+
+Common maintainer checks:
+
+```bash
+pnpm typecheck
+pnpm typecheck:tests
+pnpm test
+pnpm lint
+pnpm protocol:check
+pnpm release:check
+```
+
+Live smoke commands are explicit maintainer gates. They are not part of the
+default quick start.
