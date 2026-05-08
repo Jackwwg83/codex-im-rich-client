@@ -69,6 +69,8 @@ export type {
   ThreadCompactStartResponse,
   ThreadForkParams,
   ThreadForkResponse,
+  ThreadListParams,
+  ThreadListResponse,
   ThreadReadParams,
   ThreadReadResponse,
   ThreadResumeParams,

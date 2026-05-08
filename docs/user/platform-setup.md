@@ -7,7 +7,7 @@ config and Keychain without reinstalling the daemon.
 
 Secrets go to macOS Keychain. `~/.codex-im-bridge/config.toml` stores only
 non-secret settings such as app ids, environment-variable names, allowlists,
-project paths, and enabled platforms.
+known cwd entries, and enabled platforms.
 
 ## Telegram
 

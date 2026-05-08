@@ -4,7 +4,7 @@ Status: first-use setup guide for the local Mac bridge.
 
 Codex-IM runs on your Mac. IM bot tokens and app secrets stay in macOS
 Keychain; `config.toml` stores only non-secret settings such as enabled
-platforms, allowlists, project paths, and environment-variable names.
+platforms, allowlists, known cwd entries, and environment-variable names.
 
 Start with one platform. Do not configure all platforms at once.
 
@@ -110,7 +110,8 @@ For launch scope, rollback, and release checks, use
 In the configured IM chat:
 
 ```text
-/use codex-im
+/cwds
+/use 1
 Reply exactly: OK
 ```
 

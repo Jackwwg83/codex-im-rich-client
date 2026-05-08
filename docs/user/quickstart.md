@@ -104,12 +104,17 @@ Expected result:
 Open the configured IM chat and send:
 
 ```text
-/use codex-im
+/cwds
+/use 1
 Reply exactly: OK
 ```
 
-You should receive an exact `OK` response. After that, try a normal development
-request such as asking Codex to inspect the current project status.
+You should receive an exact `OK` response. `/cwds` shows the configured local
+cwd entries; choose by number. To create a fresh thread and start immediately,
+you can also send `/new 1 Reply exactly: OK`.
+
+After that, try a normal development request such as asking Codex to inspect the
+current repo status.
 
 ## 8. Next Steps
 

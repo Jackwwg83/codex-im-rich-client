@@ -10,6 +10,7 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
     const expected: CommandRouterCommandName[] = [
       "start",
       "help",
+      "cwds",
       "projects",
       "new",
       "threads",

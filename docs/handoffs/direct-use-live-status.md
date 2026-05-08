@@ -5,7 +5,12 @@
 > **Last updated:** 2026-05-08 - Block 4 real Telegram acceptance remains
 > green. Launchd soak remains healthy at the latest heartbeat, and the latest
 > built daemon artifact is now installed and running under launchd with
-> `pendingApprovals=0`. Feishu/Lark direct-use acceptance now proves launchd
+> `pendingApprovals=0`. The IM entry semantics are being aligned to Codex App
+> Server native thread/cwd behavior: `/cwds` lists known local cwd entries,
+> `/use` and `/new` select by number or alias without accepting raw paths, and
+> `/threads` / `/switch` use native `thread/list` / `thread/resume` when
+> available so IM can take over Codex App or CLI-created threads. Feishu/Lark
+> direct-use acceptance now proves launchd
 > daemon inbound
 > routing, `/status`, `/use codex-im`, real Codex prompt/reply, and live card
 > schema delivery, real `Allow once` / `Decline` / `Abort` /
@@ -193,7 +198,7 @@
     `app/daemon.mjs`, copies the daemon runtime dependency closure, and verifies
     the real LaunchAgent reaches `state = running`.
   - latest commit - C9 `/start` help states that non-command messages are
-    Codex prompts for the current project/thread and that native file/command/tool
+    Codex prompts for the current cwd/thread and that native file/command/tool
     activity may appear as `Codex items`.
   - latest commit - live Telegram acceptance hardening: current-thread
     `/switch` no longer resumes empty fresh threads, no-rollout `/fork` now
@@ -525,7 +530,7 @@ Required P0 plan edits:
 - No raw callback token persistence, display, docs, logs, or Linear leakage.
 - `messageRef` and server-side callback/approval binding remain required before
   `ApprovalBroker.resolve()`.
-- No command may switch project/thread while an active turn or pending approval
+- No command may switch cwd/thread while an active turn or pending approval
   exists.
 - No live external call by default.
 - No Keychain write by default.
@@ -785,13 +790,13 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT inbound attachment loop | Telegram inbound `photo` / `document` and Feishu/Lark inbound `image` / `file` messages now materialize platform resources to local daemon attachment directories before routing. Daemon maps image attachments to Codex `localImage` inputs and appends generic file paths to the prompt text instead of inventing a non-existent Codex file input. Targeted tests passed: Telegram on-message, Lark on-message + SDK client, and daemon routing (135 tests total), plus `pnpm typecheck:tests` and `pnpm lint`. DingTalk inbound image/file materialization is implemented locally through `downloadCode`; live acceptance was completed by the later 2026-05-07 image gate and 2026-05-08 file gate. |
 | 2026-05-07 SGT Codex-native control loop | Common daemon routing now exposes `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, and `/mcp` for every supported IM adapter. `CodexRuntime` keeps the new App Server method wrappers centralized, daemon replies redact local paths/targets, and Computer Use dynamic tool calls are summarized as Codex-native GUI activity. Full local gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150 files, 1401 pass, 1 skipped), and `pnpm lint`. |
 | 2026-05-07 SGT approval fallback loop | Common daemon routing now exposes `/approvals` and `/approve <id> <action>`. The fallback path is intentionally server-state based: it only resolves a pending approval when SQLite has a bound callback-token record for that approval, target, action, and approval-card `messageRef`; the IM text never carries raw callback tokens or message refs. Full local gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150 files, 1403 pass, 1 skipped), `pnpm lint`, and `pnpm protocol:check`. |
-| 2026-05-07 SGT identity/access loop | `/whoami` now reports redacted IM identity presence and current project/thread binding across supported adapters without leaking raw chat, user, topic, display-name, cwd, or full thread ids. Config parsing also supports reusable `security.access_groups` referenced by global `default_access_groups` or project-level `access_groups`; unknown group references fail closed and groups expand into the existing `SecurityPolicy` allowlist shape. |
+| 2026-05-07 SGT identity/access loop | `/whoami` now reports redacted IM identity presence and current cwd/thread binding across supported adapters without leaking raw chat, user, topic, display-name, cwd, or full thread ids. Config parsing also supports reusable `security.access_groups` referenced by global `default_access_groups` or project-level `access_groups`; unknown group references fail closed and groups expand into the existing `SecurityPolicy` allowlist shape. |
 | 2026-05-07 SGT group mention-gate loop | `security.group_policy` now supports configured `mention_required_chats` plus `mention_aliases`. Daemon inbound routing calls `SecurityPolicy.checkInboundMessage()` before command/prompt routing, so configured group chats without an alias are audited and dropped before Codex sees the text; non-gated chats keep the existing allowlist behavior. Targeted tests passed for core policy, config parsing, and daemon denial audit. |
 | 2026-05-07 SGT Slack T0 plan loop | Added `docs/superpowers/plans/2026-05-07-slack-core-platform-plan.md` as the Slack plan-of-record. The plan chooses Socket Mode by default to avoid public listeners, maps Slack `team/channel/thread_ts/ts` into existing `Target` and `MessageRef`, keeps `/codex` as ingress to existing daemon commands, and scopes JAC-244 through JAC-248 without implementation code. |
 | 2026-05-07 SGT Slack T1 skeleton loop | Added `@codex-im/im-slack` package skeleton with `SLACK_CAPABILITIES`, `SlackChannelAdapter`, injected Socket Mode/Web client interfaces, synthetic fixture data only, and no-upward-import boundary tests. The package is not wired into production daemon entrypoint yet. |
 | 2026-05-07 SGT Slack T2 text loop | Slack DM `message` and channel `app_mention` payloads now normalize to existing `InboundMessage` with `Target(platform=\"slack\", chatId=\"team:channel\", threadKey=thread_ts)` and `MessageRef(channel:ts)`; leading bot mentions are stripped before daemon routing, bot/subtype messages are dropped, and injected Web client `sendText`/`editText` paths return editable refs. |
 | 2026-05-07 SGT Slack T3 approval loop | Slack approval cards now render Block Kit buttons whose values are only `v1:<opaque>` callback tokens; `block_actions` payloads are immediately acked and normalized to existing `InboundAction` with target, sender, messageRef, rawCallbackData, and callbackHandle. Daemon callback-token, messageRef, SecurityPolicy, and ApprovalBroker validation remain the decision boundary. |
-| 2026-05-07 SGT Slack T4 slash-command loop | Slack Socket Mode `/codex` slash-command payloads now ack immediately and normalize into existing daemon text: known Codex-native command words become `/status`, `/projects`, `/threads`, `/use`, `/diagnostics`, `/cu status`, etc.; unknown text remains a normal Codex prompt. Slash-command replies use `chat.postMessage` append semantics because there is no editable originating Slack message. Optional App Home remains deferred. |
+| 2026-05-07 SGT Slack T4 slash-command loop | Slack Socket Mode `/codex` slash-command payloads now ack immediately and normalize into existing daemon text: known Codex-native command words become `/status`, `/cwds`/`/projects`, `/threads`, `/use`, `/diagnostics`, `/cu status`, etc.; unknown text remains a normal Codex prompt. Slash-command replies use `chat.postMessage` append semantics because there is no editable originating Slack message. Optional App Home remains deferred. |
 | 2026-05-07 SGT Slack T5 file/smoke skeleton loop | Slack outbound artifacts now use a `filesUploadV2`-shaped adapter surface instead of legacy `files.upload`; empty files and blank filenames fail locally. Added `pnpm smoke:slack-live`, default-skipped without secrets, with redacted dry-run/text/file gates. The file live gate uses Slack's external upload sequence (`files.getUploadURLExternal` -> upload URL -> `files.completeUploadExternal`). Real Slack workspace acceptance remains pending test app tokens/channel setup. |
 | 2026-05-07 SGT Slack T5a production wiring loop | JAC-253 added disabled-by-default Slack config, redacted `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` secret resolution, official Socket Mode production adapter construction, Slack callback-handle routing, and daemon enabled-platform fallback targeting. `@codex-im/im-slack` still uses injected clients for tests and Socket Mode in production; JAC-248 stays open until a real Slack workspace runs inbound, approval click, text, and file gates. |
 | 2026-05-07 SGT Slack T5b doctor loop | JAC-254 added Slack to the unified `pnpm im:doctor` / `pnpm channels:doctor` no-live-network readiness report. Doctor now checks Slack bot/app token source presence by env/Keychain names only, global/project allowlists, allowed channels, capabilities, Socket Mode, `/codex` slash ingress, Block Kit approvals, edit semantics, and file support. Local installed config currently reports Slack `disabled`, not green live acceptance. |
@@ -840,7 +845,7 @@ Latest live Feishu/Lark direct-use evidence:
 | launchd multi-platform start | Installed bridge bundle started under launchd pid `13136`; daemon log resolved Telegram and Lark secrets with `***REDACTED***` values and Lark WS reached `ws client ready` | green |
 | inbound observability | `deb0151` adds daemon audit for `inbound.message_allowed`, `inbound.message_denied`, `inbound.message_invalid`, and `inbound.message_handler_failed`; audit metadata records actor key, route kind, and text length only, never message body | green |
 | Lark `/status` | Feishu Web sent `/status`; SQLite recorded `inbound.message_allowed` with `routeKind=command`; bot replied `Status: target: lark chat`, `binding: unbound`, `pending approvals: 0` | green |
-| Lark `/use codex-im` | Feishu Web sent `/use codex-im`; SQLite `thread_bindings` gained a Lark row for `codex-im`; bot replied `Using project codex-im` | green |
+| Lark `/use codex-im` | Historical pre-cwd-wording evidence: Feishu Web sent `/use codex-im`; SQLite `thread_bindings` gained a Lark row for `codex-im`; bot replied with the old `Using project codex-im` text. Current user-facing flow prefers `/cwds` then `/use <number>`. | green |
 | Lark prompt -> Codex | Feishu Web prompt `Reply exactly: LARK-CODEX-OK` created a real Codex thread and bot replied `LARK-CODEX-OK` | green |
 | Lark regression after stale-thread recovery | Feishu Web prompt returned exactly `FEISHU-CODEX-REGRESSION-1207` after the daemon recovered from an old missing Codex thread by rebinding a fresh thread | green |
 | Lark card schema + CardKit update | First real approval attempt exposed Feishu error `230099` / unknown root property `elements`; `be41071` moved card content under `body.elements`. The later callback fix sends Card JSON 2.0 button `behaviors` with only `{ token: "v1:..." }` and no approval id / action kind. CardKit `idConvert` + `update` is now covered by `LARK_LIVE=1 LARK_LIVE_CARD=1 LARK_LIVE_CARD_UPDATE=1 pnpm smoke:lark-live` with redacted message-id evidence | fixed/green |
@@ -925,7 +930,7 @@ Current accepted scope:
 1. Telegram / Feishu-Lark / DingTalk live direct use: green.
 2. Slack bounded workspace use: green for Socket Mode, `/codex`, prompt/reply,
    outbound text/file, Block Kit approval click, and exact-output regression.
-3. Codex-native IM command/output surface: green for project/thread/model,
+3. Codex-native IM command/output surface: green for cwd/thread/model,
    usage/diagnostics/tools/skills/plugins/apps/MCP, artifacts, logs, diffs,
    approvals, and low-noise lifecycle/status projection.
 4. Computer Use: green for explicit `/cu` contract plus bounded local Chrome

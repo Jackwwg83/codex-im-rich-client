@@ -37,6 +37,8 @@ import type {
   ThreadCompactStartResponse,
   ThreadForkParams,
   ThreadForkResponse,
+  ThreadListParams,
+  ThreadListResponse,
   ThreadReadParams,
   ThreadReadResponse,
   ThreadResumeParams,
@@ -235,6 +237,41 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
     const r = await h.runtime.threadRead(params);
     expect(received).toEqual(params);
     expect(r.thread.id).toBe("thread-1");
+
+    await teardown(h);
+  });
+
+  it("threadList forwards params and returns native Codex threads", async () => {
+    const h = await harness();
+    let received: unknown;
+    h.fake.respondTo("thread/list", (params) => {
+      received = params;
+      return {
+        data: [
+          {
+            id: "thread-native",
+            preview: "Fix the login test",
+            cwd: "/repo/web",
+            updatedAt: 1778148600,
+            createdAt: 1778148000,
+            status: "idle",
+            source: { kind: "appServer" },
+          },
+        ],
+        nextCursor: null,
+        backwardsCursor: null,
+      } as unknown as ThreadListResponse;
+    });
+
+    const params: ThreadListParams = {
+      limit: 20,
+      archived: false,
+      sortDirection: "desc",
+    };
+    const r = await h.runtime.threadList(params);
+    expect(received).toEqual(params);
+    expect(r.data[0]?.id).toBe("thread-native");
+    expect(r.data[0]?.cwd).toBe("/repo/web");
 
     await teardown(h);
   });

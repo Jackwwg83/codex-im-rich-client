@@ -66,6 +66,8 @@ import type {
   ThreadCompactStartResponse,
   ThreadForkParams,
   ThreadForkResponse,
+  ThreadListParams,
+  ThreadListResponse,
   ThreadReadParams,
   ThreadReadResponse,
   ThreadResumeParams,
@@ -93,6 +95,7 @@ const REQUEST_METHODS = {
   threadResume: "thread/resume",
   threadFork: "thread/fork",
   threadCompactStart: "thread/compact/start",
+  threadList: "thread/list",
   threadTurnsList: "thread/turns/list",
   threadRead: "thread/read",
   skillsList: "skills/list",
@@ -156,6 +159,10 @@ export class CodexRuntime {
       REQUEST_METHODS.threadCompactStart,
       params,
     );
+  }
+
+  threadList(params: ThreadListParams): Promise<ThreadListResponse> {
+    return this.#client.request<ThreadListResponse>(REQUEST_METHODS.threadList, params);
   }
 
   threadTurnsList(params: ThreadTurnsListParams): Promise<ThreadTurnsListResponse> {

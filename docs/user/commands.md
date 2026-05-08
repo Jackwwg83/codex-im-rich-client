@@ -1,28 +1,41 @@
 # IM Commands
 
-Plain text enters the current bound Codex thread or starts a Codex turn in the
-selected project. Slash commands control project, thread, status, approval, and
-bounded Computer Use behavior.
+Plain text enters the current bound Codex thread or starts a Codex turn after
+you have selected a known local cwd. Slash commands control cwd selection,
+native Codex threads, status, approval, and bounded Computer Use behavior.
 
 ## First Commands
 
 ```text
-/use codex-im
+/cwds
+/use 1
 Reply exactly: OK
 ```
 
-If the project is configured and your IM user/chat is allowlisted, Codex should
-reply through the same IM conversation.
+`/cwds` lists the known local cwd entries from your daemon config. Choose by
+number when possible so you do not need to remember aliases. If the cwd entry
+and your IM user/chat are allowlisted, Codex should reply through the same IM
+conversation.
 
-## Project And Thread Control
+You can also create a new thread and start the first turn in one message:
+
+```text
+/new 1 Reply exactly: OK
+```
+
+Raw paths such as `/Users/me/repo` or `~/repo` are rejected from IM. Add or
+change cwd entries locally through setup/config, then select them from `/cwds`.
+
+## Cwd And Thread Control
 
 | Command | Use |
 |---|---|
-| `/projects` | List configured Codex projects. |
-| `/use <project>` | Select a project for the current IM target. |
-| `/new` | Start a new thread. |
-| `/threads` | List known threads. |
-| `/switch <n>` | Switch to a listed thread. |
+| `/cwds` | List known local cwd entries available to this IM chat. |
+| `/projects` | Compatibility alias for `/cwds`. |
+| `/use <number-or-alias>` | Select a known cwd for the current IM target. |
+| `/new [number-or-alias] [task]` | Start a new Codex thread in the selected or specified known cwd; optional task starts the first turn. |
+| `/threads` | List recent native Codex App Server threads, including threads created from Codex App or CLI. |
+| `/switch <number-or-thread-prefix>` | Resume and bind this IM chat to a listed native Codex thread. |
 | `/alias <name>` | Give the current thread a local alias. |
 | `/fork` | Fork the current thread when supported by Codex App Server. |
 | `/stop` | Interrupt the active turn. |

@@ -55,7 +55,8 @@ pnpm codex-im:install --platform telegram
 Then open the configured IM chat and send:
 
 ```text
-/use codex-im
+/cwds
+/use 1
 Reply exactly: OK
 ```
 

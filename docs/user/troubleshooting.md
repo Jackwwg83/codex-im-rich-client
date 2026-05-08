@@ -72,7 +72,7 @@ secret value.
 ## `im:doctor` Reports Allowlist Failure
 
 Your IM user id or chat/channel id is not allowlisted globally or for the
-selected project.
+selected cwd entry.
 
 Re-run setup with the correct ids, or edit `~/.codex-im-bridge/config.toml`
 carefully. IDs are platform-scoped, for example:
