@@ -20,6 +20,7 @@ export interface DoctorCheck {
   readonly name: string;
   readonly status: CheckStatus;
   readonly detail: string;
+  readonly fixes?: readonly string[];
 }
 
 export interface PlatformDoctorReport {
@@ -123,6 +124,7 @@ function evaluateTelegram(
   return platformReport("telegram", adapter.enabled, [
     adapterEnabled(adapter.enabled),
     secretCheck({
+      platform: "telegram",
       name: "secret",
       envName: adapter.botTokenEnv,
       service: SECRET_SERVICES.telegram,
@@ -171,6 +173,7 @@ function evaluateLark(
       detail: adapter.appId.length > 0 ? "present" : "missing",
     },
     secretCheck({
+      platform: "lark",
       name: "app_secret",
       envName: adapter.appSecretEnv,
       service: SECRET_SERVICES.lark,
@@ -217,6 +220,7 @@ function evaluateDingTalk(
       detail: adapter.clientId === "disabled" ? "missing" : "present",
     },
     secretCheck({
+      platform: "dingtalk",
       name: "client_secret",
       envName: adapter.clientSecretEnv,
       service: SECRET_SERVICES.dingtalk,
@@ -276,6 +280,7 @@ function evaluateSlack(
   return platformReport("slack", adapter.enabled, [
     adapterEnabled(adapter.enabled),
     secretCheck({
+      platform: "slack",
       name: "bot_token",
       envName: adapter.botTokenEnv,
       service: SECRET_SERVICES.slackBot,
@@ -283,6 +288,7 @@ function evaluateSlack(
       keychainSecretPresent,
     }),
     secretCheck({
+      platform: "slack",
       name: "app_token",
       envName: adapter.appTokenEnv,
       service: SECRET_SERVICES.slackApp,
@@ -347,6 +353,7 @@ function adapterEnabled(enabled: boolean): DoctorCheck {
 }
 
 function secretCheck(input: {
+  readonly platform: Platform;
   readonly name: string;
   readonly envName: string;
   readonly service: string;
@@ -369,6 +376,10 @@ function secretCheck(input: {
     name: input.name,
     status: "fail",
     detail: `missing from env ${input.envName} and Keychain service ${input.service}`,
+    fixes: [
+      `pnpm setup:im --platform ${input.platform}`,
+      `security add-generic-password -U -s ${input.service} -a "$USER" -w "<${input.envName}>"`,
+    ],
   };
 }
 
@@ -442,7 +453,11 @@ function overallStatus(checks: readonly DoctorCheck[]): DoctorStatus {
 }
 
 function formatCheck(check: DoctorCheck): string {
-  return `  ${check.name}: ${check.status} (${check.detail})`;
+  const firstLine = `  ${check.name}: ${check.status} (${check.detail})`;
+  if (check.fixes === undefined || check.fixes.length === 0) {
+    return firstLine;
+  }
+  return [firstLine, ...check.fixes.map((fix) => `    fix: ${fix}`)].join("\n");
 }
 
 function hasPlatformEntry(platform: Platform, values: readonly string[]): boolean {

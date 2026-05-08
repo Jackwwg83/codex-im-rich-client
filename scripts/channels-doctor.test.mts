@@ -86,6 +86,10 @@ describe("channels doctor (JAC-237)", () => {
     expect(output).toContain(
       "secret: fail (missing from env IM_TELEGRAM_BOT_TOKEN and Keychain service codex-im-bridge)",
     );
+    expect(output).toContain("fix: pnpm setup:im --platform telegram");
+    expect(output).toContain(
+      'fix: security add-generic-password -U -s codex-im-bridge -a "$USER" -w "<IM_TELEGRAM_BOT_TOKEN>"',
+    );
     expect(output).toContain("security.allowlist: fail (no telegram allowed user/chat)");
     expect(output).toContain("lark: disabled");
     expect(output).toContain("dingtalk: disabled");
@@ -117,6 +121,10 @@ describe("channels doctor (JAC-237)", () => {
     expect(output).toContain("slack: blocked");
     expect(output).toContain(
       "app_token: fail (missing from env SLACK_APP_TOKEN and Keychain service codex-im-bridge-slack-app)",
+    );
+    expect(output).toContain("fix: pnpm setup:im --platform slack");
+    expect(output).toContain(
+      'fix: security add-generic-password -U -s codex-im-bridge-slack-app -a "$USER" -w "<SLACK_APP_TOKEN>"',
     );
     expect(output).toContain("project.allowlist: fail (no project allows slack user/chat)");
     expect(output).not.toContain("xoxb-secret");

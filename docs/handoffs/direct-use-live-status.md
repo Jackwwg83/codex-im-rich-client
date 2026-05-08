@@ -876,6 +876,20 @@ Latest live-acceptance hardening gates:
 | `pnpm release:check` | green: full gates plus bridge build/install dry-run, launchd dry-run, redaction scan, fake smokes, Telegram operator gates, and Lark/DingTalk/Slack/Computer Use default live skips |
 | `pnpm bridge:build && pnpm bridge:install && pnpm launchd:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `10065`; `launchd:install` still prints expected `Load failed: 5` because the LaunchAgent is already loaded, but exits 0 and `launchd:status` is green |
 
+Latest first-use setup hardening gates:
+
+| Gate | Result |
+|---|---|
+| `pnpm exec vitest run --config vitest.config.ts --project unit scripts/setup-im.test.mts scripts/channels-doctor.test.mts` | green: 2 files, 7 passing |
+| `pnpm setup:im --platform telegram --print-template` | green: generated non-secret local config template with Keychain env-var names only |
+| `pnpm setup:im --platform slack --print-template` | green: generated Slack template with bot/app token env names and no token values |
+| `pnpm typecheck` | green |
+| `pnpm typecheck:tests` | green |
+| `pnpm lint` | green: 369 files checked |
+| `pnpm test` | green: 162 files, 1513 passing, 1 skipped |
+| `pnpm protocol:check` | green |
+| `pnpm release:check` | green: full gates plus bridge build/install dry-run, launchd dry-run, redaction scan, fake smokes, Telegram operator gates, and Lark/DingTalk/Slack/Computer Use default live skips |
+
 Latest terminal-card metadata gates:
 
 | Gate | Result |

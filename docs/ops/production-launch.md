@@ -6,6 +6,10 @@ operation.
 This runbook is for launching Codex IM Rich Client as a private local daemon.
 It is not a public deployment guide.
 
+For first-time local setup, start with `docs/setup/getting-started.md` and
+`pnpm setup:im`. This runbook assumes config and Keychain entries already
+exist or are being handled by an operator.
+
 Read `docs/ops/launch-scope.md` before launch. That file is the product
 boundary for supported platforms, command surface, attachments, Computer Use,
 and hard stop conditions.
@@ -20,7 +24,7 @@ Required local baseline:
 - Codex CLI pinned to `0.128.0`.
 - `codex login` completed for the operator account.
 - Repository branch/tag chosen for launch.
-- Telegram bot token available only in the operator shell/Keychain.
+- IM bot/app credentials available only in the operator shell/Keychain.
 
 Verify:
 

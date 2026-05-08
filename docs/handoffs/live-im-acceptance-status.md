@@ -75,7 +75,11 @@
 > local attachment directories/files are locked to `0700` / `0600`, oversized
 > uploads fail before starting a Codex turn, Computer Use wording is bounded to
 > local Chrome evidence, and CI wording distinguishes local gates/workflow
-> review from independently observed GitHub-run status.
+> review from independently observed GitHub-run status. First-use onboarding is
+> now also covered by `pnpm setup:im` plus `docs/setup/getting-started.md`: the
+> local wizard generates `~/.codex-im-bridge/config.toml`, backs up existing
+> config, writes IM secrets to macOS Keychain only, and `pnpm im:doctor` prints
+> concrete repair hints for missing secret sources.
 
 ---
 
@@ -115,7 +119,8 @@
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
   token, app secret, chat id, user id, or message id bytes are recorded in repo
-  docs, logs, or Linear.
+  docs, logs, or Linear. First-use setup remains local-only: IM credentials are
+  written to Keychain, not to a cloud platform or generated config.
 
 ## 2. Correct Acceptance Language
 

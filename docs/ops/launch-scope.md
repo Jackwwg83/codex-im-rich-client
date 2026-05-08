@@ -45,6 +45,19 @@ Minimal user help should show only project binding, plain prompts, status, stop,
 approval behavior, attachments, and bounded `/cu` scope on the first screen.
 Internal protocol details belong in docs, not first-use IM help.
 
+## First-Use Setup
+
+Use `docs/setup/getting-started.md` plus `pnpm setup:im` for first-time local
+onboarding. The setup flow is intentionally local and CLI-based:
+
+- the user creates one IM bot/app in the IM platform console;
+- the wizard writes `~/.codex-im-bridge/config.toml`;
+- the wizard writes IM secrets to macOS Keychain;
+- `pnpm im:doctor` checks readiness and prints repair hints.
+
+Do not build or rely on a cloud credential store, web configuration backend, or
+auto-provisioning of IM platform apps for this launch.
+
 ## Attachments
 
 - Outbound artifacts may be sent as files/images when the adapter supports
