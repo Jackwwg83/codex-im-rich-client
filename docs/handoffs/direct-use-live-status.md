@@ -116,8 +116,9 @@
 > live gates, and one Block Kit approval `Allow once` click. The fixes were
 > Slack-unique Block Kit `action_id`s and acking normal Socket Mode
 > message/app_mention envelopes so Slack does not retry the same prompt. Strict
-> exact-output Slack turns can still be polluted by Codex status summaries, so
-> that remains UX polish rather than a transport blocker. JAC-257 added Slack
+> exact-output Slack turns now suppress auxiliary Codex status/item sections
+> for explicit `Reply exactly` / `Respond exactly` prompts, so the final Slack
+> edit contains only the Codex text body. JAC-257 added Slack
 > inbound file/image materialization: Socket Mode `message` / `app_mention`
 > payloads with Slack `files[]` metadata are downloaded with the bot token into
 > the local daemon attachment directory, then emitted as `InboundAttachment[]`
@@ -147,9 +148,10 @@
 - **Mode:** Real Telegram / Feishu-Lark / DingTalk direct-use acceptance
   complete for enabled text/approval/outbound-artifact paths and real
   inbound image/file upload gates; bounded Slack live workspace acceptance is
-  green for Socket Mode, `/codex`, prompt/reply, outbound text/file, and
-  approval click; bounded local Chrome Computer Use provider smoke is green.
-  Broader Computer Use scenarios continue as explicit follow-up tracks.
+  green for Socket Mode, `/codex`, prompt/reply, exact-output regression,
+  outbound text/file, and approval click; bounded local Chrome Computer Use
+  provider smoke is green. Broader Computer Use scenarios remain future
+  capability expansion, not part of the current acceptance claim.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Slack plan:** `docs/superpowers/plans/2026-05-07-slack-core-platform-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
@@ -797,6 +799,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Slack T5d live acceptance runbook loop | JAC-256 added `docs/ops/slack-live-smoke.md` and linked Slack into `docs/ops/live-im-acceptance.md`. The runbook pins the required Slack app scopes/settings, Keychain services, no-live doctor gate, explicit live text/file gates, and real-client acceptance evidence. Slack remains not accepted until JAC-248 records real workspace inbound, `/codex`, prompt/reply, approval click, and terminal-card finalization. |
 | 2026-05-07 SGT Slack T5e inbound attachment loop | JAC-257 added Slack inbound file/image materialization. The adapter accepts normal file-bearing messages plus Slack `file_share` messages with `files[]`, downloads private file URLs through the injected Web client / production bot-token client, writes bytes under `data/attachments/slack`, and emits image/file `InboundAttachment[]` for the common daemon input path. No live Slack traffic was run; JAC-248 remains open. |
 | 2026-05-08 SGT Slack live workspace acceptance loop | Local OpenClaw was removed so it no longer consumes the same Slack app, and the Slack app-level token was rotated into the codex-im Keychain service. `/codex status` now gets an immediate ephemeral ack plus daemon status; DM prompt/reply, Socket Mode, outbound text/file live gates, and one real Block Kit `Allow once` approval click passed. Root causes fixed: duplicate Block Kit button `action_id`s caused Slack `invalid_blocks`, and missing message/app_mention acks caused Slack Socket Mode retries. Latest real click produced one bound token batch, `allow_once=used`, sibling tokens revoked, active turn cleared, and the harmless `/tmp` target file present. |
+| 2026-05-08 SGT Slack exact-output closeout | Explicit Slack `Reply exactly` / `Respond exactly` prompt turns now suppress auxiliary `Codex status` and item sections while keeping normal development-task status projection intact. Targeted RED/GREEN `packages/daemon/test/turn-output.test.ts -t "keeps Slack exact-reply"` passed, followed by full `turn-output`, `daemon`, and Slack adapter targeted suites. |
 | 2026-05-07 SGT installed Slack-ready bundle | Rebuilt and installed the latest daemon/wrapper bundle, then kickstarted launchd. `pnpm launchd:status` reports pid `66457`, startedAt `2026-05-07T05:21:55.128Z`, `pendingApprovals=0`; `pnpm im:doctor` reports ready for installed Telegram/Lark/DingTalk and Slack `disabled` in current config. |
 | 2026-05-07 SGT installed JAC-257 bundle | After `eec7976`, rebuilt and installed the daemon bundle again, then kickstarted launchd. After a short status-file refresh wait, `pnpm launchd:status` reports pid `81392`, startedAt `2026-05-07T05:38:56.476Z`, `pendingApprovals=0`; `launchctl print` reports `state = running`; `pnpm im:doctor` remains ready with Telegram/Lark/DingTalk ready and Slack disabled in current installed config. |
 | 2026-05-08 SGT Computer Use provider contract loop | JAC-274 now has an explicit daemon-facing App Server dynamic-tool contract. `performInitializeHandshake()` supports `capabilities.experimentalApi`, production `daemon run` opts in when Computer Use is enabled, and explicit `/cu` new-thread turns across Telegram, Feishu/Lark, and DingTalk register the same `codex_im.computer_use` / `operate` dynamic tool when a provider is configured. The contract preserves the `/cu` session registry, policy, audit, allowed-tool, and provider gates, and the prompt asks Codex to use `@Computer` / the allowed app mention instead of shell, terminal automation, or Codex UI automation. |
@@ -893,59 +896,27 @@ Latest live Telegram approval matrix:
 | stale/revoked click | green; pre-restart stale click left `/tmp/codex-im-live-allow-once-20260504-1100.txt` absent and recorded `approval.callback_not_bound` with `result=revoked` |
 | callback token state | green; SQLite shows one `used` action token per approval and revoked siblings for the other actions |
 
-## 7. Next Implementation Order
+## 7. Current Mainline Closeout
 
-Start with Block 1 only:
+The original Direct Use blocks are complete. The latest mainline closeout adds
+bounded Slack workspace acceptance, Slack exact-output suppression, bounded
+macOS Chrome Computer Use provider evidence, release readiness, installed
+bridge refresh, and Linear parent cleanup.
 
-1. Done: `fix(launchd): verify runtime paths during dry-run`
-2. Done: `feat(bridge): build daemon bundle`
-3. Done: `feat(bridge): install runtime app artifacts and dependencies`
-4. Done in A3: `test(bridge): prove installed daemon preflight from temp HOME`
-5. Done: `test(release): prove bridge install -> launchd dry-run chain`
-6. Done in A4: `docs(ops): update production launch docs to remove false-green wording`
+Current accepted scope:
 
-Do not start Track B commands until Block 1 is green.
-
-Block 2:
-
-1. Done: `fix(daemon): refuse context switches during active work`
-2. Next: `feat(daemon): implement help projects and status commands`
-3. `feat(storage): add thread_sessions migration and repository` (done)
-4. `feat(daemon): implement /new with durable thread session persistence` (done)
-5. `feat(daemon): implement /threads` (done)
-6. `feat(daemon): implement /switch with thread/resume-before-bind` (done)
-7. `feat(daemon): implement /alias` (done)
-8. `fix(cli): wire thread sessions into production daemon-run` (done)
-9. `feat(daemon): implement /fork with thread/fork semantics` (done)
-
-Block 3:
-
-1. `test(smoke): add daemon roundtrip control and approval smoke` (done)
-2. `chore(smoke): clarify Telegram side-by-side smoke` (done)
-3. `test(smoke): add operator-gated live Telegram roundtrip evidence` (done)
-4. `feat(daemon): append Codex item summaries to IM turn output` (done)
-
-Block 4:
-
-1. `chore(launchd): add read-only launchd status evidence command` (done)
-2. `fix(telegram): map /start to help` (done)
-3. `feat(daemon): stream and chunk Codex turn output for IM` (done)
-4. `fix(launchd): run installed app daemon with packaged runtime deps` (done)
-5. `fix(daemon): clarify native prompt and Codex item help` (done)
-6. `fix(daemon): avoid current-thread resume for empty /new threads` (done)
-7. `fix(daemon): make no-rollout /fork actionable in IM` (done)
-8. `fix(cli): keep production IM approval handlers pending beyond 30s` (done)
-9. `fix(telegram): preserve approval kind/risk on resolved cards` (done)
-10. Real Telegram Web approval button matrix for allow once, decline, abort,
-    allow-session, and stale/revoked click behavior (done)
-11. Feishu/Lark direct-use inbound, `/status`, `/use`, prompt/reply, and card
-    schema live acceptance (done)
-12. Lark full approval callback live acceptance (done for `Allow once`,
-    `Decline`, `Abort`, `Allow session` reuse, and terminal CardKit refresh).
-13. DingTalk real inbound direct-use acceptance is green for prompt/reply,
-    `/status`, approval card delivery, and one real CardKit callback click.
-    DingTalk bot-owned text is append-only by lifecycle contract; daemon
-    suppresses progress edits and sends one terminal reply for short output.
+1. Telegram / Feishu-Lark / DingTalk live direct use: green.
+2. Slack bounded workspace use: green for Socket Mode, `/codex`, prompt/reply,
+   outbound text/file, Block Kit approval click, and exact-output regression.
+3. Codex-native IM command/output surface: green for project/thread/model,
+   usage/diagnostics/tools/skills/plugins/apps/MCP, artifacts, logs, diffs,
+   approvals, and low-noise lifecycle/status projection.
+4. Computer Use: green for explicit `/cu` contract plus bounded local Chrome
+   provider smoke; arbitrary desktop automation and unattended sensitive
+   actions remain outside the acceptance claim.
+5. Installed bridge: refreshed under launchd pid `98631`, `pendingApprovals=0`,
+   `pnpm im:doctor` ready for Telegram/Lark/DingTalk/Slack, redaction scan
+   green.
 
 ## 8. Compact / Resume
 

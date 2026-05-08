@@ -9,6 +9,11 @@ import { describe, expect, it, vi } from "vitest";
 import { Daemon, type DaemonMessageRef, type DaemonOutboundFile } from "../src/index.js";
 
 const TARGET: Target = { platform: "telegram", chatId: "-1001" };
+const SLACK_TARGET: Target = {
+  platform: "slack",
+  chatId: "T_TEST:D_TEST",
+  threadKey: "1715000000.000000",
+};
 const SENDER: SecurityPolicySender = { userId: "42", displayName: "operator" };
 
 class EventQueue implements AsyncIterableIterator<CodexRichEvent> {
@@ -107,7 +112,7 @@ describe("daemon turn output projection", () => {
       target,
       messageId: "bot-output-1",
     }));
-    const editText = vi.fn(async () => undefined);
+    const editText = vi.fn(async (_ref: DaemonMessageRef, _body: string) => undefined);
     let messageHandler: ((message: unknown) => void) | undefined;
     let route: Extract<SessionRoute, { kind: "bound" }> = {
       kind: "bound",
@@ -205,7 +210,7 @@ describe("daemon turn output projection", () => {
       kind: "text" as const,
       textUpdateMode: "append" as const,
     }));
-    const editText = vi.fn(async () => undefined);
+    const editText = vi.fn(async (_ref: DaemonMessageRef, _body: string) => undefined);
     let messageHandler: ((message: unknown) => void) | undefined;
     let route: Extract<SessionRoute, { kind: "bound" }> = {
       kind: "bound",
@@ -295,7 +300,7 @@ describe("daemon turn output projection", () => {
       target,
       messageId: "bot-output-1",
     }));
-    const editText = vi.fn(async () => undefined);
+    const editText = vi.fn(async (_ref: DaemonMessageRef, _body: string) => undefined);
     let messageHandler: ((message: unknown) => void) | undefined;
     let route: Extract<SessionRoute, { kind: "bound" }> = {
       kind: "bound",
@@ -866,6 +871,104 @@ describe("daemon turn output projection", () => {
     expect(body).not.toContain("token-like");
     expect(body).not.toContain("SECRET=");
     expect(body).not.toContain("abcdefghijklmnopqrstuvwxyz");
+
+    await daemon.stop();
+  });
+
+  it("keeps Slack exact-reply turns free of Codex status sections", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "slack-output-1",
+    }));
+    const editText = vi.fn(async (_ref: DaemonMessageRef, _body: string) => undefined);
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: SLACK_TARGET,
+      projectId: "codex-im",
+      cwd: "/tmp/codex-im",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: SLACK_TARGET,
+      sender: SENDER,
+      text: "Reply exactly: SLACK-EXACT-OK",
+      messageRef: { target: SLACK_TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "unknown",
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        tokenUsage: { total: { totalTokens: 1234 }, last: { totalTokens: 56 } },
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-agent",
+      deltaText: "SLACK-EXACT-OK",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length >= 1);
+    expect(editText).toHaveBeenLastCalledWith(
+      { target: SLACK_TARGET, messageId: "slack-output-1" },
+      "SLACK-EXACT-OK",
+    );
+    const renderedBodies = editText.mock.calls.map(([, body]) => body);
+    expect(renderedBodies.join("\n")).not.toContain("Codex status");
+    expect(renderedBodies.join("\n")).not.toContain("token usage");
 
     await daemon.stop();
   });

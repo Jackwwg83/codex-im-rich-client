@@ -65,7 +65,10 @@
 > Slack Block Kit approval `Allow once` click validates callback token plus
 > messageRef and executes the harmless command. The Slack fixes were unique
 > Block Kit button `action_id`s and acking normal message/app_mention envelopes
-> to prevent Socket Mode retries.
+> to prevent Socket Mode retries. A final Slack exact-output polish pass now
+> suppresses auxiliary `Codex status` / item sections for explicit
+> `Reply exactly` / `Respond exactly` Slack turns, so strict answer prompts
+> render the Codex text body only.
 
 ---
 
@@ -74,7 +77,7 @@
 - **Mode:** Live IM acceptance.
 - **Branch:** `codex/live-im-acceptance`.
 - **Base release candidate:** `production-readiness-2026-05-03-r2`.
-- **Live acceptance tag:** `live-im-acceptance-2026-05-07`.
+- **Live acceptance tag:** `live-im-acceptance-2026-05-08`.
 - **Release candidate status:** non-live gates, fake smokes, contract tests,
   outside-voice review, and GitHub Actions CI are green.
 - **Live acceptance status:** Telegram real direct-use acceptance is green.
@@ -96,9 +99,9 @@
   `cardEvents=1`, `callbackMessageRef=present`, and `callbackAction=present`.
   Slack live workspace acceptance is green for the bounded JAC-248 scope:
   Socket Mode, `/codex status`, DM prompt/reply, live outbound text/file gates,
-  and one real approval card click through Block Kit. Residual Slack UX
-  hardening remains for strict exact-output turns because Codex status summaries
-  can still appear beside the requested answer.
+  one real approval card click through Block Kit, and local exact-output
+  regression coverage that prevents auxiliary Codex status sections from
+  polluting explicit `Reply exactly` turns.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -110,7 +113,7 @@
 Use this wording for the current enabled-platform acceptance state:
 
 ```text
-Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, DingTalk, and bounded Slack workspace use. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. Slack passed Socket Mode readiness, /codex status, DM prompt/reply, outbound text/file live gates, and one real Block Kit approval click with callback-token/messageRef validation. DingTalk and Slack callback acceptance remain fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
+Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, DingTalk, and bounded Slack workspace use. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. Slack passed Socket Mode readiness, /codex status, DM prompt/reply, outbound text/file live gates, one real Block Kit approval click with callback-token/messageRef validation, and exact-output regression coverage for `Reply exactly` turns. DingTalk and Slack callback acceptance remain fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
 Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context. DingTalk outbound file/image attachment support is implemented locally through media upload plus session-webhook replies or proactive robot group/user delivery with `DINGTALK_TARGET_CHAT_ID`; explicit real DingTalk file and image send gates now pass with redacted `status=file_sent` evidence.
 Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath` artifacts, completed/failed long command logs, local dynamic-tool / Computer Use screenshot artifacts, and file-change patch attachments is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram, Feishu/Lark, and DingTalk.
 ```
@@ -165,7 +168,7 @@ unattended sensitive actions remain outside the acceptance claim.
 | Common group mention gate | `security.group_policy` through common `SecurityPolicy.checkInboundMessage` daemon routing | local pass | Configured group chats require an explicit mention alias before ordinary inbound text reaches Codex; non-gated chats keep existing user/chat allowlist behavior, and approval callback authorization remains token/messageRef/broker based |
 | Slack readiness / Socket Mode | `pnpm im:doctor`, `SLACK_LIVE=1 SLACK_LIVE_DRY_RUN=1 pnpm smoke:slack-live`, and Socket Mode probe | pass | Installed Slack config is enabled with Keychain-backed bot/app token presence only; Socket Mode connects after rotating the app-level token away from the old shared consumer |
 | Slack slash command | `/codex status` in Slack Web | pass | Slack immediately shows ephemeral `Codex is working...`, then the daemon returns status with binding/project/pending-approval summary; no Slackbot timeout after the ack fix |
-| Slack DM prompt/reply | Slack Web DM harmless Codex prompt | pass with UX note | Real Codex prompt/reply returns through Slack. Strict `Reply exactly` turns can still include Codex status summaries, so exact-output polish remains a follow-up rather than a transport blocker |
+| Slack DM prompt/reply | Slack Web DM harmless Codex prompt plus exact-output regression | pass | Real Codex prompt/reply returns through Slack. Explicit `Reply exactly` / `Respond exactly` Slack turns suppress auxiliary Codex status/item sections so the final Slack edit contains only the Codex text body |
 | Slack outbound text/file live gates | `SLACK_LIVE=1 ... pnpm smoke:slack-live` text and file gates | pass | Web API text send and external-upload file path passed with redacted message-id/file evidence only |
 | Slack approval callback | Slack Web write-command prompt, real Block Kit `Allow once` click | pass | One prompt generated one bound callback-token batch after message-envelope acking; real `Allow once` changed `allow_once=used`, revoked siblings, cleared active turn, and created the harmless `/tmp` target file |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
@@ -723,6 +726,14 @@ Stop and treat as a blocker if:
   passed, and a real Slack Block Kit `Allow once` click validated callback
   token plus messageRef, changed the selected token to `used`, revoked sibling
   tokens, cleared the active turn, and created the harmless `/tmp` target file.
+- 2026-05-08 SGT Slack exact-output closeout: explicit Slack `Reply exactly`
+  / `Respond exactly` turns now suppress auxiliary Codex status/item sections
+  while preserving normal Codex-native status projection for development
+  tasks. Targeted RED/GREEN, full tests (`161 files, 1500 pass, 1 skipped`),
+  typecheck, test typecheck, lint, protocol check, `release:check
+  -- --skip-full-gates`, bridge install, launchd kickstart, `im:doctor`, and
+  installed bridge redaction scan all passed. Installed launchd is running pid
+  `98631` with `pendingApprovals=0`.
 - 2026-05-07 SGT Codex-native control loop: The common IM command plane now
   exposes Codex App Server-native surfaces for model listing, thread
   compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,

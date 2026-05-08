@@ -16,24 +16,26 @@ Fresh local evidence:
 
 ```text
 branch: codex/live-im-acceptance
-last committed baseline before this recheck: d2e60d4 feat(computer-use): register app-server provider contract
-working tree: active JAC-279 provider + Slack live acceptance/docs refresh before final commit
-launchd: running pid=78694, codexThreads=0, pendingApprovals=0
+last committed baseline before this closeout: dea88cd feat(im): accept slack live workspace and chrome cu provider
+working tree: active Slack exact-output closeout + release docs before final commit
+launchd: running pid=98631, codexThreads=0, pendingApprovals=0
 pnpm im:doctor: ready for Telegram / Lark / DingTalk / Slack
 pnpm dingtalk:readiness: ready
-targeted RED/GREEN: Slack send-card/action-id, message-envelope ack, slash ack, action/client suites; JAC-279 provider tests
-full gates after refresh:
+targeted RED/GREEN: Slack exact-output suppression; Slack send-card/action-id, message-envelope ack, slash ack, action/client suites; JAC-279 provider tests
+full gates after closeout:
   pnpm typecheck -> green
   pnpm typecheck:tests -> green
   pnpm lint -> green
-  pnpm test -> 161 files, 1499 pass, 1 skip
+  pnpm test -> 161 files, 1500 pass, 1 skip
   pnpm protocol:check -> green, 234 schema files canonical
-installed bridge after refresh:
+  pnpm release:check -- --skip-full-gates -> green
+installed bridge after closeout:
   pnpm bridge:build -> green
   pnpm bridge:install -> green, preflight ok
   launchctl kickstart -k gui/501/io.codex-im-bridge -> green
-  pnpm launchd:status -> green, pid 78694, pendingApprovals=0
+  pnpm launchd:status -> green, pid 98631, pendingApprovals=0
   pnpm im:doctor -> ready, Telegram/Lark/DingTalk/Slack ready
+  installed bridge redaction scan -> green
 ```
 
 Fresh gate/blocker checks:
@@ -47,6 +49,7 @@ Slack live workspace acceptance
 -> DM prompt/reply reached a real Codex turn
 -> outbound text/file live gates passed with redacted evidence
 -> real Block Kit Allow once click produced allow_once=used, sibling tokens revoked, active turn cleared, and harmless target file present
+-> Slack exact-output regression now suppresses auxiliary Codex status/item sections for explicit Reply exactly / Respond exactly turns
 
 DingTalk outbound file/image gates
 -> DINGTALK_LIVE_FILE=1 file gate returned redacted status=file_sent
@@ -99,20 +102,16 @@ pnpm smoke:computer-use-live
 | Computer Use output/artifacts | Dynamic-tool / Computer Use `inputImage` artifacts are projected through `sendFile`; summaries hide raw tool args. This refresh also projects app, step/action, policy decision, blocked reason, and approval-required state when those summary fields are present. | Output projection local green |
 | Real desktop Computer Use execution | JAC-274 implements the daemon-facing contract, and JAC-279 adds a bounded macOS Chrome provider. The non-dry-run smoke now routes local `navigate` + `observe` through `ComputerUseSessionRegistry`, `ComputerUsePolicy`, `ComputerUseToolGate`, and `MacChromeComputerUseProvider` and returns `status=executed`. | Bounded provider smoke green; arbitrary desktop/sensitive actions still out of scope |
 | Identity and group safety | JAC-240 and JAC-241 complete. `/whoami` is redacted; access groups and mention-required group policy are implemented. | Local green |
-| Slack live workspace acceptance | JAC-248 is now green for the bounded live workspace scope: Socket Mode readiness, `/codex status`, DM prompt/reply, outbound text/file gates, and one real approval click. Strict exact-output Slack UX polish remains follow-up because Codex status summaries can appear beside the requested answer. | Live green with UX follow-up |
+| Slack live workspace acceptance | JAC-248 is now green for the bounded live workspace scope: Socket Mode readiness, `/codex status`, DM prompt/reply, outbound text/file gates, and one real approval click. Slack exact-output regression coverage now prevents auxiliary Codex status/item sections from appearing in explicit `Reply exactly` / `Respond exactly` turns. | Live green |
 | Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264/265/266/267/268/269/271/272/273 are Done. JAC-275 tracks the command-risk / Computer Use detail refresh. JAC-277 is green for DingTalk inbound image and generic-file uploads after the 2026-05-08 file gate. JAC-274 remains the Computer Use parent, now split into JAC-278 official provider-contract evidence and JAC-279 local experimental provider POC. JAC-248 is green for bounded Slack live workspace acceptance. | Green tracking, with follow-up tracks explicit |
 | Repo handoff tracking | `docs/handoffs/direct-use-live-status.md`, `docs/handoffs/live-im-acceptance-status.md`, and `docs/phase-6/computer-use-capability-evidence.md` record current state and blockers. | Green |
 
-## 3. Follow-Up Tracks
+## 3. Future Expansion Tracks
 
-These are outside the active supported-platform completion claim:
+These are outside the active supported-platform completion claim and are not
+current launch blockers:
 
-1. **Slack strict-output UX polish.**
-   The bounded Slack workspace path is accepted, but strict `Reply exactly`
-   prompts can still show Codex status summaries beside the requested answer.
-   This is output-noise polish, not an adapter transport or approval blocker.
-
-2. **Bounded Computer Use provider scope.**
+1. **Broader Computer Use provider scope.**
    The IM `/cu` control, output surfaces, daemon-facing App Server
    dynamic-tool contract, and local macOS Chrome provider smoke are green.
    The accepted provider scope is intentionally bounded to local Chrome
@@ -133,11 +132,10 @@ proactive robot media path; DingTalk inbound image live acceptance is green
 through the robot file download path. DingTalk inbound generic-file live
 acceptance is also green after the 2026-05-08 real Desktop file-upload gate.
 
-This verdict now includes bounded Slack live workspace acceptance. It does
-**not** claim arbitrary desktop Computer Use beyond the bounded local Chrome
-provider smoke. Remaining follow-up tracks:
+This verdict now includes bounded Slack live workspace acceptance and the
+Slack exact-output closeout. It does **not** claim arbitrary desktop Computer
+Use beyond the bounded local Chrome provider smoke. Future expansion track:
 
-- Slack strict-output UX polish for exact-answer turns.
 - Broader IM-triggered Computer Use scenarios beyond the bounded local Chrome
   provider smoke, if desired.
 

@@ -389,6 +389,7 @@ interface DaemonTurnOutputState {
   readonly target: Target;
   readonly threadId: string;
   readonly turnId: string;
+  readonly suppressAuxiliarySummaries: boolean;
   readonly statusSummaries: string[];
   readonly itemSummaries: string[];
   readonly files: DaemonTurnOutputFile[];
@@ -1624,7 +1625,12 @@ export class Daemon {
     const activeTurnId = this.#turnId(startedTurn);
     if (activeTurnId !== undefined) {
       this.#bindActiveTurn(sessionRouter, route, activeTurnId);
-      await this.#openTurnOutput(inbound.target, route.codexThreadId, activeTurnId);
+      await this.#openTurnOutput(
+        inbound.target,
+        route.codexThreadId,
+        activeTurnId,
+        shouldSuppressAuxiliaryTurnSections(inbound.target, text),
+      );
     }
   }
 
@@ -1803,7 +1809,12 @@ export class Daemon {
     this.#clearTerminalActiveTurn(state.target, event.threadId, event.turnId);
     await this.#publishTerminalTurnOutput(
       state,
-      this.#terminalTurnOutputBody(event, state.text, state.statusSummaries, state.itemSummaries),
+      this.#terminalTurnOutputBody(
+        event,
+        state.text,
+        outputStatusSummaries(state),
+        outputItemSummaries(state),
+      ),
     );
     await this.#publishTerminalTurnFiles(state);
   }
@@ -1891,11 +1902,17 @@ export class Daemon {
     });
   }
 
-  async #openTurnOutput(target: Target, threadId: string, turnId: string): Promise<void> {
+  async #openTurnOutput(
+    target: Target,
+    threadId: string,
+    turnId: string,
+    suppressAuxiliarySummaries = false,
+  ): Promise<void> {
     const state: DaemonTurnOutputState = {
       target,
       threadId,
       turnId,
+      suppressAuxiliarySummaries,
       statusSummaries: [],
       itemSummaries: [],
       files: [],
@@ -2039,11 +2056,9 @@ export class Daemon {
   }
 
   async #maybeEditTurnProgress(state: DaemonTurnOutputState): Promise<void> {
-    if (
-      state.text.length === 0 &&
-      state.statusSummaries.length === 0 &&
-      state.itemSummaries.length === 0
-    ) {
+    const statusSummaries = outputStatusSummaries(state);
+    const itemSummaries = outputItemSummaries(state);
+    if (state.text.length === 0 && statusSummaries.length === 0 && itemSummaries.length === 0) {
       return;
     }
     if (isAppendOnlyTextRef(state.messageRef)) {
@@ -2061,12 +2076,12 @@ export class Daemon {
   }
 
   #inProgressTurnOutputBody(state: DaemonTurnOutputState): string {
-    if (state.statusSummaries.length === 0 && state.itemSummaries.length === 0) {
+    const statusSummaries = outputStatusSummaries(state);
+    const itemSummaries = outputItemSummaries(state);
+    if (statusSummaries.length === 0 && itemSummaries.length === 0) {
       return state.text.length === 0 ? "Codex is working..." : truncateImText(state.text);
     }
-    return truncateImText(
-      turnOutputBodyWithSections(state.text, state.statusSummaries, state.itemSummaries),
-    );
+    return truncateImText(turnOutputBodyWithSections(state.text, statusSummaries, itemSummaries));
   }
 
   #terminalTurnOutputBody(
@@ -4349,6 +4364,18 @@ function appendImText(base: string, delta: string): string {
     return next;
   }
   return `${next.slice(0, MAX_IM_TEXT_BUFFER_CHARS - 24)}\n\n[truncated for IM]`;
+}
+
+function shouldSuppressAuxiliaryTurnSections(target: Target, text: string): boolean {
+  return target.platform === "slack" && /^\s*(reply|respond)\s+exactly\b/i.test(text);
+}
+
+function outputStatusSummaries(state: DaemonTurnOutputState): readonly string[] {
+  return state.suppressAuxiliarySummaries ? [] : state.statusSummaries;
+}
+
+function outputItemSummaries(state: DaemonTurnOutputState): readonly string[] {
+  return state.suppressAuxiliarySummaries ? [] : state.itemSummaries;
 }
 
 function turnOutputBodyWithSections(
