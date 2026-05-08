@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -95,6 +95,7 @@ describe("Slack production clients", () => {
       expect(downloaded?.localPath).toBe(join(attachmentDir, "F_TEST-screenshot.png"));
       expect(downloaded?.sizeBytes).toBe(3);
       await expect(readFile(downloaded?.localPath ?? "")).resolves.toEqual(Buffer.from([4, 5, 6]));
+      expect((await stat(downloaded?.localPath ?? "")).mode & 0o777).toBe(0o600);
       expect(fetchImpl).toHaveBeenCalledWith(
         "https://files.slack.test/private/screenshot",
         expect.objectContaining({
@@ -107,6 +108,29 @@ describe("Slack production clients", () => {
     } finally {
       await rm(attachmentDir, { recursive: true, force: true });
     }
+  });
+
+  it("rejects oversized Slack private file downloads", async () => {
+    const fetchImpl = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+        new Response(new Uint8Array([1, 2, 3, 4, 5]), { status: 200 }),
+    );
+    const client = createSlackWebApiClient({
+      botToken: "xoxb-download-token-never-log",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      maxInboundAttachmentBytes: 4,
+    });
+
+    await expect(
+      client.downloadFile?.({
+        fileId: "F_TEST",
+        filename: "huge.log",
+        contentType: "text/plain",
+        url: "https://files.slack.test/private/huge",
+        sizeBytes: 5,
+      }),
+    ).rejects.toThrow("Attachment too large");
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("builds a SlackChannelAdapter from injected production clients", async () => {

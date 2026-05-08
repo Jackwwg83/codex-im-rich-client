@@ -2,11 +2,13 @@
 
 > Single source of truth while bringing Codex IM Rich Client from Phase 7
 > complete to上线运行标准.
-> **Last updated:** 2026-05-07 - JAC-171 remains the release-candidate baseline
+> **Last updated:** 2026-05-08 - JAC-171 remains the release-candidate baseline
 > at `production-readiness-2026-05-03-r2`; subsequent enabled live IM
-> acceptance for Telegram, Feishu/Lark, and DingTalk is complete in
-> `docs/handoffs/live-im-acceptance-status.md`. Slack/direct-use hardening and
-> real Computer Use provider evidence remain separate tracks.
+> acceptance for Telegram, Feishu/Lark, DingTalk, bounded Slack workspace use,
+> and bounded local Chrome Computer Use provider evidence is tracked in
+> `docs/handoffs/live-im-acceptance-status.md` and
+> `docs/handoffs/direct-use-live-status.md`. GitHub Actions rows below describe
+> workflow content/local evidence unless a specific GitHub run URL is attached.
 
 ---
 
@@ -22,7 +24,7 @@
 - **Base tag:** `phase-7-extended-platforms-web-console-complete`.
 - **Version:** `0.1.0-phase7`.
 - **Release tag:** `production-readiness-2026-05-03-r2`.
-- **Follow-on live acceptance tag:** `live-im-acceptance-2026-05-07`.
+- **Follow-on live acceptance tag:** `live-im-acceptance-2026-05-08`.
 - **Handoff:** `docs/handoffs/2026-05-03-production-readiness.md`.
 - **Next exact action:** continue direct-use hardening / Slack readiness from
   `docs/handoffs/direct-use-live-status.md` and Linear project

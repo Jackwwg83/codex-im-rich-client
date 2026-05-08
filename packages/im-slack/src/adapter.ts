@@ -9,6 +9,10 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
+import {
+  isInboundAttachmentTooLarge,
+  normalizeMaxInboundAttachmentBytes,
+} from "@codex-im/channel-core";
 import { decodeSlackCallbackHandle, normalizeSlackRawBlockAction } from "./action.js";
 import { SLACK_CAPABILITIES } from "./capabilities.js";
 import { type SlackApprovalCardBlock, renderSlackApprovalCard } from "./card.js";
@@ -68,6 +72,7 @@ export interface SlackFileDownloadInput {
   readonly filename: string;
   readonly contentType: string;
   readonly url: string;
+  readonly sizeBytes?: number;
 }
 
 export interface SlackDownloadedFile {
@@ -84,6 +89,7 @@ export interface SlackChannelAdapterOptions {
   readonly now?: () => Date;
   readonly socketClient?: SlackSocketModeClientLike;
   readonly webClient?: SlackWebClientLike;
+  readonly maxInboundAttachmentBytes?: number;
 }
 
 export class SlackChannelAdapter implements ChannelAdapter {
@@ -314,6 +320,19 @@ export class SlackChannelAdapter implements ChannelAdapter {
     if (downloadFile === undefined) {
       return [];
     }
+    const maxBytes = normalizeMaxInboundAttachmentBytes(this.#options.maxInboundAttachmentBytes);
+    const oversizedDescriptors = descriptors.filter((descriptor) =>
+      isInboundAttachmentTooLarge(descriptor.sizeBytes, maxBytes),
+    );
+    if (oversizedDescriptors.length > 0) {
+      return oversizedDescriptors.map((descriptor) => ({
+        kind: descriptor.kind,
+        filename: descriptor.filename,
+        contentType: descriptor.contentType,
+        ...(descriptor.sizeBytes === undefined ? {} : { sizeBytes: descriptor.sizeBytes }),
+        rejectionReason: "too_large",
+      }));
+    }
     const attachments: InboundAttachment[] = [];
     for (const descriptor of descriptors) {
       try {
@@ -322,6 +341,7 @@ export class SlackChannelAdapter implements ChannelAdapter {
           filename: descriptor.filename,
           contentType: descriptor.contentType,
           url: descriptor.url,
+          ...(descriptor.sizeBytes === undefined ? {} : { sizeBytes: descriptor.sizeBytes }),
         });
         attachments.push({
           kind: descriptor.kind,

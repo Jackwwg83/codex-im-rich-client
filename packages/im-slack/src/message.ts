@@ -43,6 +43,7 @@ export interface SlackFileAttachmentDescriptor {
   readonly contentType: string;
   readonly url: string;
   readonly kind: "image" | "file";
+  readonly sizeBytes?: number;
 }
 
 export function normalizeSlackRawMessage(
@@ -106,6 +107,7 @@ export function slackFileAttachmentDescriptors(
         contentType,
         url,
         kind: contentType.toLowerCase().startsWith("image/") ? "image" : "file",
+        ...(file.size === undefined ? {} : { sizeBytes: file.size }),
       },
     ];
   });

@@ -247,10 +247,10 @@ Failure localization:
 
 ## 6. Slack
 
-Slack live acceptance is tracked separately from the already accepted
-Telegram/Lark/DingTalk matrix because it requires a real Slack app, Socket Mode
-app-level token, bot token, workspace install, slash command, Events API, and
-interactivity setup.
+Slack live acceptance is now complete for the bounded JAC-248 workspace scope,
+but remains tracked separately from the Telegram/Lark/DingTalk matrix because
+it depends on a real Slack app, Socket Mode app-level token, bot token,
+workspace install, slash command, Events API, and interactivity setup.
 
 Runbook:
 
@@ -270,10 +270,13 @@ Passing criteria:
   and routes through the existing Codex image/local-path file input behavior;
 - one real approval card click reaches the daemon through Socket Mode and
   passes callback-token plus `messageRef` validation;
-- the terminal approval card visibly resolves without leaving active buttons.
+- the terminal approval card visibly resolves without leaving active buttons;
+- exact-output prompts such as `Reply exactly` do not include auxiliary Codex
+  status sections in the final Slack reply.
 
-Do not mark Slack accepted from local adapter tests alone. JAC-248 remains open
-until the real workspace path above passes.
+Do not mark future Slack regressions accepted from local adapter tests alone.
+JAC-248 passed only after the real workspace path above produced redacted live
+evidence.
 
 Failure localization:
 

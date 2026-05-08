@@ -16,19 +16,20 @@ Fresh local evidence:
 
 ```text
 branch: codex/live-im-acceptance
-last committed baseline before this closeout: dea88cd feat(im): accept slack live workspace and chrome cu provider
-working tree: active Slack exact-output closeout + release docs before final commit
+last committed baseline before this hardening: cf009cb fix(im): close slack exact-output and live readiness
+change scope: GPT Pro follow-up hardening patch
 launchd: running pid=98631, codexThreads=0, pendingApprovals=0
 pnpm im:doctor: ready for Telegram / Lark / DingTalk / Slack
 pnpm dingtalk:readiness: ready
-targeted RED/GREEN: Slack exact-output suppression; Slack send-card/action-id, message-envelope ack, slash ack, action/client suites; JAC-279 provider tests
-full gates after closeout:
+targeted RED/GREEN: Slack exact-output suppression; Slack send-card/action-id, message-envelope ack, slash ack, action/client suites; JAC-279 provider tests; inbound attachment cap/permission coverage for Telegram/Lark/DingTalk/Slack plus daemon fail-closed routing
+full gates after GPT Pro hardening:
   pnpm typecheck -> green
   pnpm typecheck:tests -> green
   pnpm lint -> green
-  pnpm test -> 161 files, 1500 pass, 1 skip
+  pnpm test -> 161 files, 1509 pass, 1 skip
   pnpm protocol:check -> green, 234 schema files canonical
-  pnpm release:check -- --skip-full-gates -> green
+  pnpm release:check -- --skip-full-gates -> green, includes Slack default-skip
+  pnpm release:check -> green
 installed bridge after closeout:
   pnpm bridge:build -> green
   pnpm bridge:install -> green, preflight ok
@@ -99,6 +100,7 @@ pnpm smoke:computer-use-live
 | Approval request cards and callbacks | Telegram and Feishu/Lark live approval matrices passed. DingTalk live CardKit callback probe passed with callback token/messageRef validation fail-closed. Slack live Block Kit `Allow once` click now also passed after unique action ids and message-envelope acking. | Green for enabled platforms plus bounded Slack |
 | Outbound images/files/artifacts | Telegram and Feishu/Lark live file gates passed. DingTalk `sendFile` is implemented locally through media upload plus session webhook when a fresh inbound robot message exists, and through proactive robot group/user media delivery when `DINGTALK_TARGET_CHAT_ID` is configured. DingTalk live file and image gates now both return redacted `status=file_sent`. | Telegram/Lark/DingTalk live green |
 | Inbound images/files | Telegram Web and Feishu Web inbound image/file live gates pass with local path/filename/size presence only. DingTalk inbound image and generic-file uploads now both pass real live gates: image uses live `content.downloadCode` / `content.pictureDownloadCode`, file uses live `msgtype=file` plus `content.downloadCode` / `content.fileName`, and both download through `/v1.0/robot/messageFiles/download` with redacted `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, and local path/filename/size presence only. | Telegram/Lark/DingTalk live green |
+| Inbound attachment hardening | GPT Pro follow-up adds a shared daemon-configurable cap (`daemon.max_inbound_attachment_bytes`, default 25 MiB), adapter-level pre/post size checks, `0700` local attachment directories, `0600` local files, and fail-closed oversized-upload response before a Codex turn starts. | Local green |
 | Computer Use output/artifacts | Dynamic-tool / Computer Use `inputImage` artifacts are projected through `sendFile`; summaries hide raw tool args. This refresh also projects app, step/action, policy decision, blocked reason, and approval-required state when those summary fields are present. | Output projection local green |
 | Real desktop Computer Use execution | JAC-274 implements the daemon-facing contract, and JAC-279 adds a bounded macOS Chrome provider. The non-dry-run smoke now routes local `navigate` + `observe` through `ComputerUseSessionRegistry`, `ComputerUsePolicy`, `ComputerUseToolGate`, and `MacChromeComputerUseProvider` and returns `status=executed`. | Bounded provider smoke green; arbitrary desktop/sensitive actions still out of scope |
 | Identity and group safety | JAC-240 and JAC-241 complete. `/whoami` is redacted; access groups and mention-required group policy are implemented. | Local green |
@@ -117,8 +119,14 @@ current launch blockers:
    The accepted provider scope is intentionally bounded to local Chrome
    observe/navigate/click/type operations through the existing session, policy,
    audit, allowed-tool, and provider gates. It does not claim arbitrary desktop
-   automation, secret entry, external website control, or unattended sensitive
-   actions.
+   automation, secret entry, external website control, arbitrary website
+   operation, or unattended sensitive actions.
+
+2. **Launch UX polish.**
+   GPT Pro product/architecture review recommends keeping the launch product
+   boundary narrow: Codex remote-control bridge first, platform count and
+   platform-specific polish second. The current launch scope is recorded in
+   `docs/ops/launch-scope.md`.
 
 ## 4. Completion Verdict
 
@@ -138,6 +146,8 @@ Use beyond the bounded local Chrome provider smoke. Future expansion track:
 
 - Broader IM-triggered Computer Use scenarios beyond the bounded local Chrome
   provider smoke, if desired.
+- Richer launch UX polish such as `/artifacts`, better `/status`, task
+  presets, and per-chat noise level, without expanding platform count.
 
 ## 5. Blocker Unblock Packet
 

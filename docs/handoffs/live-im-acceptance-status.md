@@ -69,6 +69,13 @@
 > suppresses auxiliary `Codex status` / item sections for explicit
 > `Reply exactly` / `Respond exactly` Slack turns, so strict answer prompts
 > render the Codex text body only.
+> Follow-up hardening from GPT Pro review is complete locally: release preflight
+> includes Slack default-skip hermeticity, inbound attachments share a daemon
+> configurable size cap (`daemon.max_inbound_attachment_bytes`, default 25 MiB),
+> local attachment directories/files are locked to `0700` / `0600`, oversized
+> uploads fail before starting a Codex turn, Computer Use wording is bounded to
+> local Chrome evidence, and CI wording distinguishes local gates/workflow
+> review from independently observed GitHub-run status.
 
 ---
 
@@ -79,7 +86,9 @@
 - **Base release candidate:** `production-readiness-2026-05-03-r2`.
 - **Live acceptance tag:** `live-im-acceptance-2026-05-08`.
 - **Release candidate status:** non-live gates, fake smokes, contract tests,
-  outside-voice review, and GitHub Actions CI are green.
+  and outside-voice review are green. CI workflow content is covered by local
+  repo review; independently observed GitHub-run status must be checked on
+  GitHub when a PR/run is attached.
 - **Live acceptance status:** Telegram real direct-use acceptance is green.
   Feishu/Lark live-smoke, direct-use prompt paths, and the real approval
   callback matrix are green, including terminal approval-card visual refresh
@@ -115,13 +124,14 @@ Use this wording for the current enabled-platform acceptance state:
 ```text
 Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, DingTalk, and bounded Slack workspace use. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. Slack passed Socket Mode readiness, /codex status, DM prompt/reply, outbound text/file live gates, one real Block Kit approval click with callback-token/messageRef validation, and exact-output regression coverage for `Reply exactly` turns. DingTalk and Slack callback acceptance remain fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
 Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context. DingTalk outbound file/image attachment support is implemented locally through media upload plus session-webhook replies or proactive robot group/user delivery with `DINGTALK_TARGET_CHAT_ID`; explicit real DingTalk file and image send gates now pass with redacted `status=file_sent` evidence.
+Inbound attachment materialization is hardened across Telegram, Feishu/Lark, DingTalk, and Slack: directory mode `0700`, file mode `0600`, configurable daemon cap `daemon.max_inbound_attachment_bytes` (default 25 MiB), and a fail-closed oversized-upload message before a Codex turn starts.
 Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath` artifacts, completed/failed long command logs, local dynamic-tool / Computer Use screenshot artifacts, and file-change patch attachments is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram, Feishu/Lark, and DingTalk.
 ```
 
 Do not extend this claim to arbitrary Computer Use. JAC-274/JAC-279 now has an
 explicit App Server dynamic-tool provider contract and a bounded macOS Chrome
-provider smoke for local navigate/observe through the reviewed gate, but
-broader desktop automation, secret entry, external website control, and
+provider smoke for local navigate/observe/click/type through the reviewed gate,
+but broader desktop automation, secret entry, external website control, and
 unattended sensitive actions remain outside the acceptance claim.
 
 ## 3. Live Acceptance Matrix
@@ -157,6 +167,7 @@ unattended sensitive actions remain outside the acceptance claim.
 | Lark approval allow session | exact same shell command sent twice, first tap `Allow session` | pass | first command wrote 13 bytes; second identical prompt ran without a new Lark callback token and the file grew to 26 bytes; `approval-2 allow_session=used`, siblings revoked |
 | Lark terminal approval card visual refresh | resolved approval card should remove buttons / show resolved status | pass | After launchd reinstall, Feishu Web approval resolved via CardKit; reload preserved `Status: resolved` and zero visible `Allow once` buttons |
 | Telegram/Lark inbound image/file upload | platform file resources materialize locally, then route to Codex turn input | local pass | Telegram `photo` / `document` and Feishu/Lark `image` / `file` unit coverage proves adapter download + daemon routing; images map to Codex `localImage`, generic files map to local-path text context |
+| Inbound attachment safety cap | oversized platform upload should not start a Codex turn | local pass | daemon-configurable `daemon.max_inbound_attachment_bytes` applies to Telegram/Lark/DingTalk/Slack materialization; local directories/files are `0700` / `0600`, and oversized uploads return a short failure message |
 | Common Codex-native IM control commands | `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp`, `/cu status` through daemon common command routing | local pass | Runtime wrappers keep App Server method literals centralized in `CodexRuntime`; daemon output is redacted and shared by Telegram/Lark/DingTalk adapters through the common control plane |
 | Common Computer Use readiness status | `/cu status` and `/diagnostics` policy/provider/readiness surface | local pass | shared daemon output reports enabled state, provider configured/unavailable, readiness or blocked reason, explicit `/cu` requirement, default/allowed/denied apps, sensitive approval keywords, and live-smoke gate without starting Codex work or desktop actions |
 | Common Codex model selection | `/model <model>` through daemon common command routing | local pass | daemon validates the id/name through `runtime.modelList()`, stores the selected model on the current target binding, and future `turnStart` requests use existing `model` params; no global config mutation |

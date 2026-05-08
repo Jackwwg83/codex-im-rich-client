@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -194,10 +194,18 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
   });
 
   it("downloads inbound message resources to the configured attachment directory", async () => {
-    const attachmentDir = await mkdtemp(join(tmpdir(), "codex-im-lark-test-"));
+    const tempRoot = await mkdtemp(join(tmpdir(), "codex-im-lark-test-"));
+    const attachmentDir = join(tempRoot, "attachments");
     const sdkCalls: unknown[] = [];
     try {
-      const deps = fakeSdkDeps({ sdkCalls, resourceBytes: new TextEncoder().encode("log text") });
+      let modeBeforeSdkWrite: number | undefined;
+      const deps = fakeSdkDeps({
+        sdkCalls,
+        resourceBytes: new TextEncoder().encode("log text"),
+        async onBeforeResourceWrite(path) {
+          modeBeforeSdkWrite = (await stat(path)).mode & 0o777;
+        },
+      });
       const adapter = createLarkSdkChannelAdapter({ ...CONFIG, attachmentDir }, deps);
       const seen: unknown[] = [];
 
@@ -225,6 +233,9 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
       expect(attachment?.localPath.startsWith(attachmentDir)).toBe(true);
       expect(attachment?.sizeBytes).toBe(8);
       await expect(readFile(attachment?.localPath ?? "", "utf8")).resolves.toBe("log text");
+      expect((await stat(attachmentDir)).mode & 0o777).toBe(0o700);
+      expect(modeBeforeSdkWrite).toBe(0o600);
+      expect((await stat(attachment?.localPath ?? "")).mode & 0o777).toBe(0o600);
       expect(sdkCalls).toContainEqual({
         method: "messageResourceGet",
         payload: {
@@ -233,7 +244,51 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
         },
       });
     } finally {
-      await rm(attachmentDir, { recursive: true, force: true });
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("drops oversized inbound resources through the configured size cap", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "codex-im-lark-test-"));
+    const attachmentDir = join(tempRoot, "attachments");
+    try {
+      const deps = fakeSdkDeps({ resourceBytes: new TextEncoder().encode("too large") });
+      const adapter = createLarkSdkChannelAdapter(
+        { ...CONFIG, attachmentDir, maxInboundAttachmentBytes: 4 },
+        deps,
+      );
+      const seen: unknown[] = [];
+
+      adapter.onMessage((msg) => seen.push(msg));
+      await adapter.start();
+      await adapter._emitRawMessageForTest({
+        sender: { sender_id: { open_id: "ou_file_sender" } },
+        message: {
+          message_id: "om_resource_message",
+          chat_id: "oc_resource_chat",
+          chat_type: "p2p",
+          message_type: "file",
+          content: JSON.stringify({ file_key: "file_resource_key", file_name: "build.log" }),
+          create_time: "1777750006000",
+        },
+      });
+
+      expect(seen).toEqual([
+        expect.objectContaining({
+          text: "",
+          attachments: [
+            {
+              kind: "file",
+              filename: "build.log",
+              contentType: "application/octet-stream",
+              rejectionReason: "too_large",
+            },
+          ],
+        }),
+      ]);
+      await expect(readdir(attachmentDir)).resolves.toEqual([]);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
     }
   });
 
@@ -298,6 +353,7 @@ describe("Lark SDK client factory (JAC-162 final-review fix)", () => {
 function fakeSdkDeps(options: {
   readonly dispatcher?: FakeSdkEventDispatcher;
   readonly cardKitUpdateError?: unknown;
+  readonly onBeforeResourceWrite?: (path: string) => Promise<void>;
   readonly resourceBytes?: Uint8Array;
   readonly sdkCalls?: unknown[];
   readonly wsClient?: LarkWsClientLike;
@@ -344,6 +400,7 @@ function fakeSdkDeps(options: {
             sdkCalls.push({ method: "messageResourceGet", payload });
             return {
               async writeFile(path: string) {
+                await options.onBeforeResourceWrite?.(path);
                 await writeFile(path, Buffer.from(options.resourceBytes ?? []));
               },
             };

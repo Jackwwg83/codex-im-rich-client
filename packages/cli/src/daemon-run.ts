@@ -188,6 +188,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
         asRuntimeStorage(storageBox.current).threadSessions.switchCurrent(input),
     },
     ...(computerUseProvider === undefined ? {} : { computerUseProvider }),
+    maxInboundAttachmentBytes: config.daemon.maxInboundAttachmentBytes,
     renderResolvedApprovalCard: renderResolvedCallbackApprovalCard,
     statusPath: flags.statusPath ?? join(config.daemon.dataDir, "daemon-status.json"),
   });
@@ -317,6 +318,7 @@ export function createProductionAdapter(
       adapter: new TelegramChannelAdapter({
         botToken: secrets.telegramBotToken,
         attachmentDir: join(config.daemon.dataDir, "attachments", "telegram"),
+        maxInboundAttachmentBytes: config.daemon.maxInboundAttachmentBytes,
       }),
     });
   }
@@ -331,6 +333,7 @@ export function createProductionAdapter(
         appSecret: secrets.larkAppSecret,
         domain: config.adapters.lark.domain,
         attachmentDir: join(config.daemon.dataDir, "attachments", "lark"),
+        maxInboundAttachmentBytes: config.daemon.maxInboundAttachmentBytes,
         ...(secrets.larkEncryptKey === undefined ? {} : { encryptKey: secrets.larkEncryptKey }),
         ...(secrets.larkVerificationToken === undefined
           ? {}
@@ -382,6 +385,7 @@ export function createProductionAdapter(
           clientSecret: secrets.dingtalkClientSecret,
           robotCode: dingTalkRobotCode,
           attachmentDir: join(config.daemon.dataDir, "attachments", "dingtalk"),
+          maxInboundAttachmentBytes: config.daemon.maxInboundAttachmentBytes,
         }),
       }),
     });
@@ -396,6 +400,7 @@ export function createProductionAdapter(
         botToken: secrets.slackBotToken,
         appToken: secrets.slackAppToken,
         attachmentDir: join(config.daemon.dataDir, "attachments", "slack"),
+        maxInboundAttachmentBytes: config.daemon.maxInboundAttachmentBytes,
       }),
     });
   }

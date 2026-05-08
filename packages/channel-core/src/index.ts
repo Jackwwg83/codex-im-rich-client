@@ -29,6 +29,15 @@ export type {
 } from "./types.js";
 export { requireCapability } from "./capabilities.js";
 export type { ChannelCapabilities } from "./capabilities.js";
+export {
+  DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES,
+  InboundAttachmentTooLargeError,
+  assertInboundAttachmentWithinLimit,
+  inboundAttachmentTooLargeMessage,
+  isInboundAttachmentTooLarge,
+  isInboundAttachmentTooLargeError,
+  normalizeMaxInboundAttachmentBytes,
+} from "./attachment-limits.js";
 
 // T19: ChannelAdapter interface (closed; D14 escape clause in JSDoc)
 // + TelegramShapeFakeChannelAdapter (canonical reference adapter

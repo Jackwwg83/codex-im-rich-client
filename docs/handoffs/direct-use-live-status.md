@@ -678,7 +678,7 @@ Latest C5 targeted gates:
 | `pnpm exec vitest run --config vitest.config.ts --project unit scripts/launchd-status.test.mjs` | green: 1 file, 4 passing |
 | `pnpm launchd:status` | expected local not-loaded exit 2; reports missing plist, not-loaded launchctl, and stale daemon status snapshot without token material |
 | `pnpm typecheck` | green |
-| `pnpm lint` | green: 332 files checked |
+| `pnpm lint` | green: 367 files checked |
 | `pnpm test` | green: 148 files, 1331 passing, 1 skipped |
 | `pnpm protocol:check` | green |
 
@@ -803,7 +803,8 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT installed Slack-ready bundle | Rebuilt and installed the latest daemon/wrapper bundle, then kickstarted launchd. `pnpm launchd:status` reports pid `66457`, startedAt `2026-05-07T05:21:55.128Z`, `pendingApprovals=0`; `pnpm im:doctor` reports ready for installed Telegram/Lark/DingTalk and Slack `disabled` in current config. |
 | 2026-05-07 SGT installed JAC-257 bundle | After `eec7976`, rebuilt and installed the daemon bundle again, then kickstarted launchd. After a short status-file refresh wait, `pnpm launchd:status` reports pid `81392`, startedAt `2026-05-07T05:38:56.476Z`, `pendingApprovals=0`; `launchctl print` reports `state = running`; `pnpm im:doctor` remains ready with Telegram/Lark/DingTalk ready and Slack disabled in current installed config. |
 | 2026-05-08 SGT Computer Use provider contract loop | JAC-274 now has an explicit daemon-facing App Server dynamic-tool contract. `performInitializeHandshake()` supports `capabilities.experimentalApi`, production `daemon run` opts in when Computer Use is enabled, and explicit `/cu` new-thread turns across Telegram, Feishu/Lark, and DingTalk register the same `codex_im.computer_use` / `operate` dynamic tool when a provider is configured. The contract preserves the `/cu` session registry, policy, audit, allowed-tool, and provider gates, and the prompt asks Codex to use `@Computer` / the allowed app mention instead of shell, terminal automation, or Codex UI automation. |
-| 2026-05-08 SGT Computer Use mac-chrome provider loop | JAC-279 adds `MacChromeComputerUseProvider`, injected by production `daemon run` when Computer Use is enabled on macOS for Google Chrome. The provider supports bounded `observe`, `navigate`, `click`, and `type`, with navigation restricted to local file/localhost URLs. The non-dry-run gate `COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 COMPUTER_USE_LIVE_PROVIDER=mac-chrome COMPUTER_USE_LIVE_APP="Google Chrome" ... pnpm smoke:computer-use-live` returned `status=executed` after local `navigate` + `observe` flowed through `ComputerUseSessionRegistry`, `ComputerUsePolicy`, `ComputerUseToolGate`, and the provider. |
+| 2026-05-08 SGT Computer Use mac-chrome provider loop | JAC-279 adds `MacChromeComputerUseProvider`, injected by production `daemon run` when Computer Use is enabled on macOS for Google Chrome. The provider supports bounded `observe`, `navigate`, `click`, and `type`, with navigation restricted to local file/localhost URLs. The non-dry-run gate `COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 COMPUTER_USE_LIVE_PROVIDER=mac-chrome COMPUTER_USE_LIVE_APP="Google Chrome" ... pnpm smoke:computer-use-live` returned `status=executed` after local `navigate` + `observe` flowed through `ComputerUseSessionRegistry`, `ComputerUsePolicy`, `ComputerUseToolGate`, and the provider. This is local Chrome capability evidence only; it is not a claim for secret entry, arbitrary websites, arbitrary desktop control, or unattended sensitive actions. |
+| 2026-05-08 SGT GPT Pro hardening loop | GPT Pro code review returned `APPROVE_WITH_CHANGES` with non-blocking launch hardening. The follow-up patch adds Slack to release-readiness default-skip hermeticity, a shared inbound attachment size cap surfaced as `daemon.max_inbound_attachment_bytes`, `0700` attachment directories, `0600` local files, fail-closed oversized-upload messaging before Codex turns start, tightened Computer Use launch wording, and `docs/ops/launch-scope.md` for product boundary/platform tiers/command matrix. Targeted tests passed, full gates passed, and `pnpm release:check` now includes `smoke-slack-live-default-skip`. |
 | 2026-05-07 SGT blocked acceptance recheck | Re-ran the no-side-effect unblock preflights after `9e12c9f`. `git status --short` was clean, `pnpm launchd:status` remained green at pid `16732` with `pendingApprovals=0`, `pnpm im:doctor` reported Telegram/Lark/DingTalk ready and Slack disabled, and `pnpm dingtalk:readiness` reported ready. DingTalk still cannot run the live attachment gate: `open -a DingTalk` left `System Events` reporting `frontmost=false`, `windows=0`, Computer Use `get_app_state` timed out after 120s, and the latest DingTalk inbound audit rows are still from 2026-05-05. Slack remains blocked because Keychain services `codex-im-bridge-slack-bot` and `codex-im-bridge-slack-app` are both missing. Computer Use remains blocked for real desktop execution: default smoke skips, explicit dry-run returns `ready_dry_run`, and explicit non-dry-run exits blocked with `real desktop execution is not implemented in Phase 6 harness`. |
 | 2026-05-07 SGT DingTalk proactive attachment fallback loop | JAC-273 no longer depends only on a fresh session reply URL for outbound file/image tests. `DingTalkChannelAdapter.sendFile` now falls back to a proactive media client when no session webhook is known: it uploads media through DingTalk OAPI, then sends image/file payloads through the robot group or private-user proactive APIs based on `DINGTALK_TARGET_CHAT_ID`. Production `daemon run` injects this client, and `pnpm smoke:dingtalk-live` can now run `DINGTALK_LIVE_FILE=1` with a configured target instead of waiting for a fresh inbound message. Targeted DingTalk/CLI tests, `pnpm typecheck`, and `git diff --check` passed before the live gates below. |
 | 2026-05-07 SGT DingTalk attachment live acceptance loop | JAC-273 live acceptance is now green for outbound file and image delivery. Using config/Keychain/SQLite-derived values without printing secrets, `DINGTALK_LIVE=1 DINGTALK_LIVE_FILE=1 DINGTALK_LIVE_FILE_KIND=file pnpm smoke:dingtalk-live` and the same gate with `DINGTALK_LIVE_FILE_KIND=image` both exited 0 with redacted `status=file_sent`, `targetChatId=present`, `targetSource=env`, `messageId=present`, and `robotEvents=0`. No client secret, target id, message id, or media id bytes were recorded. |
@@ -868,9 +869,11 @@ Latest live-acceptance hardening gates:
 | `pnpm exec vitest run --config vitest.config.ts --project unit packages/daemon/test/daemon.test.ts` | green: 1 file, 109 passing |
 | `pnpm exec vitest run --config vitest.config.ts --project unit packages/cli/test/daemon-run.test.ts` | green: 1 file, 4 passing |
 | `pnpm typecheck` | green |
-| `pnpm lint` | green: 332 files checked |
-| `pnpm test` | green: 148 files, 1338 passing, 1 skipped |
+| `pnpm typecheck:tests` | green |
+| `pnpm lint` | green: 367 files checked |
+| `pnpm test` | green: 161 files, 1509 passing, 1 skipped |
 | `pnpm protocol:check` | green |
+| `pnpm release:check` | green: full gates plus bridge build/install dry-run, launchd dry-run, redaction scan, fake smokes, Telegram operator gates, and Lark/DingTalk/Slack/Computer Use default live skips |
 | `pnpm bridge:build && pnpm bridge:install && pnpm launchd:install && launchctl kickstart -k gui/501/io.codex-im-bridge && pnpm launchd:status` | green with installed daemon pid `10065`; `launchd:install` still prints expected `Load failed: 5` because the LaunchAgent is already loaded, but exits 0 and `launchd:status` is green |
 
 Latest terminal-card metadata gates:
@@ -912,8 +915,9 @@ Current accepted scope:
    usage/diagnostics/tools/skills/plugins/apps/MCP, artifacts, logs, diffs,
    approvals, and low-noise lifecycle/status projection.
 4. Computer Use: green for explicit `/cu` contract plus bounded local Chrome
-   provider smoke; arbitrary desktop automation and unattended sensitive
-   actions remain outside the acceptance claim.
+   provider smoke; arbitrary desktop automation, secret entry, external
+   website control, and unattended sensitive actions remain outside the
+   acceptance claim.
 5. Installed bridge: refreshed under launchd pid `98631`, `pendingApprovals=0`,
    `pnpm im:doctor` ready for Telegram/Lark/DingTalk/Slack, redaction scan
    green.

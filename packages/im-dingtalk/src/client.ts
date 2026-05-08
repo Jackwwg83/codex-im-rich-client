@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import type { ActionAck, MessageRef, Target } from "@codex-im/channel-core";
+import {
+  assertInboundAttachmentWithinLimit,
+  normalizeMaxInboundAttachmentBytes,
+} from "@codex-im/channel-core";
 import { DWClient, EventAck, TOPIC_CARD, TOPIC_ROBOT } from "dingtalk-stream";
 import type { DingTalkApprovalCardJson } from "./card.js";
 
@@ -115,6 +119,7 @@ export interface DingTalkRobotFileClientDeps {
   readonly robotCode: string;
   readonly attachmentDir?: string;
   readonly baseUrl?: string;
+  readonly maxInboundAttachmentBytes?: number;
   readonly now?: () => number;
   readonly randomId?: () => string;
 }
@@ -358,6 +363,7 @@ export function createDingTalkRobotFileClient(
   const fetchImpl = deps.fetch ?? globalThis.fetch;
   const baseUrl = deps.baseUrl ?? DINGTALK_OPENAPI_BASE_URL;
   const attachmentDir = deps.attachmentDir ?? defaultDingTalkAttachmentDir();
+  const maxBytes = normalizeMaxInboundAttachmentBytes(deps.maxInboundAttachmentBytes);
   const now = deps.now ?? Date.now;
   const randomId = deps.randomId ?? randomUUID;
   const tokenCache: { token?: string; expiresAtMs?: number } = {};
@@ -414,12 +420,15 @@ export function createDingTalkRobotFileClient(
         throw new Error(`DingTalk robot message file fetch failed with HTTP ${response.status}`);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
-      await mkdir(attachmentDir, { recursive: true });
+      assertInboundAttachmentWithinLimit(bytes.byteLength, maxBytes);
+      await mkdir(attachmentDir, { recursive: true, mode: 0o700 });
+      await chmod(attachmentDir, 0o700);
       const localPath = join(
         attachmentDir,
         `${now()}-${randomId()}-${safeDingTalkFilename(input.filename)}`,
       );
-      await writeFile(localPath, bytes);
+      await writeFile(localPath, bytes, { mode: 0o600 });
+      await chmod(localPath, 0o600);
       return { localPath, sizeBytes: bytes.byteLength };
     },
   };

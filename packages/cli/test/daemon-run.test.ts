@@ -127,6 +127,7 @@ describe("daemon run safety rails", () => {
     expect(source).toContain(
       'attachmentDir: join(config.daemon.dataDir, "attachments", "dingtalk")',
     );
+    expect(source).toContain("maxInboundAttachmentBytes: config.daemon.maxInboundAttachmentBytes");
   });
 
   it("does not enable DingTalk SDK client-side WebSocket ping in production daemon", () => {

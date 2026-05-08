@@ -210,12 +210,14 @@ describe("SlackChannelAdapter.onMessage (JAC-245)", () => {
       filename: "screenshot.png",
       contentType: "image/png",
       url: "https://files.slack.test/screenshot",
+      sizeBytes: 3,
     });
     expect(webClient.downloadFile).toHaveBeenNthCalledWith(2, {
       fileId: "F_LOG",
       filename: "output.log",
       contentType: "text/plain",
       url: "https://files.slack.test/output",
+      sizeBytes: 7,
     });
     expect(messages).toEqual([
       expect.objectContaining({
@@ -233,6 +235,67 @@ describe("SlackChannelAdapter.onMessage (JAC-245)", () => {
             contentType: "text/plain",
             localPath: "/tmp/codex-im/slack/F_LOG-output.log",
             sizeBytes: 7,
+          },
+        ],
+      }),
+    ]);
+  });
+
+  it("emits rejected oversized Slack attachments before private file download", async () => {
+    const socketClient = new FakeSlackSocketClient();
+    const webClient: SlackWebClientLike = {
+      downloadFile: vi.fn(async () => ({
+        localPath: "/tmp/codex-im/slack/F_SMALL-small.txt",
+        sizeBytes: 4,
+      })),
+    };
+    const adapter = new SlackChannelAdapter({
+      socketClient,
+      webClient,
+      maxInboundAttachmentBytes: 4,
+    });
+    const messages: unknown[] = [];
+    adapter.onMessage((message) => messages.push(message));
+
+    await adapter.start();
+    await socketClient.emit("message", {
+      team_id: "T_TEST",
+      event: {
+        type: "message",
+        channel_type: "im",
+        channel: "D_TEST",
+        user: "U_TEST_USER",
+        text: "please inspect these",
+        ts: "1715000000.000100",
+        files: [
+          {
+            id: "F_HUGE",
+            name: "huge.log",
+            mimetype: "text/plain",
+            url_private_download: "https://files.slack.test/huge",
+            size: 5,
+          },
+          {
+            id: "F_SMALL",
+            name: "small.txt",
+            mimetype: "text/plain",
+            url_private_download: "https://files.slack.test/small",
+            size: 4,
+          },
+        ],
+      },
+    });
+
+    expect(webClient.downloadFile).not.toHaveBeenCalled();
+    expect(messages).toEqual([
+      expect.objectContaining({
+        attachments: [
+          {
+            kind: "file",
+            filename: "huge.log",
+            contentType: "text/plain",
+            sizeBytes: 5,
+            rejectionReason: "too_large",
           },
         ],
       }),

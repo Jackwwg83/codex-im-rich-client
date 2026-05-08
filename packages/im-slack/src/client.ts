@@ -1,6 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import {
+  assertInboundAttachmentWithinLimit,
+  normalizeMaxInboundAttachmentBytes,
+} from "@codex-im/channel-core";
 import { SocketModeClient } from "@slack/socket-mode";
 import {
   SlackChannelAdapter,
@@ -20,6 +24,7 @@ export interface SlackSdkChannelAdapterOptions {
   readonly botToken: string;
   readonly appToken: string;
   readonly attachmentDir?: string;
+  readonly maxInboundAttachmentBytes?: number;
   readonly fetchImpl?: typeof fetch;
   readonly socketClient?: SlackSocketModeClientLike;
   readonly webClient?: SlackWebClientLike;
@@ -28,6 +33,7 @@ export interface SlackSdkChannelAdapterOptions {
 export interface SlackWebApiClientOptions {
   readonly botToken: string;
   readonly attachmentDir?: string;
+  readonly maxInboundAttachmentBytes?: number;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -48,8 +54,14 @@ export function createSlackSdkChannelAdapter(
       createSlackWebApiClient({
         botToken: options.botToken,
         ...(options.attachmentDir === undefined ? {} : { attachmentDir: options.attachmentDir }),
+        ...(options.maxInboundAttachmentBytes === undefined
+          ? {}
+          : { maxInboundAttachmentBytes: options.maxInboundAttachmentBytes }),
         ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       }),
+    ...(options.maxInboundAttachmentBytes === undefined
+      ? {}
+      : { maxInboundAttachmentBytes: options.maxInboundAttachmentBytes }),
   } satisfies SlackChannelAdapterOptions);
 }
 
@@ -70,7 +82,13 @@ export function createSlackWebApiClient(options: SlackWebApiClientOptions): Slac
     chatUpdate: (input) => slackChatUpdate(options.botToken, input, fetchImpl),
     filesUploadV2: (input) => slackFilesUploadV2(options.botToken, input, fetchImpl),
     downloadFile: (input) =>
-      slackDownloadFile(options.botToken, input, options.attachmentDir, fetchImpl),
+      slackDownloadFile(
+        options.botToken,
+        input,
+        options.attachmentDir,
+        options.maxInboundAttachmentBytes,
+        fetchImpl,
+      ),
   };
 }
 
@@ -179,8 +197,11 @@ async function slackDownloadFile(
   token: string,
   input: SlackFileDownloadInput,
   attachmentDir: string | undefined,
+  maxInboundAttachmentBytes: number | undefined,
   fetchImpl: typeof fetch,
 ): Promise<SlackDownloadedFile> {
+  const maxBytes = normalizeMaxInboundAttachmentBytes(maxInboundAttachmentBytes);
+  assertInboundAttachmentWithinLimit(input.sizeBytes, maxBytes);
   const response = await fetchImpl(input.url, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
@@ -189,13 +210,16 @@ async function slackDownloadFile(
     throw new Error(`Slack file download failed with HTTP ${response.status}`);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
+  assertInboundAttachmentWithinLimit(bytes.byteLength, maxBytes);
   const dir = attachmentDir ?? defaultSlackAttachmentDir();
   await mkdir(dir, { recursive: true, mode: 0o700 });
+  await chmod(dir, 0o700);
   const localPath = join(
     dir,
     `${safeSlackPathPart(input.fileId)}-${safeSlackFilename(input.filename)}`,
   );
   await writeFile(localPath, bytes, { mode: 0o600 });
+  await chmod(localPath, 0o600);
   return { localPath, sizeBytes: bytes.byteLength };
 }
 

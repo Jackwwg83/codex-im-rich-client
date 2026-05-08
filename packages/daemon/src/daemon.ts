@@ -136,6 +136,7 @@ const MAX_IM_ITEM_SUMMARIES = 6;
 const MAX_IM_STATUS_SUMMARIES = 12;
 const MAX_IM_ARTIFACT_FILES = 3;
 const MAX_IM_ARTIFACT_FILE_BYTES = 10 * 1024 * 1024;
+const DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_INLINE_COMMAND_OUTPUT_CHARS = 240;
 const MAX_GENERATED_ATTACHMENT_TEXT_CHARS = 200_000;
 const PROGRESS_EDIT_INTERVAL_MS = 1_500;
@@ -338,9 +339,15 @@ interface DaemonInboundAttachment {
   readonly kind: "image" | "file";
   readonly filename: string;
   readonly contentType: string;
-  readonly localPath: string;
+  readonly localPath?: string;
   readonly sizeBytes?: number;
+  readonly rejectionReason?: "too_large";
 }
+
+type DaemonMaterializedInboundAttachment = DaemonInboundAttachment & {
+  readonly localPath: string;
+  readonly rejectionReason?: undefined;
+};
 
 interface DaemonCodexRuntime {
   readonly events?: {
@@ -502,6 +509,7 @@ export interface DaemonOptions {
   readonly statusPath?: string;
   readonly writeStatusSnapshot?: (snapshot: DaemonStatusSnapshot) => MaybePromise<void>;
   readonly readArtifactFile?: (path: string) => MaybePromise<Uint8Array>;
+  readonly maxInboundAttachmentBytes?: number;
 }
 
 export class Daemon {
@@ -913,7 +921,31 @@ export class Daemon {
         return;
       }
 
-      const routed = routeInboundCommand(inbound.text, { attachments: inbound.attachments });
+      const oversizedAttachment = firstOversizedInboundAttachment(
+        inbound.attachments,
+        this.#maxInboundAttachmentBytes(),
+      );
+      if (oversizedAttachment !== undefined) {
+        this.#emitAuditEvent("inbound.attachment_too_large", {
+          target: inbound.target,
+          result: "denied",
+          metadata: {
+            actorKey: actorKey(inbound.target, inbound.sender),
+            kind: oversizedAttachment.kind,
+            contentType: oversizedAttachment.contentType,
+            sizeBytes: oversizedAttachment.sizeBytes,
+            maxBytes: this.#maxInboundAttachmentBytes(),
+          },
+        });
+        await this.#editInboundMessage(
+          inbound.messageRef,
+          inboundAttachmentTooLargeMessage(this.#maxInboundAttachmentBytes()),
+        );
+        return;
+      }
+
+      const materializedAttachments = materializedInboundAttachments(inbound.attachments);
+      const routed = routeInboundCommand(inbound.text, { attachments: materializedAttachments });
       this.#emitAuditEvent("inbound.message_allowed", {
         target: inbound.target,
         result: "allowed",
@@ -921,11 +953,11 @@ export class Daemon {
           actorKey: actorKey(inbound.target, inbound.sender),
           routeKind: routed.kind,
           textLength: inbound.text.length,
-          attachmentCount: inbound.attachments.length,
-          imageAttachmentCount: inbound.attachments.filter(
+          attachmentCount: materializedAttachments.length,
+          imageAttachmentCount: materializedAttachments.filter(
             (attachment) => attachment.kind === "image",
           ).length,
-          fileAttachmentCount: inbound.attachments.filter(
+          fileAttachmentCount: materializedAttachments.filter(
             (attachment) => attachment.kind === "file",
           ).length,
         },
@@ -1558,7 +1590,7 @@ export class Daemon {
       messageRef?: DaemonMessageRef;
     },
     text: string,
-    attachments: readonly DaemonInboundAttachment[],
+    attachments: readonly DaemonMaterializedInboundAttachment[],
   ): Promise<void> {
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();
@@ -4191,14 +4223,27 @@ export class Daemon {
       contentType: unknown;
       localPath: unknown;
       sizeBytes: unknown;
+      rejectionReason: unknown;
     }>;
     if (
       (partial.kind !== "image" && partial.kind !== "file") ||
       typeof partial.filename !== "string" ||
-      typeof partial.contentType !== "string" ||
-      typeof partial.localPath !== "string" ||
-      partial.localPath.length === 0
+      typeof partial.contentType !== "string"
     ) {
+      return undefined;
+    }
+    if (partial.rejectionReason === "too_large") {
+      return {
+        kind: partial.kind,
+        filename: partial.filename,
+        contentType: partial.contentType,
+        rejectionReason: "too_large",
+        ...(typeof partial.sizeBytes === "number" && Number.isFinite(partial.sizeBytes)
+          ? { sizeBytes: partial.sizeBytes }
+          : {}),
+      };
+    }
+    if (typeof partial.localPath !== "string" || partial.localPath.length === 0) {
       return undefined;
     }
     return {
@@ -4210,6 +4255,13 @@ export class Daemon {
         ? { sizeBytes: partial.sizeBytes }
         : {}),
     };
+  }
+
+  #maxInboundAttachmentBytes(): number {
+    return this.#positiveInteger(
+      this.options.maxInboundAttachmentBytes,
+      DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES,
+    );
   }
 
   #daemonMessageRef(value: unknown): DaemonMessageRef | undefined {
@@ -4303,7 +4355,7 @@ function textInputItem(text: string): DaemonTextInput {
 
 function promptInput(
   text: string,
-  attachments: readonly DaemonInboundAttachment[] = [],
+  attachments: readonly DaemonMaterializedInboundAttachment[] = [],
 ): DaemonUserInput[] {
   if (attachments.length === 0) {
     return textInput(text);
@@ -4323,8 +4375,8 @@ function promptInput(
 
 function promptTextWithFileAttachments(
   text: string,
-  fileAttachments: readonly DaemonInboundAttachment[],
-  imageAttachments: readonly DaemonInboundAttachment[],
+  fileAttachments: readonly DaemonMaterializedInboundAttachment[],
+  imageAttachments: readonly DaemonMaterializedInboundAttachment[],
 ): string {
   const trimmed = text.trim();
   const sections: string[] = [];
@@ -5477,6 +5529,34 @@ function targetKey(target: Target): string {
 
 function actorKey(target: Target, sender: SecurityPolicySender): string {
   return `${target.platform}:${sender.userId}`;
+}
+
+function firstOversizedInboundAttachment(
+  attachments: readonly DaemonInboundAttachment[],
+  maxBytes: number,
+): DaemonInboundAttachment | undefined {
+  return attachments.find(
+    (attachment) =>
+      attachment.rejectionReason === "too_large" ||
+      (attachment.sizeBytes !== undefined &&
+        Number.isFinite(attachment.sizeBytes) &&
+        attachment.sizeBytes > maxBytes),
+  );
+}
+
+function materializedInboundAttachments(
+  attachments: readonly DaemonInboundAttachment[],
+): DaemonMaterializedInboundAttachment[] {
+  return attachments.filter(
+    (attachment): attachment is DaemonMaterializedInboundAttachment =>
+      attachment.rejectionReason === undefined &&
+      typeof attachment.localPath === "string" &&
+      attachment.localPath.length > 0,
+  );
+}
+
+function inboundAttachmentTooLargeMessage(maxBytes: number): string {
+  return `Attachment too large. Maximum supported inbound attachment size is ${maxBytes} bytes.`;
 }
 
 function stringArray(value: unknown): readonly string[] {

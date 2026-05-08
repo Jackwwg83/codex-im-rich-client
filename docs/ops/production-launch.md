@@ -6,6 +6,10 @@ operation.
 This runbook is for launching Codex IM Rich Client as a private local daemon.
 It is not a public deployment guide.
 
+Read `docs/ops/launch-scope.md` before launch. That file is the product
+boundary for supported platforms, command surface, attachments, Computer Use,
+and hard stop conditions.
+
 ## 1. Prerequisites
 
 Required local baseline:
@@ -63,6 +67,8 @@ Expected:
 - SQLite backup proof writes only to a temp directory;
 - fake Telegram/Lark/DingTalk smokes pass;
 - live smoke commands either default-skip or stop at explicit operator gates;
+- Slack and Computer Use live-smoke probes default-skip unless their explicit
+  gates are set;
 - output contains no token-shaped material.
 
 Do not continue to install if this command fails.
@@ -177,10 +183,12 @@ pnpm smoke:lark-fake
 pnpm smoke:dingtalk-fake
 pnpm smoke:lark-live
 pnpm smoke:dingtalk-live
+pnpm smoke:slack-live
 pnpm smoke:computer-use-live
 ```
 
-The last three default-skip unless explicit env gates are present.
+The live Lark/DingTalk/Slack/Computer Use commands default-skip unless explicit
+env gates are present.
 
 Operator-gated live checks:
 
@@ -190,6 +198,7 @@ TELEGRAM_LIVE_ROUNDTRIP=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-liv
 TELEGRAM_LIVE=1 CODEX_REAL_SMOKE=1 IM_TELEGRAM_BOT_TOKEN="$TOKEN" pnpm smoke:telegram-side-by-side
 LARK_LIVE=1 LARK_LIVE_DRY_RUN=1 ... pnpm smoke:lark-live
 DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live
+SLACK_LIVE=1 SLACK_LIVE_DRY_RUN=1 ... pnpm smoke:slack-live
 COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 COMPUTER_USE_LIVE_DRY_RUN=1 ... pnpm smoke:computer-use-live
 ```
 
@@ -252,4 +261,6 @@ Stop the launch and rollback if any of these occur:
 - approval resolution bypasses broker/policy/messageRef validation;
 - live smoke starts without explicit env gates;
 - Computer Use launches from a normal prompt instead of explicit `/cu`;
+- Computer Use attempts secret entry, arbitrary desktop automation, external
+  website control, or unattended sensitive action;
 - launchd install targets anything outside the current user's LaunchAgents.

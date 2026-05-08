@@ -34,6 +34,7 @@ describe("release-readiness-check (JAC-169)", () => {
     expect(ids).toContain("smoke-daemon-roundtrip");
     expect(ids).toContain("smoke-telegram-live-default-gate");
     expect(ids).toContain("smoke-telegram-live-roundtrip-default-gate");
+    expect(ids).toContain("smoke-slack-live-default-skip");
     expect(ids).toContain("smoke-computer-use-default-skip");
   });
 
@@ -147,6 +148,14 @@ describe("release-readiness-check (JAC-169)", () => {
       DINGTALK_CLIENT_ID: "client-id",
       DINGTALK_CLIENT_SECRET_ENV: "DINGTALK_CLIENT_SECRET",
       DINGTALK_CLIENT_SECRET: "secret",
+      SLACK_LIVE: "1",
+      SLACK_LIVE_DRY_RUN: "1",
+      SLACK_LIVE_TEXT: "status",
+      SLACK_LIVE_FILE: "1",
+      SLACK_TARGET_CHANNEL_ID: "C_TEST",
+      SLACK_BOT_TOKEN: "xoxb-test-token",
+      SLACK_APP_TOKEN: "xapp-test-token",
+      SLACK_BOT_TOKEN_ENV: "SLACK_BOT_TOKEN",
       COMPUTER_USE_LIVE: "1",
       COMPUTER_USE_PROVIDER_VERIFIED: "1",
       COMPUTER_USE_LIVE_DRY_RUN: "1",
@@ -160,6 +169,7 @@ describe("release-readiness-check (JAC-169)", () => {
       "smoke-telegram-side-by-side-default-gate",
       "smoke-lark-live-default-skip",
       "smoke-dingtalk-live-default-skip",
+      "smoke-slack-live-default-skip",
       "smoke-computer-use-default-skip",
     ];
 
@@ -193,6 +203,14 @@ describe("release-readiness-check (JAC-169)", () => {
       expect(env.DINGTALK_LIVE_INBOUND_ATTACHMENT_KIND).toBeUndefined();
       expect(env.DINGTALK_CLIENT_SECRET_ENV).toBeUndefined();
       expect(env.DINGTALK_CLIENT_SECRET).toBeUndefined();
+      expect(env.SLACK_LIVE).toBeUndefined();
+      expect(env.SLACK_LIVE_DRY_RUN).toBeUndefined();
+      expect(env.SLACK_LIVE_TEXT).toBeUndefined();
+      expect(env.SLACK_LIVE_FILE).toBeUndefined();
+      expect(env.SLACK_TARGET_CHANNEL_ID).toBeUndefined();
+      expect(env.SLACK_BOT_TOKEN).toBeUndefined();
+      expect(env.SLACK_APP_TOKEN).toBeUndefined();
+      expect(env.SLACK_BOT_TOKEN_ENV).toBeUndefined();
       expect(env.COMPUTER_USE_LIVE).toBeUndefined();
       expect(env.COMPUTER_USE_LIVE_DRY_RUN).toBeUndefined();
     }
@@ -203,6 +221,7 @@ describe("release-readiness-check (JAC-169)", () => {
     const skipIds = [
       "smoke-lark-live-default-skip",
       "smoke-dingtalk-live-default-skip",
+      "smoke-slack-live-default-skip",
       "smoke-computer-use-default-skip",
     ];
     const safeSkipOutput = [

@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type {
@@ -13,6 +13,11 @@ import type {
   OutboundFile,
   SendCardResult,
   Target,
+} from "@codex-im/channel-core";
+import {
+  assertInboundAttachmentWithinLimit,
+  isInboundAttachmentTooLargeError,
+  normalizeMaxInboundAttachmentBytes,
 } from "@codex-im/channel-core";
 import { Bot, InputFile } from "grammy";
 import { decodeCallbackData } from "./callback-codec.js";
@@ -189,6 +194,7 @@ export interface TelegramAttachmentDownloadRequest {
   readonly contentType: string;
   readonly kind: "image" | "file";
   readonly messageId: string;
+  readonly sizeBytes?: number;
 }
 
 export interface TelegramDownloadedAttachment {
@@ -210,6 +216,7 @@ export interface TelegramChannelAdapterOptions {
   readonly bot?: TelegramBotLike;
   readonly createBot?: (botToken: string) => TelegramBotLike;
   readonly attachmentDir?: string;
+  readonly maxInboundAttachmentBytes?: number;
   readonly downloadFile?: (
     request: TelegramAttachmentDownloadRequest,
   ) => Promise<TelegramDownloadedAttachment>;
@@ -488,6 +495,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       api: this.#api("downloadFile"),
       botToken: this.#options.botToken,
       attachmentDir: this.#options.attachmentDir,
+      maxInboundAttachmentBytes: this.#options.maxInboundAttachmentBytes,
       fetch: this.#options.fetch,
     });
   }
@@ -652,7 +660,16 @@ async function materializeTelegramAttachments(
         localPath: downloaded.localPath,
         ...(downloaded.sizeBytes === undefined ? {} : { sizeBytes: downloaded.sizeBytes }),
       });
-    } catch {
+    } catch (error) {
+      if (isInboundAttachmentTooLargeError(error)) {
+        attachments.push({
+          kind: descriptor.kind,
+          filename: descriptor.filename,
+          contentType: descriptor.contentType,
+          ...(descriptor.sizeBytes === undefined ? {} : { sizeBytes: descriptor.sizeBytes }),
+          rejectionReason: "too_large",
+        });
+      }
       // Attachment download failure must not leak tokenized file URLs or block text routing.
     }
   }
@@ -671,6 +688,7 @@ function telegramAttachmentDescriptors(
       contentType: "image/jpeg",
       kind: "image",
       messageId: String(message.message_id),
+      ...(photo.file_size === undefined ? {} : { sizeBytes: photo.file_size }),
     });
   }
   const document = message.document;
@@ -685,6 +703,7 @@ function telegramAttachmentDescriptors(
       contentType,
       kind: contentType.toLowerCase().startsWith("image/") ? "image" : "file",
       messageId: String(message.message_id),
+      ...(document.file_size === undefined ? {} : { sizeBytes: document.file_size }),
     });
   }
   return descriptors;
@@ -710,8 +729,11 @@ async function downloadTelegramFile(input: {
   readonly api: TelegramBotApiLike;
   readonly botToken: string | undefined;
   readonly attachmentDir: string | undefined;
+  readonly maxInboundAttachmentBytes: number | undefined;
   readonly fetch: TelegramFetchLike | undefined;
 }): Promise<TelegramDownloadedAttachment> {
+  const maxBytes = normalizeMaxInboundAttachmentBytes(input.maxInboundAttachmentBytes);
+  assertInboundAttachmentWithinLimit(input.request.sizeBytes, maxBytes);
   if (input.api.getFile === undefined) {
     throw new Error("TelegramChannelAdapter.downloadFile requires api.getFile");
   }
@@ -731,8 +753,10 @@ async function downloadTelegramFile(input: {
     throw new Error(`TelegramChannelAdapter.downloadFile failed: HTTP ${response.status}`);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
+  assertInboundAttachmentWithinLimit(bytes.byteLength, maxBytes);
   const dir = input.attachmentDir ?? defaultTelegramAttachmentDir();
   await mkdir(dir, { recursive: true, mode: 0o700 });
+  await chmod(dir, 0o700);
   const localPath = join(
     dir,
     `${input.request.messageId}-${input.request.fileId.slice(0, 12)}-${safeTelegramFilename(
@@ -740,6 +764,7 @@ async function downloadTelegramFile(input: {
     )}`,
   );
   await writeFile(localPath, bytes, { mode: 0o600 });
+  await chmod(localPath, 0o600);
   return { localPath, sizeBytes: bytes.byteLength };
 }
 

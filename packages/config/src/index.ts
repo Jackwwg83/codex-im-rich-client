@@ -5,6 +5,7 @@ export interface CodexImConfig {
   daemon: {
     dataDir: string;
     logDir: string;
+    maxInboundAttachmentBytes: number;
   };
   storage: {
     sqlitePath: string;
@@ -143,6 +144,8 @@ const computerUseConfigDefaults = {
   live_smoke_enabled: false,
 };
 
+const DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
 const rawAccessGroupSchema = z
   .object({
     allowed_users: z.array(z.string()).default([]),
@@ -163,6 +166,11 @@ const rawConfigSchema = z
       .object({
         data_dir: z.string().min(1),
         log_dir: z.string().min(1),
+        max_inbound_attachment_bytes: z
+          .number()
+          .int()
+          .positive()
+          .default(DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES),
       })
       .strict(),
     storage: z
@@ -302,6 +310,7 @@ export function parseConfigToml(source: string): CodexImConfig {
     daemon: {
       dataDir: parsed.daemon.data_dir,
       logDir: parsed.daemon.log_dir,
+      maxInboundAttachmentBytes: parsed.daemon.max_inbound_attachment_bytes,
     },
     storage: {
       sqlitePath: parsed.storage.sqlite_path,

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -252,22 +252,79 @@ describe("DingTalk Stream client wrapper (JAC-90 P1 fix)", () => {
   });
 
   it("downloads robot message files through redacted downloadCode exchange", async () => {
-    const attachmentDir = await mkdtemp(join(tmpdir(), "codex-im-dingtalk-client-test-"));
+    const tempRoot = await mkdtemp(join(tmpdir(), "codex-im-dingtalk-client-test-"));
+    const attachmentDir = join(tempRoot, "attachments");
     const calls: { readonly url: string; readonly init: RequestInit | undefined }[] = [];
+    try {
+      const client = createDingTalkRobotFileClient({
+        clientId: "ding_test_client_id",
+        clientSecret: "ding_test_secret",
+        robotCode: "ding_test_robot",
+        attachmentDir,
+        fetch: async (url, init) => {
+          calls.push({ url: String(url), init });
+          if (String(url).endsWith("/v1.0/oauth2/accessToken")) {
+            return jsonResponse({ accessToken: "token_for_download", expireIn: 7200 });
+          }
+          if (String(url).endsWith("/v1.0/robot/messageFiles/download")) {
+            return jsonResponse({ downloadUrl: "https://download.dingtalk.test/file" });
+          }
+          return new Response("hello from dingtalk file", { status: 200 });
+        },
+        now: () => 1778133000000,
+        randomId: () => "fixed",
+      });
+
+      await expect(
+        client.downloadMessageFile({
+          downloadCode: "download_code_must_not_leak",
+          filename: "../diagram.png",
+          contentType: "image/png",
+          kind: "image",
+        }),
+      ).resolves.toMatchObject({
+        localPath: join(attachmentDir, "1778133000000-fixed-diagram.png"),
+        sizeBytes: 24,
+      });
+
+      await expect(
+        readFile(join(attachmentDir, "1778133000000-fixed-diagram.png"), "utf8"),
+      ).resolves.toBe("hello from dingtalk file");
+      expect((await stat(attachmentDir)).mode & 0o777).toBe(0o700);
+      expect(
+        (await stat(join(attachmentDir, "1778133000000-fixed-diagram.png"))).mode & 0o777,
+      ).toBe(0o600);
+      expect(calls.map((call) => [call.url, call.init?.method])).toEqual([
+        ["https://api.dingtalk.com/v1.0/oauth2/accessToken", "POST"],
+        ["https://api.dingtalk.com/v1.0/robot/messageFiles/download", "POST"],
+        ["https://download.dingtalk.test/file", "GET"],
+      ]);
+      expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({
+        downloadCode: "download_code_must_not_leak",
+        robotCode: "ding_test_robot",
+      });
+      expect(join(attachmentDir, "1778133000000-fixed-diagram.png")).not.toContain(
+        "download_code_must_not_leak",
+      );
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects oversized robot message file downloads without leaking download codes", async () => {
     const client = createDingTalkRobotFileClient({
       clientId: "ding_test_client_id",
       clientSecret: "ding_test_secret",
       robotCode: "ding_test_robot",
-      attachmentDir,
-      fetch: async (url, init) => {
-        calls.push({ url: String(url), init });
+      maxInboundAttachmentBytes: 4,
+      fetch: async (url) => {
         if (String(url).endsWith("/v1.0/oauth2/accessToken")) {
           return jsonResponse({ accessToken: "token_for_download", expireIn: 7200 });
         }
         if (String(url).endsWith("/v1.0/robot/messageFiles/download")) {
           return jsonResponse({ downloadUrl: "https://download.dingtalk.test/file" });
         }
-        return new Response("hello from dingtalk file", { status: 200 });
+        return new Response("too large", { status: 200 });
       },
       now: () => 1778133000000,
       randomId: () => "fixed",
@@ -276,30 +333,11 @@ describe("DingTalk Stream client wrapper (JAC-90 P1 fix)", () => {
     await expect(
       client.downloadMessageFile({
         downloadCode: "download_code_must_not_leak",
-        filename: "../diagram.png",
-        contentType: "image/png",
-        kind: "image",
+        filename: "huge.log",
+        contentType: "text/plain",
+        kind: "file",
       }),
-    ).resolves.toMatchObject({
-      localPath: join(attachmentDir, "1778133000000-fixed-diagram.png"),
-      sizeBytes: 24,
-    });
-
-    await expect(
-      readFile(join(attachmentDir, "1778133000000-fixed-diagram.png"), "utf8"),
-    ).resolves.toBe("hello from dingtalk file");
-    expect(calls.map((call) => [call.url, call.init?.method])).toEqual([
-      ["https://api.dingtalk.com/v1.0/oauth2/accessToken", "POST"],
-      ["https://api.dingtalk.com/v1.0/robot/messageFiles/download", "POST"],
-      ["https://download.dingtalk.test/file", "GET"],
-    ]);
-    expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({
-      downloadCode: "download_code_must_not_leak",
-      robotCode: "ding_test_robot",
-    });
-    expect(join(attachmentDir, "1778133000000-fixed-diagram.png")).not.toContain(
-      "download_code_must_not_leak",
-    );
+    ).rejects.toThrow("Attachment too large");
   });
 });
 

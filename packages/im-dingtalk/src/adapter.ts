@@ -8,6 +8,7 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
+import { isInboundAttachmentTooLargeError } from "@codex-im/channel-core";
 import {
   type DingTalkInboundAction,
   decodeDingTalkCallbackHandle,
@@ -387,7 +388,18 @@ export class DingTalkChannelAdapter implements ChannelAdapter {
           ...(sizeBytes === undefined ? {} : { sizeBytes }),
         },
       ];
-    } catch {
+    } catch (error) {
+      if (isInboundAttachmentTooLargeError(error)) {
+        return [
+          {
+            kind: descriptor.kind,
+            filename: descriptor.filename,
+            contentType: descriptor.contentType,
+            ...(descriptor.sizeBytes === undefined ? {} : { sizeBytes: descriptor.sizeBytes }),
+            rejectionReason: "too_large",
+          },
+        ];
+      }
       // Download URLs and codes are sensitive; keep text routing alive without logging them.
       return [];
     }

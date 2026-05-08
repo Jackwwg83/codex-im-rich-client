@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { InboundAttachmentTooLargeError } from "@codex-im/channel-core";
 import { describe, expect, it } from "vitest";
 import {
   DINGTALK_TOPIC_CARD,
@@ -196,6 +197,40 @@ describe("DingTalk message receive fixtures (JAC-81)", () => {
         contentType: "image/jpeg",
         localPath: "/tmp/codex-im-dingtalk/image-001.jpg",
         sizeBytes: 123,
+      },
+    ]);
+    expect(JSON.stringify(received[0])).not.toContain("download_code_must_not_leak");
+  });
+
+  it("emits rejected oversized robot attachments without leaking download codes", async () => {
+    const streamClient = new FakeDingTalkStreamClient();
+    const fileClient: DingTalkRobotFileClientLike = {
+      async downloadMessageFile() {
+        throw new InboundAttachmentTooLargeError(99, 4);
+      },
+    };
+    const adapter = new DingTalkChannelAdapter({
+      streamClient,
+      fileClient,
+      now: () => new Date(1777751002000),
+    });
+    const received: DingTalkInboundMessage[] = [];
+
+    adapter.onMessage((msg) => {
+      received.push(msg as DingTalkInboundMessage);
+    });
+
+    await adapter.start();
+    await streamClient.inject(DINGTALK_TOPIC_ROBOT, fixture("unsupported-image-message.json"));
+
+    expect(received).toHaveLength(1);
+    expect(received[0]?.text).toBe("");
+    expect(received[0]?.attachments).toEqual([
+      {
+        kind: "image",
+        filename: "dingtalk-image-msg_test_image.jpg",
+        contentType: "image/jpeg",
+        rejectionReason: "too_large",
       },
     ]);
     expect(JSON.stringify(received[0])).not.toContain("download_code_must_not_leak");

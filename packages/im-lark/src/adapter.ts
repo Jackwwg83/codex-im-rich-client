@@ -9,6 +9,7 @@ import type {
   SendCardResult,
   Target,
 } from "@codex-im/channel-core";
+import { isInboundAttachmentTooLargeError } from "@codex-im/channel-core";
 import {
   type LarkRawCardActionInput,
   decodeLarkCallbackHandle,
@@ -366,7 +367,17 @@ export class LarkChannelAdapter implements ChannelAdapter {
           ...(downloaded.sizeBytes === undefined ? {} : { sizeBytes: downloaded.sizeBytes }),
         },
       ];
-    } catch {
+    } catch (error) {
+      if (isInboundAttachmentTooLargeError(error)) {
+        return [
+          {
+            kind: descriptor.kind,
+            filename: descriptor.filename,
+            contentType: descriptor.contentType,
+            rejectionReason: "too_large",
+          },
+        ];
+      }
       return [];
     }
   }

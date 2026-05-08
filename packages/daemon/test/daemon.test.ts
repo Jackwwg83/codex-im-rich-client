@@ -863,6 +863,136 @@ describe("Daemon skeleton (T14)", () => {
     expect(JSON.stringify(runtime.turnStart.mock.calls)).not.toContain('"type":"file"');
   });
 
+  it("rejects oversized inbound attachments before starting a Codex turn", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-file" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(async () => undefined),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => route), bind: vi.fn() }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      maxInboundAttachmentBytes: 10,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "summarize this huge log",
+      attachments: [
+        {
+          kind: "file",
+          filename: "huge.log",
+          contentType: "text/plain",
+          localPath: "/tmp/codex-im/huge.log",
+          sizeBytes: 11,
+        },
+      ],
+      messageRef: { target, messageId: "msg-file" },
+      receivedAt: new Date("2026-05-02T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-file" },
+      "Attachment too large. Maximum supported inbound attachment size is 10 bytes.",
+    );
+  });
+
+  it("rejects adapter-level oversized attachment markers before starting a Codex turn", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "slack", chatId: "T:C" };
+    const sender = { userId: "U_ALICE" };
+    const route = {
+      kind: "bound" as const,
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-1",
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-file" } })),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(async () => undefined),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => route), bind: vi.fn() }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      maxInboundAttachmentBytes: 10,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "summarize this huge log",
+      attachments: [
+        {
+          kind: "file",
+          filename: "huge.log",
+          contentType: "text/plain",
+          sizeBytes: 99,
+          rejectionReason: "too_large",
+        },
+      ],
+      messageRef: { target, messageId: "msg-file" },
+      receivedAt: new Date("2026-05-02T00:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-file" },
+      "Attachment too large. Maximum supported inbound attachment size is 10 bytes.",
+    );
+  });
+
   it("routes an allowed prompt with an active turn to runtime.turnSteer", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };

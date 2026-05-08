@@ -5,6 +5,7 @@ const EXAMPLE_CONFIG = `
 [daemon]
 data_dir = "~/.codex-im-bridge"
 log_dir  = "~/.codex-im-bridge/logs"
+max_inbound_attachment_bytes = 26214400
 
 [storage]
 sqlite_path  = "~/.codex-im-bridge/state.db"
@@ -71,6 +72,11 @@ describe("@codex-im/config (T7-T8)", () => {
   it("parses the Phase 3 example TOML and rejects literal Telegram bot tokens", () => {
     const config = parseConfigToml(EXAMPLE_CONFIG);
 
+    expect(config.daemon).toEqual({
+      dataDir: "~/.codex-im-bridge",
+      logDir: "~/.codex-im-bridge/logs",
+      maxInboundAttachmentBytes: 26_214_400,
+    });
     expect(config.adapters.telegram).toEqual({
       enabled: true,
       botTokenEnv: "IM_TELEGRAM_BOT_TOKEN",
@@ -214,6 +220,14 @@ allowed_channel_ids    = ["T_TEST:C_TEST"]
       appTokenEnv: "SLACK_APP_TOKEN",
       allowedChannelIds: [],
     });
+  });
+
+  it("defaults daemon inbound attachment size cap for older configs", () => {
+    const config = parseConfigToml(
+      EXAMPLE_CONFIG.replace("\nmax_inbound_attachment_bytes = 26214400", ""),
+    );
+
+    expect(config.daemon.maxInboundAttachmentBytes).toBe(25 * 1024 * 1024);
   });
 
   it("parses Computer Use app policy and rejects token-looking app values", () => {

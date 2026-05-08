@@ -180,6 +180,7 @@ describe("TelegramChannelAdapter.onMessage raw fixtures (T26/T28a-c)", () => {
       contentType: "image/jpeg",
       kind: "image",
       messageId: "44",
+      sizeBytes: 4096,
     });
     expect(seen).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -231,6 +232,7 @@ describe("TelegramChannelAdapter.onMessage raw fixtures (T26/T28a-c)", () => {
       contentType: "text/x-patch",
       kind: "file",
       messageId: "45",
+      sizeBytes: 18,
     });
     expect(seen).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -299,6 +301,59 @@ describe("TelegramChannelAdapter.onMessage raw fixtures (T26/T28a-c)", () => {
     } finally {
       await rm(attachmentDir, { recursive: true, force: true });
     }
+  });
+
+  it("emits rejected Telegram attachments when advertised file size exceeds the configured cap", async () => {
+    const bot = new FakeTelegramBot();
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      async arrayBuffer() {
+        return new Uint8Array([1, 2, 3]).buffer;
+      },
+    }));
+    const adapter = new TelegramChannelAdapter({
+      bot,
+      botToken: "unit-test-token",
+      fetch,
+      maxInboundAttachmentBytes: 2,
+    });
+    const seen = vi.fn();
+    adapter.onMessage(seen);
+    await adapter.start();
+
+    await bot.injectUpdate({
+      message: {
+        message_id: 47,
+        chat: { id: 123456789, type: "private" },
+        from: { id: 123456789, username: "ada_dev" },
+        document: {
+          file_id: "doc-file",
+          file_name: "notes.txt",
+          mime_type: "text/plain",
+          file_size: 3,
+        },
+        date: 1710000200,
+      },
+    });
+
+    expect(bot.api?.getFile).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(seen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          {
+            kind: "file",
+            filename: "notes.txt",
+            contentType: "text/plain",
+            sizeBytes: 3,
+            rejectionReason: "too_large",
+          },
+        ],
+      }),
+    );
+    await adapter.stop();
   });
 
   it("drops inbound messages after pauseInbound or stop", async () => {

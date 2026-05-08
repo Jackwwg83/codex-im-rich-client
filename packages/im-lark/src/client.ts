@@ -1,7 +1,11 @@
 import { Buffer } from "node:buffer";
-import { mkdir, stat } from "node:fs/promises";
+import { chmod, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import {
+  assertInboundAttachmentWithinLimit,
+  normalizeMaxInboundAttachmentBytes,
+} from "@codex-im/channel-core";
 import * as lark from "@larksuiteoapi/node-sdk";
 import { LarkChannelAdapter } from "./adapter.js";
 import type {
@@ -20,6 +24,7 @@ export interface LarkSdkChannelAdapterConfig {
   readonly verificationToken?: string;
   readonly encryptKey?: string;
   readonly attachmentDir?: string;
+  readonly maxInboundAttachmentBytes?: number;
 }
 
 export interface LarkSdkDeps {
@@ -194,7 +199,11 @@ export function createLarkSdkAdapterOptions(
   const wsClient = deps.createWsClient?.(config) ?? createDefaultWsClient(config);
   return {
     wsClient,
-    messageClient: createSdkMessageClient(client, config.attachmentDir),
+    messageClient: createSdkMessageClient(
+      client,
+      config.attachmentDir,
+      config.maxInboundAttachmentBytes,
+    ),
     actionClient: createSdkActionClient(),
     createEventDispatcher: () =>
       deps.createEventDispatcher?.(config) ?? createDefaultDispatcher(config),
@@ -235,7 +244,9 @@ function createDefaultDispatcher(config: LarkSdkChannelAdapterConfig): LarkEvent
 function createSdkMessageClient(
   client: LarkSdkClientLike,
   attachmentDir: string | undefined,
+  maxInboundAttachmentBytes: number | undefined,
 ): LarkMessageClientLike {
+  const maxBytes = normalizeMaxInboundAttachmentBytes(maxInboundAttachmentBytes);
   const cardIdsByMessageId = new Map<string, string>();
   let lastCardUpdateSequence = 0;
   return {
@@ -355,6 +366,7 @@ function createSdkMessageClient(
       }
       const dir = attachmentDir ?? defaultLarkAttachmentDir();
       await mkdir(dir, { recursive: true, mode: 0o700 });
+      await chmod(dir, 0o700);
       const localPath = join(
         dir,
         `${input.messageId}-${input.fileKey.slice(0, 12)}-${safeLarkFilename(input.filename)}`,
@@ -365,11 +377,20 @@ function createSdkMessageClient(
           params: { type: input.kind === "image" ? "image" : "file" },
         }),
       );
+      await writeFile(localPath, new Uint8Array(), { mode: 0o600 });
+      await chmod(localPath, 0o600);
       await resource.writeFile(localPath);
       const size = await stat(localPath).then(
         (info) => info.size,
         () => undefined,
       );
+      try {
+        assertInboundAttachmentWithinLimit(size, maxBytes);
+      } catch (error) {
+        await rm(localPath, { force: true });
+        throw error;
+      }
+      await chmod(localPath, 0o600);
       return {
         localPath,
         ...(size === undefined ? {} : { sizeBytes: size }),

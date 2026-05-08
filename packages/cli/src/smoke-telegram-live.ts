@@ -247,6 +247,9 @@ async function runTelegramLiveInboundAttachmentSmokeWithAdapter(
   const unsubscribe = adapter.onMessage((message) => {
     messageEvents++;
     for (const attachment of message.attachments ?? []) {
+      if (attachment.rejectionReason !== undefined || attachment.localPath === undefined) {
+        continue;
+      }
       if (
         input.inboundAttachmentKind !== "any" &&
         attachment.kind !== input.inboundAttachmentKind

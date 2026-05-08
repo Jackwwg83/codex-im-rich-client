@@ -103,13 +103,23 @@ export type OutboundFile = {
  * `UserInput.localImage`; generic files remain explicit until Codex exposes a
  * first-class file input shape.
  */
-export type InboundAttachment = {
-  readonly kind: "image" | "file";
-  readonly filename: string;
-  readonly contentType: string;
-  readonly localPath: string;
-  readonly sizeBytes?: number;
-};
+export type InboundAttachment =
+  | {
+      readonly kind: "image" | "file";
+      readonly filename: string;
+      readonly contentType: string;
+      readonly localPath: string;
+      readonly sizeBytes?: number;
+      readonly rejectionReason?: never;
+    }
+  | {
+      readonly kind: "image" | "file";
+      readonly filename: string;
+      readonly contentType: string;
+      readonly sizeBytes?: number;
+      readonly rejectionReason: "too_large";
+      readonly localPath?: never;
+    };
 
 /**
  * Inbound chat-message event from the IM platform. The adapter
