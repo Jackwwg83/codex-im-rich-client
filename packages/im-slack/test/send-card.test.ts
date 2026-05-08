@@ -36,6 +36,13 @@ describe("SlackChannelAdapter.sendCard (JAC-246)", () => {
     expect(actionValues(message)).toEqual(["v1:ABCDEFGHIJKLMNOP", "v1:QRSTUVWXYZ234567"]);
   });
 
+  it("renders unique Slack action IDs for buttons in the same actions block", () => {
+    const actionIds = actionButtonIds(renderSlackApprovalCard(CARD));
+
+    expect(actionIds).toEqual(["codex_im_approval_0", "codex_im_approval_1"]);
+    expect(new Set(actionIds).size).toBe(actionIds.length);
+  });
+
   it("sends a Slack approval card and maps returned message ts into MessageRef", async () => {
     const webClient: SlackWebClientLike = {
       chatPostMessage: vi.fn(async () => ({ channel: "C_TEST", ts: "1715000002.000100" })),
@@ -112,6 +119,12 @@ function actionValues(message: ReturnType<typeof renderSlackApprovalCard>): stri
   return message.blocks
     .flatMap((block) => ("elements" in block ? block.elements : []))
     .map((element) => element.value);
+}
+
+function actionButtonIds(message: ReturnType<typeof renderSlackApprovalCard>): string[] {
+  return message.blocks
+    .flatMap((block) => ("elements" in block ? block.elements : []))
+    .map((element) => element.action_id);
 }
 
 function actionBlockId(

@@ -32,6 +32,7 @@ import {
   type DaemonOptions,
   type DaemonOutboundFile,
   type DaemonSendCardResult,
+  MacChromeComputerUseProvider,
   Supervisor,
   createDaemonLogger,
 } from "@codex-im/daemon";
@@ -100,6 +101,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
   const secrets = resolveConfigSecrets(config, { env: process.env, logger });
   const daemonLogger = createDaemonLogger<Logger>({ logDir: config.daemon.logDir });
   const storageBox: { current?: RuntimeStorage } = {};
+  const computerUseProvider = createComputerUseProvider(config);
 
   const daemon = new Daemon({
     loadConfig: () => config,
@@ -185,6 +187,7 @@ export async function run(argv: readonly string[] = process.argv.slice(2)): Prom
       switchCurrent: (input) =>
         asRuntimeStorage(storageBox.current).threadSessions.switchCurrent(input),
     },
+    ...(computerUseProvider === undefined ? {} : { computerUseProvider }),
     renderResolvedApprovalCard: renderResolvedCallbackApprovalCard,
     statusPath: flags.statusPath ?? join(config.daemon.dataDir, "daemon-status.json"),
   });
@@ -514,6 +517,22 @@ function createCodexTransport(config: CodexImConfig, logger: Logger): StdioTrans
     configOverrides: DAEMON_CODEX_CONFIG_OVERRIDES,
     logger,
   });
+}
+
+function createComputerUseProvider(config: CodexImConfig) {
+  if (!config.computerUse.enabled) {
+    return undefined;
+  }
+  if (config.computerUse.defaultApp !== "Google Chrome") {
+    return undefined;
+  }
+  if (!config.computerUse.allowedApps.includes("Google Chrome")) {
+    return undefined;
+  }
+  if (process.platform !== "darwin") {
+    return undefined;
+  }
+  return new MacChromeComputerUseProvider();
 }
 
 function createSecurityPolicy(config: CodexImConfig): SecurityPolicy {

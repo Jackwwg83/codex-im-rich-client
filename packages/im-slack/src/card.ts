@@ -35,7 +35,7 @@ export interface SlackApprovalCardButton {
     readonly type: "plain_text";
     readonly text: string;
   };
-  readonly action_id: "codex_im_approval";
+  readonly action_id: `codex_im_approval_${number}`;
   readonly value: string;
   readonly style?: "primary" | "danger";
 }
@@ -73,7 +73,7 @@ function slackApprovalActionsBlockId(suffix: string | undefined): string {
   return suffix === undefined ? "codex_im_approval_actions" : `codex_im_approval_actions:${suffix}`;
 }
 
-function buttonForAction(action: ApprovalActionInput): SlackApprovalCardButton {
+function buttonForAction(action: ApprovalActionInput, index: number): SlackApprovalCardButton {
   const wirePayload = action.wirePayload;
   if (wirePayload === undefined) {
     throw new Error("SlackChannelAdapter.sendCard requires action.wirePayload");
@@ -84,7 +84,7 @@ function buttonForAction(action: ApprovalActionInput): SlackApprovalCardButton {
   return {
     type: "button",
     text: { type: "plain_text", text: labelForAction(action.kind) },
-    action_id: "codex_im_approval",
+    action_id: `codex_im_approval_${index}`,
     value: wirePayload,
     ...buttonStyle(action.kind),
   };

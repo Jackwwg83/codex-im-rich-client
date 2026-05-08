@@ -1,8 +1,8 @@
 # Live IM Acceptance Status
 
-> Single source of truth for real Telegram/Lark/DingTalk/Codex App live
+> Single source of truth for real Telegram/Lark/DingTalk/Slack/Codex App live
 > acceptance after `production-readiness-2026-05-03-r2`.
-> **Last updated:** 2026-05-07 - Telegram real bot + real Codex turn +
+> **Last updated:** 2026-05-08 - Telegram real bot + real Codex turn +
 > approval callback acceptance + development-task control acceptance passed.
 > Feishu/Lark now also passes launchd daemon inbound, `/status`, `/use`,
 > real Codex prompt/reply, live card schema delivery, CardKit terminal-card
@@ -57,6 +57,15 @@
 > warning/error/config notices, MCP progress, terminal interaction,
 > guardian/deprecation/hook notices, and auto-approval-review started/completed
 > notices with redacted summary-only output.
+> Slack live workspace acceptance now also passes the production Socket Mode
+> path: local OpenClaw was removed from the machine, the shared Slack app-level
+> token was rotated so only codex-im consumes Socket Mode, `/codex status`
+> returns immediately with an ephemeral ack plus daemon status, DM prompt/reply
+> reaches a real Codex turn, outbound text/file live gates pass, and a real
+> Slack Block Kit approval `Allow once` click validates callback token plus
+> messageRef and executes the harmless command. The Slack fixes were unique
+> Block Kit button `action_id`s and acking normal message/app_mention envelopes
+> to prevent Socket Mode retries.
 
 ---
 
@@ -85,6 +94,11 @@
   `DINGTALK_LIVE_CARD_CALLBACK=1` live gate now also passes with one real
   DingTalk Desktop click: `rawCardCallbacks=1`, `normalizedCardActions=1`,
   `cardEvents=1`, `callbackMessageRef=present`, and `callbackAction=present`.
+  Slack live workspace acceptance is green for the bounded JAC-248 scope:
+  Socket Mode, `/codex status`, DM prompt/reply, live outbound text/file gates,
+  and one real approval card click through Block Kit. Residual Slack UX
+  hardening remains for strict exact-output turns because Codex status summaries
+  can still appear beside the requested answer.
 - **Credential status:** Telegram token is present only in local Keychain
   service `codex-im-bridge`; Feishu/Lark and DingTalk test credentials were
   used only through local environment variables / browser session state. No
@@ -96,17 +110,16 @@
 Use this wording for the current enabled-platform acceptance state:
 
 ```text
-Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, and DingTalk. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. DingTalk callback acceptance remains fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
+Release candidate complete; enabled live platform acceptance passed for Telegram, Feishu/Lark, DingTalk, and bounded Slack workspace use. Telegram passed real bot + real Codex prompt/reply + approval callback acceptance. Feishu/Lark passed launchd inbound, /status, /use, real Codex prompt/reply, card schema/update, terminal-card refresh, and real approval Allow-once/Decline/Abort/Allow-session matrix. DingTalk passed Stream, OpenAPI card send/update, installed readiness, real desktop inbound prompt/reply plus /status, approval card delivery, and explicit real CardKit callback probe after one real desktop approval click. Slack passed Socket Mode readiness, /codex status, DM prompt/reply, outbound text/file live gates, and one real Block Kit approval click with callback-token/messageRef validation. DingTalk and Slack callback acceptance remain fail-closed through callback-token/messageRef validation; DingTalk text output is append-style for text refs by explicit lifecycle contract, with daemon progress edits suppressed for append-only refs.
 Telegram/Lark outbound file/image attachment support is implemented and live-smoked for harmless file sends. Telegram/Lark inbound upload support is implemented locally: images become Codex `localImage` input, generic files become explicit local-path prompt context. DingTalk outbound file/image attachment support is implemented locally through media upload plus session-webhook replies or proactive robot group/user delivery with `DINGTALK_TARGET_CHAT_ID`; explicit real DingTalk file and image send gates now pass with redacted `status=file_sent` evidence.
 Daemon-side delivery of completed `imageView.path` / `imageGeneration.savedPath` artifacts, completed/failed long command logs, local dynamic-tool / Computer Use screenshot artifacts, and file-change patch attachments is implemented locally; the adapter-level live file APIs it uses are now proven for Telegram, Feishu/Lark, and DingTalk.
 ```
 
-Do not extend this claim to Slack live workspace acceptance or real Computer
-Use provider execution. Those remain separate acceptance tracks. JAC-274 now
-has an explicit App Server dynamic-tool provider contract for `/cu` turns across
-Telegram, Feishu/Lark, and DingTalk, but current `/cu` support is still
-control/status/policy/audit/output projection plus contract registration, not
-verified desktop execution.
+Do not extend this claim to arbitrary Computer Use. JAC-274/JAC-279 now has an
+explicit App Server dynamic-tool provider contract and a bounded macOS Chrome
+provider smoke for local navigate/observe through the reviewed gate, but
+broader desktop automation, secret entry, external website control, and
+unattended sensitive actions remain outside the acceptance claim.
 
 ## 3. Live Acceptance Matrix
 
@@ -150,6 +163,11 @@ verified desktop execution.
 | Common approval text fallback | `/approvals` and `/approve <id> <action>` through daemon common command routing | local pass | Fallback only resolves approvals that already have a server-side bound callback token record with a bound approval-card `messageRef`; no raw callback token or approval payload is accepted from IM text |
 | Common identity/access controls | `/whoami` plus config-level reusable access groups | local pass | `/whoami` reports platform, identity-field presence, and current project/thread binding without raw chat/user/topic ids; config access groups expand into existing allowlists and unknown group references fail closed |
 | Common group mention gate | `security.group_policy` through common `SecurityPolicy.checkInboundMessage` daemon routing | local pass | Configured group chats require an explicit mention alias before ordinary inbound text reaches Codex; non-gated chats keep existing user/chat allowlist behavior, and approval callback authorization remains token/messageRef/broker based |
+| Slack readiness / Socket Mode | `pnpm im:doctor`, `SLACK_LIVE=1 SLACK_LIVE_DRY_RUN=1 pnpm smoke:slack-live`, and Socket Mode probe | pass | Installed Slack config is enabled with Keychain-backed bot/app token presence only; Socket Mode connects after rotating the app-level token away from the old shared consumer |
+| Slack slash command | `/codex status` in Slack Web | pass | Slack immediately shows ephemeral `Codex is working...`, then the daemon returns status with binding/project/pending-approval summary; no Slackbot timeout after the ack fix |
+| Slack DM prompt/reply | Slack Web DM harmless Codex prompt | pass with UX note | Real Codex prompt/reply returns through Slack. Strict `Reply exactly` turns can still include Codex status summaries, so exact-output polish remains a follow-up rather than a transport blocker |
+| Slack outbound text/file live gates | `SLACK_LIVE=1 ... pnpm smoke:slack-live` text and file gates | pass | Web API text send and external-upload file path passed with redacted message-id/file evidence only |
+| Slack approval callback | Slack Web write-command prompt, real Block Kit `Allow once` click | pass | One prompt generated one bound callback-token batch after message-envelope acking; real `Allow once` changed `allow_once=used`, revoked siblings, cleared active turn, and created the harmless `/tmp` target file |
 | DingTalk fake | `pnpm smoke:dingtalk-fake` | pass | covered by `pnpm release:check`, exit 0 |
 | DingTalk live dry-run | `DINGTALK_LIVE=1 DINGTALK_LIVE_DRY_RUN=1 ... pnpm smoke:dingtalk-live` | pass | `ready_dry_run`, redacted |
 | DingTalk live Stream | `DINGTALK_LIVE=1 ... pnpm smoke:dingtalk-live` | pass | bounded Stream connection completed against test app |
@@ -171,10 +189,10 @@ verified desktop execution.
 | launchd live start | `pnpm bridge:build && pnpm bridge:install && launchctl kickstart -k ... && pnpm launchd:status` | pass | installed daemon starts under user LaunchAgent with redacted secret presence and `pendingApprovals=0` |
 | Redaction | installed bridge plist/app/config/log scan for token-shaped output | pass | `BRIDGE_HOME=$HOME ... node scripts/bridge-redaction-scan.mjs` returned `redaction scan ok`; launchd plist lint also passed |
 
-Computer Use remains outside the live IM acceptance claim for real desktop
-execution. The `/cu` App Server dynamic-tool provider contract is implemented,
-but a non-dry-run live desktop provider smoke must pass before real Computer Use
-execution is called green.
+Computer Use acceptance is bounded: the `/cu` App Server dynamic-tool provider
+contract is implemented, and the local macOS Chrome provider smoke can execute
+local navigate/observe through the reviewed gate. Broader desktop automation is
+not part of the live IM acceptance claim.
 
 ## 4. Passing Criteria
 
@@ -694,6 +712,17 @@ Stop and treat as a blocker if:
   `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`,
   `attachmentDownloadAttempts=1`, `attachmentDownloadSuccesses=1`, and
   `attachmentDownloadFailures=0`.
+- 2026-05-08 SGT Slack live workspace acceptance: removed local OpenClaw so it
+  no longer competes for the same Slack app, rotated the Slack app-level token
+  into the codex-im Keychain service, and restarted the installed daemon. Live
+  root-cause testing found Slack rejected approval cards with `invalid_blocks`
+  because buttons in one actions block shared `action_id`; Slack also retried
+  normal messages until the adapter acked message/app_mention envelopes. After
+  both fixes, `/codex status` returned immediately with an ephemeral ack plus
+  daemon status, a real DM prompt reached Codex, outbound text/file live gates
+  passed, and a real Slack Block Kit `Allow once` click validated callback
+  token plus messageRef, changed the selected token to `used`, revoked sibling
+  tokens, cleared the active turn, and created the harmless `/tmp` target file.
 - 2026-05-07 SGT Codex-native control loop: The common IM command plane now
   exposes Codex App Server-native surfaces for model listing, thread
   compaction, usage/rate-limit status, diagnostics, tool/MCP capabilities,

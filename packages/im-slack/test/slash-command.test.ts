@@ -54,6 +54,10 @@ describe("SlackChannelAdapter slash command ingress (JAC-247)", () => {
     } satisfies SlackRawSlashCommandPayload);
 
     expect(ack).toHaveBeenCalledOnce();
+    expect(ack).toHaveBeenCalledWith({
+      response_type: "ephemeral",
+      text: "Codex is working...",
+    });
     expect(messages).toEqual([
       {
         target: { platform: "slack", chatId: "T_TEST:C_TEST" },

@@ -5,6 +5,7 @@ export interface SlackRawMessagePayload {
   readonly team?: { readonly id?: string };
   readonly authorizations?: readonly SlackRawAuthorization[];
   readonly event?: SlackRawMessageEvent;
+  readonly ack?: () => void | Promise<void>;
 }
 
 export interface SlackRawAuthorization {

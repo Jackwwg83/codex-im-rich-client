@@ -57,6 +57,31 @@ describe("SlackChannelAdapter.onMessage (JAC-245)", () => {
     ]);
   });
 
+  it("acks Slack Socket Mode message envelopes before emitting inbound messages", async () => {
+    const socketClient = new FakeSlackSocketClient();
+    const adapter = new SlackChannelAdapter({ socketClient });
+    const ack = vi.fn(async () => {});
+    const messages: unknown[] = [];
+    adapter.onMessage((message) => messages.push(message));
+
+    await adapter.start();
+    await socketClient.emit("message", {
+      ack,
+      team_id: "T_TEST",
+      event: {
+        type: "message",
+        channel_type: "im",
+        channel: "D_TEST",
+        user: "U_TEST_USER",
+        text: "status",
+        ts: "1715000000.000100",
+      },
+    });
+
+    expect(ack).toHaveBeenCalledOnce();
+    expect(messages).toHaveLength(1);
+  });
+
   it("normalizes app mentions in Slack channel threads and strips the leading bot mention", async () => {
     const socketClient = new FakeSlackSocketClient();
     const adapter = new SlackChannelAdapter({ socketClient });

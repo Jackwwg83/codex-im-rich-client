@@ -94,10 +94,11 @@
 > Explicit Telegram, Feishu/Lark, and DingTalk live file gates passed with
 > redacted evidence; after the latest Codex-native IM output loop bridge
 > reinstall/kickstart and the DingTalk inbound image upload gate restore, launchd is
-> running under pid `91940` with `pendingApprovals=0`, `pnpm im:doctor` is
-> ready for installed
-> Telegram/Lark/DingTalk with Slack disabled, and the bridge redaction scan
-> returned `redaction scan ok`. JAC-273 is now Done for outbound DingTalk
+> running under pid `91940` with `pendingApprovals=0`, `pnpm im:doctor` was
+> ready for installed Telegram/Lark/DingTalk, and the bridge redaction scan
+> returned `redaction scan ok`. Subsequent Slack acceptance enabled the Slack
+> adapter and `pnpm im:doctor` is now ready for Slack too. JAC-273 is now Done
+> for outbound DingTalk
 > attachments: `DINGTALK_LIVE_FILE=1` file and image gates both returned
 > redacted `status=file_sent` through the proactive target path, so outbound
 > attachment live acceptance no longer depends on a visible DingTalk client
@@ -107,25 +108,21 @@
 > gate: configured Telegram/Feishu-Lark/DingTalk group chats must mention a
 > configured alias before ordinary inbound text reaches Codex, while approval
 > callback authorization remains bound to callback tokens, messageRef
-> validation, and `ApprovalBroker.resolve()`. Slack readiness advanced through
-> production config/daemon wiring under JAC-253: Slack is disabled by default,
-> secrets resolve from `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` env refs only,
-> daemon-run can create the Slack Socket Mode adapter, and real Slack workspace
-> acceptance remains open under JAC-248. JAC-254 extends the unified
-> no-live-network `pnpm im:doctor` readiness surface to Slack; the installed
-> local config currently reports Slack disabled while Telegram/Lark/DingTalk
-> remain ready. JAC-255 extends the launchd Keychain wrapper to optionally
-> load `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` from dedicated Keychain services
-> without requiring Slack when disabled. JAC-256 adds the operator runbook for
-> real Slack workspace acceptance and links it from the live IM acceptance
-> runbook; Slack still must not be called accepted until a real workspace DM or
-> app mention, `/codex` commands, prompt/reply, file send, and approval callback
-> path have passed with redacted evidence. JAC-257 adds Slack inbound
-> file/image materialization: Socket Mode `message` / `app_mention` payloads
-> with Slack `files[]` metadata are downloaded with the bot token into the local
-> daemon attachment directory, then emitted as `InboundAttachment[]` so daemon
-> routing can reuse the existing Codex `localImage` / local-path file context
-> behavior. Slack live workspace acceptance remains pending. JAC-274 remains
+> validation, and `ApprovalBroker.resolve()`. Slack live workspace acceptance
+> is now green for the bounded JAC-248 scope. Local OpenClaw was removed, the
+> Slack app-level token was rotated into the codex-im Keychain service, installed
+> Slack config is enabled, and `pnpm im:doctor` reports Slack ready. Real Slack
+> Web acceptance passed `/codex status`, DM prompt/reply, outbound text/file
+> live gates, and one Block Kit approval `Allow once` click. The fixes were
+> Slack-unique Block Kit `action_id`s and acking normal Socket Mode
+> message/app_mention envelopes so Slack does not retry the same prompt. Strict
+> exact-output Slack turns can still be polluted by Codex status summaries, so
+> that remains UX polish rather than a transport blocker. JAC-257 added Slack
+> inbound file/image materialization: Socket Mode `message` / `app_mention`
+> payloads with Slack `files[]` metadata are downloaded with the bot token into
+> the local daemon attachment directory, then emitted as `InboundAttachment[]`
+> so daemon routing can reuse the existing Codex `localImage` / local-path file
+> context behavior. JAC-274 remains
 > the Computer Use parent, now split into JAC-278 official provider-contract
 > evidence and JAC-279 local experimental provider POC. The daemon-facing
 > App Server contract is now explicit: `daemon run` can opt into
@@ -133,9 +130,13 @@
 > Feishu/Lark, and DingTalk register the same project-owned dynamic tool
 > contract (`codex_im.computer_use` / `operate`) when a provider is configured.
 > The route still uses the shared `/cu` session, policy, audit, and
-> `ComputerUseProvider` gate. Non-dry-run real desktop execution remains an
-> acceptance gap until a configured provider proves the bounded live smoke
-> through this reviewed boundary. Current completion audit:
+> `ComputerUseProvider` gate. JAC-279 adds a bounded macOS Chrome provider and
+> a non-dry-run live smoke that returns `status=executed` after routing local
+> `navigate` + `observe` through `ComputerUseSessionRegistry`,
+> `ComputerUsePolicy`, `ComputerUseToolGate`, and
+> `MacChromeComputerUseProvider`. This proves the local provider boundary; it
+> does not claim arbitrary desktop automation, secret entry, external website
+> control, or unattended sensitive actions. Current completion audit:
 > `docs/handoffs/2026-05-07-codex-native-im-goal-audit.md`. The audit includes
 > a blocker unblock packet with exact DingTalk attachment, Slack live workspace,
 > and real Computer Use provider preflight commands plus acceptance evidence
@@ -145,8 +146,10 @@
 
 - **Mode:** Real Telegram / Feishu-Lark / DingTalk direct-use acceptance
   complete for enabled text/approval/outbound-artifact paths and real
-  inbound image/file upload gates; Slack live workspace acceptance and real
-  Computer Use provider execution continue as explicit follow-up tracks.
+  inbound image/file upload gates; bounded Slack live workspace acceptance is
+  green for Socket Mode, `/codex`, prompt/reply, outbound text/file, and
+  approval click; bounded local Chrome Computer Use provider smoke is green.
+  Broader Computer Use scenarios continue as explicit follow-up tracks.
 - **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 - **Slack plan:** `docs/superpowers/plans/2026-05-07-slack-core-platform-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
@@ -793,9 +796,11 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Slack T5c Keychain wrapper loop | JAC-255 extended `bin/load-and-run.sh` so launchd runtime can optionally load `SLACK_BOT_TOKEN` from Keychain service `codex-im-bridge-slack-bot` and `SLACK_APP_TOKEN` from `codex-im-bridge-slack-app`. Dry-run reports only set/unset + length, runtime exports Slack env vars only when present, and Slack remains optional until config enables it. |
 | 2026-05-07 SGT Slack T5d live acceptance runbook loop | JAC-256 added `docs/ops/slack-live-smoke.md` and linked Slack into `docs/ops/live-im-acceptance.md`. The runbook pins the required Slack app scopes/settings, Keychain services, no-live doctor gate, explicit live text/file gates, and real-client acceptance evidence. Slack remains not accepted until JAC-248 records real workspace inbound, `/codex`, prompt/reply, approval click, and terminal-card finalization. |
 | 2026-05-07 SGT Slack T5e inbound attachment loop | JAC-257 added Slack inbound file/image materialization. The adapter accepts normal file-bearing messages plus Slack `file_share` messages with `files[]`, downloads private file URLs through the injected Web client / production bot-token client, writes bytes under `data/attachments/slack`, and emits image/file `InboundAttachment[]` for the common daemon input path. No live Slack traffic was run; JAC-248 remains open. |
+| 2026-05-08 SGT Slack live workspace acceptance loop | Local OpenClaw was removed so it no longer consumes the same Slack app, and the Slack app-level token was rotated into the codex-im Keychain service. `/codex status` now gets an immediate ephemeral ack plus daemon status; DM prompt/reply, Socket Mode, outbound text/file live gates, and one real Block Kit `Allow once` approval click passed. Root causes fixed: duplicate Block Kit button `action_id`s caused Slack `invalid_blocks`, and missing message/app_mention acks caused Slack Socket Mode retries. Latest real click produced one bound token batch, `allow_once=used`, sibling tokens revoked, active turn cleared, and the harmless `/tmp` target file present. |
 | 2026-05-07 SGT installed Slack-ready bundle | Rebuilt and installed the latest daemon/wrapper bundle, then kickstarted launchd. `pnpm launchd:status` reports pid `66457`, startedAt `2026-05-07T05:21:55.128Z`, `pendingApprovals=0`; `pnpm im:doctor` reports ready for installed Telegram/Lark/DingTalk and Slack `disabled` in current config. |
 | 2026-05-07 SGT installed JAC-257 bundle | After `eec7976`, rebuilt and installed the daemon bundle again, then kickstarted launchd. After a short status-file refresh wait, `pnpm launchd:status` reports pid `81392`, startedAt `2026-05-07T05:38:56.476Z`, `pendingApprovals=0`; `launchctl print` reports `state = running`; `pnpm im:doctor` remains ready with Telegram/Lark/DingTalk ready and Slack disabled in current installed config. |
-| 2026-05-08 SGT Computer Use provider contract loop | JAC-274 now has an explicit daemon-facing App Server dynamic-tool contract. `performInitializeHandshake()` supports `capabilities.experimentalApi`, production `daemon run` opts in when Computer Use is enabled, and explicit `/cu` new-thread turns across Telegram, Feishu/Lark, and DingTalk register the same `codex_im.computer_use` / `operate` dynamic tool when a provider is configured. The contract preserves the `/cu` session registry, policy, audit, allowed-tool, and provider gates, and the prompt asks Codex to use `@Computer` / the allowed app mention instead of shell, terminal automation, or Codex UI automation. This is a contract implementation, not a live desktop execution pass; non-dry-run real provider acceptance remains open until a configured provider proves the bounded smoke. |
+| 2026-05-08 SGT Computer Use provider contract loop | JAC-274 now has an explicit daemon-facing App Server dynamic-tool contract. `performInitializeHandshake()` supports `capabilities.experimentalApi`, production `daemon run` opts in when Computer Use is enabled, and explicit `/cu` new-thread turns across Telegram, Feishu/Lark, and DingTalk register the same `codex_im.computer_use` / `operate` dynamic tool when a provider is configured. The contract preserves the `/cu` session registry, policy, audit, allowed-tool, and provider gates, and the prompt asks Codex to use `@Computer` / the allowed app mention instead of shell, terminal automation, or Codex UI automation. |
+| 2026-05-08 SGT Computer Use mac-chrome provider loop | JAC-279 adds `MacChromeComputerUseProvider`, injected by production `daemon run` when Computer Use is enabled on macOS for Google Chrome. The provider supports bounded `observe`, `navigate`, `click`, and `type`, with navigation restricted to local file/localhost URLs. The non-dry-run gate `COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 COMPUTER_USE_LIVE_PROVIDER=mac-chrome COMPUTER_USE_LIVE_APP="Google Chrome" ... pnpm smoke:computer-use-live` returned `status=executed` after local `navigate` + `observe` flowed through `ComputerUseSessionRegistry`, `ComputerUsePolicy`, `ComputerUseToolGate`, and the provider. |
 | 2026-05-07 SGT blocked acceptance recheck | Re-ran the no-side-effect unblock preflights after `9e12c9f`. `git status --short` was clean, `pnpm launchd:status` remained green at pid `16732` with `pendingApprovals=0`, `pnpm im:doctor` reported Telegram/Lark/DingTalk ready and Slack disabled, and `pnpm dingtalk:readiness` reported ready. DingTalk still cannot run the live attachment gate: `open -a DingTalk` left `System Events` reporting `frontmost=false`, `windows=0`, Computer Use `get_app_state` timed out after 120s, and the latest DingTalk inbound audit rows are still from 2026-05-05. Slack remains blocked because Keychain services `codex-im-bridge-slack-bot` and `codex-im-bridge-slack-app` are both missing. Computer Use remains blocked for real desktop execution: default smoke skips, explicit dry-run returns `ready_dry_run`, and explicit non-dry-run exits blocked with `real desktop execution is not implemented in Phase 6 harness`. |
 | 2026-05-07 SGT DingTalk proactive attachment fallback loop | JAC-273 no longer depends only on a fresh session reply URL for outbound file/image tests. `DingTalkChannelAdapter.sendFile` now falls back to a proactive media client when no session webhook is known: it uploads media through DingTalk OAPI, then sends image/file payloads through the robot group or private-user proactive APIs based on `DINGTALK_TARGET_CHAT_ID`. Production `daemon run` injects this client, and `pnpm smoke:dingtalk-live` can now run `DINGTALK_LIVE_FILE=1` with a configured target instead of waiting for a fresh inbound message. Targeted DingTalk/CLI tests, `pnpm typecheck`, and `git diff --check` passed before the live gates below. |
 | 2026-05-07 SGT DingTalk attachment live acceptance loop | JAC-273 live acceptance is now green for outbound file and image delivery. Using config/Keychain/SQLite-derived values without printing secrets, `DINGTALK_LIVE=1 DINGTALK_LIVE_FILE=1 DINGTALK_LIVE_FILE_KIND=file pnpm smoke:dingtalk-live` and the same gate with `DINGTALK_LIVE_FILE_KIND=image` both exited 0 with redacted `status=file_sent`, `targetChatId=present`, `targetSource=env`, `messageId=present`, and `robotEvents=0`. No client secret, target id, message id, or media id bytes were recorded. |

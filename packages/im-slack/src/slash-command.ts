@@ -40,7 +40,12 @@ export interface SlackRawSlashCommandPayload {
   readonly user_id?: string;
   readonly user_name?: string;
   readonly trigger_id?: string;
-  readonly ack?: () => void | Promise<void>;
+  readonly ack?: (response?: SlackSlashCommandAckResponse) => void | Promise<void>;
+}
+
+interface SlackSlashCommandAckResponse {
+  readonly response_type: "ephemeral";
+  readonly text: string;
 }
 
 export async function normalizeSlackRawSlashCommand(
@@ -51,7 +56,11 @@ export async function normalizeSlackRawSlashCommand(
   if (payload === undefined) {
     return undefined;
   }
-  await payload.ack?.();
+  await payload.ack?.(
+    payload.command === SLACK_CODEX_COMMAND
+      ? { response_type: "ephemeral", text: "Codex is working..." }
+      : undefined,
+  );
 
   const teamId = payload.team_id ?? payload.team?.id;
   if (

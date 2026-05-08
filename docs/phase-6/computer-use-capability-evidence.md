@@ -1,8 +1,8 @@
 # Computer Use Capability Evidence
 
 Generated: 2026-05-03
-Status: JAC-274 contract update - App Server dynamic-tool contract implemented;
-real desktop execution still not live-accepted
+Status: JAC-279 update - App Server dynamic-tool contract implemented and
+bounded macOS Chrome provider non-dry-run smoke accepted
 
 ## 1. Local Protocol Evidence
 
@@ -275,6 +275,42 @@ What this changes:
 
 - JAC-274 is no longer blocked on a daemon-facing App Server registration
   contract. The contract is now explicit and tested.
-- JAC-274 is still not a live desktop execution pass. A real provider must still
-  prove a non-dry-run `/cu` task through this boundary before the project can
-  claim real Computer Use execution green.
+- JAC-274/JAC-279 now has a bounded live desktop provider pass for local Chrome
+  operations. This does not extend to arbitrary desktop automation, secret
+  entry, external website control, or unattended sensitive actions.
+
+## 9. JAC-279 Local Provider POC
+
+Generated: 2026-05-08
+
+JAC-279 adds a bounded macOS Chrome provider instead of wiring this project to
+the current Codex session's Computer Use MCP tools.
+
+Implemented provider:
+
+- `MacChromeComputerUseProvider` executes only against `Google Chrome`.
+- Supported operations are intentionally small: `observe`, `navigate`, `click`,
+  and `type`.
+- `navigate` is restricted to local `file://`, `localhost`, `127.0.0.1`, and
+  `::1` URLs.
+- `daemon run` injects the provider only when `computerUse.enabled` is true,
+  the configured default/allowed app is `Google Chrome`, and the daemon runs on
+  macOS.
+- The live smoke uses the full reviewed gate:
+  `ComputerUseSessionRegistry` -> `ComputerUsePolicy` -> `ComputerUseToolGate`
+  -> `MacChromeComputerUseProvider`.
+
+Observed non-dry-run evidence:
+
+```text
+COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 \
+COMPUTER_USE_LIVE_PROVIDER=mac-chrome \
+COMPUTER_USE_LIVE_APP="Google Chrome" \
+COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
+pnpm smoke:computer-use-live
+-> status=executed
+```
+
+This proves a local provider can execute through the reviewed boundary. It does
+not claim arbitrary desktop automation, secret entry, external website control,
+or unattended sensitive actions.

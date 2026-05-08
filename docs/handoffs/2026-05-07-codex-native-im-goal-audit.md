@@ -1,14 +1,14 @@
 # Codex-Native IM Goal Audit
 
-Generated: 2026-05-07 SGT
+Generated: 2026-05-08 SGT
 
 This audit checks the active goal:
 
 > Bring the supported IM platforms close to native Codex App usability:
 > text, project/thread, model, tools, skills, plugins, MCP, usage,
 > diagnostics, attachments, approvals, and Computer Use output should align
-> across Telegram, Feishu/Lark, and DingTalk, with Linear and repo handoffs
-> recording real progress.
+> across Telegram, Feishu/Lark, DingTalk, and bounded Slack workspace use, with
+> Linear and repo handoffs recording real progress.
 
 ## 1. Current Repo State
 
@@ -16,36 +16,37 @@ Fresh local evidence:
 
 ```text
 branch: codex/live-im-acceptance
-last committed baseline before this recheck: 2dc4463 docs(im): record installed dingtalk proactive bundle
-working tree: active Codex-native summary/doc refresh before final commit
-launchd: running pid=60935, codexThreads=0, pendingApprovals=0
-pnpm im:doctor: ready for Telegram / Lark / DingTalk, Slack disabled
+last committed baseline before this recheck: d2e60d4 feat(computer-use): register app-server provider contract
+working tree: active JAC-279 provider + Slack live acceptance/docs refresh before final commit
+launchd: running pid=78694, codexThreads=0, pendingApprovals=0
+pnpm im:doctor: ready for Telegram / Lark / DingTalk / Slack
 pnpm dingtalk:readiness: ready
-targeted RED/GREEN: packages/daemon/test/turn-output.test.ts, 14 pass
+targeted RED/GREEN: Slack send-card/action-id, message-envelope ack, slash ack, action/client suites; JAC-279 provider tests
 full gates after refresh:
   pnpm typecheck -> green
   pnpm typecheck:tests -> green
   pnpm lint -> green
-  pnpm test -> 160 files, 1485 pass, 1 skip
+  pnpm test -> 161 files, 1499 pass, 1 skip
   pnpm protocol:check -> green, 234 schema files canonical
 installed bridge after refresh:
   pnpm bridge:build -> green
   pnpm bridge:install -> green, preflight ok
   launchctl kickstart -k gui/501/io.codex-im-bridge -> green
-  pnpm launchd:status -> green, pid 78170, pendingApprovals=0
-  pnpm im:doctor -> ready, Telegram/Lark/DingTalk ready, Slack disabled
-  bridge redaction scan -> green
+  pnpm launchd:status -> green, pid 78694, pendingApprovals=0
+  pnpm im:doctor -> ready, Telegram/Lark/DingTalk/Slack ready
 ```
 
 Fresh gate/blocker checks:
 
 ```text
-pnpm smoke:slack-live
--> status=skip, gate=disabled, botToken=missing
-
-security find-generic-password -s codex-im-bridge-slack-bot -a "$USER"
-security find-generic-password -s codex-im-bridge-slack-app -a "$USER"
--> both missing
+Slack live workspace acceptance
+-> local OpenClaw removed; launchd/global package/state absent
+-> Slack bot/app tokens present through dedicated Keychain services
+-> pnpm im:doctor reports Slack ready
+-> /codex status returned immediate ephemeral ack plus daemon status
+-> DM prompt/reply reached a real Codex turn
+-> outbound text/file live gates passed with redacted evidence
+-> real Block Kit Allow once click produced allow_once=used, sibling tokens revoked, active turn cleared, and harmless target file present
 
 DingTalk outbound file/image gates
 -> DINGTALK_LIVE_FILE=1 file gate returned redacted status=file_sent
@@ -70,10 +71,11 @@ pnpm smoke:computer-use-live
 -> status=ready_dry_run
 
 COMPUTER_USE_LIVE=1 COMPUTER_USE_PROVIDER_VERIFIED=1 \
+COMPUTER_USE_LIVE_PROVIDER=mac-chrome \
 COMPUTER_USE_LIVE_APP="Google Chrome" \
 COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
 pnpm smoke:computer-use-live
--> status=blocked, reason=real desktop execution is not implemented in Phase 6 harness
+-> status=executed
 ```
 
 ## 2. Prompt-To-Artifact Checklist
@@ -91,40 +93,33 @@ pnpm smoke:computer-use-live
 | `commandExecution` output | JAC-261/JAC-265 record short output inline and long completed/failed output as redacted `.log` attachments. This refresh also projects `riskLevel` / `risk` when App Server includes it. | Local green |
 | `fileChange` / diff output | JAC-261 records redacted `.patch` attachments for file-change diffs through common `sendFile`. | Local green |
 | MCP/plugin/skill/tool status output | JAC-263/JAC-269/JAC-271/JAC-272 record low-noise redacted Codex status projection for lifecycle, MCP progress, terminal interaction, guardian/deprecation/hook, and auto-approval-review events. | Local green |
-| Approval request cards and callbacks | Telegram and Feishu/Lark live approval matrices passed. DingTalk live CardKit callback probe passed with callback token/messageRef validation fail-closed. | Green for enabled platforms |
+| Approval request cards and callbacks | Telegram and Feishu/Lark live approval matrices passed. DingTalk live CardKit callback probe passed with callback token/messageRef validation fail-closed. Slack live Block Kit `Allow once` click now also passed after unique action ids and message-envelope acking. | Green for enabled platforms plus bounded Slack |
 | Outbound images/files/artifacts | Telegram and Feishu/Lark live file gates passed. DingTalk `sendFile` is implemented locally through media upload plus session webhook when a fresh inbound robot message exists, and through proactive robot group/user media delivery when `DINGTALK_TARGET_CHAT_ID` is configured. DingTalk live file and image gates now both return redacted `status=file_sent`. | Telegram/Lark/DingTalk live green |
 | Inbound images/files | Telegram Web and Feishu Web inbound image/file live gates pass with local path/filename/size presence only. DingTalk inbound image and generic-file uploads now both pass real live gates: image uses live `content.downloadCode` / `content.pictureDownloadCode`, file uses live `msgtype=file` plus `content.downloadCode` / `content.fileName`, and both download through `/v1.0/robot/messageFiles/download` with redacted `rawStreamEvents=1`, `rawRobotCallbacks=1`, `robotEvents=1`, `attachmentEvents=1`, and local path/filename/size presence only. | Telegram/Lark/DingTalk live green |
 | Computer Use output/artifacts | Dynamic-tool / Computer Use `inputImage` artifacts are projected through `sendFile`; summaries hide raw tool args. This refresh also projects app, step/action, policy decision, blocked reason, and approval-required state when those summary fields are present. | Output projection local green |
-| Real desktop Computer Use execution | JAC-274 now implements the reviewed daemon-facing contract: `initialize.capabilities.experimentalApi` opt-in plus `/cu` `thread/start.dynamicTools` for `codex_im.computer_use` / `operate`, routed through the existing session/policy/audit/provider gate. Non-dry-run live desktop execution is still not accepted until a configured provider proves the bounded smoke. | Contract achieved; live execution still tracked by JAC-274 |
+| Real desktop Computer Use execution | JAC-274 implements the daemon-facing contract, and JAC-279 adds a bounded macOS Chrome provider. The non-dry-run smoke now routes local `navigate` + `observe` through `ComputerUseSessionRegistry`, `ComputerUsePolicy`, `ComputerUseToolGate`, and `MacChromeComputerUseProvider` and returns `status=executed`. | Bounded provider smoke green; arbitrary desktop/sensitive actions still out of scope |
 | Identity and group safety | JAC-240 and JAC-241 complete. `/whoami` is redacted; access groups and mention-required group policy are implemented. | Local green |
-| Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264/265/266/267/268/269/271/272/273 are Done. JAC-275 tracks the command-risk / Computer Use detail refresh. JAC-277 is green for DingTalk inbound image and generic-file uploads after the 2026-05-08 file gate. JAC-274 remains the Computer Use parent, now split into JAC-278 official provider-contract evidence and JAC-279 local experimental provider POC. JAC-248 remains Slack live workspace acceptance. | Green tracking, with follow-up tracks explicit |
+| Slack live workspace acceptance | JAC-248 is now green for the bounded live workspace scope: Socket Mode readiness, `/codex status`, DM prompt/reply, outbound text/file gates, and one real approval click. Strict exact-output Slack UX polish remains follow-up because Codex status summaries can appear beside the requested answer. | Live green with UX follow-up |
+| Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264/265/266/267/268/269/271/272/273 are Done. JAC-275 tracks the command-risk / Computer Use detail refresh. JAC-277 is green for DingTalk inbound image and generic-file uploads after the 2026-05-08 file gate. JAC-274 remains the Computer Use parent, now split into JAC-278 official provider-contract evidence and JAC-279 local experimental provider POC. JAC-248 is green for bounded Slack live workspace acceptance. | Green tracking, with follow-up tracks explicit |
 | Repo handoff tracking | `docs/handoffs/direct-use-live-status.md`, `docs/handoffs/live-im-acceptance-status.md`, and `docs/phase-6/computer-use-capability-evidence.md` record current state and blockers. | Green |
 
 ## 3. Follow-Up Tracks
 
 These are outside the active supported-platform completion claim:
 
-1. **Slack real workspace acceptance (JAC-248).**
-   Slack is implemented and wired as disabled-by-default readiness, but local
-   config is disabled and Keychain services `codex-im-bridge-slack-bot` /
-   `codex-im-bridge-slack-app` are absent. Live Slack acceptance requires a test
-   workspace app with bot/app tokens, `/codex`, prompt/reply, approval click,
-   and file gate evidence. Linear JAC-248 now carries `Blocked` and
-   `Operator-Gated` labels to make this explicit.
+1. **Slack strict-output UX polish.**
+   The bounded Slack workspace path is accepted, but strict `Reply exactly`
+   prompts can still show Codex status summaries beside the requested answer.
+   This is output-noise polish, not an adapter transport or approval blocker.
 
-2. **Real desktop Computer Use provider execution (JAC-274).**
-   The IM `/cu` control, output surfaces, and daemon-facing App Server
-   dynamic-tool contract are implemented. The contract uses
-   `capabilities.experimentalApi` plus `thread/start.dynamicTools` for the
-   project-owned `codex_im.computer_use` / `operate` tool, routed through the
-   existing session, policy, audit, allowed-tool, and provider gates. Real
-   desktop execution is still not live-accepted until a configured provider
-   completes the non-dry-run smoke through that boundary.
-
-3. **Slack live workspace acceptance.**
-   Slack implementation and local/file materialization are present, but current
-   local config is disabled and the Slack Keychain services are absent. Live
-   Slack acceptance still requires a test workspace app/token/channel setup.
+2. **Bounded Computer Use provider scope.**
+   The IM `/cu` control, output surfaces, daemon-facing App Server
+   dynamic-tool contract, and local macOS Chrome provider smoke are green.
+   The accepted provider scope is intentionally bounded to local Chrome
+   observe/navigate/click/type operations through the existing session, policy,
+   audit, allowed-tool, and provider gates. It does not claim arbitrary desktop
+   automation, secret entry, external website control, or unattended sensitive
+   actions.
 
 ## 4. Completion Verdict
 
@@ -138,14 +133,13 @@ proactive robot media path; DingTalk inbound image live acceptance is green
 through the robot file download path. DingTalk inbound generic-file live
 acceptance is also green after the 2026-05-08 real Desktop file-upload gate.
 
-This verdict does **not** claim Slack live workspace acceptance or real desktop
-Computer Use provider execution.
-Those remain separate follow-up tracks:
+This verdict now includes bounded Slack live workspace acceptance. It does
+**not** claim arbitrary desktop Computer Use beyond the bounded local Chrome
+provider smoke. Remaining follow-up tracks:
 
-- Slack test app bot/app tokens and enabled bridge config.
-- DingTalk robot/Stream delivery evidence for one real uploaded image/file.
-- Non-dry-run live Computer Use provider evidence through the implemented
-  App Server dynamic-tool contract.
+- Slack strict-output UX polish for exact-answer turns.
+- Broader IM-triggered Computer Use scenarios beyond the bounded local Chrome
+  provider smoke, if desired.
 
 ## 5. Blocker Unblock Packet
 
@@ -240,13 +234,17 @@ Next diagnosis:
 
 ### JAC-248 - Slack real workspace acceptance
 
-Unblock condition:
+Acceptance condition now satisfied for bounded live workspace use:
 
 - A test Slack app is installed with Socket Mode, `/codex`, interactivity,
   `message.im`, and `app_mention` enabled.
 - Bot and app tokens are present through Keychain or local env, not docs.
 - Slack is enabled in `~/.codex-im-bridge/config.toml` with redacted
   allowlisted test user/channel entries.
+- Local OpenClaw is absent so it cannot compete for the same Socket Mode app
+  token.
+- Slack Block Kit buttons use unique `action_id`s and opaque token-only values.
+- Normal message/app_mention Socket Mode envelopes are acked to prevent retries.
 
 Secret-presence checks that do not print token bytes:
 
@@ -274,15 +272,17 @@ SLACK_LIVE=1 SLACK_LIVE_TEXT=1 SLACK_TARGET_CHANNEL_ID=C_TEST pnpm smoke:slack-l
 SLACK_LIVE=1 SLACK_LIVE_FILE=1 SLACK_TARGET_CHANNEL_ID=C_TEST pnpm smoke:slack-live
 ```
 
-Client acceptance checklist:
+Client acceptance replay checklist:
 
 - DM the bot or mention the app in the allowed test channel.
 - Run `/codex status`, `/codex projects`, and `/codex use codex-im`.
 - Send one harmless prompt and verify a Codex reply returns in Slack.
 - Upload one harmless image/file and verify the daemon materializes it without
   leaking Slack private file URLs or token bytes.
-- Trigger one harmless approval card and click it in Slack; the daemon must
-  validate callback token plus `messageRef`, then render a terminal card.
+- Trigger one harmless approval card and click it in Slack; latest acceptance
+  validated callback token plus `messageRef`, marked `allow_once=used`, revoked
+  sibling tokens, cleared active turn, and created the harmless `/tmp` target
+  file.
 
 Acceptance evidence:
 
@@ -291,9 +291,9 @@ Acceptance evidence:
 - Do not record raw workspace IDs, channel IDs, user IDs, timestamps, token
   bytes, or raw Socket Mode payloads.
 
-### JAC-274 - Real Computer Use provider execution
+### JAC-274 / JAC-279 - Real Computer Use provider execution
 
-Unblock condition:
+Accepted condition:
 
 - The provider contract is now implemented through App Server experimental
   `dynamicTools` and `item/tool/call`: initialize with
@@ -301,9 +301,9 @@ Unblock condition:
   on explicit `/cu` new threads when a provider is configured, and pass all
   calls through the `/cu` session, policy, audit, allowed-tool, and provider
   gates.
-- Remaining unblock condition: a configured provider must prove a bounded
-  non-dry-run Chrome smoke. Until then, production without a provider remains
-  fail-closed and must not claim real desktop execution green.
+- The local macOS provider must prove a bounded non-dry-run Chrome smoke. It
+  may only target local file/localhost pages and must not use the current Codex
+  session's Computer Use MCP tools as a production backend.
 
 Evidence scan:
 
@@ -321,11 +321,12 @@ COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
 pnpm smoke:computer-use-live
 ```
 
-Non-dry-run gate, only after a provider is configured:
+Non-dry-run gate:
 
 ```bash
 COMPUTER_USE_LIVE=1 \
 COMPUTER_USE_PROVIDER_VERIFIED=1 \
+COMPUTER_USE_LIVE_PROVIDER=mac-chrome \
 COMPUTER_USE_LIVE_APP="Google Chrome" \
 COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
 pnpm smoke:computer-use-live
@@ -333,7 +334,8 @@ pnpm smoke:computer-use-live
 
 Acceptance evidence:
 
-- A real `/cu` task can execute through the reviewed provider boundary.
+- The non-dry-run gate returns `status=executed` through the reviewed provider
+  boundary.
 - The IM output shows app, step/status, policy decision, screenshots/artifacts
   where appropriate, and any approval request through the existing card path.
 - Normal prompts still do not trigger Computer Use.

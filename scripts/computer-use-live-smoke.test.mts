@@ -41,6 +41,22 @@ describe("Computer Use live smoke harness gate (JAC-100)", () => {
     expect(output(result)).toContain("READY_DRY_RUN");
     expect(output(result)).not.toContain(SECRET);
   });
+
+  it("supports a fake-executor non-dry-run path for the Mac Chrome provider", () => {
+    const result = runLiveSmoke({
+      COMPUTER_USE_LIVE: "1",
+      COMPUTER_USE_PROVIDER_VERIFIED: "1",
+      COMPUTER_USE_LIVE_PROVIDER: "mac-chrome",
+      COMPUTER_USE_LIVE_FAKE_EXECUTOR: "1",
+      COMPUTER_USE_LIVE_APP: "Google Chrome",
+      COMPUTER_USE_LIVE_TASK: SECRET,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('"status": "executed"');
+    expect(output(result)).toContain("EXECUTED");
+    expect(output(result)).not.toContain(SECRET);
+  });
 });
 
 function runLiveSmoke(env: Record<string, string>) {
@@ -49,6 +65,8 @@ function runLiveSmoke(env: Record<string, string>) {
     "COMPUTER_USE_LIVE",
     "COMPUTER_USE_PROVIDER_VERIFIED",
     "COMPUTER_USE_LIVE_DRY_RUN",
+    "COMPUTER_USE_LIVE_PROVIDER",
+    "COMPUTER_USE_LIVE_FAKE_EXECUTOR",
     "COMPUTER_USE_LIVE_APP",
     "COMPUTER_USE_LIVE_TASK",
   ]) {

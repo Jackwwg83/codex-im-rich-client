@@ -52,8 +52,7 @@ pnpm smoke:computer-use-live
 ```
 
 Default behavior is a green skip. It performs no desktop action unless explicit
-environment gates are present. Because JAC-163 recorded the real provider as
-not verified, real desktop execution remains blocked in this harness.
+environment gates are present.
 
 Dry-run readiness check:
 
@@ -68,6 +67,23 @@ pnpm smoke:computer-use-live
 
 Manual smoke is not an unattended automation in Phase 6. Use it only when the
 live provider issue explicitly enables a reviewed real provider.
+
+Bounded non-dry-run provider smoke:
+
+```bash
+COMPUTER_USE_LIVE=1 \
+COMPUTER_USE_PROVIDER_VERIFIED=1 \
+COMPUTER_USE_LIVE_PROVIDER=mac-chrome \
+COMPUTER_USE_LIVE_APP="Google Chrome" \
+COMPUTER_USE_LIVE_TASK="summarize the visible local test page" \
+pnpm smoke:computer-use-live
+```
+
+Expected result: `status=executed`. The smoke creates a local disposable HTML
+page, routes `navigate` and `observe` through `ComputerUseSessionRegistry`,
+`ComputerUsePolicy`, `ComputerUseToolGate`, and `MacChromeComputerUseProvider`,
+then deletes the temporary page. It does not send IM messages or use external
+network targets.
 
 Checklist before starting:
 

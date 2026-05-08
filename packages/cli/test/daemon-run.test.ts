@@ -268,5 +268,8 @@ describe("daemon run safety rails", () => {
     expect(source).toContain("createDaemonAppServerClient(transport, logger)");
     expect(source).toContain("createDaemonAppServerClient(placeholderTransport, logger)");
     expect(source).toContain("capabilities: { experimentalApi: true }");
+    expect(source).toContain("const computerUseProvider = createComputerUseProvider(config)");
+    expect(source).toContain("computerUseProvider === undefined ? {} : { computerUseProvider }");
+    expect(source).toContain("return new MacChromeComputerUseProvider()");
   });
 });

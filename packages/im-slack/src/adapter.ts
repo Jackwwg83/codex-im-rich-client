@@ -292,6 +292,7 @@ export class SlackChannelAdapter implements ChannelAdapter {
       return;
     }
     const raw = payload as SlackRawMessagePayload;
+    await raw.ack?.();
     const attachments = await this.#materializeAttachments(raw);
     const message = normalizeSlackRawMessage(raw, this._nowForTest().getTime(), attachments);
     if (message === undefined) {
