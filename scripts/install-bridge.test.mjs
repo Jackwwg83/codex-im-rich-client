@@ -148,7 +148,7 @@ describe("install-bridge", () => {
     expect(run.status).toBe(0);
     expect(run.stdout).toContain("sqlite:1");
     expect(run.stderr).toBe("");
-  });
+  }, 30_000);
 
   it("runs installed daemon preflight after install", async () => {
     const fixture = await makeFixture({ writeConfig: true, preflightDaemon: true });

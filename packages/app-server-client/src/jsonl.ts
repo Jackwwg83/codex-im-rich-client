@@ -12,7 +12,7 @@
  */
 
 export class JsonlDecoder {
-  private buffer = "";
+  private pending: string[] = [];
 
   /**
    * Push a chunk of incoming bytes / string. Returns 0+ parsed JSON values
@@ -20,22 +20,42 @@ export class JsonlDecoder {
    * buffered until the next push.
    */
   push(chunk: string | Buffer): unknown[] {
-    this.buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
     const out: unknown[] = [];
-    while (true) {
-      const idx = this.buffer.indexOf("\n");
-      if (idx === -1) break;
-      const line = this.buffer.slice(0, idx).trim();
-      this.buffer = this.buffer.slice(idx + 1);
-      if (!line) continue;
-      try {
-        out.push(JSON.parse(line));
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        throw new Error(`JsonlDecoder: invalid JSON: ${reason}: ${line.slice(0, 200)}`);
+    let start = 0;
+
+    while (start < text.length) {
+      const idx = text.indexOf("\n", start);
+      if (idx === -1) {
+        this.pending.push(text.slice(start));
+        break;
+      }
+      const line = this.takeLine(text.slice(start, idx)).trim();
+      start = idx + 1;
+      if (line) {
+        out.push(parseJsonLine(line));
       }
     }
     return out;
+  }
+
+  private takeLine(tail: string): string {
+    if (this.pending.length === 0) {
+      return tail;
+    }
+    this.pending.push(tail);
+    const line = this.pending.join("");
+    this.pending = [];
+    return line;
+  }
+}
+
+function parseJsonLine(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`JsonlDecoder: invalid JSON: ${reason}: ${line.slice(0, 200)}`);
   }
 }
 
