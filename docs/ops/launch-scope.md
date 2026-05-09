@@ -31,8 +31,8 @@ These commands are aligned with the current router in
 |---|---|
 | Plain text | Enters the current bound Codex thread/turn. |
 | `/start`, `/help` | Basic onboarding/help only. |
-| `/cwds`, `/projects`, `/use <cwd>` | List/select known local cwd entries; `/projects` is compatibility-only. |
-| `/new [cwd] [task]`, `/threads`, `/switch <n>`, `/alias <name>`, `/fork`, `/stop` | Native cwd/thread/turn control. `/threads` uses Codex App Server thread listing when available. |
+| `/projects`, `/cwds`, `/use <project>` | List/select Codex projects; implementation maps project names to preconfigured local workspaces without showing paths by default. |
+| `/new [project] [task]`, `/threads`, `/switch <n>`, `/alias <name>`, `/fork`, `/stop` | Native project/conversation/turn control. `/threads` uses Codex App Server thread listing when available. |
 | `/status`, `/whoami` | Redacted daemon, binding, identity, and pending-approval status. |
 | `/model`, `/compact`, `/usage`, `/diagnostics` | Codex-native model, context, usage, and diagnostic surfaces. |
 | `/tools`, `/skills`, `/plugins`, `/apps` | Codex capability discovery, redacted and summary-only. |
@@ -41,7 +41,7 @@ These commands are aligned with the current router in
 | `/cu status` | Computer Use policy/provider/readiness only; no desktop action. |
 | `/cu <task>` or `/computer-use <task>` | Explicit scoped Computer Use turn. Normal prompts cannot trigger CU. |
 
-Minimal user help should show only cwd selection, plain prompts, status, stop,
+Minimal user help should show only project selection, plain prompts, status, stop,
 approval behavior, attachments, and bounded `/cu` scope on the first screen.
 Internal protocol details belong in docs, not first-use IM help.
 

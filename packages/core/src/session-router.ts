@@ -1,5 +1,11 @@
 import type { Target } from "./types.js";
 
+export type SessionContextKind =
+  | "configured_project"
+  | "codex_project"
+  | "app_default"
+  | "native_thread";
+
 export type SessionRoute =
   | {
       readonly kind: "unbound";
@@ -8,7 +14,9 @@ export type SessionRoute =
   | {
       readonly kind: "bound";
       readonly target: Target;
-      readonly projectId: string;
+      readonly contextKind?: SessionContextKind | undefined;
+      readonly projectId?: string | undefined;
+      readonly projectLabel?: string | undefined;
       readonly cwd: string;
       readonly codexThreadId?: string;
       readonly defaultModel?: string;
@@ -16,7 +24,9 @@ export type SessionRoute =
     };
 
 export interface SessionBindingInput {
-  projectId: string;
+  contextKind?: SessionContextKind | undefined;
+  projectId?: string | undefined;
+  projectLabel?: string | undefined;
   cwd: string;
   codexThreadId?: string;
   defaultModel?: string;
@@ -53,7 +63,9 @@ function routeFromRecord(record: SessionThreadBindingRecord): SessionRoute {
   return {
     kind: "bound",
     target: record.target,
-    projectId: record.projectId,
+    ...(record.contextKind !== undefined ? { contextKind: record.contextKind } : {}),
+    ...(record.projectId !== undefined ? { projectId: record.projectId } : {}),
+    ...(record.projectLabel !== undefined ? { projectLabel: record.projectLabel } : {}),
     cwd: record.cwd,
     ...(record.codexThreadId !== undefined ? { codexThreadId: record.codexThreadId } : {}),
     ...(record.defaultModel !== undefined ? { defaultModel: record.defaultModel } : {}),
@@ -68,7 +80,9 @@ function routeFromBinding(
   return {
     kind: "bound",
     target,
-    projectId: input.projectId,
+    ...(input.contextKind !== undefined ? { contextKind: input.contextKind } : {}),
+    ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
+    ...(input.projectLabel !== undefined ? { projectLabel: input.projectLabel } : {}),
     cwd: input.cwd,
     ...(input.codexThreadId !== undefined ? { codexThreadId: input.codexThreadId } : {}),
     ...(input.defaultModel !== undefined ? { defaultModel: input.defaultModel } : {}),
@@ -124,7 +138,9 @@ export class SessionRouter {
     }
 
     return this.bind(target, {
-      projectId: current.projectId,
+      ...(current.contextKind !== undefined ? { contextKind: current.contextKind } : {}),
+      ...(current.projectId !== undefined ? { projectId: current.projectId } : {}),
+      ...(current.projectLabel !== undefined ? { projectLabel: current.projectLabel } : {}),
       cwd: current.cwd,
       codexThreadId,
       ...(current.defaultModel !== undefined ? { defaultModel: current.defaultModel } : {}),

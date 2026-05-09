@@ -98,12 +98,9 @@ describe("daemon turn output projection", () => {
     await waitFor(() => sendText.mock.calls.length === 1);
     expect(editText).toHaveBeenCalledWith(
       { target: TARGET, messageId: "user-command-1" },
-      "Using cwd codex-im\ncwd: /tmp/codex-im\nNext: /new <task>",
+      "Using project codex-im\nNext: /new <task>",
     );
-    expect(sendText).toHaveBeenCalledWith(
-      TARGET,
-      "Using cwd codex-im\ncwd: /tmp/codex-im\nNext: /new <task>",
-    );
+    expect(sendText).toHaveBeenCalledWith(TARGET, "Using project codex-im\nNext: /new <task>");
     expect(route).toMatchObject({ kind: "bound", projectId: "codex-im" });
 
     await daemon.stop();

@@ -5,7 +5,7 @@ Generated: 2026-05-08 SGT
 This audit checks the active goal:
 
 > Bring the supported IM platforms close to native Codex App usability:
-> text, cwd/thread, model, tools, skills, plugins, MCP, usage,
+> text, project/conversation, model, tools, skills, plugins, MCP, usage,
 > diagnostics, attachments, approvals, and Computer Use output should align
 > across Telegram, Feishu/Lark, DingTalk, and bounded Slack workspace use, with
 > Linear and repo handoffs recording real progress.
@@ -87,7 +87,7 @@ pnpm smoke:computer-use-live
 | Requirement | Current evidence | Status |
 |---|---|---|
 | Ordinary IM text enters current Codex thread/turn | Live acceptance status records Telegram real Codex prompt/reply, Feishu/Lark prompt/reply after stale-thread recovery, and DingTalk desktop prompt/reply. Daemon common routing uses `SessionRouter` and `CodexRuntime.turnStart` / `turnSteer`. | Green for enabled platforms |
-| Cwd/thread controls: `/cwds`, `/projects`, `/use`, `/threads`, `/switch`, `/new`, `/fork`, `/stop` | Current hardening aligns IM entry with native Codex semantics: `/cwds` lists known local cwd entries, `/projects` is compatibility-only, `/use` and `/new` select known cwd entries by number or alias and reject raw paths, and `/threads` / `/switch` use App Server `thread/list` / `thread/resume` when available so IM can take over existing Codex App or CLI threads. | Green |
+| Project/conversation controls: `/projects`, `/cwds`, `/use`, `/threads`, `/switch`, `/new`, `/fork`, `/stop` | Current hardening aligns IM entry with Codex App semantics while preserving App Server native cwd/thread implementation: `/projects` lists available project names without exposing local paths, `/cwds` is a technical alias, `/use` and `/new` select projects by number or name and reject raw paths, and `/threads` / `/switch` use App Server `thread/list` / `thread/resume` when available so IM can take over existing Codex App or CLI conversations. | Green |
 | Codex-native controls: `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp` | JAC-236 / JAC-264 are complete. `packages/core/src/command-router.ts` lists these commands; `packages/daemon/src/daemon.ts` calls `CodexRuntime` wrappers for model, compaction, usage, capabilities, skills, apps, MCP login, and MCP reload. | Local green, shared across enabled adapters |
 | `/mcp login <server>` and `/mcp reload` | `docs/handoffs/direct-use-live-status.md` records JAC-264; runtime wrappers keep method literals centralized. | Local green |
 | `/cu status` | JAC-267 complete. IM output reports enabled state, provider readiness, allowed/denied apps, sensitive keywords, and live-smoke gate without desktop action. | Local green |

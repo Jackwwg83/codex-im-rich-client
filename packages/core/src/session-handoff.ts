@@ -57,7 +57,7 @@ export function handoffSession(input: SessionHandoffInput): SessionHandoffResult
   const sourcePolicy = input.operatorPolicy.check({
     actor: input.actor,
     action: "handoff_session",
-    projectId: source.projectId,
+    ...(source.projectId !== undefined ? { projectId: source.projectId } : {}),
     target: input.fromTarget,
   });
   if (sourcePolicy.kind === "deny") {
@@ -71,7 +71,7 @@ export function handoffSession(input: SessionHandoffInput): SessionHandoffResult
   const destinationPolicy = input.operatorPolicy.check({
     actor: input.actor,
     action: "handoff_session",
-    projectId: source.projectId,
+    ...(source.projectId !== undefined ? { projectId: source.projectId } : {}),
     target: input.toTarget,
   });
   if (destinationPolicy.kind === "deny") {
@@ -103,7 +103,9 @@ export function handoffSession(input: SessionHandoffInput): SessionHandoffResult
 
 function bindingFromRoute(route: BoundSessionRoute): SessionBindingInput {
   return {
-    projectId: route.projectId,
+    ...(route.contextKind !== undefined ? { contextKind: route.contextKind } : {}),
+    ...(route.projectId !== undefined ? { projectId: route.projectId } : {}),
+    ...(route.projectLabel !== undefined ? { projectLabel: route.projectLabel } : {}),
     cwd: route.cwd,
     ...(route.codexThreadId !== undefined ? { codexThreadId: route.codexThreadId } : {}),
     ...(route.defaultModel !== undefined ? { defaultModel: route.defaultModel } : {}),

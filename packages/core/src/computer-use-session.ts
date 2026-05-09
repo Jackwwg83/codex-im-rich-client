@@ -7,7 +7,7 @@ export type ComputerUseSession = {
   readonly sessionId: string;
   readonly targetKey: string;
   readonly actorKey: string;
-  readonly projectId: string;
+  readonly projectId?: string;
   readonly threadId: string;
   readonly turnId: string;
   readonly app: string;
@@ -58,7 +58,7 @@ export class ComputerUseSessionRegistry {
       sessionId: input.sessionId,
       targetKey: input.targetKey,
       actorKey: input.actorKey,
-      projectId: input.projectId,
+      ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
       threadId: input.threadId,
       turnId: input.turnId,
       app: input.app,
@@ -285,7 +285,7 @@ function sessionAuditMetadata(session: ComputerUseSession): Record<string, strin
   return {
     targetKey: session.targetKey,
     actorKey: session.actorKey,
-    projectId: session.projectId,
+    ...(session.projectId === undefined ? {} : { projectId: session.projectId }),
     threadId: session.threadId,
     turnId: session.turnId,
   };

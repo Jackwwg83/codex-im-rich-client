@@ -722,15 +722,48 @@ describe("Daemon skeleton (T14)", () => {
     });
   });
 
-  it("guides unbound prompt senders to choose a known cwd before starting Codex", async () => {
+  it("starts a default Codex conversation for an unbound plain-text prompt", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-09T10:10:00.000Z");
     const target = { platform: "telegram", chatId: "-allowed" };
     const sender = { userId: "u-alice" };
+    const bindings = {
+      upsert: vi.fn((input) => ({
+        id: "binding-default",
+        target: input.target,
+        contextKind: input.contextKind,
+        projectId: input.projectId,
+        projectLabel: input.projectLabel,
+        cwd: input.cwd,
+        codexThreadId: input.codexThreadId,
+        defaultModel: input.defaultModel,
+        activeTurnId: input.activeTurnId,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      })),
+      findByTarget: vi.fn(),
+    };
+    const sessionRouter = new SessionRouter({ bindings });
     const runtime = {
-      threadStart: vi.fn(),
-      turnStart: vi.fn(),
+      threadStart: vi.fn(() => ({
+        thread: { id: "thread-default", cwd: "/Users/jackwu/projects/codex-im-rich-client" },
+      })),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-default" } })),
       turnSteer: vi.fn(),
       turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(() => ({
+        id: "ts-default",
+        target,
+        contextKind: "app_default" as const,
+        projectLabel: "Codex default",
+        codexThreadId: "thread-default",
+        status: "open" as const,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        lastUsedAt: now.toISOString(),
+      })),
     };
     const adapter = {
       onAction: vi.fn(() => () => {}),
@@ -738,24 +771,20 @@ describe("Daemon skeleton (T14)", () => {
         messageHandler = handler;
         return () => {};
       }),
-      editText: vi.fn(),
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({
-        projects: {
-          web: { cwd: "/repo/web" },
-        },
-      }),
+      loadConfig: () => ({}),
       openStorage: () => ({}),
       createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
       createSecurityPolicy: () => ({
         checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
-        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
       }),
-      createSessionRouter: () => ({ resolve: vi.fn(() => ({ kind: "unbound" as const, target })) }),
+      createSessionRouter: () => sessionRouter,
       createSupervisor: () => ({ currentRuntime: () => runtime }),
       createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
     });
 
     await daemon.start();
@@ -768,12 +797,27 @@ describe("Daemon skeleton (T14)", () => {
     });
     await flushDaemonHandlers();
 
-    expect(runtime.threadStart).not.toHaveBeenCalled();
-    expect(runtime.turnStart).not.toHaveBeenCalled();
-    expect(adapter.editText).toHaveBeenCalledWith(
-      { target, messageId: "msg-unbound-prompt" },
-      "No cwd selected. Send /cwds, then /use <number> or /new <number> <task>.",
-    );
+    expect(runtime.threadStart).toHaveBeenCalledWith({});
+    expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
+      target,
+      contextKind: "app_default",
+      projectLabel: "Codex default",
+      cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      codexThreadId: "thread-default",
+      now: "2026-05-09T10:10:00.000Z",
+    });
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-default",
+      input: [{ type: "text", text: "Reply exactly: OK", text_elements: [] }],
+    });
+    expect(bindings.upsert).toHaveBeenLastCalledWith({
+      target,
+      contextKind: "app_default",
+      projectLabel: "Codex default",
+      cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      codexThreadId: "thread-default",
+      activeTurnId: "turn-default",
+    });
   });
 
   it("maps inbound image attachments to Codex localImage turn input", async () => {
@@ -1167,7 +1211,6 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.turnStart).toHaveBeenCalledWith({
       threadId: "thread-created",
       input: [{ type: "text", text: "start fresh", text_elements: [] }],
-      cwd: "/repo/web",
     });
     expect(sessionRouter.bind).toHaveBeenCalledWith(target, {
       projectId: "web",
@@ -1266,8 +1309,6 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.turnStart).toHaveBeenNthCalledWith(2, {
       threadId: "thread-fresh",
       input,
-      cwd: "/repo/web",
-      model: "gpt-test",
     });
     expect(sessionRouter.bind).toHaveBeenCalledWith(target, {
       projectId: "web",
@@ -2133,11 +2174,10 @@ describe("Daemon skeleton (T14)", () => {
       "Send any non-command message as a Codex prompt for the current thread.",
     );
     expect(body).toContain("/start");
-    expect(body).toContain("/cwds");
     expect(body).toContain("/projects");
-    expect(body).toContain("/use <cwd>");
+    expect(body).toContain("/use <project>");
     expect(body).toContain("/status");
-    expect(body).toContain("/new [cwd] [task]");
+    expect(body).toContain("/new [project] [task]");
     expect(body).toContain("/threads");
     expect(body).toContain("/switch <thread>");
     expect(body).toContain("/alias <title>");
@@ -2207,23 +2247,102 @@ describe("Daemon skeleton (T14)", () => {
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-projects" },
       [
-        "/projects is kept for compatibility. Use /cwds.",
-        "Known cwd entries:",
+        "Projects:",
         "  1. ops",
-        "cwd: ~/private/ops",
-        "source: config",
+        "use: /use 1",
+        "new: /new 1 <task>",
         "* 2. web",
-        "cwd: ~/private/web",
-        "source: config model: gpt-test",
-        "Use:",
-        "/use 1",
-        "/new 1 <task>",
+        "current",
+        "model: gpt-test",
+        "use: /use 2",
+        "new: /new 2 <task>",
       ].join("\n"),
     );
     const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
     expect(body).not.toContain("hidden");
     expect(body).not.toContain("/Users/alice/private");
     expect(body).not.toContain("-allowed");
+  });
+
+  it("shows native thread-history project groups without making them /use selectors", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const runtime = {
+      threadList: vi.fn(() => ({
+        data: [
+          {
+            id: "thread-native-web",
+            name: "Native web",
+            cwd: "/Users/alice/private/web",
+            updatedAt: 1778252400,
+          },
+          {
+            id: "thread-native-ops",
+            name: "Native ops",
+            cwd: "/Users/alice/private/ops",
+            updatedAt: 1778252300,
+          },
+          {
+            id: "thread-native-ops-2",
+            name: "Native ops 2",
+            cwd: "/Users/alice/private/ops",
+            updatedAt: 1778252200,
+          },
+        ],
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/Users/alice/private/web", defaultModel: "gpt-test" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => ({ kind: "unbound" as const, target })) }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/projects",
+      messageRef: { target, messageId: "msg-native-projects" },
+      receivedAt: new Date("2026-05-09T10:30:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadList).toHaveBeenCalledWith({
+      limit: 50,
+      archived: false,
+      sortDirection: "desc",
+    });
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("  1. web");
+    expect(body).toContain("model: gpt-test");
+    expect(body).toContain("conversations: 1");
+    expect(body).toContain("use: /use 1");
+    expect(body).toContain("  2. ops");
+    expect(body).toContain("conversations: 2");
+    expect(body).toContain("resume: /threads");
+    expect(body).not.toContain("use: /use 2");
+    expect(body).not.toContain("/Users/alice/private");
   });
 
   it("routes Codex-native capability commands through the common IM control plane", async () => {
@@ -2746,11 +2865,12 @@ describe("Daemon skeleton (T14)", () => {
     const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
     expect(body).toContain("target: telegram thread");
     expect(body).toContain("binding: bound");
-    expect(body).toContain("cwd: ~/private/web");
-    expect(body).toContain("cwd alias: web");
+    expect(body).toContain("project: web");
     expect(body).toContain("thread: thread-abcde...");
     expect(body).toContain("active turn: turn-1234567...");
     expect(body).toContain("pending approvals: 2");
+    expect(body).not.toContain("cwd:");
+    expect(body).not.toContain("~/private/web");
     expect(body).not.toContain("-100secret-chat");
     expect(body).not.toContain("u-secret-user");
     expect(body).not.toContain("/Users/alice/private/web");
@@ -2934,9 +3054,10 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("topic id: present");
     expect(body).toContain("sender id: present");
     expect(body).toContain("binding: bound");
-    expect(body).toContain("cwd: ~/private/web");
-    expect(body).toContain("cwd alias: web");
+    expect(body).toContain("project: web");
     expect(body).toContain("thread: thread-abcde...");
+    expect(body).not.toContain("cwd:");
+    expect(body).not.toContain("~/private/web");
     expect(body).not.toContain("-100secret-chat");
     expect(body).not.toContain("secret-thread-key");
     expect(body).not.toContain("secret-topic-id");
@@ -3033,6 +3154,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,
       projectId: "web",
+      cwd: "/repo/web",
       codexThreadId: "thread-created-1234567890",
       title: "Release check",
       now: "2026-05-03T12:00:00.000Z",
@@ -3128,8 +3250,6 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.turnStart).toHaveBeenCalledWith({
       threadId: "thread-created-selector",
       input: [{ type: "text", text: "run tests", text_elements: [] }],
-      cwd: "/repo/web",
-      model: "gpt-test",
     });
     expect(bindings.upsert).toHaveBeenLastCalledWith({
       target,
@@ -3141,25 +3261,53 @@ describe("Daemon skeleton (T14)", () => {
     });
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-new-selector" },
-      "New Codex thread thread-creat... in cwd web\ncwd: /repo/web\nturn: turn-created...",
+      "New Codex conversation thread-creat... in project web\nturn: turn-created...",
     );
   });
 
-  it("refuses /new before the target is bound to a project", async () => {
+  it("routes /new with no selected project to an App Server default conversation", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-09T10:15:00.000Z");
     const target = { platform: "telegram", chatId: "-allowed" };
     const sender = { userId: "u-alice" };
-    const sessionRouter = {
-      resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
-      bindThread: vi.fn(),
+    const bindings = {
+      upsert: vi.fn((input) => ({
+        id: "binding-new-default",
+        target: input.target,
+        contextKind: input.contextKind,
+        projectId: input.projectId,
+        projectLabel: input.projectLabel,
+        cwd: input.cwd,
+        codexThreadId: input.codexThreadId,
+        activeTurnId: input.activeTurnId,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      })),
+      findByTarget: vi.fn(),
     };
+    const sessionRouter = new SessionRouter({ bindings });
     const runtime = {
-      threadStart: vi.fn(),
-      turnStart: vi.fn(),
+      threadStart: vi.fn(() => ({
+        thread: { id: "thread-default-new", cwd: "/Users/jackwu/projects/codex-im-rich-client" },
+      })),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-default-new" } })),
       turnSteer: vi.fn(),
       turnInterrupt: vi.fn(),
     };
-    const threadSessionRepository = { upsert: vi.fn() };
+    const threadSessionRepository = {
+      upsert: vi.fn(() => ({
+        id: "ts-new-default",
+        target,
+        contextKind: "app_default" as const,
+        projectLabel: "Codex default",
+        codexThreadId: "thread-default-new",
+        title: "Release check",
+        status: "open" as const,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        lastUsedAt: now.toISOString(),
+      })),
+    };
     const adapter = {
       onAction: vi.fn(() => () => {}),
       onMessage: vi.fn((handler: (message: unknown) => void) => {
@@ -3184,25 +3332,45 @@ describe("Daemon skeleton (T14)", () => {
       createSupervisor: () => ({ currentRuntime: () => runtime }),
       createAdapter: () => adapter,
       threadSessionRepository,
+      now: () => now,
     });
 
     await daemon.start();
     messageHandler?.({
       target,
       sender,
-      text: "/new",
+      text: "/new Release check",
       messageRef: { target, messageId: "msg-new-unbound" },
-      receivedAt: new Date("2026-05-03T12:00:00.000Z"),
+      receivedAt: now,
     });
     await flushDaemonHandlers();
 
+    expect(runtime.threadStart).toHaveBeenCalledWith({});
+    expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
+      target,
+      contextKind: "app_default",
+      projectLabel: "Codex default",
+      cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      codexThreadId: "thread-default-new",
+      title: "Release check",
+      now: "2026-05-09T10:15:00.000Z",
+    });
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-default-new",
+      input: [{ type: "text", text: "Release check", text_elements: [] }],
+    });
+    expect(bindings.upsert).toHaveBeenLastCalledWith({
+      target,
+      contextKind: "app_default",
+      projectLabel: "Codex default",
+      cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      codexThreadId: "thread-default-new",
+      activeTurnId: "turn-default-new",
+    });
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-new-unbound" },
-      "No cwd selected. Use /cwds, then /new <number> <task>.",
+      "New Codex conversation thread-defau... in project Codex default\nturn: turn-default...",
     );
-    expect(runtime.threadStart).not.toHaveBeenCalled();
-    expect(threadSessionRepository.upsert).not.toHaveBeenCalled();
-    expect(sessionRouter.bindThread).not.toHaveBeenCalled();
   });
 
   it("does not change current binding when /new thread session persistence fails", async () => {
@@ -3348,6 +3516,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,
       projectId: "web",
+      cwd: "/repo/web",
       codexThreadId: "thread-created",
       now: "2026-05-03T12:15:00.000Z",
     });
@@ -3355,7 +3524,6 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.turnStart).toHaveBeenCalledWith({
       threadId: "thread-created",
       input: [{ type: "text", text: "start the next task", text_elements: [] }],
-      cwd: "/repo/web",
     });
   });
 
@@ -3468,7 +3636,9 @@ describe("Daemon skeleton (T14)", () => {
       upsert: vi.fn((input) => ({
         id: "binding-native-thread",
         target: input.target,
+        contextKind: input.contextKind,
         projectId: input.projectId,
+        projectLabel: input.projectLabel,
         cwd: input.cwd,
         codexThreadId: input.codexThreadId,
         createdAt: "2026-05-08T15:00:00.000Z",
@@ -3503,7 +3673,8 @@ describe("Daemon skeleton (T14)", () => {
       upsert: vi.fn(() => ({
         id: "ts-native",
         target,
-        projectId: "cwd-thread-native-abcdefghij",
+        contextKind: "native_thread" as const,
+        projectLabel: "web",
         codexThreadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
         title: "Login fix",
         status: "open" as const,
@@ -3554,9 +3725,11 @@ describe("Daemon skeleton (T14)", () => {
     const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
     expect(body).toContain("Recent Codex threads:");
     expect(body).toContain("1. Login fix");
-    expect(body).toContain("cwd: ~/dev/web");
+    expect(body).toContain("project: web");
     expect(body).toContain("id: thread-nativ...");
     expect(body).toContain("/switch 1");
+    expect(body).not.toContain("cwd:");
+    expect(body).not.toContain("~/dev/web");
     expect(body).not.toContain("/Users/alice");
 
     messageHandler?.({
@@ -3574,20 +3747,23 @@ describe("Daemon skeleton (T14)", () => {
     });
     expect(bindings.upsert).toHaveBeenCalledWith({
       target,
-      projectId: "cwd-thread-native-abcdefghij",
+      contextKind: "native_thread",
+      projectLabel: "web",
       cwd: "/Users/alice/dev/web",
       codexThreadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
     });
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,
-      projectId: "cwd-thread-native-abcdefghij",
+      contextKind: "native_thread",
+      projectLabel: "web",
       codexThreadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
+      cwd: "/Users/alice/dev/web",
       title: "Login fix",
       now: expect.any(String),
     });
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-native-switch" },
-      "Switched to 1 Login fix (thread-nativ...)\ncwd: ~/dev/web",
+      "Switched to 1 Login fix (thread-nativ...)\nproject: web",
     );
   });
 
@@ -3637,7 +3813,7 @@ describe("Daemon skeleton (T14)", () => {
 
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-threads-denied" },
-      "Cwd access denied",
+      "Project access denied",
     );
     expect(threadSessionRepository.listForTarget).not.toHaveBeenCalled();
   });
@@ -3779,6 +3955,124 @@ describe("Daemon skeleton (T14)", () => {
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-switch" },
       "Switched to 1 web (thread-selec...)",
+    );
+  });
+
+  it("routes /switch for a stored native thread without requiring a configured project", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-09T11:00:00.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const selectedThread = {
+      id: "ts-native-stored",
+      target,
+      contextKind: "native_thread" as const,
+      projectLabel: "web",
+      cwd: "/Users/alice/dev/web",
+      codexThreadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
+      title: "Native thread",
+      status: "open" as const,
+      createdAt: "2026-05-09T10:00:00.000Z",
+      updatedAt: "2026-05-09T10:30:00.000Z",
+      lastUsedAt: "2026-05-09T10:30:00.000Z",
+    };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
+      replaceCachedBinding: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        contextKind: "native_thread" as const,
+        projectLabel: "web",
+        cwd: "/Users/alice/dev/web",
+        codexThreadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
+      })),
+    };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadResume: vi.fn(() => ({ thread: { id: "thread-native-abcdefghijklmnopqrstuvwxyz" } })),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(),
+      listForTarget: vi.fn(() => [selectedThread]),
+      switchCurrent: vi.fn(() => ({
+        binding: {
+          id: "tb-native",
+          target,
+          contextKind: "native_thread" as const,
+          projectLabel: "web",
+          cwd: "/Users/alice/dev/web",
+          codexThreadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        },
+        session: {
+          ...selectedThread,
+          updatedAt: now.toISOString(),
+          lastUsedAt: now.toISOString(),
+        },
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: {} }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/switch 1",
+      messageRef: { target, messageId: "msg-switch-native-stored" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadResume).toHaveBeenCalledWith({
+      threadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
+      excludeTurns: true,
+    });
+    expect(threadSessionRepository.switchCurrent).toHaveBeenCalledWith({
+      target,
+      contextKind: "native_thread",
+      projectLabel: "web",
+      codexThreadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
+      cwd: "/Users/alice/dev/web",
+      now: "2026-05-09T11:00:00.000Z",
+    });
+    expect(sessionRouter.replaceCachedBinding).toHaveBeenCalledWith(target, {
+      contextKind: "native_thread",
+      projectLabel: "web",
+      cwd: "/Users/alice/dev/web",
+      codexThreadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-switch-native-stored" },
+      "Switched to 1 web (thread-nativ...)",
     );
   });
 
@@ -4159,6 +4453,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,
       projectId: "web",
+      cwd: "/repo/web",
       codexThreadId: "thread-forked-abcdefghijklmnopqrstuvwxyz",
       now: "2026-05-03T12:45:00.000Z",
     });
@@ -4272,6 +4567,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,
       projectId: "api",
+      cwd: "/repo/api",
       codexThreadId: "thread-forked-api-abcdefghijklmnopqrstuvwxyz",
       title: "Spike title",
       now: "2026-05-03T12:50:00.000Z",
@@ -4582,6 +4878,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,
       projectId: "web",
+      cwd: "/repo/web",
       codexThreadId: "thread-current",
       title: "Recovered alias",
       now: "2026-05-03T13:05:00.000Z",
@@ -4911,7 +5208,7 @@ describe("Daemon skeleton (T14)", () => {
       expect(runtime.turnSteer).not.toHaveBeenCalled();
       expect(adapter.editText).toHaveBeenCalledWith(
         { target, messageId: "msg-restored" },
-        "Cwd access denied",
+        "Project access denied",
       );
     } finally {
       db.close();
@@ -4973,7 +5270,7 @@ describe("Daemon skeleton (T14)", () => {
     });
     expect(adapter.editText).toHaveBeenCalledWith(
       messageRef,
-      "Using cwd web\ncwd: /repo/web\nNext: /new <task>",
+      "Using project web\nNext: /new <task>",
     );
     expect(sessionRouter.resolve(target)).toMatchObject({
       kind: "bound",
@@ -4983,7 +5280,7 @@ describe("Daemon skeleton (T14)", () => {
     });
   });
 
-  it("lists configured known cwd entries and binds /use by number", async () => {
+  it("lists configured projects and binds /use by number", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
     const sender = { userId: "u-alice" };
@@ -5042,10 +5339,9 @@ describe("Daemon skeleton (T14)", () => {
     await flushDaemonHandlers();
 
     const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
-    expect(body).toContain("Known cwd entries:");
+    expect(body).toContain("Projects:");
     expect(body).toContain("1. web");
-    expect(body).toContain("cwd: ~/dev/web");
-    expect(body).toContain("source: config");
+    expect(body).toContain("model: gpt-test");
     expect(body).toContain("/use 1");
     expect(body).not.toContain("api");
     expect(body).not.toContain("/Users/alice");
@@ -5067,7 +5363,7 @@ describe("Daemon skeleton (T14)", () => {
     });
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-use-number" },
-      "Using cwd web\ncwd: ~/dev/web\nNext: /new <task>",
+      "Using project web\nNext: /new <task>",
     );
   });
 
@@ -5130,11 +5426,11 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.threadStart).not.toHaveBeenCalled();
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-use-path" },
-      "IM cannot accept raw cwd paths. Use /cwds, then /use <number>.",
+      "IM cannot accept raw cwd paths. Use /projects, then /use <number>.",
     );
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-new-path" },
-      "IM cannot accept raw cwd paths. Use /cwds, then /new <number> <task>.",
+      "IM cannot accept raw cwd paths. Use /projects, then /new <number> <task>.",
     );
   });
 
@@ -5184,7 +5480,7 @@ describe("Daemon skeleton (T14)", () => {
     await flushDaemonHandlers();
 
     expect(bindings.upsert).not.toHaveBeenCalled();
-    expect(adapter.editText).toHaveBeenCalledWith(messageRef, "Cwd access denied");
+    expect(adapter.editText).toHaveBeenCalledWith(messageRef, "Project access denied");
     expect(sessionRouter.resolve(target)).toEqual({ kind: "unbound", target });
   });
 

@@ -215,6 +215,7 @@ describe("runMigrations against the real src/migrations/ directory (T3a)", () =>
     "004-audit-log.sql",
     "007-callback-tokens.sql",
     "008-thread-sessions.sql",
+    "009-im-context-kind.sql",
   ];
 
   it("applies the current real migrations and records them in schema_version", () => {

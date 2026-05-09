@@ -444,7 +444,8 @@ interface DaemonThreadStartParams {
 }
 
 interface DaemonThreadStartResult {
-  readonly thread?: { readonly id?: string };
+  readonly cwd?: string;
+  readonly thread?: { readonly id?: string; readonly cwd?: string };
 }
 
 interface DaemonThreadResumeParams {
@@ -1309,7 +1310,7 @@ export class Daemon {
       metadata: {
         targetKey: targetKey(input.inbound.target),
         actorKey: actorKey(input.inbound.target, input.inbound.sender),
-        ...(input.route === undefined ? {} : { projectId: input.route.projectId }),
+        ...(input.route?.projectId === undefined ? {} : { projectId: input.route.projectId }),
         ...(input.intent === undefined ? {} : { intentAction: input.intent.action }),
         ...(input.intent?.action === "start" ? { task: redact(input.intent.task) } : {}),
         ...redactMetadata(input.metadata),
@@ -1598,7 +1599,14 @@ export class Daemon {
     return value as DaemonProjectPolicy;
   }
 
-  #projectAllowed(projectId: string, target: Target, sender: SecurityPolicySender): boolean {
+  #projectAllowed(
+    projectId: string | undefined,
+    target: Target,
+    sender: SecurityPolicySender,
+  ): boolean {
+    if (projectId === undefined) {
+      return true;
+    }
     const policy = this.#projectPolicy(this.#securityPolicy);
     return policy?.checkProjectAccess(projectId, target, sender).kind !== "deny";
   }
@@ -1620,20 +1628,20 @@ export class Daemon {
     this.#ensureRuntimeEventPump(runtime);
 
     const initialRoute = sessionRouter.resolve(inbound.target);
-    if (initialRoute.kind !== "bound") {
-      await this.#editInboundMessage(
-        inbound.messageRef,
-        "No cwd selected. Send /cwds, then /use <number> or /new <number> <task>.",
-      );
-      return;
-    }
-    if (!this.#projectAllowed(initialRoute.projectId, inbound.target, inbound.sender)) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+    if (
+      initialRoute.kind === "bound" &&
+      !this.#projectAllowed(initialRoute.projectId, inbound.target, inbound.sender)
+    ) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
-    const hadPersistedThread = initialRoute.codexThreadId !== undefined;
-    let route = await this.#ensureBoundCodexThread(sessionRouter, runtime, inbound, initialRoute);
+    const hadPersistedThread =
+      initialRoute.kind === "bound" && initialRoute.codexThreadId !== undefined;
+    let route =
+      initialRoute.kind === "bound"
+        ? await this.#ensureBoundCodexThread(sessionRouter, runtime, inbound, initialRoute)
+        : await this.#startDefaultCodexThread(sessionRouter, runtime, inbound);
     if (route === undefined) {
       return;
     }
@@ -1650,7 +1658,9 @@ export class Daemon {
 
     let startedTurn: DaemonTurnStartResult;
     try {
-      startedTurn = await this.#startPromptTurn(runtime, route, input);
+      startedTurn = await this.#startPromptTurn(runtime, route, input, {
+        includeThreadOverrides: hadPersistedThread,
+      });
     } catch (error) {
       this.#emitAuditEvent("runtime.turn_start_failed", {
         target: inbound.target,
@@ -1666,7 +1676,9 @@ export class Daemon {
         return;
       }
       try {
-        startedTurn = await this.#startPromptTurn(runtime, freshRoute, input);
+        startedTurn = await this.#startPromptTurn(runtime, freshRoute, input, {
+          includeThreadOverrides: false,
+        });
         route = freshRoute;
       } catch (retryError) {
         this.#emitAuditEvent("runtime.turn_start_retry_failed", {
@@ -1715,13 +1727,55 @@ export class Daemon {
         await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
         return undefined;
       }
-      this.#persistThreadSessionBestEffort(inbound.target, route, threadId);
+      const cwd = this.#threadCwd(startedThread) ?? route.cwd;
+      const routeForPersist = { ...route, cwd };
+      this.#persistThreadSessionBestEffort(inbound.target, routeForPersist, threadId);
       const rebound = sessionRouter.bindThread(inbound.target, threadId);
       if (rebound.kind !== "bound" || rebound.codexThreadId === undefined) {
         await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to bind.");
         return undefined;
       }
       return { ...rebound, codexThreadId: rebound.codexThreadId };
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_start_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
+      return undefined;
+    }
+  }
+
+  async #startDefaultCodexThread(
+    sessionRouter: DaemonSessionRouter,
+    runtime: DaemonCodexRuntime,
+    inbound: { target: Target; messageRef?: DaemonMessageRef },
+  ): Promise<(Extract<SessionRoute, { kind: "bound" }> & { codexThreadId: string }) | undefined> {
+    if (sessionRouter.bind === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Binding store unavailable");
+      return undefined;
+    }
+    try {
+      const startedThread = await runtime.threadStart({});
+      const threadId = this.#threadId(startedThread);
+      const cwd = this.#threadCwd(startedThread);
+      if (threadId === undefined || cwd === undefined) {
+        await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
+        return undefined;
+      }
+      const route = sessionRouter.bind(inbound.target, {
+        contextKind: "app_default",
+        projectLabel: "Codex default",
+        cwd,
+        codexThreadId: threadId,
+      });
+      if (route.kind !== "bound" || route.codexThreadId === undefined) {
+        await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to bind.");
+        return undefined;
+      }
+      this.#persistThreadSessionBestEffort(inbound.target, route, threadId);
+      return { ...route, codexThreadId: route.codexThreadId };
     } catch (error) {
       this.#emitAuditEvent("runtime.thread_start_failed", {
         target: inbound.target,
@@ -1745,7 +1799,10 @@ export class Daemon {
     try {
       repository.upsert({
         target,
-        projectId: route.projectId,
+        ...(route.contextKind === undefined ? {} : { contextKind: route.contextKind }),
+        ...(route.projectId === undefined ? {} : { projectId: route.projectId }),
+        ...(route.projectLabel === undefined ? {} : { projectLabel: route.projectLabel }),
+        cwd: route.cwd,
         codexThreadId,
         now: this.#nowIso(),
       });
@@ -1762,13 +1819,16 @@ export class Daemon {
     runtime: DaemonCodexRuntime,
     route: Extract<SessionRoute, { kind: "bound" }> & { codexThreadId: string },
     input: DaemonUserInput[],
+    opts: { readonly includeThreadOverrides?: boolean } = {},
   ): Promise<DaemonTurnStartResult> {
     return Promise.resolve(
       runtime.turnStart({
         threadId: route.codexThreadId,
         input,
-        cwd: route.cwd,
-        ...(route.defaultModel === undefined ? {} : { model: route.defaultModel }),
+        ...(opts.includeThreadOverrides === true ? { cwd: route.cwd } : {}),
+        ...(opts.includeThreadOverrides === true && route.defaultModel !== undefined
+          ? { model: route.defaultModel }
+          : {}),
       }),
     );
   }
@@ -1951,7 +2011,9 @@ export class Daemon {
     }
 
     sessionRouter.bind(target, {
-      projectId: route.projectId,
+      ...(route.contextKind !== undefined ? { contextKind: route.contextKind } : {}),
+      ...(route.projectId !== undefined ? { projectId: route.projectId } : {}),
+      ...(route.projectLabel !== undefined ? { projectLabel: route.projectLabel } : {}),
       cwd: route.cwd,
       codexThreadId: route.codexThreadId,
       ...(route.defaultModel === undefined ? {} : { defaultModel: route.defaultModel }),
@@ -2201,7 +2263,7 @@ export class Daemon {
         result: "project_denied",
         metadata: { reason: "project_denied" },
       });
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
@@ -2281,7 +2343,7 @@ export class Daemon {
       sessionId: this.options.generateComputerUseSessionId?.() ?? randomUUID(),
       targetKey: targetKey(inbound.target),
       actorKey: actorKey(inbound.target, inbound.sender),
-      projectId: route.projectId,
+      ...(route.projectId === undefined ? {} : { projectId: route.projectId }),
       threadId: route.codexThreadId,
       turnId: activeTurnId,
       app: policyDecision.app,
@@ -2340,7 +2402,7 @@ export class Daemon {
     }
 
     if (command.name === "projects") {
-      await this.#routeCwdsCommand(inbound, { compatibilityAlias: true });
+      await this.#routeCwdsCommand(inbound);
       return;
     }
 
@@ -2447,14 +2509,13 @@ export class Daemon {
         "Commands:",
         "Send any non-command message as a Codex prompt for the current thread.",
         "/start - Show these commands.",
-        "/cwds - List known cwd entries for new Codex threads.",
-        "/projects - Compatibility alias for /cwds.",
-        "/use <cwd> - Select a known cwd by number or alias.",
+        "/projects - List Codex projects available to this IM chat.",
+        "/use <project> - Select a project by number or name.",
         "/status - Show current Codex IM status.",
         "/whoami - Show redacted IM identity and current binding.",
-        "/new [cwd] [task] - Start a new Codex thread from a known cwd.",
-        "/threads - List native Codex threads.",
-        "/switch <thread> - Resume and switch to a known Codex thread.",
+        "/new [project] [task] - Start a new Codex conversation in a project.",
+        "/threads - List native Codex conversations.",
+        "/switch <thread> - Resume and switch to a known Codex conversation.",
         "/alias <title> - Rename current thread for IM display.",
         "/fork [thread] - Fork the current or selected Codex thread.",
         "/stop - Interrupt the active Codex turn.",
@@ -2474,35 +2535,71 @@ export class Daemon {
     );
   }
 
-  async #routeCwdsCommand(
-    inbound: {
-      target: Target;
-      sender: SecurityPolicySender;
-      messageRef?: DaemonMessageRef;
-    },
-    opts: { readonly compatibilityAlias?: boolean } = {},
-  ): Promise<void> {
+  async #routeCwdsCommand(inbound: {
+    target: Target;
+    sender: SecurityPolicySender;
+    messageRef?: DaemonMessageRef;
+  }): Promise<void> {
     const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
     const entries = this.#knownConfigCwds(inbound.target, inbound.sender);
+    const nativeConversationCounts = new Map<string, number>();
+    const runtime = this.#currentRuntime();
+    if (runtime?.threadList !== undefined) {
+      try {
+        for (const thread of this.#nativeThreadEntries(
+          await runtime.threadList({ limit: 50, archived: false, sortDirection: "desc" }),
+        )) {
+          nativeConversationCounts.set(
+            thread.cwd,
+            (nativeConversationCounts.get(thread.cwd) ?? 0) + 1,
+          );
+        }
+      } catch (error) {
+        this.#emitAuditEvent("runtime.thread_list_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(error) },
+        });
+      }
+    }
+    const configuredCwds = new Set(entries.map((entry) => entry.cwd));
+    const discoveredEntries = Array.from(nativeConversationCounts.entries())
+      .filter(([cwd]) => !configuredCwds.has(cwd))
+      .map(([cwd, count]) => ({ cwd, count, label: projectDisplayNameFromCwd(cwd) }))
+      .sort((a, b) => a.label.localeCompare(b.label) || a.cwd.localeCompare(b.cwd));
 
-    if (entries.length === 0) {
-      await this.#editInboundMessage(inbound.messageRef, "No known cwd entries available.");
+    if (entries.length === 0 && discoveredEntries.length === 0) {
+      await this.#editInboundMessage(inbound.messageRef, "No projects available.");
       return;
     }
 
     const lines = [
-      ...(opts.compatibilityAlias === true
-        ? ["/projects is kept for compatibility. Use /cwds."]
-        : []),
-      "Known cwd entries:",
+      "Projects:",
       ...entries.map((entry, index) => {
-        const marker = route?.kind === "bound" && route.projectId === entry.alias ? "*" : " ";
-        const model = entry.defaultModel === undefined ? "" : ` model: ${entry.defaultModel}`;
-        return `${marker} ${index + 1}. ${entry.alias}\ncwd: ${safeDisplayCwd(entry.cwd)}\nsource: ${entry.source}${model}`;
+        const marker =
+          route?.kind === "bound" && (route.projectId === entry.alias || route.cwd === entry.cwd)
+            ? "*"
+            : " ";
+        const conversationCount = nativeConversationCounts.get(entry.cwd);
+        const details = [
+          marker === "*" ? "current" : undefined,
+          entry.defaultModel === undefined ? undefined : `model: ${entry.defaultModel}`,
+          conversationCount === undefined ? undefined : `conversations: ${conversationCount}`,
+          `use: /use ${index + 1}`,
+          `new: /new ${index + 1} <task>`,
+        ].filter(isDefined);
+        return `${marker} ${index + 1}. ${entry.alias}\n${details.join("\n")}`;
       }),
-      "Use:",
-      "/use 1",
-      "/new 1 <task>",
+      ...discoveredEntries.map((entry, offset) => {
+        const selector = entries.length + offset + 1;
+        const marker = route?.kind === "bound" && route.cwd === entry.cwd ? "*" : " ";
+        const details = [
+          marker === "*" ? "current" : undefined,
+          `conversations: ${entry.count}`,
+          "resume: /threads",
+        ].filter(isDefined);
+        return `${marker} ${selector}. ${entry.label}\n${details.join("\n")}`;
+      }),
     ];
     await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
   }
@@ -2580,7 +2677,7 @@ export class Daemon {
       projectId !== undefined &&
       !this.#projectAllowed(projectId, inbound.target, inbound.sender)
     ) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
@@ -2668,16 +2765,78 @@ export class Daemon {
       return;
     }
 
+    if (selected.record.projectId === undefined) {
+      if (selected.record.cwd === undefined) {
+        await this.#editInboundMessage(
+          inbound.messageRef,
+          "This conversation is missing its saved Codex context. Send /threads while Codex runtime is available.",
+        );
+        return;
+      }
+      const projectLabel = this.#sessionProjectLabel(selected.record);
+      const currentRoute = sessionRouter.resolve(inbound.target);
+      const selectedIsCurrent =
+        currentRoute.kind === "bound" &&
+        currentRoute.codexThreadId === selected.record.codexThreadId;
+      if (!selectedIsCurrent) {
+        try {
+          await runtime.threadResume({
+            threadId: selected.record.codexThreadId,
+            excludeTurns: true,
+          });
+        } catch (error) {
+          this.#emitAuditEvent("runtime.thread_resume_failed", {
+            target: inbound.target,
+            result: "failed",
+            metadata: { error: errorMessage(error), threadId: selected.record.codexThreadId },
+          });
+          await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to resume.");
+          return;
+        }
+      }
+      try {
+        repository.switchCurrent({
+          target: inbound.target,
+          contextKind: selected.record.contextKind ?? "native_thread",
+          projectLabel,
+          codexThreadId: selected.record.codexThreadId,
+          cwd: selected.record.cwd,
+          now: this.#nowIso(),
+        });
+        sessionRouter.replaceCachedBinding(inbound.target, {
+          contextKind: selected.record.contextKind ?? "native_thread",
+          projectLabel,
+          cwd: selected.record.cwd,
+          codexThreadId: selected.record.codexThreadId,
+        });
+      } catch (error) {
+        this.#emitAuditEvent("thread_session.switch_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(error), threadId: selected.record.codexThreadId },
+        });
+        await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to switch.");
+        return;
+      }
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `Switched to ${selected.index + 1} ${projectLabel} (${this.#shortId(
+          selected.record.codexThreadId,
+        )})`,
+      );
+      return;
+    }
+
     const project = this.#projectConfig(selected.record.projectId);
     if (project === undefined) {
       await this.#editInboundMessage(
         inbound.messageRef,
-        `Unknown cwd entry: ${selected.record.projectId}`,
+        `Unknown project: ${selected.record.projectId}`,
       );
       return;
     }
     if (!this.#projectAllowed(selected.record.projectId, inbound.target, inbound.sender)) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
@@ -2732,7 +2891,7 @@ export class Daemon {
 
     await this.#editInboundMessage(
       inbound.messageRef,
-      `Switched to ${selected.index + 1} ${selected.record.projectId} (${this.#shortId(
+      `Switched to ${selected.index + 1} ${this.#sessionProjectLabel(selected.record)} (${this.#shortId(
         selected.record.codexThreadId,
       )})`,
     );
@@ -2752,8 +2911,7 @@ export class Daemon {
     }
 
     lines.push("binding: bound");
-    lines.push(`cwd: ${safeDisplayCwd(route.cwd)}`);
-    lines.push(`cwd alias: ${route.projectId}`);
+    lines.push(`project: ${this.#routeProjectLabel(route)}`);
     lines.push(`thread: ${this.#shortId(route.codexThreadId)}`);
     const title = this.#threadTitleForRoute(inbound.target, route);
     if (title !== undefined) {
@@ -2780,8 +2938,7 @@ export class Daemon {
       `binding: ${route?.kind === "bound" ? "bound" : "unbound"}`,
     ];
     if (route?.kind === "bound") {
-      lines.push(`cwd: ${safeDisplayCwd(route.cwd)}`);
-      lines.push(`cwd alias: ${route.projectId}`);
+      lines.push(`project: ${this.#routeProjectLabel(route)}`);
       lines.push(`thread: ${this.#shortId(route.codexThreadId)}`);
     }
     await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
@@ -2837,12 +2994,12 @@ export class Daemon {
     if (route?.kind !== "bound") {
       await this.#editInboundMessage(
         inbound.messageRef,
-        "No cwd selected. Send /cwds, then /use <number>.",
+        "No project selected. Send /projects, then /use <number>.",
       );
       return;
     }
     if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
     if (sessionRouter?.bind === undefined) {
@@ -2857,7 +3014,9 @@ export class Daemon {
     }
 
     sessionRouter.bind(inbound.target, {
-      projectId: route.projectId,
+      ...(route.contextKind !== undefined ? { contextKind: route.contextKind } : {}),
+      ...(route.projectId !== undefined ? { projectId: route.projectId } : {}),
+      ...(route.projectLabel !== undefined ? { projectLabel: route.projectLabel } : {}),
       cwd: route.cwd,
       ...(route.codexThreadId === undefined ? {} : { codexThreadId: route.codexThreadId }),
       defaultModel: selectedModel,
@@ -2886,7 +3045,7 @@ export class Daemon {
       return;
     }
     if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
@@ -2947,7 +3106,7 @@ export class Daemon {
     ];
     if (route?.kind === "bound") {
       lines.push(`cwd: ${safeDisplayCwd(route.cwd)}`);
-      lines.push(`cwd alias: ${route.projectId}`);
+      lines.push(`cwd alias: ${this.#routeProjectLabel(route)}`);
       lines.push(`thread: ${this.#shortId(route.codexThreadId)}`);
       lines.push(`active turn: ${this.#shortId(route.activeTurnId)}`);
     }
@@ -3242,12 +3401,12 @@ export class Daemon {
     if (route?.kind !== "bound") {
       await this.#editInboundMessage(
         inbound.messageRef,
-        "No cwd selected. Send /cwds, then /use <number>.",
+        "No project selected. Send /projects, then /use <number>.",
       );
       return false;
     }
     if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return false;
     }
     return true;
@@ -3393,7 +3552,7 @@ export class Daemon {
       return;
     }
     if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
@@ -3413,7 +3572,10 @@ export class Daemon {
       if (renamed === undefined) {
         repository.upsert({
           target: inbound.target,
-          projectId: route.projectId,
+          ...(route.contextKind === undefined ? {} : { contextKind: route.contextKind }),
+          ...(route.projectId === undefined ? {} : { projectId: route.projectId }),
+          ...(route.projectLabel === undefined ? {} : { projectLabel: route.projectLabel }),
+          cwd: route.cwd,
           codexThreadId: route.codexThreadId,
           title,
           now: this.#nowIso(),
@@ -3456,7 +3618,7 @@ export class Daemon {
     if (firstArg !== undefined && isRawCwdSelector(firstArg)) {
       await this.#editInboundMessage(
         inbound.messageRef,
-        "IM cannot accept raw cwd paths. Use /cwds, then /new <number> <task>.",
+        "IM cannot accept raw cwd paths. Use /projects, then /new <number> <task>.",
       );
       return;
     }
@@ -3472,14 +3634,11 @@ export class Daemon {
 
     const route = sessionRouter.resolve(inbound.target);
     if (route.kind !== "bound") {
-      await this.#editInboundMessage(
-        inbound.messageRef,
-        "No cwd selected. Use /cwds, then /new <number> <task>.",
-      );
+      await this.#routeNewInDefaultContext(inbound, command.args.join(" ").trim());
       return;
     }
     if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
@@ -3504,7 +3663,10 @@ export class Daemon {
     try {
       threadSessions.upsert({
         target: inbound.target,
-        projectId: route.projectId,
+        ...(route.contextKind === undefined ? {} : { contextKind: route.contextKind }),
+        ...(route.projectId === undefined ? {} : { projectId: route.projectId }),
+        ...(route.projectLabel === undefined ? {} : { projectLabel: route.projectLabel }),
+        cwd: route.cwd,
         codexThreadId: threadId,
         ...(title === undefined ? {} : { title }),
         now: this.#nowIso(),
@@ -3577,6 +3739,7 @@ export class Daemon {
       threadSessions.upsert({
         target: inbound.target,
         projectId: entry.alias,
+        cwd: entry.cwd,
         codexThreadId: threadId,
         now: this.#nowIso(),
       });
@@ -3599,7 +3762,7 @@ export class Daemon {
     if (task.length === 0) {
       await this.#editInboundMessage(
         inbound.messageRef,
-        `New Codex thread ${this.#shortId(threadId)} in cwd ${entry.alias}\ncwd: ${safeDisplayCwd(entry.cwd)}`,
+        `New Codex conversation ${this.#shortId(threadId)} in project ${entry.alias}`,
       );
       return;
     }
@@ -3608,8 +3771,6 @@ export class Daemon {
       const startedTurn = await runtime.turnStart({
         threadId,
         input: promptInput(task, []),
-        cwd: entry.cwd,
-        ...(entry.defaultModel === undefined ? {} : { model: entry.defaultModel }),
       });
       const activeTurnId = this.#turnId(startedTurn);
       if (activeTurnId !== undefined) {
@@ -3624,7 +3785,112 @@ export class Daemon {
       }
       await this.#editInboundMessage(
         inbound.messageRef,
-        `New Codex thread ${this.#shortId(threadId)} in cwd ${entry.alias}\ncwd: ${safeDisplayCwd(entry.cwd)}${activeTurnId === undefined ? "" : `\nturn: ${this.#shortId(activeTurnId)}`}`,
+        `New Codex conversation ${this.#shortId(threadId)} in project ${entry.alias}${activeTurnId === undefined ? "" : `\nturn: ${this.#shortId(activeTurnId)}`}`,
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.turn_start_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex turn failed to start.");
+    }
+  }
+
+  async #routeNewInDefaultContext(
+    inbound: { target: Target; messageRef?: DaemonMessageRef },
+    task: string,
+  ): Promise<void> {
+    const runtime = this.#currentRuntime();
+    const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
+    const threadSessions = this.#threadSessionRepository();
+    if (runtime === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex runtime unavailable.");
+      return;
+    }
+    if (sessionRouter?.bind === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Binding store unavailable");
+      return;
+    }
+    if (threadSessions === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+      return;
+    }
+
+    let threadId: string | undefined;
+    let cwd: string | undefined;
+    try {
+      const startedThread = await runtime.threadStart({});
+      threadId = this.#threadId(startedThread);
+      cwd = this.#threadCwd(startedThread);
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_start_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
+      return;
+    }
+    if (threadId === undefined || cwd === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to start.");
+      return;
+    }
+
+    const title = task.length === 0 ? undefined : task;
+    try {
+      threadSessions.upsert({
+        target: inbound.target,
+        contextKind: "app_default",
+        projectLabel: "Codex default",
+        cwd,
+        codexThreadId: threadId,
+        ...(title === undefined ? {} : { title }),
+        now: this.#nowIso(),
+      });
+      sessionRouter.bind(inbound.target, {
+        contextKind: "app_default",
+        projectLabel: "Codex default",
+        cwd,
+        codexThreadId: threadId,
+      });
+    } catch (error) {
+      this.#emitAuditEvent("thread_session.write_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread failed to save.");
+      return;
+    }
+
+    if (task.length === 0) {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `New Codex conversation ${this.#shortId(threadId)} in project Codex default`,
+      );
+      return;
+    }
+
+    try {
+      const startedTurn = await runtime.turnStart({
+        threadId,
+        input: promptInput(task, []),
+      });
+      const activeTurnId = this.#turnId(startedTurn);
+      if (activeTurnId !== undefined) {
+        sessionRouter.bind(inbound.target, {
+          contextKind: "app_default",
+          projectLabel: "Codex default",
+          cwd,
+          codexThreadId: threadId,
+          activeTurnId,
+        });
+        await this.#openTurnOutput(inbound.target, threadId, activeTurnId, false);
+      }
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `New Codex conversation ${this.#shortId(threadId)} in project Codex default${activeTurnId === undefined ? "" : `\nturn: ${this.#shortId(activeTurnId)}`}`,
       );
     } catch (error) {
       this.#emitAuditEvent("runtime.turn_start_failed", {
@@ -3679,13 +3945,13 @@ export class Daemon {
       return;
     }
     if (!this.#projectAllowed(source.projectId, inbound.target, inbound.sender)) {
-      await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
       return;
     }
 
     const project = this.#projectConfig(source.projectId);
     if (project === undefined) {
-      await this.#editInboundMessage(inbound.messageRef, `Unknown cwd entry: ${source.projectId}`);
+      await this.#editInboundMessage(inbound.messageRef, `Unknown project: ${source.projectId}`);
       return;
     }
 
@@ -3718,6 +3984,7 @@ export class Daemon {
       threadSessions.upsert({
         target: inbound.target,
         projectId: source.projectId,
+        cwd: project.cwd,
         codexThreadId: forkedThreadId,
         ...(title === undefined ? {} : { title }),
         now: this.#nowIso(),
@@ -3772,6 +4039,9 @@ export class Daemon {
       if (selected.kind === "missing" || selected.kind === "ambiguous") {
         return selected;
       }
+      if (selected.record.projectId === undefined) {
+        return { kind: "missing" };
+      }
       return {
         kind: "source",
         projectId: selected.record.projectId,
@@ -3782,6 +4052,9 @@ export class Daemon {
 
     const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
     if (route?.kind !== "bound" || route.codexThreadId === undefined) {
+      return { kind: "no_current" };
+    }
+    if (route.projectId === undefined) {
       return { kind: "no_current" };
     }
     return {
@@ -3826,15 +4099,19 @@ export class Daemon {
     route: SessionRoute | undefined,
   ): string {
     const marker =
-      route?.kind === "bound" &&
-      route.projectId === record.projectId &&
-      route.codexThreadId === record.codexThreadId
-        ? "*"
-        : " ";
+      route?.kind === "bound" && route.codexThreadId === record.codexThreadId ? "*" : " ";
     const title = record.title === undefined ? "" : ` ${this.#sanitizeThreadTitle(record.title)}`;
-    return `${marker} ${selector} ${record.projectId}${title} (${this.#shortId(
+    return `${marker} ${selector} ${this.#sessionProjectLabel(record)}${title} (${this.#shortId(
       record.codexThreadId,
     )}) last ${record.lastUsedAt}`;
+  }
+
+  #routeProjectLabel(route: Extract<SessionRoute, { kind: "bound" }>): string {
+    return route.projectLabel ?? route.projectId ?? "Codex default";
+  }
+
+  #sessionProjectLabel(record: ThreadSessionRecord): string {
+    return record.projectLabel ?? record.projectId ?? "Codex default";
   }
 
   #nativeThreadEntries(response: unknown): DaemonNativeThreadEntry[] {
@@ -3863,7 +4140,7 @@ export class Daemon {
 
   #formatNativeThreadListLine(selector: number, thread: DaemonNativeThreadEntry): string {
     const updated = thread.updatedAt === undefined ? "" : `\nupdated: ${thread.updatedAt}`;
-    return `${selector}. ${thread.title}\ncwd: ${safeDisplayCwd(thread.cwd)}${updated}\nid: ${this.#shortId(
+    return `${selector}. ${thread.title}\nproject: ${projectDisplayNameFromCwd(thread.cwd)}${updated}\nid: ${this.#shortId(
       thread.threadId,
     )}`;
   }
@@ -3910,22 +4187,25 @@ export class Daemon {
 
     try {
       await runtime.threadResume({ threadId: thread.threadId, excludeTurns: true });
-      const projectId = nativeThreadProjectId(thread.threadId);
+      const projectLabel = projectDisplayNameFromCwd(thread.cwd);
       sessionRouter.bind(inbound.target, {
-        projectId,
+        contextKind: "native_thread",
+        projectLabel,
         cwd: thread.cwd,
         codexThreadId: thread.threadId,
       });
       this.#threadSessionRepository()?.upsert({
         target: inbound.target,
-        projectId,
+        contextKind: "native_thread",
+        projectLabel,
+        cwd: thread.cwd,
         codexThreadId: thread.threadId,
         title: thread.title,
         now: this.#nowIso(),
       });
       await this.#editInboundMessage(
         inbound.messageRef,
-        `Switched to ${index + 1} ${thread.title} (${this.#shortId(thread.threadId)})\ncwd: ${safeDisplayCwd(thread.cwd)}`,
+        `Switched to ${index + 1} ${thread.title} (${this.#shortId(thread.threadId)})\nproject: ${projectDisplayNameFromCwd(thread.cwd)}`,
       );
     } catch (error) {
       this.#emitAuditEvent("runtime.thread_resume_failed", {
@@ -4084,7 +4364,7 @@ export class Daemon {
     if (isRawCwdSelector(projectId)) {
       await this.#editInboundMessage(
         inbound.messageRef,
-        "IM cannot accept raw cwd paths. Use /cwds, then /use <number>.",
+        "IM cannot accept raw cwd paths. Use /projects, then /use <number>.",
       );
       return;
     }
@@ -4092,10 +4372,10 @@ export class Daemon {
     const selected = this.#resolveKnownConfigCwd(projectId, inbound.target, inbound.sender);
     if (selected === undefined) {
       if (this.#projectConfig(projectId) !== undefined) {
-        await this.#editInboundMessage(inbound.messageRef, "Cwd access denied");
+        await this.#editInboundMessage(inbound.messageRef, "Project access denied");
         return;
       }
-      await this.#editInboundMessage(inbound.messageRef, `Unknown cwd: ${redact(projectId)}`);
+      await this.#editInboundMessage(inbound.messageRef, `Unknown project: ${redact(projectId)}`);
       return;
     }
 
@@ -4121,7 +4401,7 @@ export class Daemon {
 
     await this.#editInboundMessage(
       inbound.messageRef,
-      `Using cwd ${selected.alias}\ncwd: ${safeDisplayCwd(selected.cwd)}\nNext: /new <task>`,
+      `Using project ${selected.alias}\nNext: /new <task>`,
     );
   }
 
@@ -4324,7 +4604,9 @@ export class Daemon {
     }
 
     sessionRouter.bind(route.target, {
-      projectId: route.projectId,
+      ...(route.contextKind !== undefined ? { contextKind: route.contextKind } : {}),
+      ...(route.projectId !== undefined ? { projectId: route.projectId } : {}),
+      ...(route.projectLabel !== undefined ? { projectLabel: route.projectLabel } : {}),
       cwd: route.cwd,
       codexThreadId: route.codexThreadId,
       ...(route.defaultModel === undefined ? {} : { defaultModel: route.defaultModel }),
@@ -4334,6 +4616,13 @@ export class Daemon {
 
   #threadId(result: DaemonThreadStartResult): string | undefined {
     return typeof result.thread?.id === "string" ? result.thread.id : undefined;
+  }
+
+  #threadCwd(result: DaemonThreadStartResult): string | undefined {
+    if (typeof result.thread?.cwd === "string") {
+      return result.thread.cwd;
+    }
+    return typeof result.cwd === "string" ? result.cwd : undefined;
   }
 
   #turnId(result: DaemonTurnStartResult): string | undefined {
@@ -5906,8 +6195,10 @@ function safeDisplayCwd(cwd: string): string {
   return cwd.replace(/^\/Users\/[^/]+/u, "~");
 }
 
-function nativeThreadProjectId(threadId: string): string {
-  return `cwd-${threadId.slice(0, 24).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+function projectDisplayNameFromCwd(cwd: string): string {
+  const normalized = cwd.replace(/\/+$/u, "");
+  const name = basename(normalized);
+  return name.length === 0 ? "workspace" : name;
 }
 
 function targetKey(target: Target): string {

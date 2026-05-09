@@ -49,22 +49,23 @@ Start with one platform.
 git clone <repo-url>
 cd codex-im-rich-client
 pnpm install
-pnpm codex-im:install --platform telegram
+pnpm codex-im:install
 ```
 
 Then open the configured IM chat and send:
 
 ```text
-/cwds
+/projects
 /use 1
 Reply exactly: OK
 ```
 
 For the full user path, read [docs/user/README.md](docs/user/README.md).
 
-The install command is a transparent wrapper around the safety boundaries:
-Codex version check, `setup:im`, `im:doctor`, bridge build/install, and
-launchd install/status. To run those steps manually, follow
+The install command asks which first platform to configure, then remains a
+transparent wrapper around the safety boundaries: Codex version check,
+`setup:im`, `im:doctor`, bridge build/install, and launchd install/status.
+To run those steps manually, follow
 [docs/user/quickstart.md](docs/user/quickstart.md).
 
 ## User Documentation

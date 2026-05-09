@@ -82,7 +82,9 @@ export async function runTelegramFakeSmokeCore(
         route = {
           kind: "bound",
           target,
-          projectId: input.projectId,
+          ...(input.contextKind === undefined ? {} : { contextKind: input.contextKind }),
+          ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
+          ...(input.projectLabel === undefined ? {} : { projectLabel: input.projectLabel }),
           cwd: input.cwd,
           ...(input.defaultModel === undefined ? {} : { defaultModel: input.defaultModel }),
           ...(input.codexThreadId === undefined ? {} : { codexThreadId: input.codexThreadId }),

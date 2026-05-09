@@ -44,10 +44,11 @@ chat transcripts, screenshots, or review packets.
 Run the local installer for your platform:
 
 ```bash
-pnpm codex-im:install --platform telegram
+pnpm codex-im:install
 ```
 
-Other supported values:
+The default installer asks which platform to configure first. If you already
+know the platform, pass it explicitly:
 
 ```bash
 pnpm codex-im:install --platform lark
@@ -86,6 +87,14 @@ pnpm launchd:status
 pnpm codex-im:status
 ```
 
+`codex-im:status` is local-only by default. To check whether a newer tagged
+release is available, run:
+
+```bash
+pnpm codex-im:upgrade --check
+pnpm codex-im:upgrade --plan
+```
+
 `im:doctor` does not send live IM traffic by default. It checks local config,
 Keychain secret presence, allowlists, platform capability flags, and installed
 bridge status.
@@ -104,14 +113,20 @@ Expected result:
 Open the configured IM chat and send:
 
 ```text
-/cwds
+/projects
 /use 1
 Reply exactly: OK
 ```
 
-You should receive an exact `OK` response. `/cwds` shows the configured local
-cwd entries; choose by number. To create a fresh thread and start immediately,
-you can also send `/new 1 Reply exactly: OK`.
+You should receive an exact `OK` response. `/projects` shows the configured
+Codex projects without exposing local paths; choose by number. To create a
+fresh conversation and start immediately, you can also send
+`/new 1 Reply exactly: OK`.
+
+Project selection is optional. Sending `Reply exactly: OK` or
+`/new Reply exactly: OK` before `/use` creates a Codex default conversation
+using the App Server's native default context. Normal IM output does not show
+the local cwd path.
 
 After that, try a normal development request such as asking Codex to inspect the
 current repo status.

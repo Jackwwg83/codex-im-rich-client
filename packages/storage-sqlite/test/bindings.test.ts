@@ -56,6 +56,72 @@ describe("BindingRepository (T4a)", () => {
     }
   });
 
+  it("stores App Server default conversations without fabricating a project id", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new BindingRepository(db);
+      const target = {
+        platform: "telegram",
+        chatId: "-100123456",
+      };
+
+      const saved = repo.upsert({
+        target,
+        contextKind: "app_default",
+        projectLabel: "Codex default",
+        codexThreadId: "thread_default",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        now: "2026-05-09T10:00:00.000Z",
+      });
+
+      expect(saved).toMatchObject({
+        target,
+        contextKind: "app_default",
+        projectLabel: "Codex default",
+        codexThreadId: "thread_default",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      });
+      expect(saved.projectId).toBeUndefined();
+      expect(repo.findByTarget(target)).toEqual(saved);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("hydrates legacy configured-project bindings with context metadata", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new BindingRepository(db);
+      const target = {
+        platform: "telegram",
+        chatId: "-100123456",
+      };
+
+      const saved = repo.upsert({
+        target,
+        projectId: "codex-im",
+        codexThreadId: "thread_project",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        now: "2026-05-09T10:05:00.000Z",
+      });
+
+      expect(saved).toMatchObject({
+        target,
+        projectId: "codex-im",
+        contextKind: "configured_project",
+        projectLabel: "codex-im",
+        codexThreadId: "thread_project",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it("lists bindings in insertion order", () => {
     const db = openDatabase(":memory:");
     try {

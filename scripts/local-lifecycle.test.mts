@@ -1,9 +1,19 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildInstallPlatformChoiceLines,
   buildLocalInstallPlan,
   buildLocalStatusPlan,
   buildLocalUninstallPlan,
+  buildLocalUpgradeApplyDryRunPlan,
+  buildLocalUpgradePlan,
+  clearSensitiveValues,
+  detectGitStateFromStatus,
+  parseRemoteTags,
   runLocalCommandPlan,
+  writeUpdateCheckCache,
 } from "./local-lifecycle.mts";
 
 describe("local lifecycle command wrappers", () => {
@@ -66,6 +76,16 @@ describe("local lifecycle command wrappers", () => {
     );
   });
 
+  it("offers a platform chooser for the default install path", () => {
+    expect(buildInstallPlatformChoiceLines()).toEqual([
+      "Choose one platform to configure first:",
+      "1. Telegram",
+      "2. Feishu/Lark",
+      "3. DingTalk",
+      "4. Slack",
+    ]);
+  });
+
   it("plans status and uninstall wrappers without hiding launchd or doctor", () => {
     expect(buildLocalStatusPlan({}).commands.map((command) => command.label)).toEqual([
       "im-doctor",
@@ -109,5 +129,130 @@ describe("local lifecycle command wrappers", () => {
     expect(exitCode).toBe(1);
     expect(runner).toHaveBeenCalledTimes(3);
     expect(output.join("\n")).toContain("failed: codex-version exit=1");
+  });
+
+  it("keeps upgrade plan local-only and blocks apply on dirty worktrees", () => {
+    const plan = buildLocalUpgradePlan({
+      homeDir: "/Users/operator",
+      repoPath: "/repo/codex-im-rich-client",
+      dirtyWorktree: true,
+      target: "latest",
+      currentGitSha: "abc123",
+      currentGitTag: "v0.1.0",
+      installedMetadata: {
+        schemaVersion: 1,
+        packageVersion: "0.1.0-phase7",
+        gitSha: "abc123",
+        gitTag: "v0.1.0",
+        codexVersion: "0.128.0",
+        installedAt: "2026-05-09T12:00:00.000Z",
+      },
+    });
+
+    const rendered = plan.completionLines.join("\n");
+    expect(plan.commands).toEqual([]);
+    expect(rendered).toContain("mode: plan");
+    expect(rendered).toContain("network: not used");
+    expect(rendered).toContain("apply: blocked");
+    expect(rendered).toContain("dirty worktree");
+    expect(rendered).not.toContain("git fetch");
+  });
+
+  it("prints an apply dry-run without mutating steps being executable", () => {
+    const plan = buildLocalUpgradeApplyDryRunPlan({
+      homeDir: "/Users/operator",
+      repoPath: "/repo/codex-im-rich-client",
+      dirtyWorktree: false,
+      target: "v0.1.1",
+      currentGitSha: "abc123",
+    });
+
+    const rendered = plan.completionLines.join("\n");
+    expect(plan.commands).toEqual([]);
+    expect(rendered).toContain("mode: apply --dry-run");
+    expect(rendered).toContain("would: git fetch --tags");
+    expect(rendered).toContain("would: pnpm install --frozen-lockfile");
+    expect(rendered).toContain("did not: git fetch");
+    expect(rendered).toContain("did not: checkout");
+    expect(rendered).toContain("did not: stop launchd");
+    expect(rendered).toContain("did not: read/write Keychain");
+  });
+
+  it("writes a redacted update-check cache", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "codex-im-upgrade-check-"));
+    try {
+      const cachePath = writeUpdateCheckCache({
+        homeDir,
+        cache: {
+          schemaVersion: 1,
+          checkedAt: "2026-05-09T12:00:00.000Z",
+          sourceRemote: "origin",
+          currentGitSha: "abc123",
+          currentGitTag: "v0.1.0",
+          latestGitTag: "v0.1.1",
+          latestGitSha: "def456",
+          status: "update_available",
+          diagnostic: "telegram token tg-secret-value should be redacted",
+        },
+      });
+
+      expect(cachePath).toBe(join(homeDir, ".codex-im-bridge", "update-check.json"));
+      expect(existsSync(cachePath)).toBe(true);
+      const written = readFileSync(cachePath, "utf8");
+      expect(written).toContain("[REDACTED]");
+      expect(written).not.toContain("tg-secret-value");
+    } finally {
+      rmSync(homeDir, { force: true, recursive: true });
+    }
+  });
+
+  it("redacts common platform secrets from lifecycle output", () => {
+    expect(
+      clearSensitiveValues(
+        [
+          "telegram token 123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
+          "xoxb-1234567890-abcdef",
+          "client_secret=ding-secret-value",
+          "app_secret=lark-secret-value",
+        ].join("\n"),
+      ),
+    ).toBe(
+      [
+        "telegram token [REDACTED]",
+        "[REDACTED]",
+        "client_secret=[REDACTED]",
+        "app_secret=[REDACTED]",
+      ].join("\n"),
+    );
+  });
+
+  it("detects dirty worktree state from git status output", () => {
+    expect(
+      detectGitStateFromStatus({
+        statusShort: " M README.md\n?? docs/new.md\n",
+        revParseHead: "abc123\n",
+        describeTags: "v0.1.0-2-gabc123\n",
+      }),
+    ).toEqual({
+      dirtyWorktree: true,
+      currentGitSha: "abc123",
+      currentGitTag: "v0.1.0-2-gabc123",
+    });
+  });
+
+  it("parses latest remote tag from read-only git ls-remote output", () => {
+    expect(
+      parseRemoteTags(
+        [
+          "1111111111111111111111111111111111111111\trefs/tags/v0.1.0",
+          "2222222222222222222222222222222222222222\trefs/tags/v0.1.10",
+          "3333333333333333333333333333333333333333\trefs/tags/v0.1.2",
+          "4444444444444444444444444444444444444444\trefs/tags/v0.1.10^{}",
+        ].join("\n"),
+      ),
+    ).toEqual({
+      latestGitTag: "v0.1.10",
+      latestGitSha: "2222222222222222222222222222222222222222",
+    });
   });
 });

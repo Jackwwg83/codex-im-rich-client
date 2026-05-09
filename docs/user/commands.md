@@ -1,21 +1,23 @@
 # IM Commands
 
-Plain text enters the current bound Codex thread or starts a Codex turn after
-you have selected a known local cwd. Slash commands control cwd selection,
-native Codex threads, status, approval, and bounded Computer Use behavior.
+Plain text enters the current Codex conversation. If there is no current
+conversation, Codex-IM starts a new Codex default conversation through App
+Server native `thread/start({})`. Slash commands control optional project
+selection, native Codex conversations, status, approval, and bounded Computer
+Use behavior.
 
 ## First Commands
 
 ```text
-/cwds
+/projects
 /use 1
 Reply exactly: OK
 ```
 
-`/cwds` lists the known local cwd entries from your daemon config. Choose by
-number when possible so you do not need to remember aliases. If the cwd entry
-and your IM user/chat are allowlisted, Codex should reply through the same IM
-conversation.
+`/projects` lists the Codex projects available to this IM chat. Choose by
+number when possible so you do not need to remember project names. If the
+project and your IM user/chat are allowlisted, Codex should reply through the
+same IM conversation.
 
 You can also create a new thread and start the first turn in one message:
 
@@ -23,24 +25,42 @@ You can also create a new thread and start the first turn in one message:
 /new 1 Reply exactly: OK
 ```
 
-Raw paths such as `/Users/me/repo` or `~/repo` are rejected from IM. Add or
-change cwd entries locally through setup/config, then select them from `/cwds`.
+If you have not selected a project, `/new Reply exactly: OK` creates a Codex
+default conversation. The daemon stores the App Server returned cwd internally,
+but normal IM output still shows `project: Codex default` rather than a local
+path.
 
-## Cwd And Thread Control
+Raw paths such as `/Users/me/repo` or `~/repo` are rejected from IM. Add or
+change projects locally through setup/config, then select them from `/projects`.
+
+## Project And Conversation Control
 
 | Command | Use |
 |---|---|
-| `/cwds` | List known local cwd entries available to this IM chat. |
-| `/projects` | Compatibility alias for `/cwds`. |
-| `/use <number-or-alias>` | Select a known cwd for the current IM target. |
-| `/new [number-or-alias] [task]` | Start a new Codex thread in the selected or specified known cwd; optional task starts the first turn. |
-| `/threads` | List recent native Codex App Server threads, including threads created from Codex App or CLI. |
-| `/switch <number-or-thread-prefix>` | Resume and bind this IM chat to a listed native Codex thread. |
-| `/alias <name>` | Give the current thread a local alias. |
-| `/fork` | Fork the current thread when supported by Codex App Server. |
+| `/projects` | List Codex projects available to this IM chat. |
+| `/cwds` | Technical alias for `/projects`; output does not show local paths. |
+| `/use <number-or-name>` | Select a project for the current IM target. |
+| `/new [number-or-name] [task]` | Start a new Codex conversation in the selected/specified project, or in Codex default when no project is selected; optional task starts the first turn. |
+| `/threads` | List recent native Codex App Server conversations, including conversations created from Codex App or CLI. |
+| `/switch <number-or-thread-prefix>` | Resume and bind this IM chat to a listed native Codex conversation. |
+| `/alias <name>` | Give the current conversation a local title. |
+| `/fork` | Fork the current conversation when supported by Codex App Server. |
 | `/stop` | Interrupt the active turn. |
 
 ## Status And Diagnostics
+
+Local lifecycle commands:
+
+```bash
+pnpm codex-im:status
+pnpm codex-im:upgrade --check
+pnpm codex-im:upgrade --plan
+pnpm codex-im:upgrade --apply --dry-run
+```
+
+`codex-im:status` is local-only by default. `upgrade --check` may contact the
+git remote and refresh `~/.codex-im-bridge/update-check.json`; the cache is
+advisory and never contains IM secrets.
 
 | Command | Use |
 |---|---|

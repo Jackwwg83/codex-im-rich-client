@@ -114,7 +114,7 @@ export async function runDaemonRoundtripSmokeCore(
   try {
     await daemon.start();
     await injectText(bot, "/use codex-im", 1, now);
-    await waitFor(() => bot.hasText("Using cwd codex-im"));
+    await waitFor(() => bot.hasText("Using project codex-im"));
 
     await injectText(bot, "/new Main thread", 2, now);
     await waitFor(() => runtime.threadStarts === 1 && bot.hasText("New Codex thread"));

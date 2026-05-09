@@ -4,7 +4,7 @@ Status: first-use setup guide for the local Mac bridge.
 
 Codex-IM runs on your Mac. IM bot tokens and app secrets stay in macOS
 Keychain; `config.toml` stores only non-secret settings such as enabled
-platforms, allowlists, known cwd entries, and environment-variable names.
+platforms, allowlists, project entries, and environment-variable names.
 
 Start with one platform. Do not configure all platforms at once.
 
@@ -43,16 +43,17 @@ Collect only the fields for the platform you will enable first:
 Run the combined local installer:
 
 ```bash
-pnpm codex-im:install --platform telegram
+pnpm codex-im:install
 ```
 
-Supported platform values:
+The default installer prompts for one platform. For non-interactive setup, pass
+the platform explicitly:
 
 ```bash
-telegram
-lark
-dingtalk
-slack
+pnpm codex-im:install --platform telegram
+pnpm codex-im:install --platform lark
+pnpm codex-im:install --platform dingtalk
+pnpm codex-im:install --platform slack
 ```
 
 The installer runs the setup wizard, writes `~/.codex-im-bridge/config.toml`,
@@ -97,6 +98,15 @@ Run:
 pnpm codex-im:status
 ```
 
+Status does not contact the network by default. Use these commands when you
+want to check for a newer tagged release or preview the upgrade path:
+
+```bash
+pnpm codex-im:upgrade --check
+pnpm codex-im:upgrade --plan
+pnpm codex-im:upgrade --apply --dry-run
+```
+
 If a secret is missing, the doctor prints a repair command and points back to
 the setup wizard. The repair command uses a placeholder such as
 `<SLACK_APP_TOKEN>`; replace it locally and do not paste real tokens into git,
@@ -110,10 +120,15 @@ For launch scope, rollback, and release checks, use
 In the configured IM chat:
 
 ```text
-/cwds
+/projects
 /use 1
 Reply exactly: OK
 ```
+
+You can also skip `/use` for the first test. A normal message or
+`/new Reply exactly: OK` creates a Codex default conversation through App
+Server native `thread/start({})`; the daemon stores the returned cwd locally
+without printing the path in normal IM output.
 
 If approvals appear, use the IM approval card first. `/approve <id> <action>` is
 only a fallback for already-bound pending approvals.

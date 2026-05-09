@@ -40,6 +40,8 @@
     "setup:im": "tsx scripts/setup-im.mts",
     "codex-im:install": "tsx scripts/local-lifecycle.mts install",
     "codex-im:status": "tsx scripts/local-lifecycle.mts status",
+    "codex-im:upgrade": "tsx scripts/local-lifecycle.mts upgrade",
+    "codex-im:rollback": "tsx scripts/local-lifecycle.mts rollback",
     "codex-im:uninstall": "tsx scripts/local-lifecycle.mts uninstall",
     "im:doctor": "tsx scripts/channels-doctor.mts",
     "channels:doctor": "pnpm im:doctor",

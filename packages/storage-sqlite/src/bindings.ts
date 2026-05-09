@@ -7,9 +7,17 @@ export interface BindingTarget {
   topicId?: string;
 }
 
+export type ImConversationContextKind =
+  | "configured_project"
+  | "codex_project"
+  | "app_default"
+  | "native_thread";
+
 export interface BindingUpsert {
   target: BindingTarget;
-  projectId: string;
+  contextKind?: ImConversationContextKind | undefined;
+  projectId?: string | undefined;
+  projectLabel?: string | undefined;
   codexThreadId?: string;
   cwd: string;
   defaultModel?: string;
@@ -20,7 +28,9 @@ export interface BindingUpsert {
 export interface ThreadBindingRecord {
   id: string;
   target: BindingTarget;
-  projectId: string;
+  contextKind?: ImConversationContextKind | undefined;
+  projectId?: string | undefined;
+  projectLabel?: string | undefined;
   codexThreadId?: string;
   cwd: string;
   defaultModel?: string;
@@ -35,7 +45,9 @@ interface ThreadBindingRow {
   target_chat_id: string;
   target_thread_key: string | null;
   target_topic_id: string | null;
-  project_id: string;
+  context_kind: ImConversationContextKind;
+  project_id: string | null;
+  project_label: string | null;
   codex_thread_id: string | null;
   cwd: string;
   default_model: string | null;
@@ -49,6 +61,12 @@ interface TargetParams {
   targetChatId: string;
   targetThreadKey: string | null;
   targetTopicId: string | null;
+}
+
+interface NormalizedBindingContext {
+  contextKind: ImConversationContextKind;
+  projectId: string | null;
+  projectLabel: string | null;
 }
 
 function normalizeTarget(target: BindingTarget): TargetParams {
@@ -73,6 +91,25 @@ function bindingId(target: BindingTarget): string {
   return `tb_${encoded}`;
 }
 
+function normalizeBindingContext(input: BindingUpsert): NormalizedBindingContext {
+  const contextKind =
+    input.contextKind ?? (input.projectId === undefined ? "app_default" : "configured_project");
+  if (contextKind === "configured_project" && input.projectId === undefined) {
+    throw new Error("configured_project bindings require projectId");
+  }
+  if (contextKind === "app_default" && input.projectId !== undefined) {
+    throw new Error("app_default bindings must not set projectId");
+  }
+  return {
+    contextKind,
+    projectId: input.projectId ?? null,
+    projectLabel:
+      input.projectLabel ??
+      input.projectId ??
+      (contextKind === "app_default" ? "Codex default" : null),
+  };
+}
+
 function hydrate(row: ThreadBindingRow): ThreadBindingRecord {
   return {
     id: row.id,
@@ -82,7 +119,9 @@ function hydrate(row: ThreadBindingRow): ThreadBindingRecord {
       ...(row.target_thread_key !== null ? { threadKey: row.target_thread_key } : {}),
       ...(row.target_topic_id !== null ? { topicId: row.target_topic_id } : {}),
     },
-    projectId: row.project_id,
+    contextKind: row.context_kind,
+    ...(row.project_id !== null ? { projectId: row.project_id } : {}),
+    ...(row.project_label !== null ? { projectLabel: row.project_label } : {}),
     ...(row.codex_thread_id !== null ? { codexThreadId: row.codex_thread_id } : {}),
     cwd: row.cwd,
     ...(row.default_model !== null ? { defaultModel: row.default_model } : {}),
@@ -99,13 +138,16 @@ export class BindingRepository {
     const now = input.now ?? new Date().toISOString();
     const existing = this.findByTarget(input.target);
     const target = normalizeTarget(input.target);
+    const context = normalizeBindingContext(input);
 
     if (existing) {
       this.db
         .prepare(
           `
             UPDATE thread_bindings
-               SET project_id = @projectId,
+               SET context_kind = @contextKind,
+                   project_id = @projectId,
+                   project_label = @projectLabel,
                    codex_thread_id = @codexThreadId,
                    cwd = @cwd,
                    default_model = @defaultModel,
@@ -116,7 +158,9 @@ export class BindingRepository {
         )
         .run({
           id: existing.id,
-          projectId: input.projectId,
+          contextKind: context.contextKind,
+          projectId: context.projectId,
+          projectLabel: context.projectLabel,
           codexThreadId: input.codexThreadId ?? null,
           cwd: input.cwd,
           defaultModel: input.defaultModel ?? null,
@@ -135,7 +179,9 @@ export class BindingRepository {
             target_chat_id,
             target_thread_key,
             target_topic_id,
+            context_kind,
             project_id,
+            project_label,
             codex_thread_id,
             cwd,
             default_model,
@@ -148,7 +194,9 @@ export class BindingRepository {
             @targetChatId,
             @targetThreadKey,
             @targetTopicId,
+            @contextKind,
             @projectId,
+            @projectLabel,
             @codexThreadId,
             @cwd,
             @defaultModel,
@@ -161,7 +209,9 @@ export class BindingRepository {
       .run({
         id: bindingId(input.target),
         ...target,
-        projectId: input.projectId,
+        contextKind: context.contextKind,
+        projectId: context.projectId,
+        projectLabel: context.projectLabel,
         codexThreadId: input.codexThreadId ?? null,
         cwd: input.cwd,
         defaultModel: input.defaultModel ?? null,
@@ -182,7 +232,9 @@ export class BindingRepository {
                  target_chat_id,
                  target_thread_key,
                  target_topic_id,
+                 context_kind,
                  project_id,
+                 project_label,
                  codex_thread_id,
                  cwd,
                  default_model,
@@ -210,7 +262,9 @@ export class BindingRepository {
                  target_chat_id,
                  target_thread_key,
                  target_topic_id,
+                 context_kind,
                  project_id,
+                 project_label,
                  codex_thread_id,
                  cwd,
                  default_model,
@@ -255,7 +309,9 @@ export class BindingRepository {
                  target_chat_id,
                  target_thread_key,
                  target_topic_id,
+                 context_kind,
                  project_id,
+                 project_label,
                  codex_thread_id,
                  cwd,
                  default_model,

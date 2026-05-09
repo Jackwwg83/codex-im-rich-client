@@ -59,6 +59,7 @@ export {
 // T4a (Phase 3) — thread_bindings repository exports.
 export {
   BindingRepository,
+  type ImConversationContextKind,
   type BindingTarget,
   type BindingUpsert,
   type ThreadBindingRecord,

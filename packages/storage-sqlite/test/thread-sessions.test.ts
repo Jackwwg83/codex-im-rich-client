@@ -45,6 +45,86 @@ describe("ThreadSessionRepository (Direct Use B2)", () => {
     }
   });
 
+  it("stores App Server default conversation sessions without fabricating a project id", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new ThreadSessionRepository(db);
+      const target = { platform: "telegram", chatId: "-100123456" };
+      const saved = repo.upsert({
+        target,
+        contextKind: "app_default",
+        projectLabel: "Codex default",
+        codexThreadId: "thread_default",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        title: "Default conversation",
+        now: "2026-05-09T10:00:00.000Z",
+      });
+
+      expect(saved).toMatchObject({
+        target,
+        contextKind: "app_default",
+        projectLabel: "Codex default",
+        codexThreadId: "thread_default",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        title: "Default conversation",
+      });
+      expect(saved.projectId).toBeUndefined();
+      expect(repo.listForTarget(target, { includeArchived: true })).toEqual([saved]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("switches current binding to an unconfigured native thread without promoting it to a project", () => {
+    const db = openDatabase(":memory:");
+    try {
+      runMigrations(db, REAL_MIGRATIONS_DIR);
+
+      const repo = new ThreadSessionRepository(db);
+      const target = { platform: "telegram", chatId: "-100123456" };
+      repo.upsert({
+        target,
+        contextKind: "native_thread",
+        projectLabel: "from Codex",
+        codexThreadId: "thread_native",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        title: "Existing Codex conversation",
+        now: "2026-05-09T10:00:00.000Z",
+      });
+
+      const result = repo.switchCurrent({
+        target,
+        contextKind: "native_thread",
+        projectLabel: "from Codex",
+        codexThreadId: "thread_native",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        now: "2026-05-09T10:05:00.000Z",
+      });
+
+      expect(result.binding).toMatchObject({
+        target,
+        contextKind: "native_thread",
+        projectLabel: "from Codex",
+        codexThreadId: "thread_native",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      });
+      expect(result.binding.projectId).toBeUndefined();
+      expect(result.session).toMatchObject({
+        target,
+        contextKind: "native_thread",
+        projectLabel: "from Codex",
+        codexThreadId: "thread_native",
+        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        lastUsedAt: "2026-05-09T10:05:00.000Z",
+      });
+      expect(result.session.projectId).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
   it("keeps one row per IM target and Codex thread while preserving title by default", () => {
     const db = openDatabase(":memory:");
     try {
