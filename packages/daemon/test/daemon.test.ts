@@ -4450,7 +4450,7 @@ describe("Daemon skeleton (T14)", () => {
       threadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
       cwd: "/repo/web",
       model: "gpt-test",
-      excludeTurns: true,
+      excludeTurns: false,
     });
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,
@@ -4564,7 +4564,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.threadFork).toHaveBeenCalledWith({
       threadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
       cwd: "/repo/api",
-      excludeTurns: true,
+      excludeTurns: false,
     });
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,

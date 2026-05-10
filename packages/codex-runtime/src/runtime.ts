@@ -62,6 +62,8 @@ import type {
   ReviewStartResponse,
   SkillsListParams,
   SkillsListResponse,
+  ThreadArchiveParams,
+  ThreadArchiveResponse,
   ThreadCompactStartParams,
   ThreadCompactStartResponse,
   ThreadForkParams,
@@ -72,10 +74,14 @@ import type {
   ThreadReadResponse,
   ThreadResumeParams,
   ThreadResumeResponse,
+  ThreadSetNameParams,
+  ThreadSetNameResponse,
   ThreadStartParams,
   ThreadStartResponse,
   ThreadTurnsListParams,
   ThreadTurnsListResponse,
+  ThreadUnarchiveParams,
+  ThreadUnarchiveResponse,
   TurnInterruptParams,
   TurnInterruptResponse,
   TurnStartParams,
@@ -98,6 +104,9 @@ const REQUEST_METHODS = {
   threadList: "thread/list",
   threadTurnsList: "thread/turns/list",
   threadRead: "thread/read",
+  threadSetName: "thread/name/set",
+  threadArchive: "thread/archive",
+  threadUnarchive: "thread/unarchive",
   skillsList: "skills/list",
   pluginList: "plugin/list",
   appsList: "app/list",
@@ -171,6 +180,18 @@ export class CodexRuntime {
 
   threadRead(params: ThreadReadParams): Promise<ThreadReadResponse> {
     return this.#client.request<ThreadReadResponse>(REQUEST_METHODS.threadRead, params);
+  }
+
+  threadSetName(params: ThreadSetNameParams): Promise<ThreadSetNameResponse> {
+    return this.#client.request<ThreadSetNameResponse>(REQUEST_METHODS.threadSetName, params);
+  }
+
+  threadArchive(params: ThreadArchiveParams): Promise<ThreadArchiveResponse> {
+    return this.#client.request<ThreadArchiveResponse>(REQUEST_METHODS.threadArchive, params);
+  }
+
+  threadUnarchive(params: ThreadUnarchiveParams): Promise<ThreadUnarchiveResponse> {
+    return this.#client.request<ThreadUnarchiveResponse>(REQUEST_METHODS.threadUnarchive, params);
   }
 
   // ─── turn/* ─────────────────────────────────────────────────────
