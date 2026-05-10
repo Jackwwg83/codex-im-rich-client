@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,7 @@ import {
   parseConfigToml,
   resolveConfigSecrets,
   resolveEnvReferences,
+  validateProjectPaths,
 } from "@codex-im/config";
 import {
   type ApprovalActor,
@@ -469,7 +470,14 @@ function parseDaemonRunArgs(argv: readonly string[]): DaemonRunFlags {
 
 async function loadConfig(path: string): Promise<CodexImConfig> {
   const source = await readFile(path, "utf8");
-  return resolveEnvReferences(parseConfigToml(source), { env: process.env });
+  const config = resolveEnvReferences(parseConfigToml(source), { env: process.env });
+  // Slice 2.1 hardening item #3: fs-resolve every project's cwd via
+  // realpath, refuse missing or non-directory paths, and existence-check
+  // every writableRoots entry. Failure here is intentional and fatal:
+  // operators get a clear error before the daemon starts spawning codex
+  // against an invalid sandbox root.
+  await validateProjectPaths(config, { realpath, stat });
+  return config;
 }
 
 function openRuntimeStorage(config: CodexImConfig, migrationsDir: string): RuntimeStorage {

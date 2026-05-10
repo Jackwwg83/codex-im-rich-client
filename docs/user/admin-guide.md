@@ -15,6 +15,27 @@ This guide covers local administration after the first setup.
 Do not put IM token values in config, plist, docs, logs, SQLite, GitHub, Linear,
 or review packets.
 
+## Project Paths In `config.toml`
+
+Each `[projects.<name>]` entry has two filesystem fields:
+
+- `cwd` — the working directory the daemon hands to Codex when this
+  project is the active session. The daemon resolves this with
+  `fs.realpath` at config load time. If the path does not exist, is
+  not a directory, or symlinks somewhere unreachable, the daemon
+  refuses to start with `CodexImConfigPathError`. Fix the path in
+  `config.toml` and reload.
+- `writable_roots` — every entry must be an existing directory; the
+  daemon refuses to start otherwise. **Currently treated as metadata
+  only**: the daemon validates these paths exist but does not yet
+  forward them to Codex via `additionalWritableRoot` permission
+  modifications. Use them to document intent for now; sandbox
+  enforcement on Codex's side is tracked for a later release.
+
+If you need a writable scope outside `cwd` enforced today, configure
+that on Codex's side directly (per-codex `~/.codex/config.toml`
+sandbox configuration) — the IM bridge does not override it.
+
 ## Install Modes
 
 | Mode | Status |
