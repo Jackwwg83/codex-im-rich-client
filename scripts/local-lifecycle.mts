@@ -636,7 +636,9 @@ function parseUpgradeOptions(args: readonly string[]): {
   }
   if (mode === "apply") {
     if (!common.dryRun) {
-      throw new Error("codex-im:upgrade: real --apply is planned for Slice 2; use --dry-run");
+      throw new Error(
+        "codex-im:upgrade: real --apply is not yet implemented; use --apply --dry-run to preview the plan",
+      );
     }
     return {
       dryRun: false,
