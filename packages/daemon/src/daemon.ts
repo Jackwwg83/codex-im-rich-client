@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { CodexRichEvent } from "@codex-im/codex-runtime";
+import { CodexCapabilities, type CodexRichEvent } from "@codex-im/codex-runtime";
 import {
   type ActorPolicy,
   type ApprovalActor,
@@ -96,6 +96,7 @@ import {
 import { PruneSweep } from "./prune-sweep.js";
 import { MutationRateLimit } from "./rate-limit.js";
 import { type DaemonStatusSnapshot, writeDaemonStatusSnapshot } from "./status.js";
+import { renameThread } from "./thread-rename.js";
 import { TurnOutputManager } from "./turn-output.js";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -375,6 +376,12 @@ interface DaemonCodexRuntime {
   threadResume?(params: DaemonThreadResumeParams): MaybePromise<unknown>;
   threadFork?(params: DaemonThreadForkParams): MaybePromise<DaemonThreadStartResult>;
   threadCompactStart?(params: { readonly threadId: string }): MaybePromise<unknown>;
+  threadSetName?(params: {
+    readonly threadId: string;
+    readonly name: string;
+  }): MaybePromise<unknown>;
+  threadArchive?(params: { readonly threadId: string }): MaybePromise<unknown>;
+  threadUnarchive?(params: { readonly threadId: string }): MaybePromise<unknown>;
   turnStart(params: DaemonTurnStartParams): MaybePromise<DaemonTurnStartResult>;
   turnSteer(params: DaemonTurnSteerParams): MaybePromise<unknown>;
   turnInterrupt?(params: DaemonTurnInterruptParams): MaybePromise<unknown>;
@@ -568,6 +575,7 @@ export class Daemon {
   #supervisorFailureCount = 0;
   #pruneSweep: PruneSweep | undefined;
   #mutationRateLimit: MutationRateLimit | undefined;
+  readonly #capabilities = new CodexCapabilities();
   readonly #stuckIssuedApprovalIds = new Set<string>();
   readonly #transportLostStuckIssuedApprovalIds = new Set<string>();
   readonly #unsubscribers: Unsubscribe[] = [];
@@ -2177,6 +2185,11 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "rename") {
+      await this.#routeRenameCommand(inbound, command);
+      return;
+    }
+
     if (command.name === "fork") {
       await this.#routeForkCommand(inbound, command);
       return;
@@ -3334,6 +3347,69 @@ export class Daemon {
     }
 
     await this.#editInboundMessage(inbound.messageRef, `Thread alias set: ${title}`);
+  }
+
+  async #routeRenameCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    if (await this.#enforceMutationRateLimit(inbound, "rename")) return;
+    const title = this.#threadTitleFromArgs(command.args);
+    if (title === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Usage: /rename <title>");
+      return;
+    }
+
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    if (route?.kind !== "bound" || route.codexThreadId === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "No current Codex thread.");
+      return;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return;
+    }
+
+    const repository = this.#threadSessionRepository();
+    if (repository === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+      return;
+    }
+
+    const outcome = await renameThread(
+      {
+        runtime: this.#currentRuntime() ?? undefined,
+        capabilities: this.#capabilities,
+        threadSessions: repository,
+        nowIso: () => this.#nowIso(),
+      },
+      inbound.target,
+      route.codexThreadId,
+      title,
+    );
+
+    if (outcome.kind === "remote_renamed") {
+      await this.#editInboundMessage(inbound.messageRef, `Thread renamed: ${title}`);
+      return;
+    }
+    if (outcome.kind === "local_only") {
+      const note =
+        outcome.reason === "no_runtime"
+          ? "Codex runtime unavailable"
+          : "codex thread/name/set not supported by this server";
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `Thread alias set locally: ${title} (${note}; codex-side name unchanged)`,
+      );
+      return;
+    }
+    // failed
+    this.#emitAuditEvent("thread.rename_failed", {
+      target: inbound.target,
+      result: "failed",
+      metadata: { error: outcome.error, threadId: route.codexThreadId },
+    });
+    await this.#editInboundMessage(inbound.messageRef, `Thread rename failed: ${outcome.error}`);
   }
 
   /**
