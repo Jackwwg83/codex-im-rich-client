@@ -1,6 +1,7 @@
 import {
   ComputerUsePolicy,
   ComputerUseSessionRegistry,
+  type DynamicToolCallHandler,
   UnsupportedComputerUseProvider,
 } from "@codex-im/core";
 import { describe, expect, it, vi } from "vitest";
@@ -21,11 +22,11 @@ function makeAudit(): ComputerUseGateAudit & { calls: Array<{ kind: string; meta
 }
 
 function makeBroker(): ComputerUseGateBroker & {
-  handler: ((req: { params: unknown }) => unknown) | undefined;
+  handler: DynamicToolCallHandler | undefined;
   registerDynamicToolCallHandler: ReturnType<typeof vi.fn>;
 } {
-  let captured: ((req: { params: unknown }) => unknown) | undefined;
-  const register = vi.fn((handler: (req: { params: unknown }) => unknown) => {
+  let captured: DynamicToolCallHandler | undefined;
+  const register = vi.fn((handler: DynamicToolCallHandler) => {
     captured = handler;
   });
   return {
@@ -105,7 +106,7 @@ describe("setupComputerUseGate", () => {
     ).not.toThrow();
   });
 
-  it("the registered handler delegates to ComputerUseToolGate.handleToolCall (rejects unallowed namespace)", () => {
+  it("the registered handler delegates to ComputerUseToolGate.handleToolCall (rejects unallowed namespace)", async () => {
     const broker = makeBroker();
     setupComputerUseGate({
       broker,
@@ -115,9 +116,16 @@ describe("setupComputerUseGate", () => {
     });
 
     // Fire a request whose namespace/tool is not in allowedTools — gate
-    // should refuse without throwing.
-    const result = broker.handler?.({
-      params: { namespace: "not_allowed", name: "evil", input: {} },
+    // should refuse without throwing. The full DynamicToolCall shape is
+    // method/params/id; the gate reads from params.
+    const result = await broker.handler?.({
+      method: "tool/call",
+      params: {
+        namespace: "not_allowed",
+        name: "evil",
+        input: {},
+      } as never,
+      id: "req-1",
     });
     expect(result).toBeDefined();
   });
