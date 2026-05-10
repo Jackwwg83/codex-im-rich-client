@@ -773,8 +773,13 @@ export class Daemon {
   #runSyncCleanup(cleanup: CleanupMethod): void {
     try {
       void cleanup();
-    } catch {
-      // Best-effort rollback must not hide the original startup failure.
+    } catch (error) {
+      // Best-effort rollback must not hide the original startup failure,
+      // but it must not silently lose the cleanup error either.
+      this.#emitAuditEvent("daemon.cleanup_failed", {
+        result: "failed",
+        metadata: { error: errorMessage(error), phase: "sync" },
+      });
     }
   }
 
@@ -784,8 +789,11 @@ export class Daemon {
     }
     try {
       await cleanup();
-    } catch {
-      // Best-effort rollback must not hide the original startup failure.
+    } catch (error) {
+      this.#emitAuditEvent("daemon.cleanup_failed", {
+        result: "failed",
+        metadata: { error: errorMessage(error), phase: "async" },
+      });
     }
   }
 
@@ -806,8 +814,9 @@ export class Daemon {
   }
 
   async #handlePendingCreated(snapshot: PendingApprovalSnapshot): Promise<void> {
+    let target: Target | null | undefined;
     try {
-      const target = await this.options.resolveApprovalTarget?.(snapshot);
+      target = await this.options.resolveApprovalTarget?.(snapshot);
       if (target === undefined || target === null) {
         return;
       }
@@ -854,8 +863,17 @@ export class Daemon {
       }
 
       await this.#autoDeclineApproval(snapshot, target, "policy_auto_decline");
-    } catch {
-      // Pending-created subscribers must not destabilize the broker.
+    } catch (error) {
+      // Pending-created subscribers must not destabilize the broker, but
+      // a silent failure here means an approval IM card was never sent
+      // and the user has no idea their request is dangling. Audit so
+      // operators / on-call can correlate.
+      this.#emitAuditEvent("approval.send_failed", {
+        approvalId: snapshot.id,
+        ...(target === undefined || target === null ? {} : { target }),
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
     }
   }
 
@@ -1333,8 +1351,14 @@ export class Daemon {
         ...(metadataJson === undefined ? {} : { metadataJson }),
         createdAt: (this.options.now?.() ?? new Date()).toISOString(),
       });
-    } catch {
-      // Daemon-level audit is best-effort and must not mutate control flow.
+    } catch (error) {
+      // Daemon-level audit is best-effort and must not mutate control
+      // flow. Cannot recursively call #emitAuditEvent here (would risk
+      // unbounded loop on a broken audit sink). Stderr surface is the
+      // operator's signal of last resort.
+      console.warn(
+        `[daemon] audit emit failed for action=${action}: ${redact(errorMessage(error))}`,
+      );
     }
   }
 
@@ -4082,7 +4106,15 @@ export class Daemon {
         cwd: selected.cwd,
         ...(selected.defaultModel === undefined ? {} : { defaultModel: selected.defaultModel }),
       });
-    } catch {
+    } catch (error) {
+      this.#emitAuditEvent("session.bind_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: {
+          error: errorMessage(error),
+          projectId: selected.alias,
+        },
+      });
       await this.#editInboundMessage(
         inbound.messageRef,
         `Failed to bind cwd ${selected.alias}: storage write failed`,
