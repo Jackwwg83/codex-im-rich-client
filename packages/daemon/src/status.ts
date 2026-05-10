@@ -40,9 +40,33 @@ export interface DaemonWebStatusViewOptions {
   readonly title?: string;
 }
 
+/**
+ * HTTP security headers applied to the read-only status view. Whoever
+ * serves the rendered body over HTTP MUST set these headers verbatim.
+ *
+ * - `Content-Security-Policy: default-src 'none'; ...` — the rendered
+ *   HTML is fully self-contained (no scripts, no images, no remote
+ *   styles); `'none'` denies every fetch directive by default. Frame-
+ *   ancestors and base-uri are also locked down.
+ * - `X-Content-Type-Options: nosniff` — prevents MIME sniffing on the
+ *   text/html response.
+ * - `Referrer-Policy: no-referrer` — local read-only console must not
+ *   leak referrers if a future link to anything external is added.
+ * - `X-Frame-Options: DENY` — defense-in-depth for older browsers
+ *   that don't honor CSP frame-ancestors.
+ */
+export const DAEMON_WEB_STATUS_SECURITY_HEADERS: Readonly<Record<string, string>> = Object.freeze({
+  "Content-Security-Policy":
+    "default-src 'none'; style-src 'none'; script-src 'none'; img-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "X-Frame-Options": "DENY",
+});
+
 export interface DaemonWebStatusView {
   readonly contentType: "text/html; charset=utf-8";
   readonly body: string;
+  readonly headers: Readonly<Record<string, string>>;
 }
 
 export async function writeDaemonStatusSnapshot(
@@ -109,6 +133,7 @@ export function renderDaemonWebStatusView(
 
   return {
     contentType: "text/html; charset=utf-8",
+    headers: DAEMON_WEB_STATUS_SECURITY_HEADERS,
     body: `<!doctype html>
 <html lang="en">
 <head>

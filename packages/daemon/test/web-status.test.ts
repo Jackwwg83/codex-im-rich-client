@@ -38,6 +38,20 @@ describe("daemon web status read-only surface (JAC-106)", () => {
     expect(view.body).not.toMatch(/<form\b|<button\b|method=|data-action=|\/approve|\/deny/i);
   });
 
+  it("returns security headers on the rendered view", () => {
+    const view = renderDaemonWebStatusView(SNAPSHOT, {
+      bind: { host: "127.0.0.1", port: 8920, readOnly: true },
+    });
+    expect(view.headers["Content-Security-Policy"]).toBeDefined();
+    const csp = view.headers["Content-Security-Policy"] ?? "";
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    expect(view.headers["X-Content-Type-Options"]).toBe("nosniff");
+    expect(view.headers["Referrer-Policy"]).toBe("no-referrer");
+    expect(view.headers["X-Frame-Options"]).toBe("DENY");
+  });
+
   it("defaults to a loopback-only bind plan", () => {
     expect(planDaemonWebStatusConsole()).toEqual({
       host: "127.0.0.1",
