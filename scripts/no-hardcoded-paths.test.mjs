@@ -11,13 +11,6 @@ const ALLOWLIST = new Set([
   // Same reason: web /status redaction snapshot test feeds a user-home string
   // and asserts it is never echoed back.
   "packages/daemon/test/web-status.test.ts",
-  // Pre-existing fixture cwd metadata. Out of scope for the Slice 1 path-leak
-  // fix (which targeted packages/daemon/test/daemon.test.ts only). May be
-  // converted to tmpdir-based fixtures in a later slice.
-  "packages/storage-sqlite/test/thread-sessions.test.ts",
-  "packages/storage-sqlite/test/bindings.test.ts",
-  // Same: pre-existing fixture cwd metadata, out of Slice 1 scope.
-  "scripts/dingtalk-readiness.test.mts",
 ]);
 
 // The forbidden literal is assembled at runtime so that *this* test file does

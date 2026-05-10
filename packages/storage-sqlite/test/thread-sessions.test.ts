@@ -4,10 +4,13 @@
 // an IM-native task list; codex_thread_id is the durable identity and
 // thread_bindings remains the current pointer.
 
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ThreadSessionRepository, openDatabase, runMigrations } from "../src/index.js";
+
+const FIXTURE_CWD = join(tmpdir(), "codex-im-rich-client-fixture-cwd");
 
 describe("ThreadSessionRepository (Direct Use B2)", () => {
   const HERE = dirname(fileURLToPath(import.meta.url));
@@ -57,7 +60,7 @@ describe("ThreadSessionRepository (Direct Use B2)", () => {
         contextKind: "app_default",
         projectLabel: "Codex default",
         codexThreadId: "thread_default",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
         title: "Default conversation",
         now: "2026-05-09T10:00:00.000Z",
       });
@@ -67,7 +70,7 @@ describe("ThreadSessionRepository (Direct Use B2)", () => {
         contextKind: "app_default",
         projectLabel: "Codex default",
         codexThreadId: "thread_default",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
         title: "Default conversation",
       });
       expect(saved.projectId).toBeUndefined();
@@ -89,7 +92,7 @@ describe("ThreadSessionRepository (Direct Use B2)", () => {
         contextKind: "native_thread",
         projectLabel: "from Codex",
         codexThreadId: "thread_native",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
         title: "Existing Codex conversation",
         now: "2026-05-09T10:00:00.000Z",
       });
@@ -99,7 +102,7 @@ describe("ThreadSessionRepository (Direct Use B2)", () => {
         contextKind: "native_thread",
         projectLabel: "from Codex",
         codexThreadId: "thread_native",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
         now: "2026-05-09T10:05:00.000Z",
       });
 
@@ -108,7 +111,7 @@ describe("ThreadSessionRepository (Direct Use B2)", () => {
         contextKind: "native_thread",
         projectLabel: "from Codex",
         codexThreadId: "thread_native",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
       });
       expect(result.binding.projectId).toBeUndefined();
       expect(result.session).toMatchObject({
@@ -116,7 +119,7 @@ describe("ThreadSessionRepository (Direct Use B2)", () => {
         contextKind: "native_thread",
         projectLabel: "from Codex",
         codexThreadId: "thread_native",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
         lastUsedAt: "2026-05-09T10:05:00.000Z",
       });
       expect(result.session.projectId).toBeUndefined();
