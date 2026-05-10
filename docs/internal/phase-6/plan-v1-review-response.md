@@ -2,7 +2,7 @@
 
 Generated: 2026-05-03
 
-Review report: `docs/phase-6/plan-v1-codex-review.md`
+Review report: `docs/internal/phase-6/plan-v1-codex-review.md`
 
 Verdict: `APPROVE_WITH_CHANGES`
 
@@ -15,7 +15,7 @@ Closed in plan v1.1.
 Changes:
 
 - Added "Broker Integration" section to
-  `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
+  `docs/internal/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
 - Explicitly forbids daemon code from calling
   `registerHandler("item/tool/call", ...)`.
 - Requires a broker-owned typed API such as

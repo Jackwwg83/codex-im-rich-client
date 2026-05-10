@@ -1,6 +1,10 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CodexImConfig } from "../packages/config/src/index.js";
 import { evaluateDingTalkReadiness, formatDingTalkReadinessReport } from "./dingtalk-readiness.mts";
+
+const FIXTURE_CWD = join(tmpdir(), "codex-im-rich-client-fixture-cwd");
 
 describe("dingtalk-readiness", () => {
   it("reports blocked without leaking credentials when direct-use config is incomplete", () => {
@@ -99,10 +103,10 @@ function makeConfig(input: {
     },
     projects: {
       "codex-im": {
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
         allowedUsers: input.projectAllowedUsers,
         allowedChats: input.projectAllowedChats,
-        writableRoots: ["/Users/jackwu/projects/codex-im-rich-client"],
+        writableRoots: [FIXTURE_CWD],
       },
     },
   };

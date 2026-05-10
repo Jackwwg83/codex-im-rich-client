@@ -74,7 +74,7 @@ This is what we actually need for Phase 0–6:
 
 ## Decision: use **STABLE** (no `--experimental`) for Phase 0–6
 
-**This reverses the preliminary stance in `docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md` Task 0.2 / Task 2.2.** The reversal is grounded in the empirical diff above, not in speculation about "what experimental might contain."
+**This reverses the preliminary stance in `docs/internal/superpowers/plans/2026-04-29-phase-0-bootstrap.md` Task 0.2 / Task 2.2.** The reversal is grounded in the empirical diff above, not in speculation about "what experimental might contain."
 
 ### Why stable is sufficient
 

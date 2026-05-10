@@ -152,7 +152,7 @@ original T4 capture commit (619ec6b) and T4.5 commit (a15c772) stand
 in history with the fixes layered on top.
 
 The full 9-finding review output is preserved in
-docs/phase-1/codex-review-t1-t4.5.md (or the b5o79pmb4 task-output log
+docs/internal/phase-1/codex-review-t1-t4.5.md (or the b5o79pmb4 task-output log
 on the runtime host).
 <!-- END CODEX OUTSIDE-VOICE OUTPUT -->
 

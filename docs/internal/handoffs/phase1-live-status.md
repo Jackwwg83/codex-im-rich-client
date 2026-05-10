@@ -10,7 +10,7 @@
 - **Phase:** Phase 1 — Codex Runtime Core (T1-T12 committed; tag GATED on integrated-review re-run)
 - **Active task:** **Phase 1 tag-gate fix pass — fix steps complete.** All 4 in-scope steps landed: docs-first (`0232dc1`), Blocker 2 supervisor cleanup (`9096cca`), Blocker 1 smoke refactor (`6059644`), metadata refresh (this commit). Next: re-run Codex outside-voice integrated review on full fix diff; apply tag if GO.
 - **Tag candidate:** `phase-1-runtime-complete` — applied AFTER re-run codex review returns GO.
-- **Next phase:** Phase 2 — Telegram MVP. Entry: `docs/handoffs/2026-05-01-phase1-to-phase2.md` (already updated to soften M4 wording + record M3 risk).
+- **Next phase:** Phase 2 — Telegram MVP. Entry: `docs/internal/handoffs/2026-05-01-phase1-to-phase2.md` (already updated to soften M4 wording + record M3 risk).
 - **Last completed task:** **T12** (Phase 1 docs + roadmap + handoff). Tag-gate fix pass is post-T12.
 - **Prior tasks (full Phase 1 chain):** Pre-1 → Pre-2 → T1 → T2 → T3 → T4 → T4.5 → T5 → T6 → T7a → T7b → T8 → Pre-3 → T9a → T9b code → T9b blocker-fix (B-clean) → T10 → T11a → T11b → T12.
 - **Autonomous mode:** off. Hand-fixing tag-gate concerns under user staged-execution discipline.
@@ -66,7 +66,7 @@ Scope:
 
 If GO: `git tag -a phase-1-runtime-complete -m "..."`. If conditional GO with low-severity nits: apply inline + commit as `fix(phase1): tag-gate review nits`. If NO-GO again: reopen the fix scope, do not tag.
 
-After tag: Phase 2 (Telegram MVP) per `docs/handoffs/2026-05-01-phase1-to-phase2.md`.
+After tag: Phase 2 (Telegram MVP) per `docs/internal/handoffs/2026-05-01-phase1-to-phase2.md`.
 
 ## 6. Currently modified files (working tree)
 
@@ -158,7 +158,7 @@ Other Phase 1 non-goals from handoff (unchanged across all tasks):
 ## 11. First command for a new (post-compact) session
 
 ```bash
-cat docs/handoffs/phase1-live-status.md && \
+cat docs/internal/handoffs/phase1-live-status.md && \
 git status --short && \
 git log --oneline -5
 ```

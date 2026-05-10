@@ -7,7 +7,7 @@ Review target:
 - Branch: `codex/phase-7-planning`
 - Base tag: `phase-6-computer-use-complete`
 - Current HEAD includes Phase 7 implementation through JAC-108 plus working-tree fixes for the first final review.
-- Prior review file: `docs/phase-7/impl-final-codex-review.md`
+- Prior review file: `docs/internal/phase-7/impl-final-codex-review.md`
 
 Task:
 
@@ -39,9 +39,9 @@ Please inspect the current working tree diff and relevant files/tests:
 - `packages/core/test/team-operator-policy.test.ts`
 - `packages/daemon/src/web-approval.ts`
 - `packages/daemon/test/web-approval.test.ts`
-- `docs/phase-7/capability-matrix.md`
-- `docs/phase-7/chat-sdk-feasibility.md`
-- `docs/phase-7/satori-koishi-feasibility.md`
+- `docs/internal/phase-7/capability-matrix.md`
+- `docs/internal/phase-7/chat-sdk-feasibility.md`
+- `docs/internal/phase-7/satori-koishi-feasibility.md`
 
 Output format:
 

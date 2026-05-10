@@ -2,7 +2,7 @@
 
 Generated: 2026-05-02
 
-Scope: `phase-3-telegram-mvp-complete..50a90c4`, focused on the P1/P2 closures from `docs/phase-4/impl-final-codex-review.md`.
+Scope: `phase-3-telegram-mvp-complete..50a90c4`, focused on the P1/P2 closures from `docs/internal/phase-4/impl-final-codex-review.md`.
 
 Verdict: **GO_WITH_LOW_NITS**. No P0/P1 blockers remained; tag gate may proceed.
 

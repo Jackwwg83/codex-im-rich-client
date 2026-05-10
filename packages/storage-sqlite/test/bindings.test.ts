@@ -8,10 +8,13 @@
 // layer (D27), so the Target shape is redeclared locally in
 // storage-sqlite; no core/protocol/channel imports are allowed.
 
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { BindingRepository, openDatabase, runMigrations } from "../src/index.js";
+
+const FIXTURE_CWD = join(tmpdir(), "codex-im-rich-client-fixture-cwd");
 
 describe("BindingRepository (T4a)", () => {
   const HERE = dirname(fileURLToPath(import.meta.url));
@@ -72,7 +75,7 @@ describe("BindingRepository (T4a)", () => {
         contextKind: "app_default",
         projectLabel: "Codex default",
         codexThreadId: "thread_default",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
         now: "2026-05-09T10:00:00.000Z",
       });
 
@@ -81,7 +84,7 @@ describe("BindingRepository (T4a)", () => {
         contextKind: "app_default",
         projectLabel: "Codex default",
         codexThreadId: "thread_default",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
       });
       expect(saved.projectId).toBeUndefined();
       expect(repo.findByTarget(target)).toEqual(saved);
@@ -105,7 +108,7 @@ describe("BindingRepository (T4a)", () => {
         target,
         projectId: "codex-im",
         codexThreadId: "thread_project",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
         now: "2026-05-09T10:05:00.000Z",
       });
 
@@ -115,7 +118,7 @@ describe("BindingRepository (T4a)", () => {
         contextKind: "configured_project",
         projectLabel: "codex-im",
         codexThreadId: "thread_project",
-        cwd: "/Users/jackwu/projects/codex-im-rich-client",
+        cwd: FIXTURE_CWD,
       });
     } finally {
       db.close();

@@ -10,7 +10,7 @@
 ## 1. Current State
 
 - **Phase:** Phase 7 - extended platforms and web console.
-- **Plan:** `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
 - **Parent Linear issue:** JAC-12 - Phase 7+ backlog / extended platforms and
   web console.
 - **Final Linear issue:** JAC-165 - Phase 7 review, handoff, and tag gate.
@@ -75,8 +75,8 @@
 
 Review reports:
 
-- `docs/phase-7/impl-final-codex-review.md`
-- `docs/phase-7/impl-final-codex-review-followup.md`
+- `docs/internal/phase-7/impl-final-codex-review.md`
+- `docs/internal/phase-7/impl-final-codex-review-followup.md`
 
 ## 5. Linear Execution Queue
 
@@ -115,10 +115,10 @@ diffing.
 If resuming after Phase 7:
 
 1. Read this file first.
-2. Read the Phase 7 plan under `docs/superpowers/plans/`.
-3. Read `docs/handoffs/2026-05-03-phase7-to-future.md`.
+2. Read the Phase 7 plan under `docs/internal/superpowers/plans/`.
+3. Read `docs/internal/handoffs/2026-05-03-phase7-to-future.md`.
 4. Read `AGENTS.md` and
-   `docs/automation/codex-app-autonomous-loop-runbook.md`.
+   `docs/internal/automation/codex-app-autonomous-loop-runbook.md`.
 5. Run `git status --short` and `git log --oneline -8`.
 6. Start any future phase from a reviewed plan and Linear issue split before
    implementation.

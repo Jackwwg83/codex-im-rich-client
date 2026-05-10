@@ -2,12 +2,12 @@
 
 Review scope:
 
-- Plan: `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
-- Live status: `docs/handoffs/phase7-live-status.md`
-- Phase 6 handoff: `docs/handoffs/2026-05-03-phase6-to-phase7.md`
+- Plan: `docs/internal/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
+- Live status: `docs/internal/handoffs/phase7-live-status.md`
+- Phase 6 handoff: `docs/internal/handoffs/2026-05-03-phase6-to-phase7.md`
 - Adapter design: `06-IM-ADAPTERS.md`
 - Security: `07-SECURITY-AND-COMPUTER-USE.md`
-- Loop runbook: `docs/automation/codex-app-autonomous-loop-runbook.md`
+- Loop runbook: `docs/internal/automation/codex-app-autonomous-loop-runbook.md`
 
 You are an outside-voice reviewer for Phase 7 of Codex IM Rich Client.
 Review the draft plan for architecture drift, unsafe sequencing, missing

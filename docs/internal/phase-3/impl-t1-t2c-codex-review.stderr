@@ -1,7 +1,7 @@
 Reading prompt from stdin...
 OpenAI Codex v0.128.0 (research preview)
 --------
-workdir: /Users/jackwu/projects/codex-im-rich-client
+workdir: <home>/projects/codex-im-rich-client
 model: gpt-5.5
 provider: openai
 approval: never
@@ -242,7 +242,7 @@ Implementation:
 - root `package.json` (pnpm.onlyBuiltDependencies whitelist)
 
 Plan-of-record:
-- `docs/superpowers/plans/2026-05-02-phase-3-plan.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md`
   - §8.1 (storage-sqlite directory layout)
   - §16.2 T1.1 / T2a / T2b / T2c / T3a-T6f
   - §7 D27 boundary
@@ -295,9 +295,9 @@ without line citations.
 codex
 I’ll read the implementation, plan sections, and Phase 2 boundary-test references first, then line up findings against the exact T-task scope and D27 boundary. Since this is a review request, I’m staying read-only and will report issues with file/line evidence.
 exec
-/bin/zsh -lc 'nl -ba packages/storage-sqlite/tsconfig.json' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/storage-sqlite/tsconfig.json' in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'nl -ba packages/storage-sqlite/package.json' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/storage-sqlite/package.json' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	{
      2	  "name": "@codex-im/storage-sqlite",
@@ -333,7 +333,7 @@ exec
     10	}
 
 exec
-/bin/zsh -lc 'git rev-parse --abbrev-ref HEAD && git rev-parse --short HEAD && git status --short' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git rev-parse --abbrev-ref HEAD && git rev-parse --short HEAD && git status --short' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-LrvAPq76' (errno=Operation not permitted)
@@ -350,23 +350,23 @@ git: error: couldn't create cache file '/tmp/xcrun_db-5c8IAy4F' (errno=Operation
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-X3Qt5u2I' (errno=Operation not permitted)
 ?? .claude/scheduled_tasks.lock
-?? docs/phase-2/codex-review-t18-t22.stderr
-?? docs/phase-2/codex-review-t24-integrated.stderr
-?? docs/phase-3/impl-t1-t2c-codex-review-prompt.md
-?? docs/phase-3/impl-t1-t2c-codex-review.md
-?? docs/phase-3/impl-t1-t2c-codex-review.stderr
-?? docs/phase-3/plan-v1-codex-review.stderr
-?? docs/phase-3/plan-v2.1-codex-round2.stderr
-?? docs/phase-3/plan-v2.2-codex-round3.stderr
-?? docs/phase-3/plan-v2.3-codex-round4.stderr
+?? docs/internal/phase-2/codex-review-t18-t22.stderr
+?? docs/internal/phase-2/codex-review-t24-integrated.stderr
+?? docs/internal/phase-3/impl-t1-t2c-codex-review-prompt.md
+?? docs/internal/phase-3/impl-t1-t2c-codex-review.md
+?? docs/internal/phase-3/impl-t1-t2c-codex-review.stderr
+?? docs/internal/phase-3/plan-v1-codex-review.stderr
+?? docs/internal/phase-3/plan-v2.1-codex-round2.stderr
+?? docs/internal/phase-3/plan-v2.2-codex-round3.stderr
+?? docs/internal/phase-3/plan-v2.3-codex-round4.stderr
 
 exec
-/bin/zsh -lc 'rg --files packages/storage-sqlite packages/channel-core docs/superpowers/plans | sort' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'rg --files packages/storage-sqlite packages/channel-core docs/internal/superpowers/plans | sort' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
-docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md
-docs/superpowers/plans/2026-04-30-phase-1-runtime.md
-docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md
-docs/superpowers/plans/2026-05-02-phase-3-plan.md
+docs/internal/superpowers/plans/2026-04-29-phase-0-bootstrap.md
+docs/internal/superpowers/plans/2026-04-30-phase-1-runtime.md
+docs/internal/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md
+docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md
 packages/channel-core/package.json
 packages/channel-core/src/adapter.ts
 packages/channel-core/src/capabilities.ts
@@ -393,13 +393,13 @@ packages/storage-sqlite/tsconfig.json
 codex
 I confirmed the requested branch/head is checked out. There are unrelated untracked review artifacts in the worktree, so I’ll ignore those and focus on the scoped files.
 exec
-/bin/zsh -lc 'nl -ba packages/storage-sqlite/src/database.ts' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/storage-sqlite/src/database.ts' in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'nl -ba packages/storage-sqlite/src/index.ts' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/storage-sqlite/src/index.ts' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	// T1.1 (Phase 3) — @codex-im/storage-sqlite package skeleton.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
      4	//
      5	// Skeleton: empty exports. Implementation lands in subsequent T-tasks
      6	// (each enters this package's src/ as its own commit):
@@ -456,7 +456,7 @@ exec
  succeeded in 0ms:
      1	// T2a + T2b (Phase 3) — openDatabase + standard pragmas + migration runner.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md
      4	//   §8.1   storage-sqlite/src/database.ts hosts openDatabase + migration
      5	//          runner (single file, by plan-of-record).
      6	//   §16.2  T2a (openDatabase + WAL + foreign-keys ON, landed)
@@ -610,13 +610,13 @@ exec
    154	}
 
 exec
-/bin/zsh -lc 'nl -ba packages/storage-sqlite/test/migrations.test.ts' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/storage-sqlite/test/migrations.test.ts' in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'nl -ba packages/storage-sqlite/test/database.test.ts' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/storage-sqlite/test/database.test.ts' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	// T2a (Phase 3) — pragma verification for openDatabase.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2a
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2a
      4	//
      5	// Single failing test target: openDatabase applies WAL + foreign_keys
      6	// pragmas. Two scenarios documented:
@@ -689,7 +689,7 @@ exec
  succeeded in 0ms:
      1	// T2b + T2c (Phase 3) — runMigrations apply + idempotency.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b/T2c
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b/T2c
      4	//
      5	// T2b — first-run apply: a migrations dir containing one `001-*.sql`
      6	//       file is applied on first run; both the migration's side-effect
@@ -842,12 +842,12 @@ exec
    153	});
 
 exec
-/bin/zsh -lc 'nl -ba packages/storage-sqlite/test/no-core-import.test.ts' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/storage-sqlite/test/no-core-import.test.ts' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	// T1.1 (Phase 3) — boundary test: storage-sqlite has NO runtime
      2	// imports from upper-layer packages.
      3	//
-     4	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
+     4	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
      5	//       + §7 D27 (storage-sqlite is below core; no upward deps)
      6	//
      7	// Mirrors `packages/channel-core/test/no-broker-import.test.ts`
@@ -923,12 +923,12 @@ exec
     77	});
 
 exec
-/bin/zsh -lc 'nl -ba packages/storage-sqlite/test/no-protocol-import.test.ts' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/storage-sqlite/test/no-protocol-import.test.ts' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	// T1.1 (Phase 3) — boundary test: storage-sqlite has NO imports
      2	// (runtime OR type-only) from protocol-side packages.
      3	//
-     4	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
+     4	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
      5	//       + §7 D27 (storage stores opaque strings, never protocol types)
      6	//
      7	// Mirrors `packages/channel-core/test/no-protocol-import.test.ts`
@@ -991,7 +991,7 @@ exec
     64	});
 
 exec
-/bin/zsh -lc 'nl -ba packages/channel-core/test/no-broker-import.test.ts' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/channel-core/test/no-broker-import.test.ts' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	// T18 (Phase 2) — boundary test: channel-core does NOT runtime-depend
      2	// on @codex-im/core or @codex-im/codex-runtime.
@@ -1056,7 +1056,7 @@ exec
     61	});
 
 exec
-/bin/zsh -lc 'nl -ba packages/channel-core/test/no-protocol-import.test.ts' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/channel-core/test/no-protocol-import.test.ts' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	// T18 (Phase 2) — boundary test: channel-core does NOT import from
      2	// @codex-im/app-server-client or @codex-im/protocol (neither runtime
@@ -1113,7 +1113,7 @@ exec
 codex
 The boundary tests are real filesystem-walk tests, not stubs. One thing already stands out: the storage test copied the Phase 2 runtime/type split, but the storage package’s own D27 comment says “NO upward import,” so I’m checking the plan wording before deciding severity.
 exec
-/bin/zsh -lc "rg -n \"D27|D38|D39|storage-sqlite|T1\\.1|T2a|T2b|T2c|T3a|T6d|callback_tokens|schema_version|raw AppServerClient|method literal|Computer Use|Lark|DingTalk\" docs/superpowers/plans/2026-05-02-phase-3-plan.md" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "rg -n \"D27|D38|D39|storage-sqlite|T1\\.1|T2a|T2b|T2c|T3a|T6d|callback_tokens|schema_version|raw AppServerClient|method literal|Computer Use|Lark|DingTalk\" docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 74:narrow scopes; nothing in this list pulls in CU, Lark, DingTalk, or
 104:   `@codex-im/storage-sqlite`) — chat→project→thread bindings stored
@@ -1213,9 +1213,9 @@ exec
 2857:- **CODEX (R4, on v2.3)**: APPROVE_WITH_CHANGES — 0 P0; 4 P1 (§17 dep graph omits T6.5/T6.6/T6.7 + T-D41a-d / T6.7 test (e) misnamed / T17.5 CAS fallback test mechanism wrong / callback_tokens.target naming inconsistency) + 2 P2 (T-D41c JSDoc lax assertion / footer rounds 1-3). Codex explicitly stated: "Implementation can begin after the P1 items above are patched". v2.4 (this revision) integrates all 4 P1 + 2 P2.
 
 exec
-/bin/zsh -lc 'nl -ba CLAUDE.md' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba CLAUDE.md' in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'nl -ba package.json' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba package.json' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	{
      2	  "name": "codex-im-rich-client",
@@ -1480,9 +1480,9 @@ exec
    214	1. Read:
    215	   - CLAUDE.md
    216	   - README.md
-   217	   - current phase plan under docs/superpowers/plans/
-   218	   - latest handoff under docs/handoffs/
-   219	   - docs/handoffs/phase1-live-status.md if present
+   217	   - current phase plan under docs/internal/superpowers/plans/
+   218	   - latest handoff under docs/internal/handoffs/
+   219	   - docs/internal/handoffs/phase1-live-status.md if present
    220	   - 09-ROADMAP.md
    221	   - TODOS.md
    222	
@@ -1516,7 +1516,7 @@ exec
    250	- Security and approval logic must fail closed.
 
 exec
-/bin/zsh -lc "rg -n \"@codex-im/(core|codex-runtime|app-server-client|channel-core|protocol|render|daemon|im-telegram)|AppServerClient\\.request|session/|approval|Computer Use|computer-use|Lark|DingTalk|token|secret|listen|createServer|Bun\\.serve|Deno\\.serve\" packages/storage-sqlite package.json" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "rg -n \"@codex-im/(core|codex-runtime|app-server-client|channel-core|protocol|render|daemon|im-telegram)|AppServerClient\\.request|session/|approval|Computer Use|computer-use|Lark|DingTalk|token|secret|listen|createServer|Bun\\.serve|Deno\\.serve\" packages/storage-sqlite package.json" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 packages/storage-sqlite/src/index.ts:14://   T5a  003-approvals migration + ApprovalRepository
 packages/storage-sqlite/src/index.ts:19://   T6d  007-callback_tokens migration + CallbackTokenRepository (D34)
@@ -1547,9 +1547,9 @@ packages/storage-sqlite/test/no-core-import.test.ts:34:  "@codex-im/daemon",
 packages/storage-sqlite/test/no-core-import.test.ts:35:  "@codex-im/im-telegram",
 
 exec
-/bin/zsh -lc "nl -ba docs/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '190,225p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '190,225p'" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc "nl -ba docs/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '417,450p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '417,450p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
    190	- G8 **Synthesized `turn_failed` events on transport-loss** (Phase 1
    191	  supervisor TODO; promoted P1→P0 per v2 Lake review). Without this,
@@ -1625,9 +1625,9 @@ exec
    450	      yet — subscriptions must be wired first;
 
 exec
-/bin/zsh -lc "nl -ba docs/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '588,675p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '588,675p'" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc "nl -ba docs/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '757,799p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '757,799p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
    588	- **D34 (v2 NEW)** — `callback_tokens` repository in
    589	  `@codex-im/storage-sqlite`. Schema:
@@ -1764,7 +1764,7 @@ exec
    799	    persistence to Phase 4 (G3 acceptance criterion would not be met).
 
 exec
-/bin/zsh -lc "nl -ba docs/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '1000,1035p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '1000,1035p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
   1000	      adapter.ts       # TelegramChannelAdapter implements ChannelAdapter
   1001	      callback-codec.ts # encode/decode callback_data
@@ -1804,7 +1804,7 @@ exec
   1035	  config/              # @codex-im/config (new) — or fold into daemon if small
 
 exec
-/bin/zsh -lc "nl -ba docs/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '1056,1070p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '1056,1070p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
   1056	  `codex-im projects list`, `codex-im bindings list`, `codex-im approvals
   1057	  list`. The `runtime send` smoke stays as-is.
@@ -1823,7 +1823,7 @@ exec
   1070	### 9.1 SQLite schema (Phase 3 subset of `08-DATA-MODEL.md`)
 
 exec
-/bin/zsh -lc "nl -ba docs/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '1076,1118p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '1076,1118p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
   1076	shapes from the doc.
   1077	
@@ -1870,7 +1870,7 @@ exec
   1118	
 
 exec
-/bin/zsh -lc "nl -ba docs/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '1932,2010p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md | sed -n '1932,2010p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
   1932	
   1933	### 16.2 Storage foundation (T1.0–T6.x) — v2 split
@@ -1953,7 +1953,7 @@ exec
   2010	  bytes match.
 
 exec
-/bin/zsh -lc "git show --name-status --format='%h %s' 3ada728" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "git show --name-status --format='%h %s' 3ada728" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-vnsAk8Sx' (errno=Operation not permitted)
@@ -1970,9 +1970,9 @@ A	packages/storage-sqlite/tsconfig.json
 M	pnpm-lock.yaml
 
 exec
-/bin/zsh -lc "git show --name-status --format='%h %s' f6972de" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "git show --name-status --format='%h %s' f6972de" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc "git show --name-status --format='%h %s' 826fdfc" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "git show --name-status --format='%h %s' 826fdfc" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-j4MWTpOB' (errno=Operation not permitted)
@@ -2000,7 +2000,7 @@ D	packages/storage-sqlite/test/skeleton.test.ts
 M	pnpm-lock.yaml
 
 exec
-/bin/zsh -lc "git show --name-status --format='%h %s' d891960" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "git show --name-status --format='%h %s' d891960" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-jGjexAcG' (errno=Operation not permitted)
@@ -2011,7 +2011,7 @@ d891960 test(storage-sqlite): T2c runMigrations idempotency
 M	packages/storage-sqlite/test/migrations.test.ts
 
 exec
-/bin/zsh -lc 'git show 3ada728:packages/storage-sqlite/src/index.ts | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show 3ada728:packages/storage-sqlite/src/index.ts | nl -ba' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-5M1zQwv5' (errno=Operation not permitted)
@@ -2019,7 +2019,7 @@ git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEM
 git: error: couldn't create cache file '/tmp/xcrun_db-9iB3VyI8' (errno=Operation not permitted)
      1	// T1.1 (Phase 3) — @codex-im/storage-sqlite package skeleton.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
      4	//
      5	// Skeleton: empty exports. Implementation lands in subsequent T-tasks
      6	// (each enters this package's src/ as its own commit):
@@ -2068,9 +2068,9 @@ git: error: couldn't create cache file '/tmp/xcrun_db-9iB3VyI8' (errno=Operation
     49	export {};
 
 exec
-/bin/zsh -lc 'git show 3ada728:packages/storage-sqlite/test/no-core-import.test.ts | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show 3ada728:packages/storage-sqlite/test/no-core-import.test.ts | nl -ba' in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'git show 3ada728:packages/storage-sqlite/package.json | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show 3ada728:packages/storage-sqlite/package.json | nl -ba' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-CIYRIpjG' (errno=Operation not permitted)
@@ -2096,7 +2096,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-HZH0W6z9' (errno=Operation
      1	// T1.1 (Phase 3) — boundary test: storage-sqlite has NO runtime
      2	// imports from upper-layer packages.
      3	//
-     4	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
+     4	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
      5	//       + §7 D27 (storage-sqlite is below core; no upward deps)
      6	//
      7	// Mirrors `packages/channel-core/test/no-broker-import.test.ts`
@@ -2172,7 +2172,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-HZH0W6z9' (errno=Operation
     77	});
 
 exec
-/bin/zsh -lc 'git show 3ada728:packages/storage-sqlite/test/no-protocol-import.test.ts | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show 3ada728:packages/storage-sqlite/test/no-protocol-import.test.ts | nl -ba' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-CioOnDdE' (errno=Operation not permitted)
@@ -2181,7 +2181,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-PNJ9xZyR' (errno=Operation
      1	// T1.1 (Phase 3) — boundary test: storage-sqlite has NO imports
      2	// (runtime OR type-only) from protocol-side packages.
      3	//
-     4	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
+     4	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
      5	//       + §7 D27 (storage stores opaque strings, never protocol types)
      6	//
      7	// Mirrors `packages/channel-core/test/no-protocol-import.test.ts`
@@ -2244,9 +2244,9 @@ git: error: couldn't create cache file '/tmp/xcrun_db-PNJ9xZyR' (errno=Operation
     64	});
 
 exec
-/bin/zsh -lc 'git show 826fdfc:packages/storage-sqlite/test/database.test.ts | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show 826fdfc:packages/storage-sqlite/test/database.test.ts | nl -ba' in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'git show 826fdfc:packages/storage-sqlite/src/database.ts | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show 826fdfc:packages/storage-sqlite/src/database.ts | nl -ba' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-4SrpHlRr' (errno=Operation not permitted)
@@ -2254,7 +2254,7 @@ git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEM
 git: error: couldn't create cache file '/tmp/xcrun_db-FhiiRQj3' (errno=Operation not permitted)
      1	// T2a (Phase 3) — pragma verification for openDatabase.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2a
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2a
      4	//
      5	// Single failing test target: openDatabase applies WAL + foreign_keys
      6	// pragmas. Two scenarios documented:
@@ -2331,7 +2331,7 @@ git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEM
 git: error: couldn't create cache file '/tmp/xcrun_db-qWrC8JWN' (errno=Operation not permitted)
      1	// T2a (Phase 3) — openDatabase + standard pragmas.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2a
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2a
      4	//       + §7 D38 (sync write-through; better-sqlite3 is sync by design)
      5	//       + §7 D39 (preflight-required; better-sqlite3 verified at T1.0)
      6	//
@@ -2387,7 +2387,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-qWrC8JWN' (errno=Operation
     56	}
 
 exec
-/bin/zsh -lc 'git show 826fdfc:packages/storage-sqlite/src/index.ts | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show 826fdfc:packages/storage-sqlite/src/index.ts | nl -ba' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-qrW9RuEY' (errno=Operation not permitted)
@@ -2395,7 +2395,7 @@ git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEM
 git: error: couldn't create cache file '/tmp/xcrun_db-r2FwyJ7Z' (errno=Operation not permitted)
      1	// T1.1 (Phase 3) — @codex-im/storage-sqlite package skeleton.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T1.1
      4	//
      5	// Skeleton: empty exports. Implementation lands in subsequent T-tasks
      6	// (each enters this package's src/ as its own commit):
@@ -2445,7 +2445,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-r2FwyJ7Z' (errno=Operation
     50	export { openDatabase, type DatabaseHandle } from "./database.js";
 
 exec
-/bin/zsh -lc "git show 826fdfc:package.json | nl -ba | sed -n '10,18p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "git show 826fdfc:package.json | nl -ba | sed -n '10,18p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-s4uSWFw4' (errno=Operation not permitted)
@@ -2462,9 +2462,9 @@ git: error: couldn't create cache file '/tmp/xcrun_db-rkbknP19' (errno=Operation
     18	    "test": "vitest run --config vitest.config.ts --project unit --project contract",
 
 exec
-/bin/zsh -lc 'git show 826fdfc:packages/storage-sqlite/package.json | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show 826fdfc:packages/storage-sqlite/package.json | nl -ba' in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc "git show f6972de:packages/storage-sqlite/src/database.ts | nl -ba | sed -n '70,154p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "git show f6972de:packages/storage-sqlite/src/database.ts | nl -ba | sed -n '70,154p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-EvavrfxX' (errno=Operation not permitted)
@@ -2583,7 +2583,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-1QeOQnfn' (errno=Operation
    154	}
 
 exec
-/bin/zsh -lc 'git show f6972de:packages/storage-sqlite/test/migrations.test.ts | nl -ba' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git show f6972de:packages/storage-sqlite/test/migrations.test.ts | nl -ba' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-htE0IgUx' (errno=Operation not permitted)
@@ -2591,7 +2591,7 @@ git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEM
 git: error: couldn't create cache file '/tmp/xcrun_db-JqARvHit' (errno=Operation not permitted)
      1	// T2b (Phase 3) — first-run apply for runMigrations.
      2	//
-     3	// Plan: docs/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b
+     3	// Plan: docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md §16.2 T2b
      4	//
      5	// One failing test target: a migrations dir containing one `001-*.sql`
      6	// file is applied on first run; both the migration's side-effect (a
@@ -2684,7 +2684,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-JqARvHit' (errno=Operation
     93	});
 
 exec
-/bin/zsh -lc "git show d891960:packages/storage-sqlite/test/migrations.test.ts | nl -ba | sed -n '100,153p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "git show d891960:packages/storage-sqlite/test/migrations.test.ts | nl -ba | sed -n '100,153p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-TpETLQW5' (errno=Operation not permitted)
@@ -2748,7 +2748,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-SptED1GJ' (errno=Operation
 codex
 For T2b/T2c, the runner shape matches the planned file placement and the tests exercise first-run, filtering, ordering, and idempotency. I’m checking edge conditions now: SQL invalidity, import scans, and whether there is any hidden protocol/client/listener leakage.
 exec
-/bin/zsh -lc 'rg -n "''^'"\\s*import\\b|"'^'"\\s*export\\b.*from|AppServerClient\\.request|thread/start|turn/start|review/start|item/fileChange/requestApproval|applyPatchApproval|account/chatgptAuthTokens/refresh|createServer|listen\\(|Bun\\.serve|Deno\\.serve|Computer Use|Lark|DingTalk|secret|token\" packages/storage-sqlite/src packages/storage-sqlite/test package.json" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'rg -n "''^'"\\s*import\\b|"'^'"\\s*export\\b.*from|AppServerClient\\.request|thread/start|turn/start|review/start|item/fileChange/requestApproval|applyPatchApproval|account/chatgptAuthTokens/refresh|createServer|listen\\(|Bun\\.serve|Deno\\.serve|Computer Use|Lark|DingTalk|secret|token\" packages/storage-sqlite/src packages/storage-sqlite/test package.json" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 packages/storage-sqlite/test/no-protocol-import.test.ts:22:import { readFileSync, readdirSync, statSync } from "node:fs";
 packages/storage-sqlite/test/no-protocol-import.test.ts:23:import { join } from "node:path";
@@ -2775,13 +2775,13 @@ packages/storage-sqlite/src/database.ts:32:import { join } from "node:path";
 packages/storage-sqlite/src/database.ts:33:import Database from "better-sqlite3";
 
 exec
-/bin/zsh -lc 'find packages/storage-sqlite/src -type f -maxdepth 4 -print | sort' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'find packages/storage-sqlite/src -type f -maxdepth 4 -print | sort' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 packages/storage-sqlite/src/database.ts
 packages/storage-sqlite/src/index.ts
 
 exec
-/bin/zsh -lc 'rg -n "better-sqlite3|kysely|onlyBuiltDependencies|@types/better-sqlite3" package.json packages/storage-sqlite/package.json pnpm-lock.yaml' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'rg -n "better-sqlite3|kysely|onlyBuiltDependencies|@types/better-sqlite3" package.json packages/storage-sqlite/package.json pnpm-lock.yaml' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 package.json:15:    "onlyBuiltDependencies": ["@biomejs/biome", "better-sqlite3", "esbuild"]
 packages/storage-sqlite/package.json:14:    "better-sqlite3": "^12.9.0",
@@ -2798,7 +2798,7 @@ pnpm-lock.yaml:1658:  better-sqlite3@12.9.0:
 pnpm-lock.yaml:1846:  kysely@0.28.16: {}
 
 exec
-/bin/zsh -lc "node -e 'const Database=require(\"better-sqlite3\"); const db=new Database(\":memory:\"); try { db.exec(\"THIS IS NOT VALID SQL ;;;\"); console.log(\"accepted\"); } catch (e) { console.log(e.constructor.name + \": \" + e.message); } finally { db.close(); }'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "node -e 'const Database=require(\"better-sqlite3\"); const db=new Database(\":memory:\"); try { db.exec(\"THIS IS NOT VALID SQL ;;;\"); console.log(\"accepted\"); } catch (e) { console.log(e.constructor.name + \": \" + e.message); } finally { db.close(); }'" in <home>/projects/codex-im-rich-client
  exited 1 in 0ms:
 node:internal/modules/cjs/loader:1458
   throw err;
@@ -2806,7 +2806,7 @@ node:internal/modules/cjs/loader:1458
 
 Error: Cannot find module 'better-sqlite3'
 Require stack:
-- /Users/jackwu/projects/codex-im-rich-client/[eval]
+- <repo>/[eval]
     at Module._resolveFilename (node:internal/modules/cjs/loader:1455:15)
     at defaultResolveImpl (node:internal/modules/cjs/loader:1065:19)
     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1070:22)
@@ -2818,13 +2818,13 @@ Require stack:
     at runScriptInThisContext (node:internal/vm:219:10)
     at node:internal/process/execution:451:12 {
   code: 'MODULE_NOT_FOUND',
-  requireStack: [ '/Users/jackwu/projects/codex-im-rich-client/[eval]' ]
+  requireStack: [ '<repo>/[eval]' ]
 }
 
 Node.js v25.6.1
 
 exec
-/bin/zsh -lc "command -v sqlite3 && sqlite3 :memory: 'THIS IS NOT VALID SQL ;;;'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "command -v sqlite3 && sqlite3 :memory: 'THIS IS NOT VALID SQL ;;;'" in <home>/projects/codex-im-rich-client
  exited 1 in 0ms:
 /usr/bin/sqlite3
 Error: in prepare, near "THIS": syntax error
@@ -2832,9 +2832,9 @@ Error: in prepare, near "THIS": syntax error
   ^--- error here
 
 exec
-/bin/zsh -lc "find . -maxdepth 3 -type d -name 'better-sqlite3' -print" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "find . -maxdepth 3 -type d -name 'better-sqlite3' -print" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'ls -la node_modules 2>/dev/null | head -40' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'ls -la node_modules 2>/dev/null | head -40' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
  succeeded in 0ms:
 total 40
@@ -2855,16 +2855,16 @@ lrwxr-xr-x@   1 jackwu  staff     65 Apr 30 13:17 vite -> .pnpm/vite@6.4.2_@type
 lrwxr-xr-x@   1 jackwu  staff    127 Apr 30 13:17 vitest -> .pnpm/vitest@4.1.5_@types+node@24.12.2_@vitest+coverage-v8@4.1.5_vite@6.4.2_@types+node@24.12.2_tsx@4.21.0_/node_modules/vitest
 
 exec
-/bin/zsh -lc 'pnpm -v' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'pnpm -v' in <home>/projects/codex-im-rich-client
  succeeded in 173ms:
 10.33.2
 
 exec
-/bin/zsh -lc "nl -ba tsconfig.test.json | sed -n '1,180p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba tsconfig.test.json | sed -n '1,180p'" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'nl -ba packages/channel-core/package.json' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba packages/channel-core/package.json' in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc "nl -ba vitest.config.ts | sed -n '1,220p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba vitest.config.ts | sed -n '1,220p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	{
      2	  "name": "@codex-im/channel-core",
@@ -2952,7 +2952,7 @@ exec
     55	});
 
 exec
-/bin/zsh -lc 'rg -n "storage-sqlite|channel-core|include" vitest.config.ts tsconfig.test.json pnpm-workspace.yaml' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'rg -n "storage-sqlite|channel-core|include" vitest.config.ts tsconfig.test.json pnpm-workspace.yaml' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 tsconfig.test.json:9:  "include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts"],
 vitest.config.ts:9://   cli-smoke  — explicit-only via `pnpm test:cli-smoke`. NOT included in
@@ -2961,7 +2961,7 @@ vitest.config.ts:43:          include: ["packages/testkit/test/fixture-replay.te
 vitest.config.ts:50:          include: ["packages/cli/test/smoke-*.test.ts"],
 
 exec
-/bin/zsh -lc 'nl -ba tsconfig.base.json' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'nl -ba tsconfig.base.json' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	{
      2	  "compilerOptions": {
@@ -2983,21 +2983,21 @@ exec
     18	}
 
 exec
-/bin/zsh -lc "rg -n \"schema_version|001-init|CREATE TABLE IF NOT EXISTS schema_version\" . --glob '"'!node_modules/**'"' --glob '"'!docs/phase-3/impl-t1-t2c-codex-review*'"'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "rg -n \"schema_version|001-init|CREATE TABLE IF NOT EXISTS schema_version\" . --glob '"'!node_modules/**'"' --glob '"'!docs/internal/phase-3/impl-t1-t2c-codex-review*'"'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
-./docs/phase-3/plan-v1-codex-review.stderr:927:   392	        001-init.sql
-./docs/phase-3/plan-v1-codex-review.stderr:1377:   838	- **T3** — Migrations 001 (tables: schema_version) + test that
-./docs/phase-3/plan-v2.3-codex-round4.stderr:1278:  1912	  migrations directory + applies + records in `schema_version` table.
-./docs/phase-3/plan-v2.3-codex-round4.stderr:1282:  1916	- **T3a** — Migration 001 `schema_version` (records each migration
-./docs/phase-3/plan-v2.3-codex-round4.stderr:4899:   976	        001-init.sql
-./docs/phase-3/plan-v2.1-codex-round2.stderr:1804:  1598	  migrations directory + applies + records in `schema_version` table.
-./docs/phase-3/plan-v2.1-codex-round2.stderr:1808:  1602	- **T3a** — Migration 001 `schema_version` (records each migration
-./docs/phase-3/plan-v2.1-codex-round2.stderr:4810:   766	        001-init.sql
-./docs/phase-3/plan-v2.2-codex-round3.stderr:2391: 1836:  migrations directory + applies + records in `schema_version` table.
-./docs/phase-3/plan-v2.2-codex-round3.stderr:2395: 1840:- **T3a** — Migration 001 `schema_version` (records each migration
-./docs/superpowers/plans/2026-05-02-phase-3-plan.md:1019:        001-init.sql
-./docs/superpowers/plans/2026-05-02-phase-3-plan.md:1981:  migrations directory + applies + records in `schema_version` table.
-./docs/superpowers/plans/2026-05-02-phase-3-plan.md:1985:- **T3a** — Migration 001 `schema_version` (records each migration
+./docs/internal/phase-3/plan-v1-codex-review.stderr:927:   392	        001-init.sql
+./docs/internal/phase-3/plan-v1-codex-review.stderr:1377:   838	- **T3** — Migrations 001 (tables: schema_version) + test that
+./docs/internal/phase-3/plan-v2.3-codex-round4.stderr:1278:  1912	  migrations directory + applies + records in `schema_version` table.
+./docs/internal/phase-3/plan-v2.3-codex-round4.stderr:1282:  1916	- **T3a** — Migration 001 `schema_version` (records each migration
+./docs/internal/phase-3/plan-v2.3-codex-round4.stderr:4899:   976	        001-init.sql
+./docs/internal/phase-3/plan-v2.1-codex-round2.stderr:1804:  1598	  migrations directory + applies + records in `schema_version` table.
+./docs/internal/phase-3/plan-v2.1-codex-round2.stderr:1808:  1602	- **T3a** — Migration 001 `schema_version` (records each migration
+./docs/internal/phase-3/plan-v2.1-codex-round2.stderr:4810:   766	        001-init.sql
+./docs/internal/phase-3/plan-v2.2-codex-round3.stderr:2391: 1836:  migrations directory + applies + records in `schema_version` table.
+./docs/internal/phase-3/plan-v2.2-codex-round3.stderr:2395: 1840:- **T3a** — Migration 001 `schema_version` (records each migration
+./docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md:1019:        001-init.sql
+./docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md:1981:  migrations directory + applies + records in `schema_version` table.
+./docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md:1985:- **T3a** — Migration 001 `schema_version` (records each migration
 ./packages/storage-sqlite/src/index.ts:10://   T3a  001-init migration (schema_version table)
 ./packages/storage-sqlite/src/database.ts:7://          T2b (runMigrations: walk dir, apply, record in schema_version)
 ./packages/storage-sqlite/src/database.ts:9://          T3a (001-init.sql migration that owns schema_version DDL)
@@ -3035,9 +3035,9 @@ exec
 ./packages/storage-sqlite/test/migrations.test.ts:142:      expect(allRows).toEqual([{ version: "001-init.sql", applied_at: firstRow.applied_at }]);
 
 exec
-/bin/zsh -lc "rg -n \"\\bany\\b| as \\{| as any|unknown\" packages/storage-sqlite/src packages/storage-sqlite/test" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "rg -n \"\\bany\\b| as \\{| as any|unknown\" packages/storage-sqlite/src packages/storage-sqlite/test" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc 'find packages/storage-sqlite -maxdepth 3 -type f -print | sort' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'find packages/storage-sqlite -maxdepth 3 -type f -print | sort' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 packages/storage-sqlite/test/no-protocol-import.test.ts:9:// ServerRequest, ApprovalUiAction, or any other protocol/core type:
 packages/storage-sqlite/src/database.ts:29:// atomic CAS expectations. No `await` needed for any DB op.
@@ -3065,7 +3065,7 @@ packages/storage-sqlite/tsconfig.json
 packages/storage-sqlite/tsconfig.tsbuildinfo
 
 exec
-/bin/zsh -lc 'git ls-files packages/storage-sqlite | sort' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git ls-files packages/storage-sqlite | sort' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-6q3t8v5O' (errno=Operation not permitted)
@@ -3081,7 +3081,7 @@ packages/storage-sqlite/test/no-protocol-import.test.ts
 packages/storage-sqlite/tsconfig.json
 
 exec
-/bin/zsh -lc 'git status --ignored --short packages/storage-sqlite' in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc 'git status --ignored --short packages/storage-sqlite' in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
 git: error: couldn't create cache file '/tmp/xcrun_db-XXSgahO5' (errno=Operation not permitted)
@@ -3092,7 +3092,7 @@ git: error: couldn't create cache file '/tmp/xcrun_db-zsNPo65A' (errno=Operation
 !! packages/storage-sqlite/tsconfig.tsbuildinfo
 
 exec
-/bin/zsh -lc "nl -ba .gitignore | sed -n '1,160p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba .gitignore | sed -n '1,160p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
      1	node_modules/
      2	dist/
@@ -3105,7 +3105,7 @@ exec
      9	*.tsbuildinfo
 
 exec
-/bin/zsh -lc "rg -n \"dist|tsbuildinfo\" .gitignore packages/storage-sqlite -g '"'!node_modules/**'"'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "rg -n \"dist|tsbuildinfo\" .gitignore packages/storage-sqlite -g '"'!node_modules/**'"'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
 .gitignore:2:dist/
 .gitignore:6:packages/*/dist/
@@ -3113,13 +3113,13 @@ exec
 packages/storage-sqlite/tsconfig.json:4:    "outDir": "dist",
 
 exec
-/bin/zsh -lc "nl -ba pnpm-lock.yaml | sed -n '936,940p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba pnpm-lock.yaml | sed -n '936,940p'" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc "nl -ba pnpm-lock.yaml | sed -n '136,154p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba pnpm-lock.yaml | sed -n '136,154p'" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc "nl -ba pnpm-lock.yaml | sed -n '1654,1668p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba pnpm-lock.yaml | sed -n '1654,1668p'" in <home>/projects/codex-im-rich-client
 exec
-/bin/zsh -lc "nl -ba pnpm-lock.yaml | sed -n '780,790p'" in /Users/jackwu/projects/codex-im-rich-client
+/bin/zsh -lc "nl -ba pnpm-lock.yaml | sed -n '780,790p'" in <home>/projects/codex-im-rich-client
  succeeded in 0ms:
    936	    resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
    937	
@@ -3192,7 +3192,7 @@ P0 (blocks T3a start):
   - none
 
 P1 (required before T3a):
-  - [packages/storage-sqlite/test/no-core-import.test.ts:10] D27 enforcement is too weak: this test explicitly allows `import type` from upper-layer packages and skips them at [packages/storage-sqlite/test/no-core-import.test.ts:63], even though storage’s own boundary says “NO upward import” for the full list [packages/storage-sqlite/src/index.ts:23] and T1.1 requires no core/codex-runtime/app-server imports [docs/superpowers/plans/2026-05-02-phase-3-plan.md:1939]. Also, both boundary tests only match lines starting with `import`, so `export ... from` and multiline imports can slip [packages/storage-sqlite/test/no-core-import.test.ts:61] [packages/storage-sqlite/test/no-protocol-import.test.ts:49]. Fix by using one forbidden-all predicate over import/export declarations for all 8 packages, with type-only imports forbidden.
+  - [packages/storage-sqlite/test/no-core-import.test.ts:10] D27 enforcement is too weak: this test explicitly allows `import type` from upper-layer packages and skips them at [packages/storage-sqlite/test/no-core-import.test.ts:63], even though storage’s own boundary says “NO upward import” for the full list [packages/storage-sqlite/src/index.ts:23] and T1.1 requires no core/codex-runtime/app-server imports [docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md:1939]. Also, both boundary tests only match lines starting with `import`, so `export ... from` and multiline imports can slip [packages/storage-sqlite/test/no-core-import.test.ts:61] [packages/storage-sqlite/test/no-protocol-import.test.ts:49]. Fix by using one forbidden-all predicate over import/export declarations for all 8 packages, with type-only imports forbidden.
 
 P2 (nice-to-have):
   - [packages/storage-sqlite/test/migrations.test.ts:39] Add a rollback test for a multi-statement migration where statement 2 fails, because the source promises failed migrations leave both schema and `schema_version` untouched [packages/storage-sqlite/src/database.ts:103] [packages/storage-sqlite/src/database.ts:137].
@@ -3200,7 +3200,7 @@ P2 (nice-to-have):
 
 NOTES:
   - Boundary-test fidelity vs channel-core reference: mechanically faithful, but storage’s boundary is stricter than channel-core’s F13 split; allowing type-only upper-layer imports is wrong for D27 [packages/channel-core/test/no-broker-import.test.ts:9] [packages/storage-sqlite/test/no-core-import.test.ts:10].
-  - Forward-compat for T3a is acceptable if `001-init.sql` declares exactly the bootstrap shape: `version TEXT PRIMARY KEY NOT NULL`, `applied_at INTEGER NOT NULL` [packages/storage-sqlite/src/database.ts:88]. T6d is unaffected; runner only cares about filenames and migration SQL execution, not table shape [packages/storage-sqlite/src/database.ts:101] [docs/superpowers/plans/2026-05-02-phase-3-plan.md:1087].
+  - Forward-compat for T3a is acceptable if `001-init.sql` declares exactly the bootstrap shape: `version TEXT PRIMARY KEY NOT NULL`, `applied_at INTEGER NOT NULL` [packages/storage-sqlite/src/database.ts:88]. T6d is unaffected; runner only cares about filenames and migration SQL execution, not table shape [packages/storage-sqlite/src/database.ts:101] [docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md:1087].
   - T2c’s corrupt-file proof is scoped correctly to “does not re-execute the migration body,” not “no SQL at all” [packages/storage-sqlite/test/migrations.test.ts:111] [packages/storage-sqlite/test/migrations.test.ts:131].
   - Pace looks right: T2a/T2b added small extra tests, but they remain within the same behavior surface [packages/storage-sqlite/test/database.test.ts:31] [packages/storage-sqlite/test/migrations.test.ts:60].
   - T3a can begin after the D27 predicate is tightened.

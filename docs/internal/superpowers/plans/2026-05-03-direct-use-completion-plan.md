@@ -31,12 +31,12 @@ state.
 
 Canonical anchors:
 
-- Plan: `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`
-- Live status: `docs/handoffs/direct-use-live-status.md`
+- Plan: `docs/internal/superpowers/plans/2026-05-03-direct-use-completion-plan.md`
+- Live status: `docs/internal/handoffs/direct-use-live-status.md`
 - Prior release candidate handoff:
-  `docs/handoffs/2026-05-03-production-readiness.md`
+  `docs/internal/handoffs/2026-05-03-production-readiness.md`
 - Prior live IM acceptance status:
-  `docs/handoffs/live-im-acceptance-status.md`
+  `docs/internal/handoffs/live-im-acceptance-status.md`
 - Linear: create a new parent/milestone named
   `Direct Use Completion / Phase 8 - Production usability hardening` before
   tracking implementation issues. Do not attach this work as hidden tail work
@@ -233,7 +233,7 @@ Files:
 - `package.json`
 - `packages/cli/README.md`
 - `docs/ops/production-launch.md`
-- `docs/ops/live-im-acceptance.md`
+- `docs/internal/ops-smoke/live-im-acceptance.md`
 
 Change:
 
@@ -265,9 +265,9 @@ Acceptance:
 
 Files:
 
-- `docs/handoffs/YYYY-MM-DD-mac-mini-soak.md`
-- `docs/handoffs/live-im-acceptance-status.md`
-- `docs/handoffs/direct-use-live-status.md`
+- `docs/internal/handoffs/YYYY-MM-DD-mac-mini-soak.md`
+- `docs/internal/handoffs/live-im-acceptance-status.md`
+- `docs/internal/handoffs/direct-use-live-status.md`
 - Linear parent tracker
 
 Change:
@@ -513,7 +513,7 @@ After Track A makes the production path truthful:
 
 - run Lark live dry-run and live send with redacted evidence;
 - run DingTalk live dry-run and bounded Stream smoke with redacted evidence;
-- update `docs/handoffs/live-im-acceptance-status.md`;
+- update `docs/internal/handoffs/live-im-acceptance-status.md`;
 - update Linear parent tracker.
 
 This work is credential-gated, not architecture-gated.
@@ -524,7 +524,7 @@ This work is credential-gated, not architecture-gated.
 
 1. Create Linear parent/milestone:
    `Direct Use Completion / Phase 8 - Production usability hardening`.
-2. Add `docs/handoffs/direct-use-live-status.md`.
+2. Add `docs/internal/handoffs/direct-use-live-status.md`.
 3. Apply GPT Pro P0 plan edits.
 4. Commit docs-only plan v2.
 

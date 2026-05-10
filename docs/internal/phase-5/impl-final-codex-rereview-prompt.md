@@ -7,15 +7,15 @@ Review scope:
 - Base phase tag: `phase-4-lark-adapter-complete`
 - Current HEAD: `4a308d2`
 - Original final review report:
-  `docs/phase-5/impl-final-codex-review.md`
+  `docs/internal/phase-5/impl-final-codex-review.md`
 - Blocker fix commit: `4a308d2 fix(im-dingtalk): JAC-90 close final review blockers`
 
 Source-of-truth docs:
 
 - `AGENTS.md`
-- `docs/handoffs/phase5-live-status.md`
-- `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`
-- `docs/phase-5/dingtalk-target-verification.md`
+- `docs/internal/handoffs/phase5-live-status.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`
+- `docs/internal/phase-5/dingtalk-target-verification.md`
 
 Original review verdict:
 
@@ -37,7 +37,7 @@ What changed in `4a308d2`:
   callback-token/messageRef validation, because approval replay is not
   adapter-local state.
 - Redacted platform ids from `InboundMessage.raw` and `InboundAction.raw`.
-- Updated `docs/phase-5/dingtalk-target-verification.md` with implemented target,
+- Updated `docs/internal/phase-5/dingtalk-target-verification.md` with implemented target,
   messageRef, replay, ack, and raw-field evidence.
 
 Fresh verification already run after the fix:

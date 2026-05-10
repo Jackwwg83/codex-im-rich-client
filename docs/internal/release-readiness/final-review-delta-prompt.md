@@ -12,9 +12,9 @@ Review target:
 
 Prior review chain:
 
-- `docs/release-readiness/final-review.md`: `APPROVE_WITH_CHANGES`, one P1
+- `docs/internal/release-readiness/final-review.md`: `APPROVE_WITH_CHANGES`, one P1
   about ambient live-smoke env inheritance.
-- `docs/release-readiness/final-review-followup.md`: `GO_WITH_LOW_NITS`,
+- `docs/internal/release-readiness/final-review-followup.md`: `GO_WITH_LOW_NITS`,
   confirms the P1 is fixed and JAC-171 may proceed to handoff/tag from
   reviewed HEAD `16d11ca`.
 

@@ -5,7 +5,7 @@ Generated: 2026-05-03
 ## 1. Closeout
 
 - **Closed phase:** Phase 6 - explicit Computer Use flow.
-- **Plan:** `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
 - **Base tag:** `phase-5-dingtalk-adapter-complete`.
 - **Release tag:** `phase-6-computer-use-complete`.
 - **Version:** `0.1.0-phase6`.
@@ -48,8 +48,8 @@ Generated: 2026-05-03
 - `43a11e3` closed the remaining P3 nit by preserving core default deny apps
   and sensitive keywords when daemon receives partial Computer Use config.
 - Review reports:
-  - `docs/phase-6/impl-final-codex-review.md`
-  - `docs/phase-6/impl-final-codex-rereview.md`
+  - `docs/internal/phase-6/impl-final-codex-review.md`
+  - `docs/internal/phase-6/impl-final-codex-rereview.md`
 
 ## 4. Gates
 
@@ -103,7 +103,7 @@ Recommended Phase 7 scope candidates:
 Recommended first task:
 
 1. Open or create the Phase 7 Linear parent.
-2. Create a Phase 7 plan under `docs/superpowers/plans/`.
+2. Create a Phase 7 plan under `docs/internal/superpowers/plans/`.
 3. Split implementation into reviewable children before writing product code.
 4. Ask Codex/GPT Pro for plan review before crossing into implementation.
 

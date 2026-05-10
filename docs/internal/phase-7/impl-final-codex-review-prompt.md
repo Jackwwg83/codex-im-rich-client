@@ -7,13 +7,13 @@ HEAD on branch `codex/phase-7-planning`.
 ## Source Of Truth
 
 - Project rules: `AGENTS.md`, `CLAUDE.md`
-- Phase 7 plan: `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
-- Phase 7 live status: `docs/handoffs/phase7-live-status.md`
-- Phase 6 -> Phase 7 handoff: `docs/handoffs/2026-05-03-phase6-to-phase7.md`
-- Capability matrix: `docs/phase-7/capability-matrix.md`
+- Phase 7 plan: `docs/internal/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
+- Phase 7 live status: `docs/internal/handoffs/phase7-live-status.md`
+- Phase 6 -> Phase 7 handoff: `docs/internal/handoffs/2026-05-03-phase6-to-phase7.md`
+- Capability matrix: `docs/internal/phase-7/capability-matrix.md`
 - Feasibility spikes:
-  - `docs/phase-7/satori-koishi-feasibility.md`
-  - `docs/phase-7/chat-sdk-feasibility.md`
+  - `docs/internal/phase-7/satori-koishi-feasibility.md`
+  - `docs/internal/phase-7/chat-sdk-feasibility.md`
 
 ## Review Scope
 

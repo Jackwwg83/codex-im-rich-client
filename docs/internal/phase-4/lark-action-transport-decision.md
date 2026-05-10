@@ -1,13 +1,13 @@
 # Phase 4 Decision — Lark Action Transport
 
 Generated: 2026-05-02
-Plan: `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
+Plan: `docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
 
 ## Decision
 
 Use Feishu/Lark long connection mode with the newer `card.action.trigger` callback for Phase 4 approval actions.
 
-JAC-148 T0a records the default implementation target as Feishu enterprise custom app, long connection subscription, `card.action.trigger`, and original message references from the Lark card action event. See `docs/phase-4/lark-target-verification.md`.
+JAC-148 T0a records the default implementation target as Feishu enterprise custom app, long connection subscription, `card.action.trigger`, and original message references from the Lark card action event. See `docs/internal/phase-4/lark-target-verification.md`.
 
 Do not use the legacy "message card interaction" callback. Do not add a public webhook listener by default.
 

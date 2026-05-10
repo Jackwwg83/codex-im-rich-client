@@ -17,10 +17,10 @@ IM Adapter -> ChannelAdapter -> Core -> CodexRuntime -> AppServerClient -> codex
 
 ## Source Of Truth
 
-- `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`
-- `docs/handoffs/phase5-live-status.md`
-- `docs/phase-5/dingtalk-target-verification.md`
-- `docs/ops/dingtalk-live-smoke.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`
+- `docs/internal/handoffs/phase5-live-status.md`
+- `docs/internal/phase-5/dingtalk-target-verification.md`
+- `docs/internal/ops-smoke/dingtalk-live-smoke.md`
 - `06-IM-ADAPTERS.md`
 - `07-SECURITY-AND-COMPUTER-USE.md`
 - `08-DATA-MODEL.md`

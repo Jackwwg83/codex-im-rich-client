@@ -15,7 +15,7 @@ Telegram (Phase 3) → Lark/DingTalk (Phase 4/5) → Computer Use (Phase 6).
 **Round 1 on plan v1** (`b60a67d`):
 - Codex outside-voice → REJECT, 6 P0 + 6 P1 + 3 P2.
 - gstack /plan-eng-review → APPROVE_WITH_CHANGES, 12 issues.
-- See `docs/phase-3/plan-v1-codex-review.md`.
+- See `docs/internal/phase-3/plan-v1-codex-review.md`.
 
 **v1 → v2** (`ff1176b`): all 6 round-1 P0s + 12+ P1s integrated.
 
@@ -25,7 +25,7 @@ v2 → v2.1 (`4edfd81`) integrated round-2a P1s + 2 P2s; 2 P2s deferred.
 **Round 2b (codex) on plan v2.1**: REJECT, 1 P0 + 5 P1 + 3 P2.
 Codex confirmed all earlier-round P0s genuinely fixed but flagged
 new defects v2.1's edits introduced. See
-`docs/phase-3/plan-v2.1-codex-round2.md`.
+`docs/internal/phase-3/plan-v2.1-codex-round2.md`.
 
 **v2.1 → v2.2** (this revision, `c606039`): integrates all 1 P0 + 5
 P1 + 3 P2 round-2b codex findings.
@@ -135,17 +135,17 @@ DO look for:
 ## Files to read
 
 Primary:
-- `docs/superpowers/plans/2026-05-02-phase-3-plan.md` (v2.2 — 2613 lines)
+- `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` (v2.2 — 2613 lines)
 
 Companion:
-- `docs/phase-3/plan-v2-review-response.md` (response matrix, v1→v2.2)
-- `docs/phase-3/plan-v2.1-codex-round2.md` (codex round-2 verdict on v2.1)
-- `docs/phase-3/plan-v2-gstack-round2-review.md` (gstack round-2 on v2)
-- `docs/phase-3/plan-v1-codex-review.md` (codex round-1 on v1)
+- `docs/internal/phase-3/plan-v2-review-response.md` (response matrix, v1→v2.2)
+- `docs/internal/phase-3/plan-v2.1-codex-round2.md` (codex round-2 verdict on v2.1)
+- `docs/internal/phase-3/plan-v2-gstack-round2-review.md` (gstack round-2 on v2)
+- `docs/internal/phase-3/plan-v1-codex-review.md` (codex round-1 on v1)
 
 Project context:
 - `CLAUDE.md`
-- `docs/handoffs/2026-05-02-phase2-to-phase3.md`
+- `docs/internal/handoffs/2026-05-02-phase2-to-phase3.md`
 - `01-PRD.md`, `02-TECHNICAL-DECISIONS.md`, `03-ARCHITECTURE.md`,
   `04-MODULE-DESIGN.md`, `06-IM-ADAPTERS.md`,
   `07-SECURITY-AND-COMPUTER-USE.md`, `08-DATA-MODEL.md`, `09-ROADMAP.md`

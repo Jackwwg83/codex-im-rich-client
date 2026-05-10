@@ -28,9 +28,9 @@ desktop smokes.
 
 ## 2. Source Of Truth
 
-- Phase 5 close: `docs/handoffs/phase5-live-status.md`
-- Phase 5 to Phase 6 handoff: `docs/handoffs/2026-05-02-phase5-to-phase6.md`
-- Phase 6 live status: `docs/handoffs/phase6-live-status.md`
+- Phase 5 close: `docs/internal/handoffs/phase5-live-status.md`
+- Phase 5 to Phase 6 handoff: `docs/internal/handoffs/2026-05-02-phase5-to-phase6.md`
+- Phase 6 live status: `docs/internal/handoffs/phase6-live-status.md`
 - Computer Use security: `07-SECURITY-AND-COMPUTER-USE.md`
 - Security guardrails: `18-HOOKS-AND-GUARDRAILS.md`
 - Testing guidance: `11-TESTING-AND-QA.md`
@@ -38,7 +38,7 @@ desktop smokes.
   `packages/codex-protocol/src/generated/**`
 - Existing command boundary: `packages/core/src/command-router.ts`
 - Existing daemon prompt path: `packages/daemon/src/daemon.ts`
-- Loop runbook: `docs/automation/codex-app-autonomous-loop-runbook.md`
+- Loop runbook: `docs/internal/automation/codex-app-autonomous-loop-runbook.md`
 - Linear: JAC-11 parent, JAC-91 through JAC-101 execution children plus any
   plan-added children.
 
@@ -283,9 +283,9 @@ may contain secrets.
 
 Allowed files:
 
-- `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`
-- `docs/handoffs/phase6-live-status.md`
-- `docs/phase-6/*`
+- `docs/internal/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`
+- `docs/internal/handoffs/phase6-live-status.md`
+- `docs/internal/phase-6/*`
 - `README.md`
 - `TODOS.md`
 - Linear issue descriptions/comments
@@ -293,7 +293,7 @@ Allowed files:
 Body:
 
 - Create this plan and live-status.
-- Create capability evidence stub under `docs/phase-6/`.
+- Create capability evidence stub under `docs/internal/phase-6/`.
 - Run Codex outside-voice review.
 - If review returns P0/P1, patch plan before implementation.
 - Update Linear JAC-91.

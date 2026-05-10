@@ -154,7 +154,7 @@
 > `MacChromeComputerUseProvider`. This proves the local provider boundary; it
 > does not claim arbitrary desktop automation, secret entry, external website
 > control, or unattended sensitive actions. Current completion audit:
-> `docs/handoffs/2026-05-07-codex-native-im-goal-audit.md`. The audit includes
+> `docs/internal/handoffs/2026-05-07-codex-native-im-goal-audit.md`. The audit includes
 > a blocker unblock packet with exact DingTalk attachment, Slack live workspace,
 > and real Computer Use provider preflight commands plus acceptance evidence
 > rules.
@@ -168,8 +168,8 @@
   outbound text/file, and approval click; bounded local Chrome Computer Use
   provider smoke is green. Broader Computer Use scenarios remain future
   capability expansion, not part of the current acceptance claim.
-- **Plan:** `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
-- **Slack plan:** `docs/superpowers/plans/2026-05-07-slack-core-platform-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
+- **Slack plan:** `docs/internal/superpowers/plans/2026-05-07-slack-core-platform-plan.md`.
 - **Prior release baseline:** `production-readiness-2026-05-03-r2`.
 - **Prior Phase 7 status:** complete; do not mutate Phase 7 as hidden tail work.
 - **Branch:** `codex/live-im-acceptance`.
@@ -803,7 +803,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT approval fallback loop | Common daemon routing now exposes `/approvals` and `/approve <id> <action>`. The fallback path is intentionally server-state based: it only resolves a pending approval when SQLite has a bound callback-token record for that approval, target, action, and approval-card `messageRef`; the IM text never carries raw callback tokens or message refs. Full local gates passed: `pnpm typecheck`, `pnpm typecheck:tests`, `pnpm test` (150 files, 1403 pass, 1 skipped), `pnpm lint`, and `pnpm protocol:check`. |
 | 2026-05-07 SGT identity/access loop | `/whoami` now reports redacted IM identity presence and current project/conversation binding across supported adapters without leaking raw chat, user, topic, display-name, cwd, or full thread ids. Config parsing also supports reusable `security.access_groups` referenced by global `default_access_groups` or project-level `access_groups`; unknown group references fail closed and groups expand into the existing `SecurityPolicy` allowlist shape. |
 | 2026-05-07 SGT group mention-gate loop | `security.group_policy` now supports configured `mention_required_chats` plus `mention_aliases`. Daemon inbound routing calls `SecurityPolicy.checkInboundMessage()` before command/prompt routing, so configured group chats without an alias are audited and dropped before Codex sees the text; non-gated chats keep the existing allowlist behavior. Targeted tests passed for core policy, config parsing, and daemon denial audit. |
-| 2026-05-07 SGT Slack T0 plan loop | Added `docs/superpowers/plans/2026-05-07-slack-core-platform-plan.md` as the Slack plan-of-record. The plan chooses Socket Mode by default to avoid public listeners, maps Slack `team/channel/thread_ts/ts` into existing `Target` and `MessageRef`, keeps `/codex` as ingress to existing daemon commands, and scopes JAC-244 through JAC-248 without implementation code. |
+| 2026-05-07 SGT Slack T0 plan loop | Added `docs/internal/superpowers/plans/2026-05-07-slack-core-platform-plan.md` as the Slack plan-of-record. The plan chooses Socket Mode by default to avoid public listeners, maps Slack `team/channel/thread_ts/ts` into existing `Target` and `MessageRef`, keeps `/codex` as ingress to existing daemon commands, and scopes JAC-244 through JAC-248 without implementation code. |
 | 2026-05-07 SGT Slack T1 skeleton loop | Added `@codex-im/im-slack` package skeleton with `SLACK_CAPABILITIES`, `SlackChannelAdapter`, injected Socket Mode/Web client interfaces, synthetic fixture data only, and no-upward-import boundary tests. The package is not wired into production daemon entrypoint yet. |
 | 2026-05-07 SGT Slack T2 text loop | Slack DM `message` and channel `app_mention` payloads now normalize to existing `InboundMessage` with `Target(platform=\"slack\", chatId=\"team:channel\", threadKey=thread_ts)` and `MessageRef(channel:ts)`; leading bot mentions are stripped before daemon routing, bot/subtype messages are dropped, and injected Web client `sendText`/`editText` paths return editable refs. |
 | 2026-05-07 SGT Slack T3 approval loop | Slack approval cards now render Block Kit buttons whose values are only `v1:<opaque>` callback tokens; `block_actions` payloads are immediately acked and normalized to existing `InboundAction` with target, sender, messageRef, rawCallbackData, and callbackHandle. Daemon callback-token, messageRef, SecurityPolicy, and ApprovalBroker validation remain the decision boundary. |
@@ -812,7 +812,7 @@ Latest DingTalk direct-use readiness evidence:
 | 2026-05-07 SGT Slack T5a production wiring loop | JAC-253 added disabled-by-default Slack config, redacted `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` secret resolution, official Socket Mode production adapter construction, Slack callback-handle routing, and daemon enabled-platform fallback targeting. `@codex-im/im-slack` still uses injected clients for tests and Socket Mode in production; JAC-248 stays open until a real Slack workspace runs inbound, approval click, text, and file gates. |
 | 2026-05-07 SGT Slack T5b doctor loop | JAC-254 added Slack to the unified `pnpm im:doctor` / `pnpm channels:doctor` no-live-network readiness report. Doctor now checks Slack bot/app token source presence by env/Keychain names only, global/project allowlists, allowed channels, capabilities, Socket Mode, `/codex` slash ingress, Block Kit approvals, edit semantics, and file support. Local installed config currently reports Slack `disabled`, not green live acceptance. |
 | 2026-05-07 SGT Slack T5c Keychain wrapper loop | JAC-255 extended `bin/load-and-run.sh` so launchd runtime can optionally load `SLACK_BOT_TOKEN` from Keychain service `codex-im-bridge-slack-bot` and `SLACK_APP_TOKEN` from `codex-im-bridge-slack-app`. Dry-run reports only set/unset + length, runtime exports Slack env vars only when present, and Slack remains optional until config enables it. |
-| 2026-05-07 SGT Slack T5d live acceptance runbook loop | JAC-256 added `docs/ops/slack-live-smoke.md` and linked Slack into `docs/ops/live-im-acceptance.md`. The runbook pins the required Slack app scopes/settings, Keychain services, no-live doctor gate, explicit live text/file gates, and real-client acceptance evidence. Slack remains not accepted until JAC-248 records real workspace inbound, `/codex`, prompt/reply, approval click, and terminal-card finalization. |
+| 2026-05-07 SGT Slack T5d live acceptance runbook loop | JAC-256 added `docs/internal/ops-smoke/slack-live-smoke.md` and linked Slack into `docs/internal/ops-smoke/live-im-acceptance.md`. The runbook pins the required Slack app scopes/settings, Keychain services, no-live doctor gate, explicit live text/file gates, and real-client acceptance evidence. Slack remains not accepted until JAC-248 records real workspace inbound, `/codex`, prompt/reply, approval click, and terminal-card finalization. |
 | 2026-05-07 SGT Slack T5e inbound attachment loop | JAC-257 added Slack inbound file/image materialization. The adapter accepts normal file-bearing messages plus Slack `file_share` messages with `files[]`, downloads private file URLs through the injected Web client / production bot-token client, writes bytes under `data/attachments/slack`, and emits image/file `InboundAttachment[]` for the common daemon input path. No live Slack traffic was run; JAC-248 remains open. |
 | 2026-05-08 SGT Slack live workspace acceptance loop | Local OpenClaw was removed so it no longer consumes the same Slack app, and the Slack app-level token was rotated into the codex-im Keychain service. `/codex status` now gets an immediate ephemeral ack plus daemon status; DM prompt/reply, Socket Mode, outbound text/file live gates, and one real Block Kit `Allow once` approval click passed. Root causes fixed: duplicate Block Kit button `action_id`s caused Slack `invalid_blocks`, and missing message/app_mention acks caused Slack Socket Mode retries. Latest real click produced one bound token batch, `allow_once=used`, sibling tokens revoked, active turn cleared, and the harmless `/tmp` target file present. |
 | 2026-05-08 SGT Slack exact-output closeout | Explicit Slack `Reply exactly` / `Respond exactly` prompt turns now suppress auxiliary `Codex status` and item sections while keeping normal development-task status projection intact. Targeted RED/GREEN `packages/daemon/test/turn-output.test.ts -t "keeps Slack exact-reply"` passed, followed by full `turn-output`, `daemon`, and Slack adapter targeted suites. |
@@ -957,7 +957,7 @@ Current accepted scope:
 If resuming this work:
 
 1. Read this file first.
-2. Read `docs/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
+2. Read `docs/internal/superpowers/plans/2026-05-03-direct-use-completion-plan.md`.
 3. Read `AGENTS.md`.
 4. Run `git status --short` and `git log --oneline -8`.
 5. Continue from the current block only when branch/HEAD/scope are clear.

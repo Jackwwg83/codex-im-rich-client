@@ -108,7 +108,10 @@ describe("setup-im wizard planning", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("setup:im plan");
     expect(result.stdout).toContain("IM_TELEGRAM_BOT_TOKEN");
-    expect(result.stdout).toContain(`length=${secret.length}`);
+    expect(result.stdout).toMatch(
+      /IM_TELEGRAM_BOT_TOKEN: Keychain service \S+, account \S+, present/,
+    );
+    expect(result.stdout).not.toMatch(/length=\d+/);
     expect(result.stdout).not.toContain(secret);
     expect(result.stderr).not.toContain(secret);
   });

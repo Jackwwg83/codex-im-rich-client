@@ -33,7 +33,7 @@
 |---------|--------|-----------------|
 | 1 (P0) Init-only smoke insufficient | ✅ Adopted with rails | Section J Tasks 9.3–9.4 |
 | 2 (P1) Version pin + upgrade gate | ✅ Adopted (custom `codexIm.codexVersion` field, NOT `engines.codex`) | Section B Task 1.5 |
-| 3 (P1) `--experimental` flag decision | ✅ Adopted; **decision REVERSED to STABLE** based on empirical diff (Phase 0–6 needs all in stable; experimental adds only realtime/fuzzy-session/memory/mock — out of scope). See `docs/phase-0/codex-gen-diff.md` and `docs/phase-0/host-environment.md` "--experimental decision". | Section A Task 0.2; Section C Task 2.2 |
+| 3 (P1) `--experimental` flag decision | ✅ Adopted; **decision REVERSED to STABLE** based on empirical diff (Phase 0–6 needs all in stable; experimental adds only realtime/fuzzy-session/memory/mock — out of scope). See `docs/internal/phase-0/codex-gen-diff.md` and `docs/internal/phase-0/host-environment.md` "--experimental decision". | Section A Task 0.2; Section C Task 2.2 |
 | 4 (P1) Wire spike underspecified | ✅ Adopted, 6 spike cases | Section A Task 0.3 |
 | 5 (P1) Default-reject server request | ✅ Adopted, 4 cases (no handler / throw / timeout / unknown method) | Section F Task 5.6 |
 | 6 (P1) `StdioTransportOptions` shape | ✅ Adopted full signature with `configOverrides` translation | Section G Task 6.1 |
@@ -197,7 +197,7 @@ codex-im-rich-client/
 
 ### Task 0.1 — Host toolchain version capture
 
-**Files:** Create `docs/phase-0/host-environment.md`, `CODEX_VERSION` (root).
+**Files:** Create `docs/internal/phase-0/host-environment.md`, `CODEX_VERSION` (root).
 
 - [ ] **Step 1:** Run and capture stdout into the doc:
   - `node --version` (≥ 20.10)
@@ -241,14 +241,14 @@ codex-im-rich-client/
 
 ### Task 0.2 — `--experimental` flag decision
 
-**Files:** Modify `docs/phase-0/host-environment.md`.
+**Files:** Modify `docs/internal/phase-0/host-environment.md`.
 
 - [ ] **Step 1:** Run `codex app-server generate-ts --help` and `codex app-server generate-json-schema --help`. Note whether `--experimental` exists on each.
 - [ ] **Step 2 (real path):** Generate twice into temp directories:
   - `mkdir -p /tmp/codex-gen-stable && codex app-server generate-ts --out /tmp/codex-gen-stable`
   - `mkdir -p /tmp/codex-gen-exp && codex app-server generate-ts --experimental --out /tmp/codex-gen-exp`
   - `diff -r /tmp/codex-gen-stable /tmp/codex-gen-exp > /tmp/codex-gen.diff` and inspect diff.
-- [ ] **Step 3:** Decide and document in `host-environment.md` and `docs/phase-0/codex-gen-diff.md`. **Empirical decision (executed 2026-04-29): USE STABLE.** Rationale: Phase 0–6 needs (initialize, thread/turn lifecycle, command exec, approvals via `item/*/requestApproval` server-requests, MCP, auth, Tool generic, ServerNotification/Response) **are all in stable**. Experimental adds only realtime voice, fuzzy-session lifecycle, memory mode, elicitation counters, background terminals, collaboration mode, and mock — all out of P0–P6 scope. Computer Use is a runtime `Tool` instance, not a type-level distinction; `--experimental` does NOT add a ComputerUse type. See `docs/phase-0/codex-gen-diff.md` for full evidence and "Switching to --experimental later" recipe.
+- [ ] **Step 3:** Decide and document in `host-environment.md` and `docs/internal/phase-0/codex-gen-diff.md`. **Empirical decision (executed 2026-04-29): USE STABLE.** Rationale: Phase 0–6 needs (initialize, thread/turn lifecycle, command exec, approvals via `item/*/requestApproval` server-requests, MCP, auth, Tool generic, ServerNotification/Response) **are all in stable**. Experimental adds only realtime voice, fuzzy-session lifecycle, memory mode, elicitation counters, background terminals, collaboration mode, and mock — all out of P0–P6 scope. Computer Use is a runtime `Tool` instance, not a type-level distinction; `--experimental` does NOT add a ComputerUse type. See `docs/internal/phase-0/codex-gen-diff.md` for full evidence and "Switching to --experimental later" recipe.
 
 - [ ] **Step 4 (degraded path):** If `generate-ts` does not exist at all → write degraded section with hand-shim plan and STOP for human review.
 - [ ] **Step 5:** Commit: `chore(phase0): document --experimental flag decision`.
@@ -258,7 +258,7 @@ codex-im-rich-client/
 
 ### Task 0.3 — Wire spike: 6 cases against real `codex app-server`
 
-**Files:** Modify `docs/phase-0/host-environment.md`.
+**Files:** Modify `docs/internal/phase-0/host-environment.md`.
 
 - [ ] **Step 1:** Append "Wire spike results" section. For each case below, **manually** pipe a single line into `codex app-server --listen stdio://` and capture stdout + stderr verbatim.
 
@@ -603,8 +603,8 @@ directory. Reasons:
 - Forces deliberate adoption of new types — every new export is a code review.
 
 ## Why stable, not --experimental?
-See `docs/phase-0/host-environment.md` "--experimental decision" and
-`docs/phase-0/codex-gen-diff.md`. tldr: experimental adds only realtime/fuzzy-session/
+See `docs/internal/phase-0/host-environment.md` "--experimental decision" and
+`docs/internal/phase-0/codex-gen-diff.md`. tldr: experimental adds only realtime/fuzzy-session/
 memory/elicitation/mock features that are out of Phase 0–6 scope. If Phase 7+
 needs them, follow the "Switching to --experimental later" recipe in codex-gen-diff.md.
 
@@ -634,7 +634,7 @@ needs them, follow the "Switching to --experimental later" recipe in codex-gen-d
 "protocol:generate": "pnpm check:codex-version && rm -rf packages/codex-protocol/src/generated packages/codex-protocol/schema && codex app-server generate-ts --out packages/codex-protocol/src/generated && codex app-server generate-json-schema --out packages/codex-protocol/schema"
 ```
 
-**Note:** No `--experimental` flag. If Phase 7+ requires voice / memory mode / fuzzy session, see `docs/phase-0/codex-gen-diff.md` "Switching to --experimental later" — regenerate with the flag, expand `packages/codex-protocol/src/index.ts` facade explicitly.
+**Note:** No `--experimental` flag. If Phase 7+ requires voice / memory mode / fuzzy session, see `docs/internal/phase-0/codex-gen-diff.md` "Switching to --experimental later" — regenerate with the flag, expand `packages/codex-protocol/src/index.ts` facade explicitly.
 
 - [ ] **Step 2:** Add `protocol:check`: `pnpm protocol:generate && git diff --exit-code packages/codex-protocol`.
 - [ ] **Step 3 (degraded path — only if Task 0.2 decided no generators available):** Replace with `node scripts/protocol-generate-fallback.mjs` that exits 1 with explanation.
@@ -941,7 +941,7 @@ export function isJsonRpcNotification(m: unknown): m is JsonRpcNotification {
 ```ts
 // src/transport.ts
 //
-// Architecture (see also docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md):
+// Architecture (see also docs/internal/superpowers/plans/2026-04-29-phase-0-bootstrap.md):
 //
 //                AppServerClient
 //                       │ Transport
@@ -2088,7 +2088,7 @@ export async function run(): Promise<void> {
       sandbox: "read-only",
       approval_policy: "on-request",
       // network_access flag name varies per codex version; document either way.
-      // Defer to docs/phase-0/host-environment.md task 0.2/0.3 for exact key.
+      // Defer to docs/internal/phase-0/host-environment.md task 0.2/0.3 for exact key.
     },
     logger: log,
   });
@@ -2247,7 +2247,7 @@ it("smoke:real-turn full lifecycle", async () => {
 
 ### Task 10.5 — Codex CLI independent review (per `14-OPERATION §7`)
 
-**Files:** Create `docs/phase-0/codex-review.md`.
+**Files:** Create `docs/internal/phase-0/codex-review.md`.
 
 - [ ] **Step 1:** Run Codex CLI review (per `15-PHASE-BY-PHASE-PROMPTS.md` Phase 0 §Codex CLI 辅助提示词) on the final `git diff main...phase-0-bootstrap`. Capture verbatim output.
 - [ ] **Step 2:** Triage P0/P1 findings into (a) fix-now follow-up commits, (b) move-to-Phase-1 TODOs, (c) reject with reason.
@@ -2258,7 +2258,7 @@ it("smoke:real-turn full lifecycle", async () => {
 
 ### Task 10.6 — Decision Log finalization + final commit
 
-**Files:** Create `docs/phase-0/decision-log.md` mirroring this plan's header.
+**Files:** Create `docs/internal/phase-0/decision-log.md` mirroring this plan's header.
 
 - [ ] **Step 1:** Verify each decision (D1–D4 + each Codex finding disposition) maps to a concrete commit.
 - [ ] **Step 2:** Tag commit `phase0-bootstrap-complete` for traceability.
@@ -2370,7 +2370,7 @@ THEN SERIAL (cli + wrap-up):
 
 ## Execution handoff
 
-This plan is saved to `docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md`. Two execution options:
+This plan is saved to `docs/internal/superpowers/plans/2026-04-29-phase-0-bootstrap.md`. Two execution options:
 
 1. **Subagent-Driven (recommended)** — I dispatch a fresh subagent per worktree lane (per the parallelization map above), main session reviews between merges, fast iteration.
 2. **Inline Execution** — Execute serially in this session using `superpowers:executing-plans`, batched checkpoints at end of each Section.

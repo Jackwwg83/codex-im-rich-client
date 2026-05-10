@@ -708,10 +708,10 @@ README.md                                     # package count update (7 → 9 de
                                               # test count refresh; Phase 2 quickstart;
                                               # explicit "production = Supervisor; runtime-send = dev only" line
 TODOS.md                                       # P2.x items moved to Done; Phase 3 backlog appended
-docs/handoffs/2026-05-XX-phase2-to-phase3.md  # NEW
-docs/handoffs/phase2-live-status.md           # NEW: Phase 2 live status (mirrors phase1-live-status format)
-docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md  # THIS DOC (revised v2)
-docs/phase-2/                                  # NEW: Codex outside-voice review reports per task
+docs/internal/handoffs/2026-05-XX-phase2-to-phase3.md  # NEW
+docs/internal/handoffs/phase2-live-status.md           # NEW: Phase 2 live status (mirrors phase1-live-status format)
+docs/internal/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md  # THIS DOC (revised v2)
+docs/internal/phase-2/                                  # NEW: Codex outside-voice review reports per task
 09-ROADMAP.md                                  # Phase 2 sub-section snapshot at tag
 CLAUDE.md                                      # MODIFIED at T22: "Method literal policy" extended to
                                               # cover render/, channel-core/, approval-request-kind.ts,
@@ -1315,7 +1315,7 @@ The same shape applies to `packages/codex-runtime/test/no-raw-client-request.tes
 ### Task T23 — Phase 2 close-out documentation
 
 **Files:**
-- Create: `docs/handoffs/2026-05-XX-phase2-to-phase3.md`, `docs/handoffs/phase2-live-status.md`
+- Create: `docs/internal/handoffs/2026-05-XX-phase2-to-phase3.md`, `docs/internal/handoffs/phase2-live-status.md`
 - Modify: `09-ROADMAP.md`, `README.md`, `TODOS.md`, `package.json#version` (`0.1.0-phase2-draft` → `0.1.0-phase2`), `CLAUDE.md`
 
 - [ ] **T23.1** Draft Phase 2 → Phase 3 handoff per Phase 1 handoff format (status, gate matrix, decision log carry-forward, redlines, recommended Phase 3 mission).
@@ -1408,7 +1408,7 @@ git switch -c phase-2-channel-core
 
 **Date:** 2026-05-01
 **Reviewer:** Claude Sonnet via gstack `/plan-eng-review` skill
-**Plan:** `docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md`
+**Plan:** `docs/internal/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md`
 **Mode:** consolidated review (auto mode)
 
 **Verdict:** APPROVE_WITH_CHANGES — superseded by Codex outside-voice REJECT below; combined disposition is REJECT pending P0 fix arc.
@@ -1492,7 +1492,7 @@ Redact pattern miss has no error handling; T-G1 closes it for known patterns. Ad
 
 **Date:** 2026-05-01
 **Reviewer:** codex 0.125.0 via `codex exec --skip-git-repo-check --sandbox read-only` with the plan-review prompt at `/tmp/phase2-plan-codex-review-prompt.txt` piped via stdin
-**Plan:** `docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md`
+**Plan:** `docs/internal/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md`
 **Output:** `/tmp/phase2-plan-codex-review-output.txt` (4193 lines)
 
 ### Verdict: REJECT

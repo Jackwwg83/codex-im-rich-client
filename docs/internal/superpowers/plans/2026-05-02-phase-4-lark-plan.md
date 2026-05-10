@@ -19,14 +19,14 @@ Phase 4 does not implement DingTalk, Computer Use production flow, Web Console, 
 
 ## 2. Source Of Truth
 
-- Phase 3 close: `docs/handoffs/2026-05-02-phase3-to-phase4.md`
-- Phase 3 live status: `docs/handoffs/phase3-live-status.md`
-- Phase 4 live status: `docs/handoffs/phase4-live-status.md`
-- Lark target verification: `docs/phase-4/lark-target-verification.md`
+- Phase 3 close: `docs/internal/handoffs/2026-05-02-phase3-to-phase4.md`
+- Phase 3 live status: `docs/internal/handoffs/phase3-live-status.md`
+- Phase 4 live status: `docs/internal/handoffs/phase4-live-status.md`
+- Lark target verification: `docs/internal/phase-4/lark-target-verification.md`
 - IM adapter design: `06-IM-ADAPTERS.md` §4 and §8
 - Security: `07-SECURITY-AND-COMPUTER-USE.md`
 - Data model: `08-DATA-MODEL.md`
-- Loop runbook: `docs/automation/codex-app-autonomous-loop-runbook.md`
+- Loop runbook: `docs/internal/automation/codex-app-autonomous-loop-runbook.md`
 - Linear: JAC-9 parent, JAC-65 planning gate, JAC-148 through JAC-162 execution children
 
 Current SDK evidence:
@@ -158,16 +158,16 @@ Use explicit fields, not serialized target strings:
 
 Allowed files:
 
-- `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
-- `docs/phase-4/*`
+- `docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
+- `docs/internal/phase-4/*`
 - `TODOS.md`
-- `docs/handoffs/phase4-live-status.md`
+- `docs/internal/handoffs/phase4-live-status.md`
 - Linear issue descriptions/comments
 
 Body:
 
 - Verify `@larksuiteoapi/node-sdk` receives new `card.action.trigger` callbacks through long connection without a public webhook, and explicitly reject legacy message-card callbacks for Phase 4.
-- Record a decision under `docs/phase-4/lark-action-transport-decision.md`.
+- Record a decision under `docs/internal/phase-4/lark-action-transport-decision.md`.
 - Review this plan with Codex outside-voice and GPT Pro.
 - Split/update Linear child issues based on the decision.
 - Before T6/T8 may begin, record the exact target:

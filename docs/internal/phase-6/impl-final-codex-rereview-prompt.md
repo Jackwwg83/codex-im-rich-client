@@ -7,8 +7,8 @@ outside-voice review returned `APPROVE_WITH_CHANGES`.
 
 ## Prior Review
 
-- Prior prompt: `docs/phase-6/impl-final-codex-review-prompt.md`
-- Prior output: `docs/phase-6/impl-final-codex-review.md`
+- Prior prompt: `docs/internal/phase-6/impl-final-codex-review-prompt.md`
+- Prior output: `docs/internal/phase-6/impl-final-codex-review.md`
 - Prior verdict: `APPROVE_WITH_CHANGES`
 
 ## Required Prior Fixes

@@ -26,14 +26,14 @@ App Server listener.
 
 ## 2. Source Of Truth
 
-- Phase 4 close: `docs/handoffs/phase4-live-status.md`
-- Phase 4 to Phase 5 handoff: `docs/handoffs/2026-05-02-phase4-to-phase5.md`
-- Phase 5 live status: `docs/handoffs/phase5-live-status.md`
-- DingTalk target verification: `docs/phase-5/dingtalk-target-verification.md`
+- Phase 4 close: `docs/internal/handoffs/phase4-live-status.md`
+- Phase 4 to Phase 5 handoff: `docs/internal/handoffs/2026-05-02-phase4-to-phase5.md`
+- Phase 5 live status: `docs/internal/handoffs/phase5-live-status.md`
+- DingTalk target verification: `docs/internal/phase-5/dingtalk-target-verification.md`
 - IM adapter design: `06-IM-ADAPTERS.md` Section 5
 - Data model: `08-DATA-MODEL.md`
 - Security: `07-SECURITY-AND-COMPUTER-USE.md`
-- Loop runbook: `docs/automation/codex-app-autonomous-loop-runbook.md`
+- Loop runbook: `docs/internal/automation/codex-app-autonomous-loop-runbook.md`
 - Linear: JAC-10 parent, JAC-78 through JAC-90 execution children
 
 Current public evidence:
@@ -217,10 +217,10 @@ is implemented.
 
 Allowed files:
 
-- `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`
-- `docs/phase-5/*`
-- `docs/handoffs/phase5-live-status.md`
-- `docs/automation/codex-app-autonomous-loop-runbook.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`
+- `docs/internal/phase-5/*`
+- `docs/internal/handoffs/phase5-live-status.md`
+- `docs/internal/automation/codex-app-autonomous-loop-runbook.md`
 - `AGENTS.md`
 - `README.md`
 - `TODOS.md`

@@ -18,12 +18,12 @@ Telegram (Phase 3) → Lark/DingTalk (Phase 4/5) → Computer Use (Phase 6).
 - gstack /plan-eng-review → APPROVE_WITH_CHANGES, 12 issues, 3 critical
 
 **v1 → v2** (`ff1176b`): all 6 round-1 P0s + 12+ P1s integrated.
-See `docs/phase-3/plan-v2-review-response.md` for the v1→v2 finding-to-fix matrix.
+See `docs/internal/phase-3/plan-v2-review-response.md` for the v1→v2 finding-to-fix matrix.
 
 **Round 2 on plan v2** by gstack /plan-eng-review:
 - Verdict: APPROVE_WITH_CHANGES, **0 P0**, 4 P1, 4 P2.
 - Verified all 6 round-1 P0s are genuinely fixed in v2 plan text
-  (line-cited evidence in `docs/phase-3/plan-v2-gstack-round2-review.md`).
+  (line-cited evidence in `docs/internal/phase-3/plan-v2-gstack-round2-review.md`).
 - New v2-introduced issues found: P1-A (step-5 UPDATE failure), P1-B
   (Telegram null callback_query.message), P1-C (sweep CAS spec missing),
   P1-D (G8/G9 task expansion).
@@ -35,9 +35,9 @@ integrated; 2 P2 deferred-justified.
 
 You are reviewing **plan v2.1**. Do NOT re-flag findings already
 addressed in v2 or v2.1. Specifically, do NOT re-flag the 6 round-1
-P0s (all fixed in v2 — see `docs/phase-3/plan-v1-codex-review.md` for
+P0s (all fixed in v2 — see `docs/internal/phase-3/plan-v1-codex-review.md` for
 the originals) or the 4 round-2 P1s (all fixed in v2.1 — see
-`docs/phase-3/plan-v2-gstack-round2-review.md`).
+`docs/internal/phase-3/plan-v2-gstack-round2-review.md`).
 
 DO look for:
 
@@ -101,17 +101,17 @@ DO look for:
 ## Files to read
 
 Primary:
-- `docs/superpowers/plans/2026-05-02-phase-3-plan.md` (v2.1 — 2304 lines)
+- `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` (v2.1 — 2304 lines)
 
 Companion:
-- `docs/phase-3/plan-v2-review-response.md` (v1→v2 + v2→v2.1 fix matrix)
-- `docs/phase-3/plan-v2-gstack-round2-review.md` (round-2 verdict)
-- `docs/phase-3/plan-v1-codex-review.md` (round-1 codex verdict — what
+- `docs/internal/phase-3/plan-v2-review-response.md` (v1→v2 + v2→v2.1 fix matrix)
+- `docs/internal/phase-3/plan-v2-gstack-round2-review.md` (round-2 verdict)
+- `docs/internal/phase-3/plan-v1-codex-review.md` (round-1 codex verdict — what
   v2 fixed)
 
 Project context (cite line numbers from working tree):
 - `CLAUDE.md` (project redlines)
-- `docs/handoffs/2026-05-02-phase2-to-phase3.md` (Phase 2 → 3 handoff)
+- `docs/internal/handoffs/2026-05-02-phase2-to-phase3.md` (Phase 2 → 3 handoff)
 - `01-PRD.md`, `02-TECHNICAL-DECISIONS.md`, `03-ARCHITECTURE.md`,
   `04-MODULE-DESIGN.md`, `06-IM-ADAPTERS.md`,
   `07-SECURITY-AND-COMPUTER-USE.md`, `08-DATA-MODEL.md`, `09-ROADMAP.md`

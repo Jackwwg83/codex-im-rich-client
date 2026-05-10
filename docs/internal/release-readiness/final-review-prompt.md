@@ -22,10 +22,10 @@ Important source-of-truth docs:
 
 - `AGENTS.md`
 - `README.md`
-- `docs/handoffs/phase7-live-status.md`
-- `docs/handoffs/2026-05-03-phase7-to-future.md`
-- `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`
-- `docs/handoffs/release-readiness-live-status.md`
+- `docs/internal/handoffs/phase7-live-status.md`
+- `docs/internal/handoffs/2026-05-03-phase7-to-future.md`
+- `docs/internal/superpowers/plans/2026-05-03-release-readiness-plan.md`
+- `docs/internal/handoffs/release-readiness-live-status.md`
 - `docs/ops/release-readiness.md`
 - `docs/ops/production-launch.md`
 
@@ -43,12 +43,12 @@ Important files added/changed:
 - `scripts/release-readiness-check.test.mts`
 - `docs/ops/release-readiness.md`
 - `docs/ops/production-launch.md`
-- `docs/handoffs/release-readiness-live-status.md`
-- `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`
+- `docs/internal/handoffs/release-readiness-live-status.md`
+- `docs/internal/superpowers/plans/2026-05-03-release-readiness-plan.md`
 - `package.json`
 - `README.md`
 - `TODOS.md`
-- `docs/ops/keychain-launchd-smoke.md`
+- `docs/internal/ops-smoke/keychain-launchd-smoke.md`
 - `scripts/keychain-launchd-smoke-doc.test.mjs`
 
 Gate evidence at current HEAD:

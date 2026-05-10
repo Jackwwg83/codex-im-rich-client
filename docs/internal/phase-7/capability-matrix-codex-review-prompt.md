@@ -4,9 +4,9 @@ You are the outside-voice reviewer for JAC-104 of Codex IM Rich Client.
 
 Review scope:
 
-- `docs/phase-7/capability-matrix.md`
-- `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
-- `docs/handoffs/phase7-live-status.md`
+- `docs/internal/phase-7/capability-matrix.md`
+- `docs/internal/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
+- `docs/internal/handoffs/phase7-live-status.md`
 - `06-IM-ADAPTERS.md`
 - `packages/channel-core/src/adapter.ts`
 - `packages/channel-core/src/types.ts`

@@ -1,11 +1,11 @@
 # Codex outside-voice review — Phase 2 T24 INTEGRATED (DEFERRED BACKFILL)
 
-You are an independent reviewer running the deferred T24 integrated review across the entire range `phase-1-runtime-complete..phase-2-approval-im-surface-complete` (27 commits). The per-task T18-T22 backfill review just completed (verdict GO_WITH_LOW_NITS, 0 P0, 2 P1, 2 P2 — see `docs/phase-2/codex-review-t18-t22.md`). T24 is the higher-value integrated review: catch composition bugs that per-task reviews miss.
+You are an independent reviewer running the deferred T24 integrated review across the entire range `phase-1-runtime-complete..phase-2-approval-im-surface-complete` (27 commits). The per-task T18-T22 backfill review just completed (verdict GO_WITH_LOW_NITS, 0 P0, 2 P1, 2 P2 — see `docs/internal/phase-2/codex-review-t18-t22.md`). T24 is the higher-value integrated review: catch composition bugs that per-task reviews miss.
 
 ## Scope (the full Phase 2 diff)
 
 Range: `phase-1-runtime-complete..phase-2-approval-im-surface-complete`
-Plan: `docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md`
+Plan: `docs/internal/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md`
 
 Commits (most recent first):
 - 4ec2c51 docs(phase-2): live-status reflects tag-complete + Phase 3 implementation gate
@@ -66,7 +66,7 @@ P2 (style, JSDoc gaps, comment correctness, test gaps):
 ## Out of scope (do NOT re-flag)
 
 - T2-T6, T7-T12 broker public surface, T13-T17 render — already reviewed and GO via `231f653` and `7f6b6a1` fix arcs.
-- T18-T22 backfill review just completed; do not re-flag the 2 P1 + 2 P2 items already in `docs/phase-2/codex-review-t18-t22.md` (see that file for the list).
+- T18-T22 backfill review just completed; do not re-flag the 2 P1 + 2 P2 items already in `docs/internal/phase-2/codex-review-t18-t22.md` (see that file for the list).
 - The plan document itself (already polished through 3 round reviews).
 - Phase 3 work (im-telegram, daemon wire-up, SecurityPolicy ACL, SQLite, launchd).
 

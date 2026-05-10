@@ -4,11 +4,11 @@ You are an outside-voice reviewer for the Codex IM Rich Client repository.
 
 Run in read-only mode. Do not modify files. Do not run network commands.
 
-Review only whether the P1/P2 findings from `docs/phase-4/plan-v1.1-codex-review.md` were correctly absorbed into:
+Review only whether the P1/P2 findings from `docs/internal/phase-4/plan-v1.1-codex-review.md` were correctly absorbed into:
 
-- `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
-- `docs/phase-4/lark-action-transport-decision.md`
-- `docs/phase-4/plan-v1.1-review-response.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
+- `docs/internal/phase-4/lark-action-transport-decision.md`
+- `docs/internal/phase-4/plan-v1.1-review-response.md`
 
 Required output:
 

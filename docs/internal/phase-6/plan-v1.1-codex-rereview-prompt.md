@@ -6,11 +6,11 @@ Review scope:
 
 - Base tag: `phase-5-dingtalk-adapter-complete`
 - Current branch: `codex/phase-6-computer-use`
-- Plan v1.1: `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`
-- Prior review: `docs/phase-6/plan-v1-codex-review.md`
-- Review response: `docs/phase-6/plan-v1-review-response.md`
-- Live status: `docs/handoffs/phase6-live-status.md`
-- Capability evidence: `docs/phase-6/computer-use-capability-evidence.md`
+- Plan v1.1: `docs/internal/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`
+- Prior review: `docs/internal/phase-6/plan-v1-codex-review.md`
+- Review response: `docs/internal/phase-6/plan-v1-review-response.md`
+- Live status: `docs/internal/handoffs/phase6-live-status.md`
+- Capability evidence: `docs/internal/phase-6/computer-use-capability-evidence.md`
 
 Prior verdict:
 

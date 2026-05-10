@@ -5,7 +5,7 @@ Generated: 2026-05-03
 ## 1. Closeout
 
 - **Closed phase:** Phase 7 - extended platforms and web console.
-- **Plan:** `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
 - **Base tag:** `phase-6-computer-use-complete`.
 - **Release tag:** `phase-7-extended-platforms-web-console-complete`.
 - **Version:** `0.1.0-phase7`.
@@ -47,8 +47,8 @@ Generated: 2026-05-03
 - `6269d99` closed the final-review P1/P2/P3 findings.
 - Follow-up review returned GO_WITH_LOW_NITS with no new P0/P1.
 - Review reports:
-  - `docs/phase-7/impl-final-codex-review.md`
-  - `docs/phase-7/impl-final-codex-review-followup.md`
+  - `docs/internal/phase-7/impl-final-codex-review.md`
+  - `docs/internal/phase-7/impl-final-codex-review-followup.md`
 
 ## 4. Gates
 

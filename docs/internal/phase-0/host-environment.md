@@ -98,7 +98,7 @@ Options:
 
 **Decision: USE STABLE** (do NOT pass `--experimental`) for `generate-ts` and `generate-json-schema` in Phase 0–6.
 
-**This reverses** the preliminary stance in plan v2 (`docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md` Task 0.2 / Task 2.2), which assumed `--experimental` was needed for Computer Use / approval / rich events. Empirical diff (see `docs/phase-0/codex-gen-diff.md`) shows that assumption was wrong.
+**This reverses** the preliminary stance in plan v2 (`docs/internal/superpowers/plans/2026-04-29-phase-0-bootstrap.md` Task 0.2 / Task 2.2), which assumed `--experimental` was needed for Computer Use / approval / rich events. Empirical diff (see `docs/internal/phase-0/codex-gen-diff.md`) shows that assumption was wrong.
 
 ### Evidence summary
 
@@ -127,7 +127,7 @@ What Phase 0–6 actually needs is **all in stable**:
 
 - Smaller generated surface → less review churn on codex upgrade
 - Lower risk of writing code against a renamed experimental method
-- If Phase 7+ needs voice / memory mode / fuzzy session, **explicit opt-in**: regenerate with `--experimental`, expand facade. See `docs/phase-0/codex-gen-diff.md` "Switching to --experimental later" for the steps.
+- If Phase 7+ needs voice / memory mode / fuzzy session, **explicit opt-in**: regenerate with `--experimental`, expand facade. See `docs/internal/phase-0/codex-gen-diff.md` "Switching to --experimental later" for the steps.
 
 ### Caveat
 
@@ -148,7 +148,7 @@ What Phase 0–6 actually needs is **all in stable**:
 
 **Stdout** (single line, captured to `packages/testkit/fixtures/codex-0.125.0/initialize-response.jsonl`):
 ```json
-{"id":1,"result":{"userAgent":"phase0-spike/0.125.0 (Mac OS 26.1.0; arm64) iTerm.app/3.6.6 (phase0-spike; 0.0.0)","codexHome":"/Users/jackwu/.codex","platformFamily":"unix","platformOs":"macos"}}
+{"id":1,"result":{"userAgent":"phase0-spike/0.125.0 (Mac OS 26.1.0; arm64) iTerm.app/3.6.6 (phase0-spike; 0.0.0)","codexHome":"<home>/.codex","platformFamily":"unix","platformOs":"macos"}}
 ```
 
 **Findings**:
@@ -252,7 +252,7 @@ not json at all
 
 ```
 transport started
-initialize OK (codexHome=/Users/jackwu/.codex,
+initialize OK (codexHome=<home>/.codex,
                platformFamily=unix, platformOs=macos)
 thread/start OK (threadId=019ddc4e-f6ac-7863-9cad-82bf4ada4219)
 turn/start with harmless prompt

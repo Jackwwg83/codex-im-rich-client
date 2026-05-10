@@ -8,7 +8,7 @@
 
 ## 1. Current phase / task
 
-- **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4. **Status:** complete at JAC-64 / T39-T40.
+- **Phase:** Phase 3 — Telegram MVP + production daemon wire-up + SecurityPolicy ACL + persistent SessionRouter (SQLite) + launchd integration. **Plan:** `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4. **Status:** complete at JAC-64 / T39-T40.
 - **Active task:** None at this checkpoint. Last completed: **JAC-64 / T39-T40** Phase 3 handoff and tag gate.
 - **Next exact task:** **JAC-65** — Phase 4 plan review gate for Feishu/Lark adapter.
 - **Phase 3 mission scope** (per plan §1): real Telegram adapter, production daemon wire-up, SecurityPolicy ACL, persistent SessionRouter backed by SQLite, durable audit log, callback_tokens (D34), launchd. Phase 3 plan went through 4 codex outside-voice rounds + 2 gstack `/plan-eng-review` rounds; v2.4 approved with T1 implementation gate authorized.
@@ -34,7 +34,7 @@
 | `c06813e` | T3a | `001-init.sql` owns schema_version DDL + real-dir runner test + PRAGMA shape pin |
 | `f4e1b69` | docs convergence | Phase 3 live-status doc + README/ROADMAP/TODOS/phase2-live-status banners (no source code) |
 | `f493360` | handoff checkpoint | Refresh this live-status HEAD + add §10 handoff to Codex section (no source code) |
-| `084aab8` | autonomous-loop runbook | Add `docs/automation/codex-app-autonomous-loop-runbook.md` + AGENTS/CLAUDE pointer |
+| `084aab8` | autonomous-loop runbook | Add `docs/internal/automation/codex-app-autonomous-loop-runbook.md` + AGENTS/CLAUDE pointer |
 | `b25cb78` | T4a | `002-thread-bindings.sql` + `BindingRepository.upsert/findByTarget` + round-trip test |
 | `89742a3` | T4b | `BindingRepository.list/delete` + two focused tests |
 | `2904b36` | T4c | D38 write-failure surfaces to caller; no optimistic repository state |
@@ -152,11 +152,11 @@
 
 ## 5. Codex outside-voice review status
 
-- **Phase 3 plan v2.4:** APPROVE_WITH_CHANGES at codex round 4 (4 P1 + 2 P2, all absorbed). Plan-of-record under `docs/superpowers/plans/2026-05-02-phase-3-plan.md`. Round-by-round records under `docs/phase-3/plan-v{1,2.1,2.2,2.3}-codex-{review,round2,round3,round4}.md`.
-- **Implementation T1.1+T2a+T2b+T2c review (impl-t1-t2c):** APPROVE_WITH_CHANGES, 0 P0 + 1 P1 + 2 P2. All findings cleared by commit `04a92fe`. Per-task scope verdict: clean across all 4 commits. Record at `docs/phase-3/impl-t1-t2c-codex-review.md`.
-- **Implementation T1-T19 mid-phase review (JAC-62 / T37):** APPROVE_WITH_CHANGES, 0 P0 + 4 P1 + 2 P2. All findings cleared by commit `b5c4441`. Records at `docs/phase-3/impl-t1-t19-midphase-codex-review-prompt.md` and `docs/phase-3/impl-t1-t19-midphase-codex-review.md`.
-- **Implementation T1-T36 final review (JAC-63 / T38):** APPROVE_WITH_CHANGES, 0 P0 + 2 P1 + 3 P2. All findings cleared by commits `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, and `eb05753`. Records at `docs/phase-3/impl-t1-t36-final-codex-review-prompt.md` and `docs/phase-3/impl-t1-t36-final-codex-review.md`.
-- **Implementation T40 tag-gate review (JAC-64):** GO_WITH_LOW_NITS, no P0/P1 blockers. Record at `docs/phase-3/impl-t1-t40-tag-gate-codex-review.md`. Recommendation: version `0.1.0-phase3`; annotated tag `phase-3-telegram-mvp-complete`.
+- **Phase 3 plan v2.4:** APPROVE_WITH_CHANGES at codex round 4 (4 P1 + 2 P2, all absorbed). Plan-of-record under `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md`. Round-by-round records under `docs/internal/phase-3/plan-v{1,2.1,2.2,2.3}-codex-{review,round2,round3,round4}.md`.
+- **Implementation T1.1+T2a+T2b+T2c review (impl-t1-t2c):** APPROVE_WITH_CHANGES, 0 P0 + 1 P1 + 2 P2. All findings cleared by commit `04a92fe`. Per-task scope verdict: clean across all 4 commits. Record at `docs/internal/phase-3/impl-t1-t2c-codex-review.md`.
+- **Implementation T1-T19 mid-phase review (JAC-62 / T37):** APPROVE_WITH_CHANGES, 0 P0 + 4 P1 + 2 P2. All findings cleared by commit `b5c4441`. Records at `docs/internal/phase-3/impl-t1-t19-midphase-codex-review-prompt.md` and `docs/internal/phase-3/impl-t1-t19-midphase-codex-review.md`.
+- **Implementation T1-T36 final review (JAC-63 / T38):** APPROVE_WITH_CHANGES, 0 P0 + 2 P1 + 3 P2. All findings cleared by commits `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, and `eb05753`. Records at `docs/internal/phase-3/impl-t1-t36-final-codex-review-prompt.md` and `docs/internal/phase-3/impl-t1-t36-final-codex-review.md`.
+- **Implementation T40 tag-gate review (JAC-64):** GO_WITH_LOW_NITS, no P0/P1 blockers. Record at `docs/internal/phase-3/impl-t1-t40-tag-gate-codex-review.md`. Recommendation: version `0.1.0-phase3`; annotated tag `phase-3-telegram-mvp-complete`.
 - **Next planned codex review:** Phase 4 plan review after JAC-65 draft plan exists.
 
 ## 6. Active redlines (carry forward into all future Phase 3 tasks)
@@ -190,11 +190,11 @@ Plan §19 lists 29 exit criteria; this status doc is not the place to enumerate 
 
 ## 8. Documentation companions
 
-- **Phase 3 plan-of-record:** `docs/superpowers/plans/2026-05-02-phase-3-plan.md` (v2.4)
-- **Phase 2 → Phase 3 handoff:** `docs/handoffs/2026-05-02-phase2-to-phase3.md`
-- **Phase 2 frozen status:** `docs/handoffs/phase2-live-status.md` (frozen — see banner there)
-- **Plan reviews:** `docs/phase-3/plan-v{1,2.1,2.2,2.3}-codex-*.md` + `plan-v2-gstack-round2-review.md`
-- **Implementation review:** `docs/phase-3/impl-t1-t2c-codex-review.md`
+- **Phase 3 plan-of-record:** `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` (v2.4)
+- **Phase 2 → Phase 3 handoff:** `docs/internal/handoffs/2026-05-02-phase2-to-phase3.md`
+- **Phase 2 frozen status:** `docs/internal/handoffs/phase2-live-status.md` (frozen — see banner there)
+- **Plan reviews:** `docs/internal/phase-3/plan-v{1,2.1,2.2,2.3}-codex-*.md` + `plan-v2-gstack-round2-review.md`
+- **Implementation review:** `docs/internal/phase-3/impl-t1-t2c-codex-review.md`
 - **Project rules:** `CLAUDE.md` (root) — contains the generic compact-recovery rules; this file is the Phase 3 live-status anchor those rules land readers on.
 
 ## 9. Compact / resume context
@@ -203,7 +203,7 @@ If you are resuming after `/compact`, `/resume`, or context loss:
 
 1. Read this file FIRST (you are here).
 2. Read `CLAUDE.md` for project-wide rules + redlines.
-3. Read `docs/handoffs/2026-05-02-phase3-to-phase4.md` and then start **JAC-65** planning-only Phase 4 work.
+3. Read `docs/internal/handoffs/2026-05-02-phase3-to-phase4.md` and then start **JAC-65** planning-only Phase 4 work.
 4. Run `git status --short` + `git log --oneline -10` to confirm branch state matches §2 above.
 5. Run `pnpm test` + `pnpm typecheck` to confirm gates green.
 6. Output a Context Recovery Report. In autonomous-loop sessions, continue only if the recovered state is clean and the next Linear issue is unambiguous; otherwise consult GPT Pro rather than asking the operator for technical direction.
@@ -230,7 +230,7 @@ For the Codex agent picking this up:
 4. **Read order on first session:**
    1. This file (you are here).
    2. `CLAUDE.md` — generic redlines + compact-recovery rules.
-   3. `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 (T16.1 body) + §17 (dep graph) + §6 (Phase 3 redlines) + §7 (decisions D22+).
+   3. `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` §16.5 (T16.1 body) + §17 (dep graph) + §6 (Phase 3 redlines) + §7 (decisions D22+).
    4. `packages/daemon/src/daemon.ts` (current implementation surface).
    5. `packages/daemon/test/daemon.test.ts` (current daemon wire-up test pattern).
 5. **Cadence expectations carried forward from prior sessions:**
@@ -238,7 +238,7 @@ For the Codex agent picking this up:
    - Run all 5 gates (typecheck / typecheck:tests / test / lint / protocol:check) before each commit.
    - Current autonomous-loop directive: keep one focused issue per commit, update Linear/docs, push regularly, and continue through technical decisions without waiting for routine human approval. Escalate only for actions the tooling cannot perform safely.
    - Codex outside-voice impl review cadence is at-discretion, not per-task. Past pattern: review after a coherent batch (e.g. T1.1 → T2c was reviewed together). Next good review gate is after T16/T17 approval callback flow or at the T19 daemon mid-review gate.
-   - When the user says "做一次 codex review", produce a prompt under `docs/phase-3/impl-<scope>-codex-review-prompt.md`, invoke `cat <prompt> | codex exec --sandbox read-only -c model_reasoning_effort=xhigh > <output>.md 2> <output>.stderr` in the background.
+   - When the user says "做一次 codex review", produce a prompt under `docs/internal/phase-3/impl-<scope>-codex-review-prompt.md`, invoke `cat <prompt> | codex exec --sandbox read-only -c model_reasoning_effort=xhigh > <output>.md 2> <output>.stderr` in the background.
    - Phase 3 tag-gate bumped `package.json` `version` to `0.1.0-phase3` after GO_WITH_LOW_NITS review.
    - Don't run repo-wide format. Per-file `pnpm format` after edits is fine; biome auto-formats minor whitespace differences.
 

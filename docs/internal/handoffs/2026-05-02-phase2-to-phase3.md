@@ -36,7 +36,7 @@
 
 ## D5–D21 决策摘要 (Phase 1 + Phase 2 carry-forward)
 
-Phase 1 D5-D10 carry forward unchanged (see `docs/handoffs/2026-05-01-phase1-to-phase2.md`).
+Phase 1 D5-D10 carry forward unchanged (see `docs/internal/handoffs/2026-05-01-phase1-to-phase2.md`).
 
 Phase 2 D11-D21:
 
@@ -82,9 +82,9 @@ Persistent project redlines from CLAUDE.md remain. Phase 2 adds:
 
 ## 启动时必读 (5 files for new Phase 3 session)
 
-1. **This file** (`docs/handoffs/2026-05-02-phase2-to-phase3.md`) — start here.
+1. **This file** (`docs/internal/handoffs/2026-05-02-phase2-to-phase3.md`) — start here.
 2. **`CLAUDE.md`** — project-wide rules + redlines (updated for Phase 2).
-3. **`docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md`** — full Phase 2 plan v2.3 with all decisions, task bodies, decision rationale.
+3. **`docs/internal/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md`** — full Phase 2 plan v2.3 with all decisions, task bodies, decision rationale.
 4. **`packages/core/src/approval-broker.ts`** — the single most important production source in the project. Phase 1 B-clean settleOnce body is byte-for-byte unchanged; Phase 2 added `#settleEntry`, `enablePendingMode`, `bindActorPolicy`, `resolve()`, `isAttached()`, `approvalTtlMs` constructor option.
 5. **`packages/channel-core/src/adapter.ts`** + `fake.ts` — closed ChannelAdapter interface + canonical reference adapter. Future IM platform implementations conform to this without interface change OR submit a plan amendment.
 

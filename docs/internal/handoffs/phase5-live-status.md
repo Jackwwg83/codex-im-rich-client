@@ -9,7 +9,7 @@
 ## 1. Current phase / task
 
 - **Phase:** Phase 5 - DingTalk adapter.
-- **Plan:** `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
 - **Parent Linear issue:** JAC-10 - Phase 5 backlog / DingTalk adapter.
 - **Final Linear issue:** JAC-90 - T12 review/handoff/tag.
 - **Branch:** `codex/phase-5-dingtalk`.
@@ -53,9 +53,9 @@
 |---|---|
 | Phase 5 plan v1 Codex review | APPROVE_WITH_CHANGES: 1 P1 + 3 P2; fixes absorbed in plan/live-status/target verification |
 | Phase 5 plan v1.1 Codex re-review | GO; no remaining findings; JAC-79 allowed to start |
-| Phase 5 final implementation review | APPROVE_WITH_CHANGES at `9b3f395`; 2 P1 + 2 P2 recorded in `docs/phase-5/impl-final-codex-review.md` |
+| Phase 5 final implementation review | APPROVE_WITH_CHANGES at `9b3f395`; 2 P1 + 2 P2 recorded in `docs/internal/phase-5/impl-final-codex-review.md` |
 | Phase 5 final review fixes | `4a308d2` closed real Stream wrapper/ack, duplicate robot suppression, target evidence, and raw redaction blockers |
-| Phase 5 final re-review | GO; no P0/P1/P2 findings; report in `docs/phase-5/impl-final-codex-rereview.md` |
+| Phase 5 final re-review | GO; no P0/P1/P2 findings; report in `docs/internal/phase-5/impl-final-codex-rereview.md` |
 
 ## 5. Linear execution queue
 
@@ -96,7 +96,7 @@ Latest Phase 5 tag-gate verification:
 If resuming after Phase 5:
 
 1. Treat this file as frozen Phase 5 closeout evidence.
-2. Read `docs/handoffs/2026-05-02-phase5-to-phase6.md`.
+2. Read `docs/internal/handoffs/2026-05-02-phase5-to-phase6.md`.
 3. Create or read the Phase 6 Computer Use plan once available.
 4. Run `git status --short` and `git log --oneline -8`.
 5. Continue from Phase 6 planning/Linear issue queue; do not reopen Phase 5 unless a regression appears.

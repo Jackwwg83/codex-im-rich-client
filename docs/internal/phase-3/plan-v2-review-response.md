@@ -1,6 +1,6 @@
 # Phase 3 plan review response matrix (v1 → v2 → v2.1 → v2.2)
 
-Companion to `docs/superpowers/plans/2026-05-02-phase-3-plan.md` (plan v2.2).
+Companion to `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` (plan v2.2).
 
 Tracks every Codex outside-voice + gstack `/plan-eng-review` finding
 across 4 plan revisions and 3+ review rounds → where each is fixed.
@@ -101,7 +101,7 @@ After T0.7 lands, **T1 is unlocked**. Phase 3 implementation may begin.
 ## v2.1 → v2.2 codex round-2 fix matrix
 
 Codex outside-voice round 2 on v2.1 (`4edfd81`) returned **REJECT**
-with 1 P0 + 5 P1 + 3 P2. See `docs/phase-3/plan-v2.1-codex-round2.md`.
+with 1 P0 + 5 P1 + 3 P2. See `docs/internal/phase-3/plan-v2.1-codex-round2.md`.
 Codex confirmed all round-1 P0s + round-2 P1s genuinely fixed; flagged
 new v2.1-introduced defects.
 
@@ -120,7 +120,7 @@ new v2.1-introduced defects.
 ## v2.2 → v2.3 codex round-3 fix matrix
 
 Codex outside-voice round 3 on v2.2 (`c606039`) returned **APPROVE_WITH_CHANGES**
-with 0 P0 + 6 P1 + 3 P2. See `docs/phase-3/plan-v2.2-codex-round3.md`.
+with 0 P0 + 6 P1 + 3 P2. See `docs/internal/phase-3/plan-v2.2-codex-round3.md`.
 0 P0 confirmed structural design is sound; all findings are
 integration / consistency / refinement.
 

@@ -6,15 +6,15 @@ Run in read-only mode. Do not modify files. Do not run network commands (`npm vi
 
 Review:
 
-- `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
-- `docs/phase-4/lark-action-transport-decision.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
+- `docs/internal/phase-4/lark-action-transport-decision.md`
 
 Required context:
 
 - `CLAUDE.md`
 - `AGENTS.md`
-- `docs/handoffs/2026-05-02-phase3-to-phase4.md`
-- `docs/handoffs/phase3-live-status.md`
+- `docs/internal/handoffs/2026-05-02-phase3-to-phase4.md`
+- `docs/internal/handoffs/phase3-live-status.md`
 - `06-IM-ADAPTERS.md`
 - `07-SECURITY-AND-COMPUTER-USE.md`
 

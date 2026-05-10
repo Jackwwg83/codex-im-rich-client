@@ -512,7 +512,7 @@ function formatPlanSummary(plan: SetupPlan, options: CliOptions): string {
     "secrets:",
     ...plan.keychainWrites.map(
       (write) =>
-        `  ${write.envName}: Keychain service ${write.service}, account ${write.account}, length=${write.secret.length}`,
+        `  ${write.envName}: Keychain service ${write.service}, account ${write.account}, present`,
     ),
     "",
     "next:",
