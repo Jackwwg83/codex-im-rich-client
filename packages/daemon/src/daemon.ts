@@ -58,10 +58,8 @@ import {
 } from "@codex-im/storage-sqlite";
 import {
   actorKey,
-  appendImText,
   drainShutdown,
   errorMessage,
-  extractCodexItemFiles,
   firstOversizedInboundAttachment,
   forkFailureMessage,
   formatAppsList,
@@ -74,42 +72,30 @@ import {
   formatUsage,
   generateRawCallbackToken,
   inboundAttachmentTooLargeMessage,
-  isAppendOnlyTextRef,
   isDefined,
-  isGlobalRuntimeStatusMethod,
   isRawCwdSelector,
   materializedInboundAttachments,
   optionalMessageRefKind,
   optionalMessageRefTextUpdateMode,
-  outputItemSummaries,
-  outputStatusSummaries,
   parseTextApprovalAction,
   presence,
   projectDisplayNameFromCwd,
   promptInput,
   readArrayField,
   readNumberField,
-  readRecord,
   readStringField,
   redactMetadata,
   safeDisplayCwd,
   selectModelIdentifier,
   shouldSuppressAuxiliaryTurnSections,
   sleep,
-  splitImText,
   stringArray,
-  summarizeCodexItem,
-  summarizeCodexRuntimeNotice,
-  summarizeCodexStatusEvent,
   targetEqual,
   targetKey,
   textInput,
-  truncateImText,
-  turnOutputBodyWithSections,
-  turnOutputFileKey,
-  turnOutputKey,
 } from "./format.js";
 import { type DaemonStatusSnapshot, writeDaemonStatusSnapshot } from "./status.js";
+import { TurnOutputManager } from "./turn-output.js";
 
 type MaybePromise<T> = T | Promise<T>;
 type Unsubscribe = () => void;
@@ -180,12 +166,7 @@ const COMPUTER_USE_DYNAMIC_TOOL_SPEC = Object.freeze({
   },
 } as const satisfies ComputerUseDynamicToolSpec);
 const EAGER_PRUNE_RATIO = 0.8;
-const MAX_IM_ITEM_SUMMARIES = 6;
-const MAX_IM_STATUS_SUMMARIES = 12;
-const MAX_IM_ARTIFACT_FILES = 3;
-const MAX_IM_ARTIFACT_FILE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-const PROGRESS_EDIT_INTERVAL_MS = 1_500;
 
 export interface DaemonBroker {
   attach(): void;
@@ -599,7 +580,7 @@ export class Daemon {
   readonly #transportLostStuckIssuedApprovalIds = new Set<string>();
   readonly #unsubscribers: Unsubscribe[] = [];
   readonly #runtimeEventPumps = new WeakSet<object>();
-  readonly #turnOutputs = new Map<string, DaemonTurnOutputState>();
+  #turnOutputManager: TurnOutputManager | undefined;
   readonly #approvalCardsById = new Map<string, ApprovalCard>();
 
   constructor(options: DaemonOptions = {}) {
@@ -646,6 +627,14 @@ export class Daemon {
         supervisor: this.#supervisor,
       };
       this.#adapter = await this.options.createAdapter?.(adapterContext);
+      this.#turnOutputManager = new TurnOutputManager(
+        this.#adapter ?? {},
+        (event, detail) => {
+          this.#emitAuditEvent(event, detail as never);
+        },
+        async (path) => (await this.options.readArtifactFile?.(path)) ?? (await readFile(path)),
+        () => (this.options.now?.() ?? new Date()).getTime(),
+      );
       this.#revokeStartupCallbackTokens();
       this.#subscribe(
         this.#broker?.onPendingCreated?.((snapshot) => {
@@ -705,7 +694,8 @@ export class Daemon {
     this.#config = undefined;
     this.#stuckIssuedApprovalIds.clear();
     this.#transportLostStuckIssuedApprovalIds.clear();
-    this.#turnOutputs.clear();
+    this.#turnOutputManager?.clear();
+    this.#turnOutputManager = undefined;
   }
 
   isStarted(): boolean {
@@ -768,7 +758,8 @@ export class Daemon {
     this.#config = undefined;
     this.#stuckIssuedApprovalIds.clear();
     this.#transportLostStuckIssuedApprovalIds.clear();
-    this.#turnOutputs.clear();
+    this.#turnOutputManager?.clear();
+    this.#turnOutputManager = undefined;
   }
 
   #runSyncCleanup(cleanup: CleanupMethod): void {
@@ -1738,7 +1729,7 @@ export class Daemon {
     const activeTurnId = this.#turnId(startedTurn);
     if (activeTurnId !== undefined) {
       this.#bindActiveTurn(sessionRouter, route, activeTurnId);
-      await this.#openTurnOutput(
+      await this.#turnOutputManager?.open(
         inbound.target,
         route.codexThreadId,
         activeTurnId,
@@ -1887,157 +1878,22 @@ export class Daemon {
       return;
     }
     this.#runtimeEventPumps.add(runtime);
-    void this.#consumeRuntimeEvents(events.call(runtime.events)).catch((error: unknown) => {
-      this.#emitAuditEvent("runtime.event_pump_failed", {
-        result: "failed",
-        metadata: { error: errorMessage(error) },
-      });
-    });
-  }
-
-  async #consumeRuntimeEvents(events: AsyncIterable<CodexRichEvent>): Promise<void> {
-    for await (const event of events) {
-      await this.#handleRuntimeEvent(event);
-    }
-  }
-
-  async #handleRuntimeEvent(event: CodexRichEvent): Promise<void> {
-    if (event.type === "agent_message_delta") {
-      const state = this.#turnOutputs.get(turnOutputKey(event.threadId, event.turnId));
-      if (state !== undefined) {
-        state.text = appendImText(state.text, event.deltaText);
-        await this.#maybeEditTurnProgress(state);
-      }
-      return;
-    }
-
-    if (event.type === "item_completed") {
-      const state = this.#turnOutputs.get(turnOutputKey(event.threadId, event.turnId));
-      const summary = summarizeCodexItem(event.raw);
-      if (
-        state !== undefined &&
-        summary !== undefined &&
-        state.itemSummaries.length < MAX_IM_ITEM_SUMMARIES &&
-        !state.itemSummaries.includes(summary)
-      ) {
-        state.itemSummaries.push(summary);
-      }
-      if (state !== undefined) {
-        for (const file of extractCodexItemFiles(event.raw)) {
-          if (state.files.length >= MAX_IM_ARTIFACT_FILES) {
-            break;
-          }
-          if (
-            !state.files.some(
-              (candidate) => turnOutputFileKey(candidate) === turnOutputFileKey(file),
-            )
-          ) {
-            state.files.push(file);
+    const iterator = events.call(runtime.events);
+    void (async () => {
+      try {
+        for await (const event of iterator) {
+          const signal = await this.#turnOutputManager?.handle(event);
+          if (signal?.kind === "turn_terminal") {
+            this.#clearTerminalActiveTurn(signal.target, signal.threadId, signal.turnId);
           }
         }
+      } catch (error) {
+        this.#emitAuditEvent("runtime.event_pump_failed", {
+          result: "failed",
+          metadata: { error: errorMessage(error) },
+        });
       }
-      return;
-    }
-
-    if (event.type === "unknown") {
-      const state = this.#turnOutputStateForStatusEvent(event);
-      const summary = summarizeCodexStatusEvent(event);
-      await this.#appendTurnStatusSummary(state, summary);
-      return;
-    }
-
-    if (event.type === "warning" || event.type === "error") {
-      const state = this.#turnOutputStateForRuntimeNotice(event.raw);
-      const summary = summarizeCodexRuntimeNotice(event);
-      await this.#appendTurnStatusSummary(state, summary);
-      return;
-    }
-
-    if (
-      event.type !== "turn_completed" &&
-      event.type !== "turn_failed" &&
-      event.type !== "turn_interrupted"
-    ) {
-      return;
-    }
-
-    const key = turnOutputKey(event.threadId, event.turnId);
-    const state = this.#turnOutputs.get(key);
-    if (state === undefined) {
-      return;
-    }
-    this.#turnOutputs.delete(key);
-    this.#clearTerminalActiveTurn(state.target, event.threadId, event.turnId);
-    await this.#publishTerminalTurnOutput(
-      state,
-      this.#terminalTurnOutputBody(
-        event,
-        state.text,
-        outputStatusSummaries(state),
-        outputItemSummaries(state),
-      ),
-    );
-    await this.#publishTerminalTurnFiles(state);
-  }
-
-  #turnOutputStateForStatusEvent(
-    event: Extract<CodexRichEvent, { type: "unknown" }>,
-  ): DaemonTurnOutputState | undefined {
-    const params = readRecord(event.params);
-    const threadId = readStringField(params, "threadId");
-    const turnId = readStringField(params, "turnId");
-    if (threadId !== undefined && turnId !== undefined) {
-      return this.#turnOutputs.get(turnOutputKey(threadId, turnId));
-    }
-    if (threadId !== undefined) {
-      for (const state of this.#turnOutputs.values()) {
-        if (state.threadId === threadId) {
-          return state;
-        }
-      }
-      return undefined;
-    }
-    if (isGlobalRuntimeStatusMethod(event.method) && this.#turnOutputs.size === 1) {
-      return this.#turnOutputs.values().next().value;
-    }
-    return undefined;
-  }
-
-  async #appendTurnStatusSummary(
-    state: DaemonTurnOutputState | undefined,
-    summary: string | undefined,
-  ): Promise<void> {
-    if (
-      state !== undefined &&
-      summary !== undefined &&
-      state.statusSummaries.length < MAX_IM_STATUS_SUMMARIES &&
-      !state.statusSummaries.includes(summary)
-    ) {
-      state.statusSummaries.push(summary);
-      await this.#maybeEditTurnProgress(state);
-    }
-  }
-
-  #turnOutputStateForRuntimeNotice(raw: unknown): DaemonTurnOutputState | undefined {
-    const rawRecord = readRecord(raw);
-    const params = readRecord(rawRecord?.params);
-    const threadId = readStringField(params, "threadId") ?? readStringField(rawRecord, "threadId");
-    const turnId = readStringField(params, "turnId") ?? readStringField(rawRecord, "turnId");
-    if (threadId !== undefined && turnId !== undefined) {
-      return this.#turnOutputs.get(turnOutputKey(threadId, turnId));
-    }
-    if (threadId !== undefined) {
-      for (const state of this.#turnOutputs.values()) {
-        if (state.threadId === threadId) {
-          return state;
-        }
-      }
-      return undefined;
-    }
-    if (this.#turnOutputs.size === 1) {
-      return this.#turnOutputs.values().next().value;
-    }
-    return undefined;
+    })();
   }
 
   #clearTerminalActiveTurn(target: Target, threadId: string, turnId: string): void {
@@ -2063,208 +1919,6 @@ export class Daemon {
       codexThreadId: route.codexThreadId,
       ...(route.defaultModel === undefined ? {} : { defaultModel: route.defaultModel }),
     });
-  }
-
-  async #openTurnOutput(
-    target: Target,
-    threadId: string,
-    turnId: string,
-    suppressAuxiliarySummaries = false,
-  ): Promise<void> {
-    const state: DaemonTurnOutputState = {
-      target,
-      threadId,
-      turnId,
-      suppressAuxiliarySummaries,
-      statusSummaries: [],
-      itemSummaries: [],
-      files: [],
-      text: "",
-    };
-    this.#turnOutputs.set(turnOutputKey(threadId, turnId), state);
-    if (this.#adapter?.sendText === undefined) {
-      return;
-    }
-    try {
-      state.messageRef = await this.#adapter.sendText(target, "Codex is working...");
-    } catch (error) {
-      this.#emitAuditEvent("runtime.turn_output_send_failed", {
-        target,
-        result: "failed",
-        metadata: { error: errorMessage(error) },
-      });
-    }
-  }
-
-  async #editTurnOutput(state: DaemonTurnOutputState, body: string): Promise<boolean> {
-    if (state.messageRef === undefined || this.#adapter?.editText === undefined) {
-      return false;
-    }
-    try {
-      await this.#adapter.editText(state.messageRef, body);
-      return true;
-    } catch (error) {
-      this.#emitAuditEvent("runtime.turn_output_edit_failed", {
-        target: state.target,
-        result: "failed",
-        metadata: { error: errorMessage(error), turnId: state.turnId },
-      });
-      return false;
-    }
-  }
-
-  async #publishTerminalTurnOutput(state: DaemonTurnOutputState, body: string): Promise<void> {
-    const chunks = splitImText(body);
-    const [firstChunk, ...continuationChunks] = chunks;
-    if (firstChunk !== undefined) {
-      const edited = isAppendOnlyTextRef(state.messageRef)
-        ? false
-        : await this.#editTurnOutput(state, firstChunk);
-      if (!edited && !(await this.#sendTurnOutputChunk(state, firstChunk))) {
-        return;
-      }
-    }
-    if (continuationChunks.length === 0 || this.#adapter?.sendText === undefined) {
-      return;
-    }
-    for (const chunk of continuationChunks) {
-      if (!(await this.#sendTurnOutputChunk(state, chunk))) {
-        return;
-      }
-    }
-  }
-
-  async #sendTurnOutputChunk(state: DaemonTurnOutputState, body: string): Promise<boolean> {
-    if (this.#adapter?.sendText === undefined) {
-      return false;
-    }
-    try {
-      await this.#adapter.sendText(state.target, body);
-      return true;
-    } catch (error) {
-      this.#emitAuditEvent("runtime.turn_output_send_failed", {
-        target: state.target,
-        result: "failed",
-        metadata: { error: errorMessage(error), turnId: state.turnId },
-      });
-      return false;
-    }
-  }
-
-  async #publishTerminalTurnFiles(state: DaemonTurnOutputState): Promise<void> {
-    if (state.files.length === 0) {
-      return;
-    }
-    if (this.#adapter?.sendFile === undefined) {
-      this.#emitAuditEvent("runtime.turn_output_file_skipped", {
-        target: state.target,
-        result: "skipped",
-        metadata: { reason: "adapter_unsupported", turnId: state.turnId },
-      });
-      return;
-    }
-    for (const file of state.files) {
-      await this.#sendTurnOutputFile(state, file);
-    }
-  }
-
-  async #sendTurnOutputFile(
-    state: DaemonTurnOutputState,
-    file: DaemonTurnOutputFile,
-  ): Promise<void> {
-    try {
-      const bytes =
-        file.bytes ??
-        (file.path === undefined ? undefined : await this.#readArtifactFile(file.path));
-      if (bytes === undefined) {
-        this.#emitAuditEvent("runtime.turn_output_file_skipped", {
-          target: state.target,
-          result: "skipped",
-          metadata: {
-            reason: "missing_file_source",
-            filename: file.filename,
-            turnId: state.turnId,
-          },
-        });
-        return;
-      }
-      if (bytes.byteLength === 0 || bytes.byteLength > MAX_IM_ARTIFACT_FILE_BYTES) {
-        this.#emitAuditEvent("runtime.turn_output_file_skipped", {
-          target: state.target,
-          result: "skipped",
-          metadata: {
-            reason: bytes.byteLength === 0 ? "empty_file" : "file_too_large",
-            filename: file.filename,
-            turnId: state.turnId,
-          },
-        });
-        return;
-      }
-      await this.#adapter?.sendFile?.(state.target, {
-        filename: file.filename,
-        bytes,
-        contentType: file.contentType,
-      });
-    } catch (error) {
-      this.#emitAuditEvent("runtime.turn_output_file_send_failed", {
-        target: state.target,
-        result: "failed",
-        metadata: { error: errorMessage(error), filename: file.filename, turnId: state.turnId },
-      });
-    }
-  }
-
-  async #readArtifactFile(path: string): Promise<Uint8Array> {
-    return this.options.readArtifactFile?.(path) ?? readFile(path);
-  }
-
-  async #maybeEditTurnProgress(state: DaemonTurnOutputState): Promise<void> {
-    const statusSummaries = outputStatusSummaries(state);
-    const itemSummaries = outputItemSummaries(state);
-    if (state.text.length === 0 && statusSummaries.length === 0 && itemSummaries.length === 0) {
-      return;
-    }
-    if (isAppendOnlyTextRef(state.messageRef)) {
-      return;
-    }
-    const nowMs = (this.options.now?.() ?? new Date()).getTime();
-    if (
-      state.lastProgressEditAtMs !== undefined &&
-      nowMs - state.lastProgressEditAtMs < PROGRESS_EDIT_INTERVAL_MS
-    ) {
-      return;
-    }
-    state.lastProgressEditAtMs = nowMs;
-    await this.#editTurnOutput(state, this.#inProgressTurnOutputBody(state));
-  }
-
-  #inProgressTurnOutputBody(state: DaemonTurnOutputState): string {
-    const statusSummaries = outputStatusSummaries(state);
-    const itemSummaries = outputItemSummaries(state);
-    if (statusSummaries.length === 0 && itemSummaries.length === 0) {
-      return state.text.length === 0 ? "Codex is working..." : truncateImText(state.text);
-    }
-    return truncateImText(turnOutputBodyWithSections(state.text, statusSummaries, itemSummaries));
-  }
-
-  #terminalTurnOutputBody(
-    event: CodexRichEvent,
-    text: string,
-    statusSummaries: readonly string[] = [],
-    itemSummaries: readonly string[] = [],
-  ): string {
-    let body: string;
-    if (event.type === "turn_completed") {
-      body = text.length === 0 ? "Codex turn completed." : text;
-    } else if (event.type === "turn_interrupted") {
-      body = text.length === 0 ? "Codex turn interrupted." : `${text}\n\n[turn interrupted]`;
-    } else {
-      body = text.length === 0 ? "Codex turn failed." : `${text}\n\n[turn failed]`;
-    }
-    if (statusSummaries.length === 0 && itemSummaries.length === 0) {
-      return body;
-    }
-    return truncateImText(turnOutputBodyWithSections(body, statusSummaries, itemSummaries));
   }
 
   async #routeComputerUse(
@@ -3826,7 +3480,7 @@ export class Daemon {
           ...(entry.defaultModel === undefined ? {} : { defaultModel: entry.defaultModel }),
           activeTurnId,
         });
-        await this.#openTurnOutput(inbound.target, threadId, activeTurnId, false);
+        await this.#turnOutputManager?.open(inbound.target, threadId, activeTurnId, false);
       }
       await this.#editInboundMessage(
         inbound.messageRef,
@@ -3931,7 +3585,7 @@ export class Daemon {
           codexThreadId: threadId,
           activeTurnId,
         });
-        await this.#openTurnOutput(inbound.target, threadId, activeTurnId, false);
+        await this.#turnOutputManager?.open(inbound.target, threadId, activeTurnId, false);
       }
       await this.#editInboundMessage(
         inbound.messageRef,
@@ -4378,23 +4032,7 @@ export class Daemon {
       turnId: route.activeTurnId,
     });
     this.#clearTerminalActiveTurn(inbound.target, route.codexThreadId, route.activeTurnId);
-    await this.#interruptTurnOutput(route.codexThreadId, route.activeTurnId);
-  }
-
-  async #interruptTurnOutput(threadId: string, turnId: string): Promise<void> {
-    const key = turnOutputKey(threadId, turnId);
-    const state = this.#turnOutputs.get(key);
-    if (state === undefined) {
-      return;
-    }
-    this.#turnOutputs.delete(key);
-    await this.#publishTerminalTurnOutput(
-      state,
-      this.#terminalTurnOutputBody(
-        { type: "turn_interrupted", threadId, turnId, raw: {}, terminal: true },
-        state.text,
-      ),
-    );
+    await this.#turnOutputManager?.interrupt(route.codexThreadId, route.activeTurnId);
   }
 
   async #routeUseCommand(
