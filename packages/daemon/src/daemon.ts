@@ -11,8 +11,7 @@ import {
   type ComputerUseCommandResult,
   ComputerUsePolicy,
   type ComputerUseProvider,
-  ComputerUseSessionRegistry,
-  ComputerUseToolGate,
+  type ComputerUseSessionRegistry,
   type DynamicToolCallHandler,
   type IMRoutableApprovalMethod,
   IM_ROUTABLE_APPROVAL_METHODS,
@@ -31,7 +30,6 @@ import {
   type Target,
   UnsupportedComputerUseProvider,
   classifyApprovalRequest,
-  parseComputerUsePolicyConfig,
   redact,
   routeInboundCommand,
   wrapComputerUsePrompt,
@@ -56,6 +54,7 @@ import {
   type ThreadSessionUpsert,
   hashCallbackToken,
 } from "@codex-im/storage-sqlite";
+import { setupComputerUseGate } from "./computer-use-wiring.js";
 import {
   actorKey,
   drainShutdown,
@@ -117,10 +116,6 @@ const TEXT_FALLBACK_APPROVAL_ACTIONS = Object.freeze([
   "abort",
 ] as const satisfies readonly CallbackTokenAction[]);
 const DEFAULT_BIND_RETRY_DELAYS_MS = [50, 150, 350] as const;
-const DEFAULT_COMPUTER_USE_ALLOWED_TOOLS = Object.freeze([
-  { namespace: "codex_im.computer_use", tool: "operate" },
-  { namespace: null, tool: "computer_use.synthetic" },
-] as const satisfies readonly ComputerUseAllowedTool[]);
 type ComputerUseDynamicToolSpec = {
   readonly namespace?: string;
   readonly name: string;
@@ -733,24 +728,20 @@ export class Daemon {
   }
 
   #setupComputerUseToolGate(): void {
-    const registry = new ComputerUseSessionRegistry();
-    const policyConfig = parseComputerUsePolicyConfig(this.#config);
-    const policy =
-      policyConfig === undefined ? new ComputerUsePolicy() : new ComputerUsePolicy(policyConfig);
     const audit = this.#computerUseAuditEmitter();
-    const gate = new ComputerUseToolGate({
-      registry,
-      policy,
-      provider: this.options.computerUseProvider ?? new UnsupportedComputerUseProvider({ audit }),
+    const provider =
+      this.options.computerUseProvider ?? new UnsupportedComputerUseProvider({ audit });
+    const result = setupComputerUseGate({
+      broker: this.#broker,
+      config: this.#config,
+      provider,
       audit,
-      allowedTools: this.options.computerUseAllowedTools ?? DEFAULT_COMPUTER_USE_ALLOWED_TOOLS,
+      ...(this.options.computerUseAllowedTools === undefined
+        ? {}
+        : { allowedTools: this.options.computerUseAllowedTools }),
     });
-
-    this.#computerUseRegistry = registry;
-    this.#computerUsePolicy = policy;
-    this.#broker?.registerDynamicToolCallHandler?.((req) =>
-      gate.handleToolCall({ params: req.params }),
-    );
+    this.#computerUsePolicy = result.policy;
+    this.#computerUseRegistry = result.registry;
   }
 
   async #cleanupPartialStart(): Promise<void> {
