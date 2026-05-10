@@ -67,7 +67,7 @@ expect(
     contextKind: "app_default",
     projectLabel: "Codex default",
     codexThreadId: "thread-default",
-    cwd: "/Users/jackwu/projects/codex-im-rich-client",
+    cwd: "<home>/projects/codex-im-rich-client",
     now,
   }),
 ).toMatchObject({

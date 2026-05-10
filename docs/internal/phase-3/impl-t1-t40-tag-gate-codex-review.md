@@ -3,11 +3,11 @@ Verdict: GO_WITH_LOW_NITS
 Blockers: None P0/P1 found.
 
 T38 closure check:
-- WAL backup is closed: `better-sqlite3` online backup is used in [db-backup.ts](/Users/jackwu/projects/codex-im-rich-client/packages/cli/src/db-backup.ts:123), with a live WAL-mode test in [db-backup.test.ts](/Users/jackwu/projects/codex-im-rich-client/packages/cli/test/db-backup.test.ts:31).
-- Telegram shutdown pause is closed: `pauseInbound()` and `#acceptInbound()` gate messages/actions in [adapter.ts](/Users/jackwu/projects/codex-im-rich-client/packages/im-telegram/src/adapter.ts:186) and [adapter.ts](/Users/jackwu/projects/codex-im-rich-client/packages/im-telegram/src/adapter.ts:358), with post-pause tests.
-- launchd validation is closed: non-dry-run verifies wrapper/node/daemon paths before write/load in [install-launchd.mjs](/Users/jackwu/projects/codex-im-rich-client/bin/install-launchd.mjs:83).
-- stale `issued` expiration is closed: prune now includes `issued` and `bound` in [callback-tokens.ts](/Users/jackwu/projects/codex-im-rich-client/packages/storage-sqlite/src/callback-tokens.ts:340), with regression coverage.
-- daemon status producer is closed: startup writes a snapshot via [daemon.ts](/Users/jackwu/projects/codex-im-rich-client/packages/daemon/src/daemon.ts:360) and [status.ts](/Users/jackwu/projects/codex-im-rich-client/packages/daemon/src/status.ts:26).
+- WAL backup is closed: `better-sqlite3` online backup is used in [db-backup.ts](<repo>/packages/cli/src/db-backup.ts:123), with a live WAL-mode test in [db-backup.test.ts](<repo>/packages/cli/test/db-backup.test.ts:31).
+- Telegram shutdown pause is closed: `pauseInbound()` and `#acceptInbound()` gate messages/actions in [adapter.ts](<repo>/packages/im-telegram/src/adapter.ts:186) and [adapter.ts](<repo>/packages/im-telegram/src/adapter.ts:358), with post-pause tests.
+- launchd validation is closed: non-dry-run verifies wrapper/node/daemon paths before write/load in [install-launchd.mjs](<repo>/bin/install-launchd.mjs:83).
+- stale `issued` expiration is closed: prune now includes `issued` and `bound` in [callback-tokens.ts](<repo>/packages/storage-sqlite/src/callback-tokens.ts:340), with regression coverage.
+- daemon status producer is closed: startup writes a snapshot via [daemon.ts](<repo>/packages/daemon/src/daemon.ts:360) and [status.ts](<repo>/packages/daemon/src/status.ts:26).
 
 Low nits:
 - I did not rerun full gates in this read-only review. The tracked docs report the post-fix gates green at `eb05753`; JAC-64 should run final gates after the handoff/version commit.

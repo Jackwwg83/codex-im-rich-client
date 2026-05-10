@@ -148,7 +148,7 @@ What Phase 0–6 actually needs is **all in stable**:
 
 **Stdout** (single line, captured to `packages/testkit/fixtures/codex-0.125.0/initialize-response.jsonl`):
 ```json
-{"id":1,"result":{"userAgent":"phase0-spike/0.125.0 (Mac OS 26.1.0; arm64) iTerm.app/3.6.6 (phase0-spike; 0.0.0)","codexHome":"/Users/jackwu/.codex","platformFamily":"unix","platformOs":"macos"}}
+{"id":1,"result":{"userAgent":"phase0-spike/0.125.0 (Mac OS 26.1.0; arm64) iTerm.app/3.6.6 (phase0-spike; 0.0.0)","codexHome":"<home>/.codex","platformFamily":"unix","platformOs":"macos"}}
 ```
 
 **Findings**:
@@ -252,7 +252,7 @@ not json at all
 
 ```
 transport started
-initialize OK (codexHome=/Users/jackwu/.codex,
+initialize OK (codexHome=<home>/.codex,
                platformFamily=unix, platformOs=macos)
 thread/start OK (threadId=019ddc4e-f6ac-7863-9cad-82bf4ada4219)
 turn/start with harmless prompt
