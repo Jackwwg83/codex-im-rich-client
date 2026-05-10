@@ -11,8 +11,7 @@
     "test": "vitest run --project unit"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0",
-    "kysely": "^0.28.16"
+    "better-sqlite3": "^12.9.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13"

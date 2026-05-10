@@ -234,9 +234,6 @@ importers:
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0
-      kysely:
-        specifier: ^0.28.16
-        version: 0.28.16
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13
@@ -1207,10 +1204,6 @@ packages:
 
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
-
-  kysely@0.28.16:
-    resolution: {integrity: sha512-3i5pmOiZvMDj00qhrIVbH0AnioVTx22DMP7Vn5At4yJO46iy+FM8Y/g61ltenLVSo3fiO8h8Q3QOFgf/gQ72ww==}
-    engines: {node: '>=20.0.0'}
 
   lodash.identity@3.0.0:
     resolution: {integrity: sha512-AupTIzdLQxJS5wIYUQlgGyk2XRTfGXA+MCghDHqZk0pzUNYvd3EESS6dkChNauNYVIutcb0dfHw1ri9Q1yPV8Q==}
@@ -2457,8 +2450,6 @@ snapshots:
       istanbul-lib-report: 3.0.1
 
   js-tokens@10.0.0: {}
-
-  kysely@0.28.16: {}
 
   lodash.identity@3.0.0: {}
 

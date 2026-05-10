@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type DynamicToolCallHandler,
@@ -27,6 +28,7 @@ import {
 
 const SRC_DIR = join(import.meta.dirname, "../src");
 const STORAGE_MIGRATIONS_DIR = join(import.meta.dirname, "../../storage-sqlite/src/migrations");
+const FIXTURE_CWD = join(tmpdir(), "codex-im-rich-client-fixture-cwd");
 
 async function flushDaemonHandlers(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
@@ -746,7 +748,7 @@ describe("Daemon skeleton (T14)", () => {
     const sessionRouter = new SessionRouter({ bindings });
     const runtime = {
       threadStart: vi.fn(() => ({
-        thread: { id: "thread-default", cwd: "/Users/jackwu/projects/codex-im-rich-client" },
+        thread: { id: "thread-default", cwd: FIXTURE_CWD },
       })),
       turnStart: vi.fn(() => ({ turn: { id: "turn-default" } })),
       turnSteer: vi.fn(),
@@ -802,7 +804,7 @@ describe("Daemon skeleton (T14)", () => {
       target,
       contextKind: "app_default",
       projectLabel: "Codex default",
-      cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      cwd: FIXTURE_CWD,
       codexThreadId: "thread-default",
       now: "2026-05-09T10:10:00.000Z",
     });
@@ -814,7 +816,7 @@ describe("Daemon skeleton (T14)", () => {
       target,
       contextKind: "app_default",
       projectLabel: "Codex default",
-      cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      cwd: FIXTURE_CWD,
       codexThreadId: "thread-default",
       activeTurnId: "turn-default",
     });
@@ -3288,7 +3290,7 @@ describe("Daemon skeleton (T14)", () => {
     const sessionRouter = new SessionRouter({ bindings });
     const runtime = {
       threadStart: vi.fn(() => ({
-        thread: { id: "thread-default-new", cwd: "/Users/jackwu/projects/codex-im-rich-client" },
+        thread: { id: "thread-default-new", cwd: FIXTURE_CWD },
       })),
       turnStart: vi.fn(() => ({ turn: { id: "turn-default-new" } })),
       turnSteer: vi.fn(),
@@ -3350,7 +3352,7 @@ describe("Daemon skeleton (T14)", () => {
       target,
       contextKind: "app_default",
       projectLabel: "Codex default",
-      cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      cwd: FIXTURE_CWD,
       codexThreadId: "thread-default-new",
       title: "Release check",
       now: "2026-05-09T10:15:00.000Z",
@@ -3363,7 +3365,7 @@ describe("Daemon skeleton (T14)", () => {
       target,
       contextKind: "app_default",
       projectLabel: "Codex default",
-      cwd: "/Users/jackwu/projects/codex-im-rich-client",
+      cwd: FIXTURE_CWD,
       codexThreadId: "thread-default-new",
       activeTurnId: "turn-default-new",
     });
