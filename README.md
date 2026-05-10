@@ -1,5 +1,7 @@
 # Codex IM Rich Client
 
+> ⚠️ **Early Access (alpha)** — security hardening in progress. Not for production deployments.
+
 Codex IM Rich Client lets you use Codex App from IM. A local daemon runs on
 your Mac, connects to Codex App Server, and projects Codex-native threads,
 turns, approvals, files, diffs, status, and bounded Computer Use events into
@@ -46,7 +48,7 @@ IM-platform app provisioning in this version.
 Start with one platform.
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Jackwwg83/codex-im-rich-client.git
 cd codex-im-rich-client
 pnpm install
 pnpm codex-im:install

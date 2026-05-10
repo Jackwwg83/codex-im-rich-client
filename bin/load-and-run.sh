@@ -28,33 +28,31 @@ read_keychain_secret() {
   security find-generic-password -s "$service" -a "$USER" -w 2>/dev/null || true
 }
 
-describe_secret() {
+describe_secret_presence() {
   local name="$1"
   local value="$2"
   if [ -z "$value" ]; then
-    echo "$name: <unset>"
+    echo "$name: missing"
   else
-    echo "$name: <set from Keychain/env, length=${#value}>"
+    echo "$name: present"
   fi
 }
 
+# Resolve every IM secret from env (preferred) or Keychain. Missing values are
+# left empty here; this wrapper does not gate on which adapter is enabled.
+# The daemon validates per-adapter requirements based on config.toml.
 TELEGRAM_TOKEN="${IM_TELEGRAM_BOT_TOKEN:-$(read_keychain_secret codex-im-bridge)}"
 LARK_APP_SECRET_VALUE="${IM_LARK_APP_SECRET:-$(read_keychain_secret codex-im-bridge-lark)}"
 DINGTALK_CLIENT_SECRET_VALUE="${DINGTALK_CLIENT_SECRET:-$(read_keychain_secret codex-im-bridge-dingtalk)}"
 SLACK_BOT_TOKEN_VALUE="${SLACK_BOT_TOKEN:-$(read_keychain_secret codex-im-bridge-slack-bot)}"
 SLACK_APP_TOKEN_VALUE="${SLACK_APP_TOKEN:-$(read_keychain_secret codex-im-bridge-slack-app)}"
 
-if [ -z "$TELEGRAM_TOKEN" ]; then
-  echo "load-and-run: IM_TELEGRAM_BOT_TOKEN not found in Keychain (-s codex-im-bridge -a $USER)" >&2
-  exit 1
-fi
-
 if [ "${1:-}" = "--dry-run" ]; then
-  describe_secret "IM_TELEGRAM_BOT_TOKEN" "$TELEGRAM_TOKEN"
-  describe_secret "IM_LARK_APP_SECRET" "$LARK_APP_SECRET_VALUE"
-  describe_secret "DINGTALK_CLIENT_SECRET" "$DINGTALK_CLIENT_SECRET_VALUE"
-  describe_secret "SLACK_BOT_TOKEN" "$SLACK_BOT_TOKEN_VALUE"
-  describe_secret "SLACK_APP_TOKEN" "$SLACK_APP_TOKEN_VALUE"
+  describe_secret_presence "IM_TELEGRAM_BOT_TOKEN" "$TELEGRAM_TOKEN"
+  describe_secret_presence "IM_LARK_APP_SECRET" "$LARK_APP_SECRET_VALUE"
+  describe_secret_presence "DINGTALK_CLIENT_SECRET" "$DINGTALK_CLIENT_SECRET_VALUE"
+  describe_secret_presence "SLACK_BOT_TOKEN" "$SLACK_BOT_TOKEN_VALUE"
+  describe_secret_presence "SLACK_APP_TOKEN" "$SLACK_APP_TOKEN_VALUE"
   echo "NODE_BIN: $NODE_BIN"
   echo "DAEMON_ENTRY: $DAEMON_ENTRY"
   echo "CONFIG_PATH: $CONFIG_PATH"
@@ -62,7 +60,9 @@ if [ "${1:-}" = "--dry-run" ]; then
   exit 0
 fi
 
-export IM_TELEGRAM_BOT_TOKEN="$TELEGRAM_TOKEN"
+if [ -n "$TELEGRAM_TOKEN" ]; then
+  export IM_TELEGRAM_BOT_TOKEN="$TELEGRAM_TOKEN"
+fi
 if [ -n "$LARK_APP_SECRET_VALUE" ]; then
   export IM_LARK_APP_SECRET="$LARK_APP_SECRET_VALUE"
 fi

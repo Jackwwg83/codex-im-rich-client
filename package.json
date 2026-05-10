@@ -1,6 +1,7 @@
 {
   "name": "codex-im-rich-client",
-  "version": "0.1.0-phase7",
+  "version": "0.1.0-alpha.1",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "engines": {

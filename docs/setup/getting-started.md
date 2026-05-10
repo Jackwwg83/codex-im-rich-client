@@ -107,6 +107,12 @@ pnpm codex-im:upgrade --plan
 pnpm codex-im:upgrade --apply --dry-run
 ```
 
+> Note: `--apply` without `--dry-run` (i.e. a real upgrade-and-restart flow)
+> is not yet implemented and is planned for a later release. The three
+> commands above (`--check` for a remote-version probe, `--plan` for a local
+> readiness summary, and `--apply --dry-run` for a no-op preview of the
+> apply steps) are the supported upgrade-related operations today.
+
 If a secret is missing, the doctor prints a repair command and points back to
 the setup wizard. The repair command uses a placeholder such as
 `<SLACK_APP_TOKEN>`; replace it locally and do not paste real tokens into git,

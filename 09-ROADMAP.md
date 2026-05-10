@@ -6,10 +6,10 @@
 >
 > 当前 phase 状态请看：
 >
-> - **Per-phase 实施计划：** `docs/superpowers/plans/`（最新 `2026-05-02-phase-3-plan.md` v2.4）
-> - **当前 live status：** `docs/handoffs/phase3-live-status.md`
-> - **历史 phase live status：** `docs/handoffs/phase{1,2}-live-status.md`（FROZEN）
-> - **Phase 间 handoff：** `docs/handoffs/<date>-phase{N}-to-phase{N+1}.md`
+> - **Per-phase 实施计划：** `docs/internal/superpowers/plans/`（最新 `2026-05-02-phase-3-plan.md` v2.4）
+> - **当前 live status：** `docs/internal/handoffs/phase3-live-status.md`
+> - **历史 phase live status：** `docs/internal/handoffs/phase{1,2}-live-status.md`（FROZEN）
+> - **Phase 间 handoff：** `docs/internal/handoffs/<date>-phase{N}-to-phase{N+1}.md`
 >
 > 本文以下 Phase 0 / Phase 1 章节由后续 plan 实时回填为最终事实；Phase 2+ 章节保留作为 v0 历史 backlog 而非可执行 roadmap。
 
@@ -28,7 +28,7 @@
 - [x] 初始化 pnpm workspace（commit `0629659`）
 - [x] 创建 packages skeleton（codex-protocol/app-server-client/testkit/cli — Sections C–J）
 - [x] 添加 TypeScript（5.9.3 strict + composite + verbatimModuleSyntax + exactOptionalPropertyTypes）、Vitest（4.1.5 with unit/contract projects）、Biome（1.9.4，commits `cbd44c7` `34119a0` `df05488`）
-- [x] 实现 `protocol:generate` —— stable mode 不带 `--experimental`（empirical 决策见 `docs/phase-0/codex-gen-diff.md`，commits `c1a1a08` `67d7928` `d9b61c5`）
+- [x] 实现 `protocol:generate` —— stable mode 不带 `--experimental`（empirical 决策见 `docs/internal/phase-0/codex-gen-diff.md`，commits `c1a1a08` `67d7928` `d9b61c5`）
 - [x] 实现 JSONL transport 最小版本（JsonlDecoder + perf 1MB/4KB/<100ms + UTF-8 split，commit `9b74163`）
 - [x] 实现 `smoke:app-server`（CODEX_SMOKE=1 gated，初始化握手 + 干净 shutdown，commit `72d328f`）
 
@@ -50,13 +50,13 @@
 
 ### 产出引用
 
-- 实施计划：`docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md`
-- 协议决策证据：`docs/phase-0/host-environment.md`、`docs/phase-0/codex-gen-diff.md`
+- 实施计划：`docs/internal/superpowers/plans/2026-04-29-phase-0-bootstrap.md`
+- 协议决策证据：`docs/internal/phase-0/host-environment.md`、`docs/internal/phase-0/codex-gen-diff.md`
 - Codex outside-voice review 结果：见 plan v2 Decision Log + commit `dacbb29` `719a859` `380a988`
 
 ## Phase 1：Codex Runtime Core ✅ 完成 2026-05-01
 
-> **入口文档**：`docs/handoffs/2026-04-30-phase0-to-phase1.md` 是 Phase 1 启动的 single source of truth。Phase 1→2 交接见 `docs/handoffs/2026-05-01-phase1-to-phase2.md`。
+> **入口文档**：`docs/internal/handoffs/2026-04-30-phase0-to-phase1.md` 是 Phase 1 启动的 single source of truth。Phase 1→2 交接见 `docs/internal/handoffs/2026-05-01-phase1-to-phase2.md`。
 
 ### 目标
 
@@ -102,7 +102,7 @@
 - **Branch:** `phase-1-runtime`
 - **Test count:** 315 / 315 passing
 - **Gates:** `bash scripts/ci-check.sh` 8/8 green
-- **Codex outside-voice reviews captured (one per task):** docs/phase-1/codex-review-{t5,t6,t7b,t8,t9a,t9b,t9b-blocker-fix,t10,t11a,t11b}.md — 10 review docs total. T9b's blocker-fix arc included a B-clean lifecycle redesign of ApprovalBroker after the first review found 2 blockers; the redesign is the load-bearing correctness work for Phase 1.
+- **Codex outside-voice reviews captured (one per task):** docs/internal/phase-1/codex-review-{t5,t6,t7b,t8,t9a,t9b,t9b-blocker-fix,t10,t11a,t11b}.md — 10 review docs total. T9b's blocker-fix arc included a B-clean lifecycle redesign of ApprovalBroker after the first review found 2 blockers; the redesign is the load-bearing correctness work for Phase 1.
 - **Plan-amendment retrofit count:** 3 mid-phase prerequisites (Pre-1 Node 24, Pre-2 protocol facade, Pre-3 AppServerClient JsonRpcResponseError) + 1 mid-phase blocker fix (T9b broker completion race). Each was triggered by a codex review finding and recorded in plan + TODOS.
 
 ### Phase 1 后续 deferred items（recorded in TODOS.md backlog）
@@ -123,7 +123,7 @@
 
 ### Phase 1 必须先做的 spike / review
 
-1. **新 plan**：`docs/superpowers/plans/YYYY-MM-DD-phase-1-runtime.md`（按 Phase 0 plan v2 同样格式）
+1. **新 plan**：`docs/internal/superpowers/plans/YYYY-MM-DD-phase-1-runtime.md`（按 Phase 0 plan v2 同样格式）
 2. **gstack `/plan-eng-review`** on Phase 1 plan
 3. **Codex outside voice** on Phase 1 plan
 4. **richer-prompt fixture spike**：在写 EventNormalizer 之前，先抓 1–2 个 scenario 的真实事件流

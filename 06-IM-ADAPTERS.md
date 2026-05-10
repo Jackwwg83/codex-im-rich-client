@@ -36,7 +36,7 @@ export interface ChannelCapabilities {
 ```
 
 Phase 7 的扩展能力矩阵记录在
-`docs/phase-7/capability-matrix.md`。运行时代码仍以
+`docs/internal/phase-7/capability-matrix.md`。运行时代码仍以
 `packages/channel-core/src/adapter.ts` 的闭合 `ChannelAdapter` 接口为准。
 
 ## 3. Telegram Adapter

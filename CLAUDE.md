@@ -50,7 +50,7 @@ IM 平台只通过 ChannelAdapter 接入。
 4. 每个任务只改计划内文件。
 5. 关键模块先写 failing tests。
 6. 每个 phase 结束调用 Codex CLI 做独立 review。
-7. Autonomous loop sessions must follow `docs/automation/codex-app-autonomous-loop-runbook.md`.
+7. Autonomous loop sessions must follow `docs/internal/automation/codex-app-autonomous-loop-runbook.md`.
 
 ## 常用命令
 
@@ -215,9 +215,9 @@ First enter Context Recovery Mode:
 1. Read:
    - CLAUDE.md
    - README.md
-   - current phase plan under docs/superpowers/plans/
-   - latest handoff under docs/handoffs/
-   - docs/handoffs/phase1-live-status.md if present
+   - current phase plan under docs/internal/superpowers/plans/
+   - latest handoff under docs/internal/handoffs/
+   - docs/internal/handoffs/phase1-live-status.md if present
    - 09-ROADMAP.md
    - TODOS.md
 
