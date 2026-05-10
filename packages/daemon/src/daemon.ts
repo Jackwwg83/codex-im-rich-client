@@ -94,6 +94,7 @@ import {
   textInput,
 } from "./format.js";
 import { PruneSweep } from "./prune-sweep.js";
+import { MutationRateLimit } from "./rate-limit.js";
 import { type DaemonStatusSnapshot, writeDaemonStatusSnapshot } from "./status.js";
 import { TurnOutputManager } from "./turn-output.js";
 
@@ -566,6 +567,7 @@ export class Daemon {
   #lastFatal: { at: string; message: string } | undefined;
   #supervisorFailureCount = 0;
   #pruneSweep: PruneSweep | undefined;
+  #mutationRateLimit: MutationRateLimit | undefined;
   readonly #stuckIssuedApprovalIds = new Set<string>();
   readonly #transportLostStuckIssuedApprovalIds = new Set<string>();
   readonly #unsubscribers: Unsubscribe[] = [];
@@ -625,6 +627,9 @@ export class Daemon {
         async (path) => (await this.options.readArtifactFile?.(path)) ?? (await readFile(path)),
         () => (this.options.now?.() ?? new Date()).getTime(),
       );
+      this.#mutationRateLimit = new MutationRateLimit({
+        clock: () => (this.options.now?.() ?? new Date()).getTime(),
+      });
       this.#pruneSweep = new PruneSweep(
         {
           callbackTokenRepository: this.options.callbackTokenRepository,
@@ -708,6 +713,7 @@ export class Daemon {
     this.#transportLostStuckIssuedApprovalIds.clear();
     this.#turnOutputManager?.clear();
     this.#turnOutputManager = undefined;
+    this.#mutationRateLimit = undefined;
   }
 
   isStarted(): boolean {
@@ -768,13 +774,19 @@ export class Daemon {
     this.#transportLostStuckIssuedApprovalIds.clear();
     this.#turnOutputManager?.clear();
     this.#turnOutputManager = undefined;
+    this.#mutationRateLimit = undefined;
   }
 
   #runSyncCleanup(cleanup: CleanupMethod): void {
     try {
       void cleanup();
-    } catch {
-      // Best-effort rollback must not hide the original startup failure.
+    } catch (error) {
+      // Best-effort rollback must not hide the original startup failure,
+      // but it must not silently lose the cleanup error either.
+      this.#emitAuditEvent("daemon.cleanup_failed", {
+        result: "failed",
+        metadata: { error: errorMessage(error), phase: "sync" },
+      });
     }
   }
 
@@ -784,8 +796,11 @@ export class Daemon {
     }
     try {
       await cleanup();
-    } catch {
-      // Best-effort rollback must not hide the original startup failure.
+    } catch (error) {
+      this.#emitAuditEvent("daemon.cleanup_failed", {
+        result: "failed",
+        metadata: { error: errorMessage(error), phase: "async" },
+      });
     }
   }
 
@@ -806,8 +821,9 @@ export class Daemon {
   }
 
   async #handlePendingCreated(snapshot: PendingApprovalSnapshot): Promise<void> {
+    let target: Target | null | undefined;
     try {
-      const target = await this.options.resolveApprovalTarget?.(snapshot);
+      target = await this.options.resolveApprovalTarget?.(snapshot);
       if (target === undefined || target === null) {
         return;
       }
@@ -854,8 +870,17 @@ export class Daemon {
       }
 
       await this.#autoDeclineApproval(snapshot, target, "policy_auto_decline");
-    } catch {
-      // Pending-created subscribers must not destabilize the broker.
+    } catch (error) {
+      // Pending-created subscribers must not destabilize the broker, but
+      // a silent failure here means an approval IM card was never sent
+      // and the user has no idea their request is dangling. Audit so
+      // operators / on-call can correlate.
+      this.#emitAuditEvent("approval.send_failed", {
+        approvalId: snapshot.id,
+        ...(target === undefined || target === null ? {} : { target }),
+        result: "failed",
+        metadata: { error: errorMessage(error) },
+      });
     }
   }
 
@@ -1333,8 +1358,14 @@ export class Daemon {
         ...(metadataJson === undefined ? {} : { metadataJson }),
         createdAt: (this.options.now?.() ?? new Date()).toISOString(),
       });
-    } catch {
-      // Daemon-level audit is best-effort and must not mutate control flow.
+    } catch (error) {
+      // Daemon-level audit is best-effort and must not mutate control
+      // flow. Cannot recursively call #emitAuditEvent here (would risk
+      // unbounded loop on a broken audit sink). Stderr surface is the
+      // operator's signal of last resort.
+      console.warn(
+        `[daemon] audit emit failed for action=${action}: ${redact(errorMessage(error))}`,
+      );
     }
   }
 
@@ -1935,9 +1966,12 @@ export class Daemon {
   ): Promise<void> {
     const policy = this.#computerUsePolicy ?? new ComputerUsePolicy();
     if (command.action === "status") {
+      // /cu status is a read-only diagnostic; not subject to mutation
+      // rate limiting.
       await this.#editInboundMessage(inbound.messageRef, this.#computerUseStatusText(policy));
       return;
     }
+    if (await this.#enforceMutationRateLimit(inbound, "cu")) return;
 
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();
@@ -2413,6 +2447,7 @@ export class Daemon {
     inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
+    if (await this.#enforceMutationRateLimit(inbound, "switch")) return;
     const [selector] = command.args;
     if (selector === undefined) {
       await this.#editInboundMessage(inbound.messageRef, "Usage: /switch <thread>");
@@ -3301,10 +3336,45 @@ export class Daemon {
     await this.#editInboundMessage(inbound.messageRef, `Thread alias set: ${title}`);
   }
 
+  /**
+   * Slice 2.1 hardening item #6: enforce a sliding-window rate limit on
+   * mutation commands. Returns true when the request was denied (caller
+   * should immediately return); false when the request is admitted.
+   *
+   * Denial side-effects: edit the inbound message with an IM-friendly
+   * "Try again in N seconds" reply, and emit `inbound.rate_limited`
+   * audit so operators can correlate.
+   */
+  async #enforceMutationRateLimit(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    commandLabel: string,
+  ): Promise<boolean> {
+    const decision = this.#mutationRateLimit?.check(inbound.sender, inbound.target);
+    if (decision === undefined || decision.kind !== "deny") {
+      return false;
+    }
+    const retrySec = Math.max(1, Math.ceil(decision.retryAfterMs / 1000));
+    await this.#editInboundMessage(
+      inbound.messageRef,
+      `Rate limited. Try again in ${retrySec} seconds.`,
+    );
+    this.#emitAuditEvent("inbound.rate_limited", {
+      target: inbound.target,
+      result: "denied",
+      metadata: {
+        command: commandLabel,
+        retryAfterMs: decision.retryAfterMs,
+        limit: decision.limit,
+      },
+    });
+    return true;
+  }
+
   async #routeNewCommand(
     inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
+    if (await this.#enforceMutationRateLimit(inbound, "new")) return;
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();
     const threadSessions = this.#threadSessionRepository();
@@ -3613,6 +3683,7 @@ export class Daemon {
     inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
+    if (await this.#enforceMutationRateLimit(inbound, "fork")) return;
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();
     const threadSessions = this.#threadSessionRepository();
@@ -4049,9 +4120,12 @@ export class Daemon {
   ): Promise<void> {
     const [projectId] = command.args;
     if (projectId === undefined) {
+      // /use with no argument is a read-only listing (delegates to /cwds);
+      // not subject to mutation rate limiting.
       await this.#routeCwdsCommand(inbound);
       return;
     }
+    if (await this.#enforceMutationRateLimit(inbound, "use")) return;
     if (isRawCwdSelector(projectId)) {
       await this.#editInboundMessage(
         inbound.messageRef,
@@ -4082,7 +4156,15 @@ export class Daemon {
         cwd: selected.cwd,
         ...(selected.defaultModel === undefined ? {} : { defaultModel: selected.defaultModel }),
       });
-    } catch {
+    } catch (error) {
+      this.#emitAuditEvent("session.bind_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: {
+          error: errorMessage(error),
+          projectId: selected.alias,
+        },
+      });
       await this.#editInboundMessage(
         inbound.messageRef,
         `Failed to bind cwd ${selected.alias}: storage write failed`,

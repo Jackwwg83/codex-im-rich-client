@@ -14,6 +14,7 @@ export { Daemon } from "./daemon.js";
 export { createDaemonLogger, planDaemonLogger } from "./logger.js";
 export { MacChromeComputerUseProvider } from "./mac-chrome-computer-use-provider.js";
 export {
+  DAEMON_WEB_STATUS_SECURITY_HEADERS,
   planDaemonWebStatusConsole,
   renderDaemonWebStatusView,
   writeDaemonStatusSnapshot,

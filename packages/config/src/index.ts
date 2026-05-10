@@ -525,3 +525,178 @@ function resolveSecretEnv(
 
   return value;
 }
+
+// ---- Project path validation (Slice 2.1 hardening item #3) ---------------
+
+/**
+ * Filesystem operations the project-path validator needs. The injection
+ * point keeps the validator pure and testable; production callers pass
+ * `node:fs/promises` directly. Each operation matches the corresponding
+ * Node API by name + signature so `fs/promises` is structurally
+ * compatible without an adapter.
+ */
+export interface CodexImProjectPathFs {
+  realpath(path: string): Promise<string>;
+  stat(path: string): Promise<{ isDirectory(): boolean }>;
+}
+
+/**
+ * Thrown by `validateProjectPaths` for any path-level rejection. Wraps
+ * the failing path + project name + reason so callers can surface a
+ * useful error to the operator without leaking absolute paths into
+ * non-operator surfaces.
+ */
+export class CodexImConfigPathError extends Error {
+  readonly projectName: string;
+  readonly field: "cwd" | "writableRoots";
+  readonly path: string;
+  readonly reason: "missing" | "not_a_directory" | "realpath_failed";
+
+  constructor(input: {
+    projectName: string;
+    field: "cwd" | "writableRoots";
+    path: string;
+    reason: "missing" | "not_a_directory" | "realpath_failed";
+    cause?: unknown;
+  }) {
+    super(
+      `Project ${input.projectName}.${input.field} (${input.path}) is invalid: ${input.reason}`,
+      input.cause === undefined ? undefined : { cause: input.cause },
+    );
+    this.name = "CodexImConfigPathError";
+    this.projectName = input.projectName;
+    this.field = input.field;
+    this.path = input.path;
+    this.reason = input.reason;
+  }
+}
+
+/**
+ * Result of `validateProjectPaths`. The returned config is a SHALLOW
+ * copy with each project's cwd canonicalized via `fs.realpath`.
+ * `writableRoots` are NOT canonicalized into the returned config — they
+ * stay as the operator typed them so that diff vs. config.toml is
+ * visible. They ARE existence-checked (and rejected if missing).
+ *
+ * Slice 2.1 explicit decision: `writableRoots` is currently
+ * **metadata only** — codex itself does not yet receive these paths via
+ * `additionalWritableRoot` permission modifications. The validator's
+ * job here is to fail loudly at config load if the operator typed a
+ * wrong path, not to enforce sandboxing on codex's side. That
+ * enforcement is tracked for a later slice (capability-detect +
+ * permissions wire-up).
+ */
+export interface ValidatedCodexImConfig {
+  readonly config: CodexImConfig;
+  readonly canonicalProjectCwds: ReadonlyMap<string, string>;
+}
+
+/**
+ * Resolve every configured project's `cwd` via `fs.realpath` (catches
+ * symlink-escape between config-time and runtime), assert each `cwd`
+ * exists and is a directory, and assert every `writableRoots` entry
+ * exists and is a directory. Throws `CodexImConfigPathError` on the
+ * first failure.
+ *
+ * Returns the original config (unchanged) plus a sidecar
+ * `canonicalProjectCwds` map so callers can use realpath'd paths in
+ * places that require absolute identity (e.g. before passing to a
+ * child process), without having to mutate the config tree.
+ */
+export async function validateProjectPaths(
+  config: CodexImConfig,
+  fs: CodexImProjectPathFs,
+): Promise<ValidatedCodexImConfig> {
+  const canonicalProjectCwds = new Map<string, string>();
+  for (const [projectName, project] of Object.entries(config.projects)) {
+    const canonicalCwd = await canonicalizeDirectory(fs, projectName, "cwd", project.cwd);
+    canonicalProjectCwds.set(projectName, canonicalCwd);
+    for (const root of project.writableRoots) {
+      await assertDirectoryExists(fs, projectName, "writableRoots", root);
+    }
+  }
+  return { config, canonicalProjectCwds };
+}
+
+async function canonicalizeDirectory(
+  fs: CodexImProjectPathFs,
+  projectName: string,
+  field: "cwd",
+  path: string,
+): Promise<string> {
+  let resolved: string;
+  try {
+    resolved = await fs.realpath(path);
+  } catch (cause) {
+    throw new CodexImConfigPathError({
+      projectName,
+      field,
+      path,
+      reason: "realpath_failed",
+      cause,
+    });
+  }
+  let stat: { isDirectory(): boolean };
+  try {
+    stat = await fs.stat(resolved);
+  } catch (cause) {
+    throw new CodexImConfigPathError({
+      projectName,
+      field,
+      path: resolved,
+      reason: "missing",
+      cause,
+    });
+  }
+  if (!stat.isDirectory()) {
+    throw new CodexImConfigPathError({
+      projectName,
+      field,
+      path: resolved,
+      reason: "not_a_directory",
+    });
+  }
+  return resolved;
+}
+
+async function assertDirectoryExists(
+  fs: CodexImProjectPathFs,
+  projectName: string,
+  field: "writableRoots",
+  path: string,
+): Promise<void> {
+  // realpath first so a symlink to a non-directory (or a dangling
+  // symlink) is caught as "missing" rather than misclassified.
+  let resolved: string;
+  try {
+    resolved = await fs.realpath(path);
+  } catch (cause) {
+    throw new CodexImConfigPathError({
+      projectName,
+      field,
+      path,
+      reason: "realpath_failed",
+      cause,
+    });
+  }
+  let stat: { isDirectory(): boolean };
+  try {
+    stat = await fs.stat(resolved);
+  } catch (cause) {
+    throw new CodexImConfigPathError({
+      projectName,
+      field,
+      path: resolved,
+      reason: "missing",
+      cause,
+    });
+  }
+  if (!stat.isDirectory()) {
+    throw new CodexImConfigPathError({
+      projectName,
+      field,
+      path: resolved,
+      reason: "not_a_directory",
+    });
+  }
+}
