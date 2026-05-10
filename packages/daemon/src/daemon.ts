@@ -95,6 +95,11 @@ import {
 } from "./format.js";
 import { PruneSweep } from "./prune-sweep.js";
 import { MutationRateLimit } from "./rate-limit.js";
+import {
+  type RemoteControlStatusUpdate,
+  formatRemoteControlStatusLine,
+  parseRemoteControlStatusParams,
+} from "./remote-control.js";
 import { type DaemonStatusSnapshot, writeDaemonStatusSnapshot } from "./status.js";
 import { archiveThread, unarchiveThread } from "./thread-lifecycle.js";
 import { renameThread } from "./thread-rename.js";
@@ -583,6 +588,7 @@ export class Daemon {
   #pruneSweep: PruneSweep | undefined;
   #mutationRateLimit: MutationRateLimit | undefined;
   readonly #capabilities = new CodexCapabilities();
+  #lastRemoteControlStatus: RemoteControlStatusUpdate | undefined;
   readonly #stuckIssuedApprovalIds = new Set<string>();
   readonly #transportLostStuckIssuedApprovalIds = new Set<string>();
   readonly #unsubscribers: Unsubscribe[] = [];
@@ -1936,6 +1942,12 @@ export class Daemon {
     void (async () => {
       try {
         for await (const event of iterator) {
+          if (event.type === "unknown" && event.method === "remoteControl/status/changed") {
+            const update = parseRemoteControlStatusParams(event.params);
+            if (update !== undefined) {
+              this.#lastRemoteControlStatus = update;
+            }
+          }
           const signal = await this.#turnOutputManager?.handle(event);
           if (signal?.kind === "turn_terminal") {
             this.#clearTerminalActiveTurn(signal.target, signal.threadId, signal.turnId);
@@ -2678,6 +2690,7 @@ export class Daemon {
     if (route?.kind !== "bound") {
       lines.push("binding: unbound");
       lines.push(`pending approvals: ${this.#pendingApprovalCount()}`);
+      lines.push(formatRemoteControlStatusLine(this.#lastRemoteControlStatus));
       await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
       return;
     }
@@ -2691,6 +2704,7 @@ export class Daemon {
     }
     lines.push(`active turn: ${this.#shortId(route.activeTurnId)}`);
     lines.push(`pending approvals: ${this.#pendingApprovalCount()}`);
+    lines.push(formatRemoteControlStatusLine(this.#lastRemoteControlStatus));
     await this.#editInboundMessage(inbound.messageRef, lines.join("\n"));
   }
 
@@ -3926,6 +3940,13 @@ export class Daemon {
       return;
     }
 
+    // Slice 3 A5: /fork accepts an optional `--exclude-turns` flag.
+    // Default behavior matches the codex protocol default (include
+    // turns). The flag opts in to excluding the turn array from the
+    // forked thread metadata, which is the path callers use when they
+    // plan to call thread/turns/list immediately after.
+    const excludeTurns = command.args.includes("--exclude-turns");
+
     let forkedThreadId: string | undefined;
     try {
       forkedThreadId = this.#threadId(
@@ -3933,7 +3954,7 @@ export class Daemon {
           threadId: source.codexThreadId,
           cwd: project.cwd,
           ...(project.defaultModel === undefined ? {} : { model: project.defaultModel }),
-          excludeTurns: true,
+          excludeTurns,
         }),
       );
     } catch (error) {
