@@ -229,7 +229,7 @@ Implementation:
 - root `package.json` (pnpm.onlyBuiltDependencies whitelist)
 
 Plan-of-record:
-- `docs/superpowers/plans/2026-05-02-phase-3-plan.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md`
   - §8.1 (storage-sqlite directory layout)
   - §16.2 T1.1 / T2a / T2b / T2c / T3a-T6f
   - §7 D27 boundary

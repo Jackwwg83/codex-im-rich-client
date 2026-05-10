@@ -2,7 +2,7 @@
 
 > 🧊 **FROZEN — historical record.** Phase 2 closed at tag `phase-2-codex-reviewed` (annotated, at `0d4dfc3`). Codex backfill review fix arc (T18-T22 + T24) returned GO and version was promoted from `0.1.0-phase2-draft` → `0.1.0-phase2`. Phase 3 implementation began on branch `phase-3-implementation` (T1.1 → T3a landed as of 2026-05-02).
 >
-> **For current live state see [`docs/handoffs/phase3-live-status.md`](phase3-live-status.md).** Do not update this file further; the "Phase 3 IMPLEMENTATION BLOCKED" line below is preserved as the original 2026-05-02 close-out sentiment but is **no longer accurate**.
+> **For current live state see [`docs/internal/handoffs/phase3-live-status.md`](phase3-live-status.md).** Do not update this file further; the "Phase 3 IMPLEMENTATION BLOCKED" line below is preserved as the original 2026-05-02 close-out sentiment but is **no longer accurate**.
 
 ---
 
@@ -17,10 +17,10 @@
 
 - **Phase:** Phase 2 — Approval & IM Surface (✅ tagged complete; Codex backfill review pending)
 - **Active task:** None. Implementation chain complete through T24 tag-gate.
-- **Tag applied:** `phase-2-approval-im-surface-complete` at commit `3154f54` (annotated; deferral note in tag body). See `docs/phase-2/codex-review-deferred.md`.
+- **Tag applied:** `phase-2-approval-im-surface-complete` at commit `3154f54` (annotated; deferral note in tag body). See `docs/internal/phase-2/codex-review-deferred.md`.
 - **Version:** `0.1.0-phase2-draft` (will promote to `0.1.0-phase2` ONLY after deferred Codex backfill review returns GO).
 - **Last completed implementation milestone:** T24 tag-gate with deferral docs (commit `3154f54`).
-- **Phase 3 status:** PLANNING ALLOWED (start with `/plan-eng-review` against the candidates in `docs/handoffs/2026-05-02-phase2-to-phase3.md` §"Recommended Phase 3 mission"). **IMPLEMENTATION BLOCKED** until either:
+- **Phase 3 status:** PLANNING ALLOWED (start with `/plan-eng-review` against the candidates in `docs/internal/handoffs/2026-05-02-phase2-to-phase3.md` §"Recommended Phase 3 mission"). **IMPLEMENTATION BLOCKED** until either:
   1. Deferred Codex backfill review returns GO, OR
   2. Human explicitly authorizes Phase 3 planning-only-then-implementation work.
 
@@ -74,7 +74,7 @@
 
 ## 6. Active redlines (carry forward to Phase 3)
 
-See `docs/handoffs/2026-05-02-phase2-to-phase3.md` §"Phase 2 redlines".
+See `docs/internal/handoffs/2026-05-02-phase2-to-phase3.md` §"Phase 2 redlines".
 
 ## 7. Rejected alternatives (do not relitigate)
 

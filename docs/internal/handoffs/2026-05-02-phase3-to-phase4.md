@@ -1,7 +1,7 @@
 # Phase 3 -> Phase 4 Handoff
 
 > Purpose: compact recovery anchor for a fresh Phase 4 planning session.
-> Start here, then read `docs/handoffs/phase3-live-status.md`, `CLAUDE.md`, and the next Phase 4 plan once created.
+> Start here, then read `docs/internal/handoffs/phase3-live-status.md`, `CLAUDE.md`, and the next Phase 4 plan once created.
 
 ---
 
@@ -41,7 +41,7 @@ Final JAC-64 gate run was green after the `0.1.0-phase3` version bump and handof
 | T1.1-T2c implementation | APPROVE_WITH_CHANGES | Closed by `04a92fe` |
 | T1-T19 mid-phase | APPROVE_WITH_CHANGES | Closed by `b5c4441` |
 | T1-T36 final | APPROVE_WITH_CHANGES | Closed by `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, `eb05753` |
-| T40 tag gate | GO_WITH_LOW_NITS | `docs/phase-3/impl-t1-t40-tag-gate-codex-review.md` |
+| T40 tag gate | GO_WITH_LOW_NITS | `docs/internal/phase-3/impl-t1-t40-tag-gate-codex-review.md` |
 
 ## D22-D31 Decision Summary
 
@@ -58,7 +58,7 @@ Final JAC-64 gate run was green after the `0.1.0-phase3` version bump and handof
 | D30 | Telegram callback data is `v1:` + short opaque token only | `packages/im-telegram/src/callback-codec.ts` |
 | D31 | Audit ring failures are rate-limited and do not crash routing | `packages/storage-sqlite/src/audit.ts` |
 
-Later Phase 3 decisions D32-D42 are live redlines in `docs/handoffs/phase3-live-status.md` §6 and carry into Phase 4+.
+Later Phase 3 decisions D32-D42 are live redlines in `docs/internal/handoffs/phase3-live-status.md` §6 and carry into Phase 4+.
 
 ## Phase 3 Delivered Surface
 
@@ -120,6 +120,6 @@ Linear next issue: JAC-65 — Phase 4 plan review gate for Feishu/Lark.
 Phase 4 must start as planning-only work:
 
 1. Read this handoff, `phase3-live-status.md`, `CLAUDE.md`, `06-IM-ADAPTERS.md` §4, and `07-SECURITY-AND-COMPUTER-USE.md`.
-2. Draft a Phase 4 plan under `docs/superpowers/plans/`.
+2. Draft a Phase 4 plan under `docs/internal/superpowers/plans/`.
 3. Review the plan with Codex/GPT Pro before implementing `im-lark`.
 4. Keep real Lark credentials and live calls operator-gated; do not put secrets in Linear or docs.

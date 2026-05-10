@@ -9,7 +9,7 @@
 ## 1. Current phase / task
 
 - **Phase:** Phase 4 — Feishu/Lark adapter.
-- **Plan:** `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md`.
 - **Parent Linear issue:** JAC-9 — Phase 4 backlog / Feishu-Lark adapter.
 - **Final Linear issue:** JAC-162 — Phase4-T12 review/handoff/tag.
 - **Branch:** `codex/phase-4-planning`.
@@ -21,12 +21,12 @@
 
 - Phase 4 uses native `@larksuiteoapi/node-sdk`, not Vercel Chat SDK, Koishi/Satori, or a generic chat abstraction.
 - Default connection mode is Lark/Feishu long connection (`WSClient`) so the Mac mini does not need a public webhook.
-- Decision record: `docs/phase-4/lark-action-transport-decision.md`.
-- Target verification: `docs/phase-4/lark-target-verification.md`.
+- Decision record: `docs/internal/phase-4/lark-action-transport-decision.md`.
+- Target verification: `docs/internal/phase-4/lark-target-verification.md`.
 - Selected action transport: newer `card.action.trigger` over long connection; legacy message-card callbacks rejected for Phase 4.
 - Default target: `feishu`, enterprise custom app, long connection subscription, `card.action.trigger`.
 - MessageRef source: `context.open_message_id` / `open_message_id` plus `context.open_chat_id` / `open_chat_id`; missing or ambiguous references fail closed.
-- Live Lark smoke is documented and env-gated in `docs/ops/lark-live-smoke.md`; default run skips with no network or credentials.
+- Live Lark smoke is documented and env-gated in `docs/internal/ops-smoke/lark-live-smoke.md`; default run skips with no network or credentials.
 
 ## 3. Active redlines carried forward
 
@@ -49,9 +49,9 @@
 | Phase 4 plan v1.1 Codex review | APPROVE_WITH_CHANGES, 0 P0 + 5 P1 + 3 P2 |
 | Phase 4 plan v1.1 response | P1/P2 fixes absorbed in plan + decision record |
 | Phase 4 plan v1.2 Codex review | GO_WITH_LOW_NITS, no P0/P1 blockers |
-| Phase 4 final implementation review | REJECT at `f51c7c6`; 2 P1 + 2 P2 recorded in `docs/phase-4/impl-final-codex-review.md` |
+| Phase 4 final implementation review | REJECT at `f51c7c6`; 2 P1 + 2 P2 recorded in `docs/internal/phase-4/impl-final-codex-review.md` |
 | Phase 4 final review fixes | `50a90c4` closed the 2 P1 blockers and prior P2s |
-| Phase 4 final re-review | GO_WITH_LOW_NITS; no P0/P1, tag allowed; report in `docs/phase-4/impl-final-codex-rereview.md` |
+| Phase 4 final re-review | GO_WITH_LOW_NITS; no P0/P1, tag allowed; report in `docs/internal/phase-4/impl-final-codex-rereview.md` |
 | Re-review low-nit closure | `c289a7a` fixed production `answerAction` ack strategy and malformed action primitive fail-closed coverage |
 
 ## 5. Linear execution queue
@@ -96,7 +96,7 @@ Note: `protocol:check` regenerates protocol files during verification, so do not
 If resuming after Phase 4:
 
 1. Treat this file as frozen Phase 4 closeout evidence.
-2. Read `docs/handoffs/2026-05-02-phase4-to-phase5.md`.
+2. Read `docs/internal/handoffs/2026-05-02-phase4-to-phase5.md`.
 3. Read the Phase 5 DingTalk plan once created.
 4. Run `git status --short` and `git log --oneline -8`.
 5. Continue from Phase 5 planning/Linear issue queue; do not reopen Phase 4 unless a regression appears.

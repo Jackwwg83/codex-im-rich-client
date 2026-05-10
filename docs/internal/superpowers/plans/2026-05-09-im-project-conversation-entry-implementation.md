@@ -12,7 +12,7 @@
 
 ## Source Of Truth
 
-- Design: `docs/superpowers/specs/2026-05-09-im-project-conversation-entry-design.md`
+- Design: `docs/internal/superpowers/specs/2026-05-09-im-project-conversation-entry-design.md`
 - Protocol facts:
   - `packages/codex-protocol/src/generated/v2/ThreadStartParams.ts`
   - `packages/codex-protocol/src/generated/v2/ThreadStartResponse.ts`
@@ -44,7 +44,7 @@
   - Pin command behavior for plain text and `/new`.
 - `packages/daemon/test/turn-output.test.ts`
   - Keep output wording path-free.
-- `docs/handoffs/direct-use-live-status.md`
+- `docs/internal/handoffs/direct-use-live-status.md`
   - Record current semantics and gate evidence.
 
 ## Task 1: Storage Context Migration
@@ -220,7 +220,7 @@ pnpm exec vitest run --project unit packages/daemon/test/daemon.test.ts packages
 - Modify: `docs/user/commands.md`
 - Modify: `docs/user/quickstart.md`
 - Modify: `docs/setup/getting-started.md`
-- Modify: `docs/handoffs/direct-use-live-status.md`
+- Modify: `docs/internal/handoffs/direct-use-live-status.md`
 
 - [x] **Step 1: Update user docs**
 

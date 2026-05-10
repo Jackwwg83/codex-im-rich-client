@@ -254,7 +254,7 @@ workspace install, slash command, Events API, and interactivity setup.
 
 Runbook:
 
-- `docs/ops/slack-live-smoke.md`
+- `docs/internal/ops-smoke/slack-live-smoke.md`
 
 Passing criteria:
 

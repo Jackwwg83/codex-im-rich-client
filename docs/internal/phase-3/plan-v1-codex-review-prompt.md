@@ -18,8 +18,8 @@ Phase 2 tag: `phase-2-approval-im-surface-complete` (`4ec2c51`) +
 platform-agnostic rendering + fake e2e. New packages
 `@codex-im/render` + `@codex-im/channel-core`. Codex backfill review
 returned GO_WITH_LOW_NITS after applying P0+P1 fixes (see
-`docs/phase-2/codex-review-t18-t22.md` and
-`docs/phase-2/codex-review-t24-integrated.md`).
+`docs/internal/phase-2/codex-review-t18-t22.md` and
+`docs/internal/phase-2/codex-review-t24-integrated.md`).
 
 Codex 0.128 upgrade landed on `chore/codex-upgrade-0.128` (`d999af5`).
 ServerRequest method names UNCHANGED 0.125 → 0.128 (broker untouched);
@@ -28,7 +28,7 @@ ThreadStartParams fields removed.
 
 ## Plan to review
 
-`docs/superpowers/plans/2026-05-02-phase-3-plan.md` (1202 lines, v1)
+`docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` (1202 lines, v1)
 
 Mission: Telegram MVP, end-to-end, production-shaped. Bundles five
 slivers — production daemon wire-up, SecurityPolicy ACL, real
@@ -38,8 +38,8 @@ SessionRouter (SQLite), launchd integration.
 ## Also read for context (cite line numbers from working tree)
 
 - `CLAUDE.md` — project-wide redlines
-- `docs/handoffs/2026-05-02-phase2-to-phase3.md` — Phase 2 → 3 handoff
-- `docs/phase-2/codex-review-t18-t22.md` + `codex-review-t24-integrated.md`
+- `docs/internal/handoffs/2026-05-02-phase2-to-phase3.md` — Phase 2 → 3 handoff
+- `docs/internal/phase-2/codex-review-t18-t22.md` + `codex-review-t24-integrated.md`
 - `01-PRD.md`, `02-TECHNICAL-DECISIONS.md`, `03-ARCHITECTURE.md`,
   `04-MODULE-DESIGN.md`, `06-IM-ADAPTERS.md`,
   `07-SECURITY-AND-COMPUTER-USE.md`, `08-DATA-MODEL.md`, `09-ROADMAP.md`

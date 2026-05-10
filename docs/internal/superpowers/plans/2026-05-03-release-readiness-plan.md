@@ -17,8 +17,8 @@ recoverable, and safe production run.
 - Branch: `codex/release-readiness`
 - Parent Linear issue: JAC-166
 - First issue: JAC-167
-- Frozen prior status: `docs/handoffs/phase7-live-status.md`
-- Prior handoff: `docs/handoffs/2026-05-03-phase7-to-future.md`
+- Frozen prior status: `docs/internal/handoffs/phase7-live-status.md`
+- Prior handoff: `docs/internal/handoffs/2026-05-03-phase7-to-future.md`
 - Current root version: `0.1.0-phase7`
 - Codex pin: `0.128.0`
 
@@ -115,8 +115,8 @@ output before diffing.
 
 Allowed files:
 
-- `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`
-- `docs/handoffs/release-readiness-live-status.md`
+- `docs/internal/superpowers/plans/2026-05-03-release-readiness-plan.md`
+- `docs/internal/handoffs/release-readiness-live-status.md`
 - `README.md`
 - `TODOS.md`
 
@@ -132,7 +132,7 @@ Exit:
 Allowed files:
 
 - `.github/workflows/ci.yml`
-- `docs/handoffs/release-readiness-live-status.md`
+- `docs/internal/handoffs/release-readiness-live-status.md`
 - `TODOS.md`
 
 CI must not run live smoke commands or require secrets.
@@ -145,7 +145,7 @@ Allowed files:
 - `scripts/release-readiness-check.test.mts`
 - `package.json`
 - `docs/ops/release-readiness.md`
-- `docs/handoffs/release-readiness-live-status.md`
+- `docs/internal/handoffs/release-readiness-live-status.md`
 - `TODOS.md`
 
 Default execution must be non-live and side-effect-minimized. Any command that
@@ -158,7 +158,7 @@ Allowed files:
 
 - `docs/ops/production-launch.md`
 - `README.md`
-- `docs/handoffs/release-readiness-live-status.md`
+- `docs/internal/handoffs/release-readiness-live-status.md`
 - `TODOS.md`
 
 Checklist must include prerequisites, install, health, logs, backup, smoke,
@@ -169,8 +169,8 @@ instructions.
 
 Allowed files:
 
-- `docs/release-readiness/**`
-- `docs/handoffs/**`
+- `docs/internal/release-readiness/**`
+- `docs/internal/handoffs/**`
 - `README.md`
 - `TODOS.md`
 - `package.json` only if release version convention requires a bump

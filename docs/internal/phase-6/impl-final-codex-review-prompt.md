@@ -22,10 +22,10 @@ Computer Use session and policy/tool gate allow it.
 
 ## Source Of Truth
 
-- `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`
-- `docs/handoffs/phase6-live-status.md`
-- `docs/phase-6/computer-use-capability-evidence.md`
-- `docs/ops/computer-use-smoke.md`
+- `docs/internal/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`
+- `docs/internal/handoffs/phase6-live-status.md`
+- `docs/internal/phase-6/computer-use-capability-evidence.md`
+- `docs/internal/ops-smoke/computer-use-smoke.md`
 - `07-SECURITY-AND-COMPUTER-USE.md`
 - `08-DATA-MODEL.md`
 - `11-TESTING-AND-QA.md`

@@ -39,7 +39,7 @@ None.
 ## Low-severity nits only
 
 1. `README.md` top summary still says test count `73 → 315`, while quickstart and live-status say `320`. Stale handoff metadata, not a runtime blocker.
-2. `docs/handoffs/2026-05-01-phase1-to-phase2.md` snapshot also still references `315`. Same stale-metadata category as nit #1.
+2. `docs/internal/handoffs/2026-05-01-phase1-to-phase2.md` snapshot also still references `315`. Same stale-metadata category as nit #1.
 
 Both nits are docs-only and clearly mechanical. Per user-defined `GO_WITH_LOW_NITS` flow: apply inline as `fix(phase1): tag-gate review nits`, run full gates, then re-confirm before tagging. Do not introduce new features or modify Supervisor / ApprovalBroker / AppServerClient / CodexRuntime wrappers in this fixup.
 
@@ -97,7 +97,7 @@ Codex confirmed:
 
 ## M3 / M4 / L5 disposition
 
-- **M3** (runtime-send vs Supervisor integration) — recorded as Phase 2 risk in `docs/handoffs/2026-05-01-phase1-to-phase2.md`. Not hidden, not a tag blocker. ✅
+- **M3** (runtime-send vs Supervisor integration) — recorded as Phase 2 risk in `docs/internal/handoffs/2026-05-01-phase1-to-phase2.md`. Not hidden, not a tag blocker. ✅
 - **M4** (Phase 2 hooks overstated) — handoff softened to say `ApprovalBroker.resolve()` remains a throwing stub; Phase 2 likely needs additional broker public surface for IM rendering and user-decision mapping. ✅
 - **L5** (README/package metadata staleness) — partially fixed (quickstart + version bumps + clientVersion bumps); residual nits in this report (README top summary + handoff snapshot test counts).
 

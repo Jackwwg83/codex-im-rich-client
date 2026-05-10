@@ -5,7 +5,7 @@ Generated: 2026-05-02
 ## 1. Closeout
 
 - **Closed phase:** Phase 5 - DingTalk adapter.
-- **Plan:** `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`.
 - **Base tag:** `phase-4-lark-adapter-complete`.
 - **Release tag:** `phase-5-dingtalk-adapter-complete`.
 - **Version:** `0.1.0-phase5`.
@@ -26,7 +26,7 @@ Generated: 2026-05-02
 - Duplicate robot delivery suppression; card replay remains enforced by daemon callback-token CAS and messageRef validation.
 - Redacted adapter `raw` fields for platform ids.
 - Adapter contract suite, boundary tests, fake daemon smoke, and env-gated live smoke harness.
-- Live smoke docs: `docs/ops/dingtalk-live-smoke.md`.
+- Live smoke docs: `docs/internal/ops-smoke/dingtalk-live-smoke.md`.
 
 ## 3. Review / fixes
 
@@ -38,7 +38,7 @@ Generated: 2026-05-02
   - duplicate robot delivery suppression;
   - implemented target/messageRef evidence;
   - redacted platform ids from adapter `raw`.
-- Final re-review returned GO with no P0/P1/P2 findings; report: `docs/phase-5/impl-final-codex-rereview.md`.
+- Final re-review returned GO with no P0/P1/P2 findings; report: `docs/internal/phase-5/impl-final-codex-rereview.md`.
 
 ## 4. Gates
 
@@ -77,7 +77,7 @@ Phase 6 should start with a Computer Use plan review gate before any implementat
 Recommended first task:
 
 1. Open or create the Phase 6 Linear parent for Computer Use.
-2. Create a Phase 6 plan under `docs/superpowers/plans/`.
+2. Create a Phase 6 plan under `docs/internal/superpowers/plans/`.
 3. Define the explicit `/cu` trigger, ComputerUsePolicy schema, allow/deny app rules, sensitive-step approval model, audit events, and operator-gated live/manual smoke.
 4. Split Phase 6 into small Linear children: plan gate, parser-only slice, policy schema, allow/deny config, prompt wrapper, normal-prompt-does-not-trigger test, sensitive-step approval, audit, fake/manual smoke docs, final review/handoff/tag.
 

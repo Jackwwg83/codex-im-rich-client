@@ -10,8 +10,8 @@ surface. It is not a new product abstraction: Slack must conform to the existing
 
 ## 1. Source of Truth
 
-- Current live status: `docs/handoffs/direct-use-live-status.md`
-- Live IM acceptance: `docs/handoffs/live-im-acceptance-status.md`
+- Current live status: `docs/internal/handoffs/direct-use-live-status.md`
+- Live IM acceptance: `docs/internal/handoffs/live-im-acceptance-status.md`
 - Channel boundary: `packages/channel-core/src/{adapter,types,capabilities}.ts`
 - Existing adapter references:
   - `packages/im-telegram`
@@ -373,7 +373,7 @@ Every live gate must print only redacted presence/status fields.
 - Add outbound `sendFile`.
 - Add inbound file materialization.
 - Add explicit live dry-run/connect/text/approval/file gates.
-- Update `docs/handoffs/live-im-acceptance-status.md` only after real Slack
+- Update `docs/internal/handoffs/live-im-acceptance-status.md` only after real Slack
   evidence exists.
 
 ## 14. Open Decisions

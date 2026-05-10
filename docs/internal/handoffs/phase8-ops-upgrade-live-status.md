@@ -21,7 +21,7 @@ This work is separate from the completed Phase 0-7 IM/platform acceptance work.
 ## Source Of Truth
 
 - Design spec:
-  `docs/superpowers/specs/2026-05-09-user-install-auto-check-manual-upgrade-design.md`
+  `docs/internal/superpowers/specs/2026-05-09-user-install-auto-check-manual-upgrade-design.md`
 - Operator runbook:
   `docs/ops/install-upgrade-runbook.md`
 - Existing setup foundation:

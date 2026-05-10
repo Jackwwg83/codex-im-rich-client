@@ -36,12 +36,12 @@
 |---|---|---|
 | **D1** | `performInitializeHandshake` 是独立模块，不烤进 `AppServerClient` | `packages/app-server-client/src/handshake.ts` 共享给 smoke + Phase 1 `CodexRuntime.initialize` |
 | **D2** | `InMemoryTransport` 在 `@codex-im/testkit`，不在 production client 包 | `packages/testkit/src/in-memory-transport.ts` |
-| **D3** | Codex CLI 是本项目的 outside voice，**早期且持续使用** | Phase 0 跑了 4 轮（plan / Section B / 整 diff / backlog triage），均落在 `docs/phase-0/codex-review.md` 等 |
+| **D3** | Codex CLI 是本项目的 outside voice，**早期且持续使用** | Phase 0 跑了 4 轮（plan / Section B / 整 diff / backlog triage），均落在 `docs/internal/phase-0/codex-review.md` 等 |
 | **D4** | Phase 0 smoke 必须包含真 turn（不只是 initialize） | `smoke:real-turn` `CODEX_REAL_SMOKE=1` gated，`sandbox=read-only` + `approval_policy=on-request` + 客户端 default-reject + 固定 harmless prompt |
 
 ### Phase 0 empirical 反转（Phase 1 不要复辩）
 
-- `--experimental` flag → **stable**（empirical diff 证明 +29 文件全在 Phase 7+ scope；详见 `docs/phase-0/codex-gen-diff.md`）
+- `--experimental` flag → **stable**（empirical diff 证明 +29 文件全在 Phase 7+ scope；详见 `docs/internal/phase-0/codex-gen-diff.md`）
 - `vitest@^2` → `vitest@^4` + `vite@^6`（v4 的 `test.projects` 原生语法）
 - `@types/node@^22` → `^20`（与 `engines.node>=20.10` 对齐）
 
@@ -140,7 +140,7 @@ extend/build on Phase 0 stack：
 
 按这个顺序，**别跳步**：
 
-1. **新 Phase 1 plan**：`docs/superpowers/plans/YYYY-MM-DD-phase-1-runtime.md`，仿 plan v2（Phase 0）的格式：File Structure、Decision Log、Tasks（2–5 min 粒度）、Worktree Parallelization、Failure Modes、GSTACK REVIEW REPORT。
+1. **新 Phase 1 plan**：`docs/internal/superpowers/plans/YYYY-MM-DD-phase-1-runtime.md`，仿 plan v2（Phase 0）的格式：File Structure、Decision Log、Tasks（2–5 min 粒度）、Worktree Parallelization、Failure Modes、GSTACK REVIEW REPORT。
 2. **richer-prompt fixture spike**：写 plan 之前先做。设计一个 prompt 触发：
    - 1+ `item/agentMessage/delta`
    - 1+ shell command exec → `item/commandExecution/outputDelta` + 终态
@@ -159,7 +159,7 @@ extend/build on Phase 0 stack：
 
 按这个顺序读，不要跳：
 
-1. **本文件**（`docs/handoffs/2026-04-30-phase0-to-phase1.md`）— 你在这
+1. **本文件**（`docs/internal/handoffs/2026-04-30-phase0-to-phase1.md`）— 你在这
 2. `CLAUDE.md`（项目硬规则）
 3. `TODOS.md`（Phase 1 backlog 单一来源）
 4. `09-ROADMAP.md` 的 Phase 1 章节（任务+验收清单）
@@ -167,13 +167,13 @@ extend/build on Phase 0 stack：
 
 按需查（**不要预读**，省 context）：
 
-- `docs/phase-0/host-environment.md` — wire spike 5 cases 实测数据
-- `docs/phase-0/codex-gen-diff.md` — `--experimental` 决策证据
-- `docs/phase-0/codex-review.md` — Phase 0 final review 战果
-- `docs/phase-0/decision-log.md` — D1–D4 完整 rationale
+- `docs/internal/phase-0/host-environment.md` — wire spike 5 cases 实测数据
+- `docs/internal/phase-0/codex-gen-diff.md` — `--experimental` 决策证据
+- `docs/internal/phase-0/codex-review.md` — Phase 0 final review 战果
+- `docs/internal/phase-0/decision-log.md` — D1–D4 完整 rationale
 - `packages/app-server-client/src/client.ts` — 阅读头部 JSDoc 即可（lifecycle policy）
 - `packages/codex-protocol/src/generated/{ServerRequest,ServerNotification,ClientRequest}.ts` — 真实 method names
-- `docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md` — 仅在需要 Phase 0 详细决策时查
+- `docs/internal/superpowers/plans/2026-04-29-phase-0-bootstrap.md` — 仅在需要 Phase 0 详细决策时查
 
 **不要读** `packages/codex-protocol/src/generated/` 全量（488 文件）和 `schema/`（227 文件）—— grep / 按需 read 单文件。
 
@@ -185,7 +185,7 @@ extend/build on Phase 0 stack：
 进入 Phase 1：Codex Runtime Core。
 
 请先读：
-1. docs/handoffs/2026-04-30-phase0-to-phase1.md
+1. docs/internal/handoffs/2026-04-30-phase0-to-phase1.md
 2. CLAUDE.md
 3. TODOS.md
 4. 09-ROADMAP.md（仅 Phase 1 章节）
@@ -197,7 +197,7 @@ app-server-client + testkit + cli）是 contract，Phase 1 只 extend。
 不要立刻写代码。
 
 第一步：用 Superpowers writing-plans 风格写 Phase 1 plan，落到
-docs/superpowers/plans/YYYY-MM-DD-phase-1-runtime.md。计划必须含：
+docs/internal/superpowers/plans/YYYY-MM-DD-phase-1-runtime.md。计划必须含：
 - Decision Log（仿 Phase 0）
 - File Structure（codex-runtime/core/daemon 三个新包）
 - Tasks（2-5 min 粒度，TDD）

@@ -2,7 +2,7 @@
 
 Status: historical release-ready local Mac mini candidate. Subsequent enabled
 Telegram / Feishu-Lark / DingTalk live IM acceptance completed on 2026-05-07;
-see `docs/handoffs/live-im-acceptance-status.md` for current evidence.
+see `docs/internal/handoffs/live-im-acceptance-status.md` for current evidence.
 
 ## 1. Release Pointer
 
@@ -22,7 +22,7 @@ see `docs/handoffs/live-im-acceptance-status.md` for current evidence.
 The repository is ready as a private local Mac mini release candidate. It is not
 a public SaaS deployment and does not expose Codex App Server to the internet by
 default. Real Telegram/Lark/DingTalk/Codex live acceptance was tracked
-separately in `docs/handoffs/live-im-acceptance-status.md` and is now complete
+separately in `docs/internal/handoffs/live-im-acceptance-status.md` and is now complete
 for enabled Telegram, Feishu/Lark, and DingTalk paths. Slack and real Computer
 Use provider evidence remain separate future tracks.
 
@@ -84,9 +84,9 @@ git diff --check
 
 | File | Verdict | Outcome |
 |---|---|---|
-| `docs/release-readiness/final-review.md` | `APPROVE_WITH_CHANGES` | found P1 ambient live-smoke env inheritance |
-| `docs/release-readiness/final-review-followup.md` | `GO_WITH_LOW_NITS` | P1 fixed by `16d11ca` |
-| `docs/release-readiness/final-review-delta.md` | `GO_WITH_LOW_NITS` | lazy setup P3 fixed by `7052a8a`; JAC-171 may tag |
+| `docs/internal/release-readiness/final-review.md` | `APPROVE_WITH_CHANGES` | found P1 ambient live-smoke env inheritance |
+| `docs/internal/release-readiness/final-review-followup.md` | `GO_WITH_LOW_NITS` | P1 fixed by `16d11ca` |
+| `docs/internal/release-readiness/final-review-delta.md` | `GO_WITH_LOW_NITS` | lazy setup P3 fixed by `7052a8a`; JAC-171 may tag |
 
 No P0/P1/P2 findings remain before the production-readiness tag.
 

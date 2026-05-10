@@ -6,8 +6,8 @@
 > at `production-readiness-2026-05-03-r2`; subsequent enabled live IM
 > acceptance for Telegram, Feishu/Lark, DingTalk, bounded Slack workspace use,
 > and bounded local Chrome Computer Use provider evidence is tracked in
-> `docs/handoffs/live-im-acceptance-status.md` and
-> `docs/handoffs/direct-use-live-status.md`. GitHub Actions rows below describe
+> `docs/internal/handoffs/live-im-acceptance-status.md` and
+> `docs/internal/handoffs/direct-use-live-status.md`. GitHub Actions rows below describe
 > workflow content/local evidence unless a specific GitHub run URL is attached.
 
 ---
@@ -16,7 +16,7 @@
 
 - **Mode:** Release candidate complete; enabled Telegram / Feishu-Lark /
   DingTalk live IM acceptance complete in the follow-on live-acceptance track.
-- **Plan:** `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-03-release-readiness-plan.md`.
 - **Linear project:** Codex IM Rich Client Release Readiness.
 - **Parent Linear issue:** JAC-166 - Release readiness parent -上线运行标准.
 - **Current Linear issue:** none. JAC-171 is complete.
@@ -25,9 +25,9 @@
 - **Version:** `0.1.0-phase7`.
 - **Release tag:** `production-readiness-2026-05-03-r2`.
 - **Follow-on live acceptance tag:** `live-im-acceptance-2026-05-08`.
-- **Handoff:** `docs/handoffs/2026-05-03-production-readiness.md`.
+- **Handoff:** `docs/internal/handoffs/2026-05-03-production-readiness.md`.
 - **Next exact action:** continue direct-use hardening / Slack readiness from
-  `docs/handoffs/direct-use-live-status.md` and Linear project
+  `docs/internal/handoffs/direct-use-live-status.md` and Linear project
   `Codex IM Rich Client Direct Use & Slack Readiness`.
 
 ## 2. Production Readiness Target
@@ -124,17 +124,17 @@ Final outside-voice review chain:
 
 | File | Verdict | Result |
 |---|---|---|
-| `docs/release-readiness/final-review.md` | `APPROVE_WITH_CHANGES` | found one P1 ambient live-smoke env blocker |
-| `docs/release-readiness/final-review-followup.md` | `GO_WITH_LOW_NITS` | confirmed P1 fixed by `16d11ca` |
-| `docs/release-readiness/final-review-delta.md` | `GO_WITH_LOW_NITS` | confirmed P3 lazy setup fixed by `7052a8a`; JAC-171 may proceed to handoff/tag |
+| `docs/internal/release-readiness/final-review.md` | `APPROVE_WITH_CHANGES` | found one P1 ambient live-smoke env blocker |
+| `docs/internal/release-readiness/final-review-followup.md` | `GO_WITH_LOW_NITS` | confirmed P1 fixed by `16d11ca` |
+| `docs/internal/release-readiness/final-review-delta.md` | `GO_WITH_LOW_NITS` | confirmed P3 lazy setup fixed by `7052a8a`; JAC-171 may proceed to handoff/tag |
 
 ## 6. Compact / Resume
 
 If resuming release-readiness work:
 
 1. Read this file first.
-2. Read `docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
+2. Read `docs/internal/superpowers/plans/2026-05-03-release-readiness-plan.md`.
 3. Read `AGENTS.md` and
-   `docs/automation/codex-app-autonomous-loop-runbook.md`.
+   `docs/internal/automation/codex-app-autonomous-loop-runbook.md`.
 4. Run `git status --short` and `git log --oneline -8`.
 5. Continue from the current Linear issue when branch/HEAD/scope are clear.

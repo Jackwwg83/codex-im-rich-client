@@ -18,7 +18,7 @@ model_reasoning_effort=high -` with diff piped via stdin.
 
 ## Findings (verbatim)
 
-> 1. [docs/phase-1/fixture-prompt-review.md](docs/phase-1/fixture-prompt-review.md#L137):
+> 1. [docs/internal/phase-1/fixture-prompt-review.md](docs/internal/phase-1/fixture-prompt-review.md#L137):
 >    T4 required outside-voice consult before capture, but this records
 >    "No retry attempted" and then approves capture anyway. Fix: rerun
 >    the consult with stdin-fed input or record an explicit human waiver

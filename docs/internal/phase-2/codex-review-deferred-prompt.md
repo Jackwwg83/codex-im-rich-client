@@ -29,7 +29,7 @@ Test files (validate behavior, not for finding bugs):
 
 ## Plan reference
 
-docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md
+docs/internal/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md
 - §2.1 file structure (channel-core)
 - §3 module boundaries (F1 method-literal, F13 channel-core boundary)
 - §5 task bodies T18 through T22

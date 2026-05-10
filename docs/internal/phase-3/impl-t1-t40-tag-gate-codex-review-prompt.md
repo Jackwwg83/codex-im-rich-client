@@ -20,11 +20,11 @@ Read:
 
 - `CLAUDE.md`
 - `AGENTS.md`
-- `docs/handoffs/phase3-live-status.md`
-- `docs/superpowers/plans/2026-05-02-phase-3-plan.md` §16.9 and §19
-- `docs/phase-3/impl-t1-t19-midphase-codex-review.md`
-- `docs/phase-3/impl-t1-t36-final-codex-review.md`
-- `docs/phase-3/impl-t1-t36-final-review-response.md`
+- `docs/internal/handoffs/phase3-live-status.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` §16.9 and §19
+- `docs/internal/phase-3/impl-t1-t19-midphase-codex-review.md`
+- `docs/internal/phase-3/impl-t1-t36-final-codex-review.md`
+- `docs/internal/phase-3/impl-t1-t36-final-review-response.md`
 
 ## Review Focus
 

@@ -6,17 +6,17 @@ Review scope:
 
 - Base tag: `phase-5-dingtalk-adapter-complete`
 - Current branch: `codex/phase-6-computer-use`
-- Current plan: `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`
-- Live status: `docs/handoffs/phase6-live-status.md`
-- Capability evidence: `docs/phase-6/computer-use-capability-evidence.md`
+- Current plan: `docs/internal/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`
+- Live status: `docs/internal/handoffs/phase6-live-status.md`
+- Capability evidence: `docs/internal/phase-6/computer-use-capability-evidence.md`
 - Linear parent: JAC-11
 - Current issue: JAC-91
 
 Source-of-truth docs:
 
 - `AGENTS.md`
-- `docs/automation/codex-app-autonomous-loop-runbook.md`
-- `docs/handoffs/2026-05-02-phase5-to-phase6.md`
+- `docs/internal/automation/codex-app-autonomous-loop-runbook.md`
+- `docs/internal/handoffs/2026-05-02-phase5-to-phase6.md`
 - `07-SECURITY-AND-COMPUTER-USE.md`
 - `18-HOOKS-AND-GUARDRAILS.md`
 - `11-TESTING-AND-QA.md`

@@ -43,7 +43,7 @@ Refs:
 
 - `packages/im-lark/src/card.ts`
 - `packages/im-lark/src/callback-codec.ts`
-- `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
 
 ### P2 — Malformed Lark message events throw instead of failing closed
 
@@ -69,7 +69,7 @@ claiming T6/T7 complete.
 
 Refs:
 
-- `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md`
 
 ## Positive Checks
 

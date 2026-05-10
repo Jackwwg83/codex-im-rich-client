@@ -1,7 +1,7 @@
 # Phase 0 Decision Log
 
 This is the canonical record of decisions made during Phase 0. Mirrors
-the header in `docs/superpowers/plans/2026-04-29-phase-0-bootstrap.md` plus
+the header in `docs/internal/superpowers/plans/2026-04-29-phase-0-bootstrap.md` plus
 runtime adjustments made during execution.
 
 ## Plan-stage decisions (D1–D4)
@@ -21,7 +21,7 @@ runtime adjustments made during execution.
 
 **Empirical reality**: diff between stable and experimental shows experimental adds only realtime voice, fuzzy-session lifecycle, memory mode, elicitation counters, background terminals, collaboration mode, and a `mock` method — **all out of Phase 0–6 scope**. Everything Phase 0–6 actually needs (initialize, thread/turn lifecycle, command exec, approvals, MCP, auth, Tool generic, ServerNotification) is in stable. Computer Use is a runtime `Tool` instance, not a type-level distinction; `--experimental` does NOT add a ComputerUse type.
 
-**Decision**: stable, no `--experimental`. See `docs/phase-0/codex-gen-diff.md` for full evidence and "Switching to --experimental later" recipe (Phase 7+).
+**Decision**: stable, no `--experimental`. See `docs/internal/phase-0/codex-gen-diff.md` for full evidence and "Switching to --experimental later" recipe (Phase 7+).
 
 **Commits**: `dacbb29` (decision + plan amendments), `c1a1a08` (`protocol:generate` script wired without flag), `67d7928` (committed generated artifacts).
 
@@ -64,7 +64,7 @@ runtime adjustments made during execution.
 
 ## Codex final review (end-of-Phase-0) — disposition
 
-See `docs/phase-0/codex-review.md` for full findings. Summary:
+See `docs/internal/phase-0/codex-review.md` for full findings. Summary:
 
 - **0 P0** — no hard-rule violations (no CLI parsing, no public exposure, no implicit Computer Use, etc.)
 - **4 P1** — all fixed in commit `1c81023` (request leak on send throw, missing onError sub, server-request timer leak, loose JSON-RPC guards) with 10 regression tests added

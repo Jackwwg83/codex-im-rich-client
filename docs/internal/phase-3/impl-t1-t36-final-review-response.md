@@ -1,7 +1,7 @@
 # Phase 3 T1-T36 Final Review Response
 
 Generated: 2026-05-02  
-Review: `docs/phase-3/impl-t1-t36-final-codex-review.md`  
+Review: `docs/internal/phase-3/impl-t1-t36-final-codex-review.md`  
 Verdict: APPROVE_WITH_CHANGES
 
 ## Summary

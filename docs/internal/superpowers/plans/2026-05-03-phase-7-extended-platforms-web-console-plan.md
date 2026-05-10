@@ -24,16 +24,16 @@ Phase 7 is not a generic chat-bot rewrite and not a public web service launch.
 
 ## 2. Source Of Truth
 
-- Phase 6 live status: `docs/handoffs/phase6-live-status.md`
-- Phase 6 -> Phase 7 handoff: `docs/handoffs/2026-05-03-phase6-to-phase7.md`
-- Current Phase 7 live status: `docs/handoffs/phase7-live-status.md`
+- Phase 6 live status: `docs/internal/handoffs/phase6-live-status.md`
+- Phase 6 -> Phase 7 handoff: `docs/internal/handoffs/2026-05-03-phase6-to-phase7.md`
+- Current Phase 7 live status: `docs/internal/handoffs/phase7-live-status.md`
 - Adapter design: `06-IM-ADAPTERS.md`
 - Security / Computer Use: `07-SECURITY-AND-COMPUTER-USE.md`
 - Architecture: `03-ARCHITECTURE.md`
 - Data model: `08-DATA-MODEL.md`
 - Testing: `11-TESTING-AND-QA.md`
 - Ops: `12-OPERATIONS.md`
-- Loop runbook: `docs/automation/codex-app-autonomous-loop-runbook.md`
+- Loop runbook: `docs/internal/automation/codex-app-autonomous-loop-runbook.md`
 - Linear: JAC-12 parent, JAC-164 plan gate, JAC-102 through JAC-109 current
   execution children.
 
@@ -160,11 +160,11 @@ resolution or target-transition behavior.
 Exit:
 
 - Plan review returns GO/GO_WITH_LOW_NITS, or P0/P1 findings are closed and the
-  closure review/result is recorded in `docs/phase-7/`.
+  closure review/result is recorded in `docs/internal/phase-7/`.
 
 ### T1 - JAC-104 Capability Matrix
 
-- Create `docs/phase-7/capability-matrix.md`.
+- Create `docs/internal/phase-7/capability-matrix.md`.
 - Fill rows for Telegram, Lark, DingTalk, Satori/Koishi, Chat SDK family, and
   local web console.
 - Mark unsupported/unknown cells explicitly; no runtime changes.
@@ -178,7 +178,7 @@ First review target:
 
 ### T2 - JAC-102 Satori/Koishi Feasibility Spike
 
-- Create `docs/phase-7/satori-koishi-feasibility.md`.
+- Create `docs/internal/phase-7/satori-koishi-feasibility.md`.
 - Decide whether an `im-satori` adapter can preserve target/messageRef/action
   and callback semantics.
 - Record required auth/topology if Koishi server-satori or Satori WebSocket is
@@ -195,7 +195,7 @@ Forbidden:
 
 ### T3 - JAC-103 Chat SDK Feasibility Spike
 
-- Create `docs/phase-7/chat-sdk-feasibility.md`.
+- Create `docs/internal/phase-7/chat-sdk-feasibility.md`.
 - Decide if Chat SDK can sit outside `ChannelAdapter` without becoming Codex
   core.
 - Map feature gaps for Slack/Discord/Teams/Google Chat/GitHub/Linear/WhatsApp.

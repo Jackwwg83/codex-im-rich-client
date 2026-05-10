@@ -3,7 +3,7 @@
 Generated: 2026-05-03
 Linear issue: JAC-104
 Branch: `codex/phase-7-planning`
-Plan: `docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
+Plan: `docs/internal/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`
 
 This matrix gates Phase 7 work. It does not change runtime behavior and does
 not authorize any live external platform call, credential probing, listener
@@ -62,10 +62,10 @@ startup, or adapter instantiation.
 - Shipped native adapters: `packages/im-telegram/src/capabilities.ts`,
   `packages/im-lark/src/capabilities.ts`,
   `packages/im-dingtalk/src/capabilities.ts`.
-- Phase closeout anchors: `docs/handoffs/phase3-live-status.md`,
-  `docs/handoffs/phase4-live-status.md`,
-  `docs/handoffs/phase5-live-status.md`,
-  `docs/handoffs/phase6-live-status.md`.
+- Phase closeout anchors: `docs/internal/handoffs/phase3-live-status.md`,
+  `docs/internal/handoffs/phase4-live-status.md`,
+  `docs/internal/handoffs/phase5-live-status.md`,
+  `docs/internal/handoffs/phase6-live-status.md`.
 - External references recorded in the Phase 7 plan: Satori introduction,
   Satori protocol overview, Koishi adapter guide, Chat SDK adapters, and Vercel
   Chat SDK guide.

@@ -2,7 +2,7 @@
 
 Generated: 2026-05-02
 
-Review file: `docs/phase-5/plan-v1-codex-review.md`
+Review file: `docs/internal/phase-5/plan-v1-codex-review.md`
 Verdict: `APPROVE_WITH_CHANGES`
 
 ## Findings Closed

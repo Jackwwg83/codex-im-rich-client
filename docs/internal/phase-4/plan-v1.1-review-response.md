@@ -1,12 +1,12 @@
 # Phase 4 Plan v1.1 Review Response
 
 Generated: 2026-05-02
-Review: `docs/phase-4/plan-v1.1-codex-review.md`
+Review: `docs/internal/phase-4/plan-v1.1-codex-review.md`
 Verdict: APPROVE_WITH_CHANGES
 
 ## Summary
 
-Codex found no P0 blockers and five P1 plan-hardening items. All P1 items are absorbed in `docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md` and `docs/phase-4/lark-action-transport-decision.md`.
+Codex found no P0 blockers and five P1 plan-hardening items. All P1 items are absorbed in `docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md` and `docs/internal/phase-4/lark-action-transport-decision.md`.
 
 ## P1 Closure
 

@@ -11,7 +11,7 @@ upgrade without weakening local-control boundaries.
 
 Canonical follow-ups:
 
-- `docs/handoffs/phase8-ops-upgrade-live-status.md`
+- `docs/internal/handoffs/phase8-ops-upgrade-live-status.md`
 - `docs/ops/install-upgrade-runbook.md`
 
 ## Goal

@@ -191,7 +191,7 @@ After merging Pre-3, T9a starts on top of it.
 
 ## 1. Decision Log (Phase 1)
 
-Numbering continues from Phase 0 (D1–D4). Each decision must have a write-up in `docs/superpowers/plans/decision-log.md` after merge.
+Numbering continues from Phase 0 (D1–D4). Each decision must have a write-up in `docs/internal/superpowers/plans/decision-log.md` after merge.
 
 ### D5 — EventNormalizer backpressure: single FIFO queue with class-aware walk-and-drop (revised twice; final after Codex outside-voice 2026-04-30, blocker B4)
 
@@ -336,9 +336,9 @@ scripts/redact-fixture.mjs        # NEW (P1-5) — JSONL filter that scrubs abso
 scripts/redact-fixture.test.mjs   # NEW (P1-5) — round-trip test on a known dirty fixture; runs as part of pnpm test
 scripts/split-capture.mts         # NEW (Codex B2) — JSON-aware splitter; reads raw capture JSONL, emits two JSONL streams (notifications vs server-initiated requests). Replaces unsafe grep pipeline.
 scripts/verify-phase1-fixtures.mts # NEW (Codex B1) — committed tsx script that backs T4.5 acceptance gate; type-checks fixture frames against generated ServerRequest["method"] union; requires ≥1 approval-capable method
-docs/handoffs/2026-04-30-phase0-to-phase1.md   # source of truth — DO NOT MODIFY here
-docs/superpowers/plans/decision-log.md         # APPEND D5 (revised), D6, D7, D8, D9 after merge
-docs/phase-1/                     # NEW — Codex outside-voice + plan-eng-review + fixture-prompt-review reports
+docs/internal/handoffs/2026-04-30-phase0-to-phase1.md   # source of truth — DO NOT MODIFY here
+docs/internal/superpowers/plans/decision-log.md         # APPEND D5 (revised), D6, D7, D8, D9 after merge
+docs/internal/phase-1/                     # NEW — Codex outside-voice + plan-eng-review + fixture-prompt-review reports
   fixture-prompt-review.md        # T4 step 4.2 output
   event-normalizer-review.md      # T7b step output
   approval-broker-review.md       # T9b step output
@@ -796,7 +796,7 @@ Prompt skeleton: "in a sandboxed scratch dir, propose adding a single-file `hell
 
 ⚠ This is a Phase 0 outside-voice consultation point — **before running**, send `codex consult` with the prompt + safety constraints (sandbox=read-only, approval_policy=on-request, scratch dir under `/tmp/codex-fixture-XXXX`) and ask "will this trigger ≥1 server-initiated approval without taking destructive action".
 
-- [ ] **Step 4.2: Codex outside-voice consult — record verdict in `docs/phase-1/fixture-prompt-review.md`.**
+- [ ] **Step 4.2: Codex outside-voice consult — record verdict in `docs/internal/phase-1/fixture-prompt-review.md`.**
 - [ ] **Step 4.3: Run capture (Codex B2 — fixed: stay in repo for pnpm + paths; pass --cwd to subprocess for sandboxing):**
 
 ```bash
@@ -1044,7 +1044,7 @@ pnpm exec tsx scripts/verify-phase1-fixtures.mts
 # Expected: GATE PASS: <N> server-request frames, <M> approval-capable
 ```
 
-If exit code ≠ 0: STOP. Do not start T7, T8, or T9. Loop back to T4 with a different prompt or `approval_policy` setting. Document the rollback in `docs/phase-1/fixture-prompt-review.md`.
+If exit code ≠ 0: STOP. Do not start T7, T8, or T9. Loop back to T4 with a different prompt or `approval_policy` setting. Document the rollback in `docs/internal/phase-1/fixture-prompt-review.md`.
 
 - [ ] **Step 4.5.4: Add `pnpm exec tsx scripts/verify-phase1-fixtures.mts` to `scripts/ci-check.sh`** so every later subagent reruns the gate.
 
@@ -1510,7 +1510,7 @@ Test: feed `turn/completed`; assert next iteration **does NOT close** automatica
 - [ ] **Step 7b.9: Add fixture replay test** — load `phase1-richer-turn-event-stream.jsonl`, feed each line into `transport.simulateInbound`, assert iterator yields exactly N events in order, all three terminal-state arms (`turn_completed | turn_failed | turn_interrupted`) parsed correctly when present.
 - [ ] **Step 7b.10: `for await ... of` integration test** — consume entire fixture without a manual `break`.
 - [ ] **Step 7b.11: `bash scripts/ci-check.sh` — exit 0.**
-- [ ] **Step 7b.12: Codex outside-voice review on the diff** — `codex review` against the EventNormalizer files. Specifically ask: "is global FIFO order preserved across all eviction paths?". Record findings in `docs/phase-1/event-normalizer-review.md`.
+- [ ] **Step 7b.12: Codex outside-voice review on the diff** — `codex review` against the EventNormalizer files. Specifically ask: "is global FIFO order preserved across all eviction paths?". Record findings in `docs/internal/phase-1/event-normalizer-review.md`.
 - [ ] **Step 7b.13: gstack `/plan-eng-review`** on the EventNormalizer module surface vs. plan.
 - [ ] **Step 7b.14: Commit.**
 
@@ -1788,7 +1788,7 @@ adds timeout + throw + transport-loss + outside-voice review."
   1. "is the single-slot invariant violated anywhere?"
   2. "does method-name handling read from the generated `ServerRequest` union?"
   3. "is `ApprovalActor` always set on resolve, including system-initiated transport-loss path?"
-  Capture in `docs/phase-1/approval-broker-review.md`.
+  Capture in `docs/internal/phase-1/approval-broker-review.md`.
 - [ ] **Step 9b.8: gstack `/plan-eng-review`** on the broker module.
 - [ ] **Step 9b.9: `bash scripts/ci-check.sh` — exit 0.**
 - [ ] **Step 9b.10: Commit.**
@@ -1812,7 +1812,7 @@ packages/core/. Outside-voice + plan-eng-review captured."
 
 ### Task 9b blocker-fix — broker completion race (added 2026-05-01 after T9b codex review)
 
-**Status:** added late; ships as a follow-up commit chain on `phase-1-runtime` after T9b code (HEAD `bf97a49`) and the STOPPED docs commit (`0bae49b`). Closes the 2 blockers + 4 minor findings from `docs/phase-1/codex-review-t9b.md`.
+**Status:** added late; ships as a follow-up commit chain on `phase-1-runtime` after T9b code (HEAD `bf97a49`) and the STOPPED docs commit (`0bae49b`). Closes the 2 blockers + 4 minor findings from `docs/internal/phase-1/codex-review-t9b.md`.
 
 **Problem (codex outside-voice review T9b, 2026-05-01):**
 
@@ -1922,7 +1922,7 @@ Without this reset, after the first transport close + supervisor restart, the se
 1. **Step 0 — docs only.** Update plan + live-status + TODOS.md, run gates, commit `docs(phase1): record t9b broker completion race fix`. STOP for user review.
 2. **Step 1 — failing tests first.** Write 4 failing tests covering both blockers. Run targeted tests, expect fail-for-the-right-reason. Report. STOP for user approval.
 3. **Step 2 — implementation.** Apply B-clean per the design above. Tests should turn green. Commit `fix(core): make approval broker completion lifecycle race-free` (or split into two commits if natural). STOP for user approval.
-4. **Step 3 — codex outside-voice review** on the fix diff. Apply low/nit + obvious medium fixes inline; STOP on uncertain medium / blocker. Capture findings in `docs/phase-1/codex-review-t9b-blocker-fix.md`.
+4. **Step 3 — codex outside-voice review** on the fix diff. Apply low/nit + obvious medium fixes inline; STOP on uncertain medium / blocker. Capture findings in `docs/internal/phase-1/codex-review-t9b-blocker-fix.md`.
 5. **Step 4 — live-status sync** marking T9b complete; resume autonomous loop for T10 (or do T10 manually).
 
 **Future defensive guardrail (NOT in this fix):**
@@ -2113,7 +2113,7 @@ backoff + halt + close-idempotence."
   2. "does any branch leak the prior runtime reference?"
   3. "is `failPendingAsTransportLost` called exactly once per close, even under concurrent close events?"
   4. "is the close subscription always installed before any wire activity could trigger it?"
-  Capture in `docs/phase-1/supervisor-review.md`.
+  Capture in `docs/internal/phase-1/supervisor-review.md`.
 - [ ] **Step 11b.4: `bash scripts/ci-check.sh` — exit 0.**
 - [ ] **Step 11b.5: Commit.**
 
@@ -2138,8 +2138,8 @@ synthetic turn_failed event. Outside-voice review captured."
 - Modify: `TODOS.md` (move Phase 1 backlog → Done; lift Phase 2 forward)
 - Modify: `05-CODEX-APP-SERVER-PROTOCOL.md` §3/§4.1 (only fields confirmed by fixture)
 - Modify: `README.md` (Phase 1 status section)
-- Create: `docs/handoffs/<DATE>-phase1-to-phase2.md` (skeleton modeled on Phase 0→1 handoff)
-- Create: `docs/superpowers/plans/decision-log.md` entries D5–D9
+- Create: `docs/internal/handoffs/<DATE>-phase1-to-phase2.md` (skeleton modeled on Phase 0→1 handoff)
+- Create: `docs/internal/superpowers/plans/decision-log.md` entries D5–D9
 - Update: `packages/{codex-runtime,core,daemon}/README.md`
 
 - [ ] **Steps 12.1–12.6:** edit each doc; run `pnpm test typecheck lint`; commit individually for clean PR history.

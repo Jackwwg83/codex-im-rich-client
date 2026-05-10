@@ -53,7 +53,7 @@ The single most consequential design call in Phase 1. Codex review caught that t
 - A would mask broker bugs at the wire layer.
 - B fixes the bug at the source — the broker's lifecycle.
 
-Implementation: internal `PendingEntry` per pending request owns a `completion` Promise; `settleOnce(outcome)` is the only way to settle it. Three sources race (handler resolve/reject, expirePending, failPendingAsTransportLost); first wins; late settlers no-op. AppServerClient receives exactly one wire response per request id by construction. See `docs/phase-1/codex-review-t9b-blocker-fix.md` for the full design + verdict.
+Implementation: internal `PendingEntry` per pending request owns a `completion` Promise; `settleOnce(outcome)` is the only way to settle it. Three sources race (handler resolve/reject, expirePending, failPendingAsTransportLost); first wins; late settlers no-op. AppServerClient receives exactly one wire response per request id by construction. See `docs/internal/phase-1/codex-review-t9b-blocker-fix.md` for the full design + verdict.
 
 ---
 
@@ -102,7 +102,7 @@ extend/build on Phase 1 stack：
 
 ## Phase 2 启动顺序
 
-1. **Phase 2 plan**: `docs/superpowers/plans/<DATE>-phase-2-telegram-mvp.md`，仿 Phase 1 plan 格式
+1. **Phase 2 plan**: `docs/internal/superpowers/plans/<DATE>-phase-2-telegram-mvp.md`，仿 Phase 1 plan 格式
 2. **gstack `/plan-eng-review`** on Phase 2 plan
 3. **Codex outside-voice** on Phase 2 plan
 4. **Telegram bot quickstart spike** — 一个最小 bot，能收到消息就行；用来验证 grammY 选型 / 部署假设
@@ -188,7 +188,7 @@ review — Phase 2 risk, not a Phase 1 blocker.
 
 按这个顺序读，不要跳：
 
-1. **本文件**（`docs/handoffs/2026-05-01-phase1-to-phase2.md`）— 你在这
+1. **本文件**（`docs/internal/handoffs/2026-05-01-phase1-to-phase2.md`）— 你在这
 2. `CLAUDE.md`（项目硬规则 + Compact / Resume Instructions）
 3. `TODOS.md`（Phase 2 backlog 单一来源；Phase 1 items moved to Done）
 4. `09-ROADMAP.md` 的 Phase 2 章节
@@ -196,8 +196,8 @@ review — Phase 2 risk, not a Phase 1 blocker.
 
 按需查（**不要预读**，省 context）：
 
-- `docs/superpowers/plans/2026-04-30-phase-1-runtime.md` — Phase 1 plan 全本（仅在需要 Phase 1 决策细节时查）
-- `docs/phase-1/codex-review-*.md` — 10 个 codex outside-voice review 报告
+- `docs/internal/superpowers/plans/2026-04-30-phase-1-runtime.md` — Phase 1 plan 全本（仅在需要 Phase 1 决策细节时查）
+- `docs/internal/phase-1/codex-review-*.md` — 10 个 codex outside-voice review 报告
 - `packages/codex-runtime/src/event-normalizer.ts` 头部 JSDoc — D5/D9 决策 + walk-and-drop 算法
 - `packages/core/src/approval-broker.ts` 头部 JSDoc — D7 + B-clean lifecycle + per-method default-reject 表
 - `packages/daemon/src/supervisor.ts` 头部 JSDoc — Codex B7 + close-handling lifecycle + halt-on-spawn-failure
@@ -213,7 +213,7 @@ review — Phase 2 risk, not a Phase 1 blocker.
 进入 Phase 2：Telegram MVP。
 
 请先读：
-1. docs/handoffs/2026-05-01-phase1-to-phase2.md
+1. docs/internal/handoffs/2026-05-01-phase1-to-phase2.md
 2. CLAUDE.md
 3. TODOS.md
 4. 09-ROADMAP.md（仅 Phase 2 章节）
@@ -226,7 +226,7 @@ review — Phase 2 risk, not a Phase 1 blocker.
 不要立刻写代码。
 
 第一步：用 Superpowers writing-plans 风格写 Phase 2 plan，落到
-docs/superpowers/plans/<DATE>-phase-2-telegram-mvp.md。计划必须含：
+docs/internal/superpowers/plans/<DATE>-phase-2-telegram-mvp.md。计划必须含：
 - Decision Log（仿 Phase 1，从 D11 开始）
 - File Structure（packages/im-telegram + packages/channel 两个新包）
 - Tasks（2-5 min 粒度，TDD）

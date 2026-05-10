@@ -12,8 +12,8 @@
 - None found.
 
 **P3**
-- Working tree is still not release-clean. The untracked `.stderr` artifacts remain and include fake token-shaped literals, e.g. [docs/phase-2/codex-review-t18-t22.stderr](/Users/jackwu/projects/codex-im-rich-client/docs/phase-2/codex-review-t18-t22.stderr:6154) and [docs/phase-3/impl-t1-t36-final-codex-review.stderr](/Users/jackwu/projects/codex-im-rich-client/docs/phase-3/impl-t1-t36-final-codex-review.stderr:13035). They are not committed in HEAD, but keep them out of the release handoff/tag packet.
-- JAC-171 final bookkeeping is still pending as expected: live status still says final review/tag is next at [docs/handoffs/release-readiness-live-status.md](/Users/jackwu/projects/codex-im-rich-client/docs/handoffs/release-readiness-live-status.md:5), and `TODOS.md` still has JAC-171 open at [TODOS.md](/Users/jackwu/projects/codex-im-rich-client/TODOS.md:312).
+- Working tree is still not release-clean. The untracked `.stderr` artifacts remain and include fake token-shaped literals, e.g. [docs/internal/phase-2/codex-review-t18-t22.stderr](/Users/jackwu/projects/codex-im-rich-client/docs/internal/phase-2/codex-review-t18-t22.stderr:6154) and [docs/internal/phase-3/impl-t1-t36-final-codex-review.stderr](/Users/jackwu/projects/codex-im-rich-client/docs/internal/phase-3/impl-t1-t36-final-codex-review.stderr:13035). They are not committed in HEAD, but keep them out of the release handoff/tag packet.
+- JAC-171 final bookkeeping is still pending as expected: live status still says final review/tag is next at [docs/internal/handoffs/release-readiness-live-status.md](/Users/jackwu/projects/codex-im-rich-client/docs/internal/handoffs/release-readiness-live-status.md:5), and `TODOS.md` still has JAC-171 open at [TODOS.md](/Users/jackwu/projects/codex-im-rich-client/TODOS.md:312).
 
 3. Original P1 and follow-up P3
 

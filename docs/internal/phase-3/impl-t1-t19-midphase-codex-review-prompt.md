@@ -31,9 +31,9 @@ Do not treat this as:
 Read these first:
 
 - `CLAUDE.md`
-- `docs/handoffs/phase3-live-status.md`
-- `docs/superpowers/plans/2026-05-02-phase-3-plan.md`
-- `docs/phase-3/plan-v2-review-response.md`
+- `docs/internal/handoffs/phase3-live-status.md`
+- `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md`
+- `docs/internal/phase-3/plan-v2-review-response.md`
 - `08-DATA-MODEL.md`
 - `TODOS.md`
 

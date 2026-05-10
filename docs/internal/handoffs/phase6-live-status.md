@@ -9,7 +9,7 @@
 ## 1. Current State
 
 - **Phase:** Phase 6 - explicit Computer Use flow.
-- **Plan:** `docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
+- **Plan:** `docs/internal/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`.
 - **Parent Linear issue:** JAC-11 - Phase 6 backlog / explicit Computer Use flow.
 - **Final Linear issue:** JAC-101 - final review / handoff / tag.
 - **Branch:** `codex/phase-6-computer-use`.
@@ -18,7 +18,7 @@
 - **Version:** `0.1.0-phase6`.
 - **HEAD:** `8b089d1` - `chore(release): JAC-101 close phase 6 tag gate`.
 - **Next exact action:** Phase 6 is frozen. Current work continues in
-  `docs/handoffs/phase7-live-status.md`.
+  `docs/internal/handoffs/phase7-live-status.md`.
 
 ## 2. Shipped Behavior
 
@@ -66,8 +66,8 @@
 
 Review reports:
 
-- `docs/phase-6/impl-final-codex-review.md`
-- `docs/phase-6/impl-final-codex-rereview.md`
+- `docs/internal/phase-6/impl-final-codex-review.md`
+- `docs/internal/phase-6/impl-final-codex-rereview.md`
 
 ## 5. Linear Execution Queue
 
@@ -108,9 +108,9 @@ diffing.
 If resuming after Phase 6:
 
 1. Read this file first.
-2. Read `docs/handoffs/2026-05-03-phase6-to-phase7.md`.
+2. Read `docs/internal/handoffs/2026-05-03-phase6-to-phase7.md`.
 3. Read `AGENTS.md` and
-   `docs/automation/codex-app-autonomous-loop-runbook.md`.
+   `docs/internal/automation/codex-app-autonomous-loop-runbook.md`.
 4. Run `git status --short` and `git log --oneline -8`.
 5. Continue from the current Linear issue when recovered state is clearly safe;
    use GPT Pro/Codex outside-voice for technical ambiguity.

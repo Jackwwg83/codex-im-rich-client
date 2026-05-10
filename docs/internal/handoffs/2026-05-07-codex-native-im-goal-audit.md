@@ -89,7 +89,7 @@ pnpm smoke:computer-use-live
 | Ordinary IM text enters current Codex thread/turn | Live acceptance status records Telegram real Codex prompt/reply, Feishu/Lark prompt/reply after stale-thread recovery, and DingTalk desktop prompt/reply. Daemon common routing uses `SessionRouter` and `CodexRuntime.turnStart` / `turnSteer`. | Green for enabled platforms |
 | Project/conversation controls: `/projects`, `/cwds`, `/use`, `/threads`, `/switch`, `/new`, `/fork`, `/stop` | Current hardening aligns IM entry with Codex App semantics while preserving App Server native cwd/thread implementation: `/projects` lists available project names without exposing local paths, `/cwds` is a technical alias, `/use` and `/new` select projects by number or name and reject raw paths, and `/threads` / `/switch` use App Server `thread/list` / `thread/resume` when available so IM can take over existing Codex App or CLI conversations. | Green |
 | Codex-native controls: `/model`, `/compact`, `/usage`, `/diagnostics`, `/tools`, `/skills`, `/plugins`, `/apps`, `/mcp` | JAC-236 / JAC-264 are complete. `packages/core/src/command-router.ts` lists these commands; `packages/daemon/src/daemon.ts` calls `CodexRuntime` wrappers for model, compaction, usage, capabilities, skills, apps, MCP login, and MCP reload. | Local green, shared across enabled adapters |
-| `/mcp login <server>` and `/mcp reload` | `docs/handoffs/direct-use-live-status.md` records JAC-264; runtime wrappers keep method literals centralized. | Local green |
+| `/mcp login <server>` and `/mcp reload` | `docs/internal/handoffs/direct-use-live-status.md` records JAC-264; runtime wrappers keep method literals centralized. | Local green |
 | `/cu status` | JAC-267 complete. IM output reports enabled state, provider readiness, allowed/denied apps, sensitive keywords, and live-smoke gate without desktop action. | Local green |
 | Explicit `/cu <task>` | Phase 6 explicit `/cu` prompt wrapper, policy, session registry, audit, dynamic-tool gate, and App Server dynamic-tool registration contract are implemented for Telegram, Feishu/Lark, and DingTalk when a provider is configured. Normal prompts do not create CU sessions. | Safe control path and provider contract green; live desktop execution still tracked by JAC-274 |
 | `/approvals` and `/approve <id> <action>` fallback | Direct-use status records approval fallback loop. It uses bound server-side callback token state and `ApprovalBroker.resolve()`; IM text never carries raw callback tokens/message refs. | Local green |
@@ -106,7 +106,7 @@ pnpm smoke:computer-use-live
 | Identity and group safety | JAC-240 and JAC-241 complete. `/whoami` is redacted; access groups and mention-required group policy are implemented. | Local green |
 | Slack live workspace acceptance | JAC-248 is now green for the bounded live workspace scope: Socket Mode readiness, `/codex status`, DM prompt/reply, outbound text/file gates, and one real approval click. Slack exact-output regression coverage now prevents auxiliary Codex status/item sections from appearing in explicit `Reply exactly` / `Respond exactly` turns. | Live green |
 | Linear progress tracking | JAC-235 is the parent; JAC-236/237/238/239/240/241/263/264/265/266/267/268/269/271/272/273 are Done. JAC-275 tracks the command-risk / Computer Use detail refresh. JAC-277 is green for DingTalk inbound image and generic-file uploads after the 2026-05-08 file gate. JAC-274 remains the Computer Use parent, now split into JAC-278 official provider-contract evidence and JAC-279 local experimental provider POC. JAC-248 is green for bounded Slack live workspace acceptance. | Green tracking, with follow-up tracks explicit |
-| Repo handoff tracking | `docs/handoffs/direct-use-live-status.md`, `docs/handoffs/live-im-acceptance-status.md`, and `docs/phase-6/computer-use-capability-evidence.md` record current state and blockers. | Green |
+| Repo handoff tracking | `docs/internal/handoffs/direct-use-live-status.md`, `docs/internal/handoffs/live-im-acceptance-status.md`, and `docs/internal/phase-6/computer-use-capability-evidence.md` record current state and blockers. | Green |
 
 ## 3. Future Expansion Tracks
 
@@ -319,7 +319,7 @@ Evidence scan:
 rg -n "computer|Computer|dynamicToolCall|item/tool/call|provider|Tool" \
   packages/codex-protocol/src/generated \
   packages/codex-protocol/schema \
-  docs/phase-6/computer-use-capability-evidence.md
+  docs/internal/phase-6/computer-use-capability-evidence.md
 pnpm smoke:computer-use-live
 COMPUTER_USE_LIVE=1 \
 COMPUTER_USE_PROVIDER_VERIFIED=1 \

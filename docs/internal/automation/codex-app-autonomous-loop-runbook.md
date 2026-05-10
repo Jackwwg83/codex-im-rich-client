@@ -14,12 +14,12 @@ If there is a conflict, the stricter rule wins.
 
 - Linear project: `Codex IM Rich Client`
 - Current parent issue: read the active phase parent from Linear and the latest
-  `docs/handoffs/phaseN-live-status.md` file. Historical examples may still
+  `docs/internal/handoffs/phaseN-live-status.md` file. Historical examples may still
   mention JAC-8 for Phase 3; do not treat that as current after later phases.
-- Current live status: read the latest active `docs/handoffs/phaseN-live-status.md`
+- Current live status: read the latest active `docs/internal/handoffs/phaseN-live-status.md`
   file before each issue.
 - Current phase plan: read the matching active phase plan under
-  `docs/superpowers/plans/` before each issue.
+  `docs/internal/superpowers/plans/` before each issue.
 - Project rules: `AGENTS.md` and `CLAUDE.md`
 - Data model: `08-DATA-MODEL.md`
 - Historical roadmap: `09-ROADMAP.md`
@@ -54,7 +54,7 @@ Default objective for an overnight autonomous session:
 3. Keep each issue to one focused behavior, one focused commit, and one
    completion report.
 4. Keep the working tree clean between issues.
-5. Update Linear and the active `docs/handoffs/phaseN-live-status.md` at task
+5. Update Linear and the active `docs/internal/handoffs/phaseN-live-status.md` at task
    boundaries.
 6. Consult GPT Pro automatically for technical ambiguity instead of asking the
    human operator for technical advice.
@@ -125,8 +125,8 @@ Before writing code for each issue:
 
 1. Read the Linear issue.
 2. Read the current phase parent issue.
-3. Read the latest active `docs/handoffs/phaseN-live-status.md`.
-4. Read the matching current phase plan under `docs/superpowers/plans/`.
+3. Read the latest active `docs/internal/handoffs/phaseN-live-status.md`.
+4. Read the matching current phase plan under `docs/internal/superpowers/plans/`.
 5. Run:
 
 ```bash
@@ -183,7 +183,7 @@ pnpm lint
 pnpm protocol:check
 ```
 
-7. Update the active `docs/handoffs/phaseN-live-status.md` when current task,
+7. Update the active `docs/internal/handoffs/phaseN-live-status.md` when current task,
    completed tasks, next task, HEAD, or gate state changes.
 8. Commit one focused commit.
 9. Update Linear with a completion report if Linear write tools are available.
@@ -260,8 +260,8 @@ Current repo state:
 
 Relevant source-of-truth docs read:
 - AGENTS.md / CLAUDE.md:
-- docs/handoffs/phase3-live-status.md:
-- docs/superpowers/plans/2026-05-02-phase-3-plan.md section:
+- docs/internal/handoffs/phase3-live-status.md:
+- docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md section:
 - Linear issue description:
 
 Current task goal:
@@ -417,8 +417,8 @@ After auto-compaction, manual compact, resume, interruption, or context loss:
 ```text
 AGENTS.md
 CLAUDE.md
-latest active docs/handoffs/phaseN-live-status.md
-matching current phase plan under docs/superpowers/plans/
+latest active docs/internal/handoffs/phaseN-live-status.md
+matching current phase plan under docs/internal/superpowers/plans/
 current Linear issue
 current phase parent Linear issue
 ```
@@ -511,9 +511,9 @@ Recommended next step:
 - Known untracked files:
   - `.claude/scheduled_tasks.lock`
   - `AGENTS.md`
-  - `docs/phase-2/codex-review-t18-t22.stderr`
-  - `docs/phase-2/codex-review-t24-integrated.stderr`
-  - `docs/phase-3/plan-v1-codex-review.stderr`
-  - `docs/phase-3/plan-v2.1-codex-round2.stderr`
-  - `docs/phase-3/plan-v2.2-codex-round3.stderr`
-  - `docs/phase-3/plan-v2.3-codex-round4.stderr`
+  - `docs/internal/phase-2/codex-review-t18-t22.stderr`
+  - `docs/internal/phase-2/codex-review-t24-integrated.stderr`
+  - `docs/internal/phase-3/plan-v1-codex-review.stderr`
+  - `docs/internal/phase-3/plan-v2.1-codex-round2.stderr`
+  - `docs/internal/phase-3/plan-v2.2-codex-round3.stderr`
+  - `docs/internal/phase-3/plan-v2.3-codex-round4.stderr`

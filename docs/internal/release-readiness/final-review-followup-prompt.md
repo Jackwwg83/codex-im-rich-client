@@ -12,7 +12,7 @@ Review target:
 
 Previous review:
 
-- File: `docs/release-readiness/final-review.md`
+- File: `docs/internal/release-readiness/final-review.md`
 - Verdict: `APPROVE_WITH_CHANGES`
 - Release blocker: `pnpm release:check` inherited ambient live-smoke env,
   allowing default checks to become live behavior if the operator shell already

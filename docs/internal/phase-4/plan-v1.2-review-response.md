@@ -1,7 +1,7 @@
 # Phase 4 Plan v1.2 Review Response
 
 Generated: 2026-05-02
-Review: `docs/phase-4/plan-v1.2-codex-review.md`
+Review: `docs/internal/phase-4/plan-v1.2-codex-review.md`
 Verdict: GO_WITH_LOW_NITS
 
 ## Summary

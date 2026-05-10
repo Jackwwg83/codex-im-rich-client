@@ -37,16 +37,16 @@ explicit deferral note in the annotation.
 2. Run T18-T22 combined review:
    ```bash
    codex exec --skip-git-repo-check --sandbox read-only \
-     "$(cat docs/phase-2/codex-review-deferred-prompt.md)" \
-     > docs/phase-2/codex-review-t18-t22.md
+     "$(cat docs/internal/phase-2/codex-review-deferred-prompt.md)" \
+     > docs/internal/phase-2/codex-review-t18-t22.md
    ```
 3. Run T24 integrated review:
    ```bash
    codex exec --skip-git-repo-check --sandbox read-only \
      "Review all commits in phase-1-runtime-complete..phase-2-approval-im-surface-complete \
-      for boundary violations, regressions, P0/P1 risks. Plan: docs/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md. \
+      for boundary violations, regressions, P0/P1 risks. Plan: docs/internal/superpowers/plans/2026-05-01-phase-2-approval-im-surface.md. \
       Output VERDICT + per-commit findings." \
-     > docs/phase-2/codex-review-t24-integrated.md
+     > docs/internal/phase-2/codex-review-t24-integrated.md
    ```
 4. **If GO**: add `phase-2-codex-reviewed` annotated tag at the same commit
    pointing at the verified-GO state; bump `package.json#version` from

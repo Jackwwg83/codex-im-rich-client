@@ -29,10 +29,10 @@ all 6 P1 + 3 P2 from codex round 3.
 Do NOT re-flag findings already addressed in earlier revisions:
 
 - The 6 round-1 codex P0s (all fixed in v2 — see plan v1 codex
-  review at `docs/phase-3/plan-v1-codex-review.md`).
+  review at `docs/internal/phase-3/plan-v1-codex-review.md`).
 - The 4 gstack round-2 P1s (fixed in v2.1).
 - The 1 P0 + 5 P1 + 3 P2 codex round-2 findings (fixed in v2.2 — see
-  `docs/phase-3/plan-v2.1-codex-round2.md`).
+  `docs/internal/phase-3/plan-v2.1-codex-round2.md`).
 - The 6 P1 + 3 P2 codex round-3 findings (claimed fixed in v2.3 —
   verify each, but don't re-flag the original v2.2 wording).
 
@@ -153,15 +153,15 @@ You are reviewing **plan v2.3**. Verify two things:
 ## Files to read
 
 Primary:
-- `docs/superpowers/plans/2026-05-02-phase-3-plan.md` (v2.3 — 2759 lines)
+- `docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` (v2.3 — 2759 lines)
 
 Companion:
-- `docs/phase-3/plan-v2-review-response.md` (full v1→v2.3 fix matrix)
-- `docs/phase-3/plan-v2.2-codex-round3.md` (round-3 verdict on v2.2;
+- `docs/internal/phase-3/plan-v2-review-response.md` (full v1→v2.3 fix matrix)
+- `docs/internal/phase-3/plan-v2.2-codex-round3.md` (round-3 verdict on v2.2;
   the source of v2.3's fix list)
-- `docs/phase-3/plan-v2.1-codex-round2.md` (round-2 verdict on v2.1)
-- `docs/phase-3/plan-v2-gstack-round2-review.md` (gstack round-2 on v2)
-- `docs/phase-3/plan-v1-codex-review.md` (round-1 on v1)
+- `docs/internal/phase-3/plan-v2.1-codex-round2.md` (round-2 verdict on v2.1)
+- `docs/internal/phase-3/plan-v2-gstack-round2-review.md` (gstack round-2 on v2)
+- `docs/internal/phase-3/plan-v1-codex-review.md` (round-1 on v1)
 
 Project context:
 - `CLAUDE.md`
