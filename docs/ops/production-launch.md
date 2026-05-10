@@ -123,8 +123,8 @@ Expected:
 - migrations are under `~/.codex-im-bridge/app/migrations`;
 - runtime native dependency `better-sqlite3` resolves from
   `~/.codex-im-bridge/app/node_modules`;
-- token output is only `<set from Keychain, length=N>`;
-- no token bytes appear.
+- token output is only `<NAME>: present` or `<NAME>: missing`;
+- no token bytes or token length appear.
 
 ## 5. Install And Start
 
