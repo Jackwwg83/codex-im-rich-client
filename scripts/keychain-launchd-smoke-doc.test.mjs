@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const DOC = "docs/ops/keychain-launchd-smoke.md";
+const DOC = "docs/internal/ops-smoke/keychain-launchd-smoke.md";
 const TOKEN_SHAPED_LITERAL = /\b\d{5,}:[A-Za-z0-9_-]{20,}\b/;
 
 describe("Keychain launchd smoke documentation (T29b)", () => {

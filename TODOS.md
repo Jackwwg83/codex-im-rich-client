@@ -8,7 +8,7 @@ Phase 1 plan-eng-review should ground itself on this file.
 ### Phase 1 implementation backlog ✅ COMPLETE 2026-05-01
 
 All P1.1-P1.6 items shipped + codex outside-voice reviewed. See
-`docs/handoffs/2026-05-01-phase1-to-phase2.md` for the close-out
+`docs/internal/handoffs/2026-05-01-phase1-to-phase2.md` for the close-out
 summary and Phase 2 hand-off.
 
 | Item | Commits | Review |
@@ -29,13 +29,13 @@ summary and Phase 2 hand-off.
   - **Why**: Phase 1 callers will otherwise scatter method strings and unchecked result casts across the runtime.
   - **What**: typed wrappers like `runtime.threadStart(params): Promise<ThreadStartResponse>` over `client.request("thread/start", params)`. Cover at least `thread/{start,resume,fork,interrupt,turns/list,read}`, `turn/{start,steer,interrupt}`, `review/start`, `command/exec/{,write,terminate,resize}`. Use `@codex-im/protocol` generated types as the source of truth — ts-rs union arms drive the wrapper signatures.
   - **Where to start**: `packages/codex-runtime/` (new package). Depends on existing `@codex-im/app-server-client` `AppServerClient` + handshake.
-  - **Source**: `docs/phase-0/codex-review.md` Group 3 #1.
+  - **Source**: `docs/internal/phase-0/codex-review.md` Group 3 #1.
 
 - [ ] **P1.2 — `ApprovalBroker` with single server-request handler + internal method dispatch**
   - **Why**: Phase 0 `AppServerClient.setServerRequestHandler` accepts ONE global handler. Phase 1 needs method routing, expiry, audit metadata, and per-turn/thread ownership. Multiple modules cannot register their own handlers — they ALL go through `ApprovalBroker` which owns the one slot.
   - **What**: `ApprovalBroker.handleServerRequest(req)` is the single registered handler. Internally it switches on `req.method` (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`, `item/permissions/requestApproval`, `item/tool/requestUserInput`, `item/tool/call`, `mcpServer/elicitation/request`, `applyPatchApproval` legacy, `execCommandApproval` legacy, `account/chatgptAuthTokens/refresh`). Method names MUST be read from generated `ServerRequest.ts`, NOT hardcoded as string literals (Phase 0 Task 10.3 audit enforced zero hardcoded method names in production code).
   - **Where to start**: `packages/core/src/approval-broker.ts` (new). Depends on `@codex-im/app-server-client`.
-  - **Source**: `docs/phase-0/codex-review.md` Group 3 #2.
+  - **Source**: `docs/internal/phase-0/codex-review.md` Group 3 #2.
 
 - [ ] **P1.3 — `EventNormalizer` ordered async iterator + terminal-state recognition**
   - **Why**: Phase 1 needs ordered async consumption of codex events with terminal-state recognition (`turn/completed`, `turn/failed`-equivalent if discovered, `thread/closed`, etc.) and deterministic teardown. Fire-and-forget `client.onNotification` callbacks make missed events hard to reason about.
@@ -45,13 +45,13 @@ summary and Phase 2 hand-off.
     - allow per-turn / per-thread filtered sub-iterators if needed by ApprovalBroker
     - surface unknown methods as `{ type: "unknown", method, params }` without crashing
   - **Where to start**: `packages/codex-runtime/src/event-normalizer.ts`. Depends on `@codex-im/app-server-client` and `@codex-im/protocol`.
-  - **Source**: `docs/phase-0/codex-review.md` Group 3 #3.
+  - **Source**: `docs/internal/phase-0/codex-review.md` Group 3 #3.
 
 - [ ] **P1.4 — Daemon supervisor: client lifecycle policy on codex restart**
   - **Why**: `AppServerClient.stop()` and `handleClose()` set `closed=true` and never reset. Phase 0 `client.ts` JSDoc explicitly documents the ONE-SHOT policy (commit `2055646`). Phase 1 daemon supervisor MUST respect it: when codex subprocess exits or transport closes, the supervisor must construct a NEW `AppServerClient` and re-attach handlers, NOT reuse the old one.
   - **What**: `packages/daemon/src/supervisor.ts` (new). On codex child exit: log + audit, exponential backoff, spawn fresh `StdioTransport`, construct new `AppServerClient(transport, opts)`, run `performInitializeHandshake`, re-register `ApprovalBroker` as server-request handler, re-subscribe `EventNormalizer` to notifications, replace runtime's reference to point at new client.
   - **Where to start**: read `packages/app-server-client/src/client.ts` "Lifecycle policy: ONE-SHOT" header JSDoc for the 7-step protocol.
-  - **Source**: `docs/phase-0/codex-review.md` Group 3 #4. JSDoc applied in `packages/app-server-client/src/client.ts`.
+  - **Source**: `docs/internal/phase-0/codex-review.md` Group 3 #4. JSDoc applied in `packages/app-server-client/src/client.ts`.
 
 - [ ] **P1.5 — `categorizeJsonRpcError(err)` helper**
   - **Why**: Codex 0.125 returns `-32600` for BOTH unknown-method AND invalid-params (Phase 0 wire spike case 3+4 in `host-environment.md`). Client cannot distinguish by code alone. Also: malformed JSON has NO JSON-RPC error response — it's stderr-only with ANSI escapes (case 5).
@@ -63,13 +63,13 @@ summary and Phase 2 hand-off.
     - other code → `{ category: "unknown", code }`
   - Note that **malformed JSON wire frames** never reach `categorizeJsonRpcError` because they're stderr-only — they surface via `StdioTransport`'s logger.warn path, not as a `JsonRpcResponseError`.
   - **Where to start**: `packages/app-server-client/src/errors.ts` exports new helper alongside `JsonRpcResponseError`.
-  - **Source**: `docs/phase-0/host-environment.md` "Wire spike results" + Codex outside-voice on plan v2.
+  - **Source**: `docs/internal/phase-0/host-environment.md` "Wire spike results" + Codex outside-voice on plan v2.
 
 - [ ] **P1.6 — Capture richer wire fixtures** during EventNormalizer development
   - **Why**: Phase 0 `smoke:real-turn` ran with a deliberately minimal "Reply OK" prompt. Model never triggered any `item/agentMessage/delta`, `item/started`, `command/exec/outputDelta`, server-initiated approval request, etc. The committed `harmless-turn-event-stream.jsonl` slot in `packages/testkit/fixtures/codex-0.125.0/` is still a placeholder.
   - **What**: design a Phase 1 richer prompt that exercises (a) tool use / file edit / shell exec — each producing a stream of `item/*/outputDelta` and `item/completed` notifications, (b) at least one server-initiated approval request so `item/{commandExecution,fileChange}/requestApproval` shapes can be captured. Run `CODEX_REAL_SMOKE=1 pnpm smoke:real-turn` with the richer prompt, capture the full notification stream, save as `packages/testkit/fixtures/codex-0.125.0/<scenario>-event-stream.jsonl`. Update `packages/testkit/test/fixture-replay.test.ts` to add contract tests over the new fixtures.
   - **Where to start**: extend `packages/cli/src/smoke-real-turn.ts` with a `--capture <path>` flag (or a sibling `smoke-real-turn-capture.ts`) that dumps every inbound message verbatim to a file. Then write the prompt, run, commit the fixture.
-  - **Source**: `docs/phase-0/host-environment.md` "Real-turn smoke results" Phase 1 implications. Codex outside-voice on plan v2 #1 follow-up.
+  - **Source**: `docs/internal/phase-0/host-environment.md` "Real-turn smoke results" Phase 1 implications. Codex outside-voice on plan v2 #1 follow-up.
 
 ### Phase 1 documentation work (small, can fold into any P1.x commit)
 
@@ -90,7 +90,7 @@ summary and Phase 2 hand-off.
 - [x] ~~**05-PROTOCOL.md approval method names + comprehensive audit**~~ — applied in commit `70a0381`. Replaced stale `"approval/request"`/`"commandApproval/request"` guesses with real `item/{commandExecution,fileChange,permissions,tool}/{requestApproval,requestUserInput}` from generated `ServerRequest.ts`. Added explicit injunction: app-server-client layer must NOT hardcode approval method names; Phase 1 ApprovalBroker reads them from generated schema.
 - [x] ~~**09-ROADMAP Phase 1 wording "build" → "extend/build on"**~~ — applied in commit `88d37a7`. Marked AppServerClient/FakeAppServer/smoke:app-server/request-correlation/unknown-event as done with cross-references.
 - [x] ~~**`AppServerClient` ONE-SHOT lifecycle JSDoc**~~ — applied in commit `2055646`. Header documents 7-step supervisor recovery protocol.
-- [x] ~~**`pnpm audit` baseline**~~ — clean run recorded in `docs/phase-0/host-environment.md` Security baseline section. 193 deps, 0 vulnerabilities.
+- [x] ~~**`pnpm audit` baseline**~~ — clean run recorded in `docs/internal/phase-0/host-environment.md` Security baseline section. 193 deps, 0 vulnerabilities.
 
 ## Phase 2 implementation backlog ✅ COMPLETE 2026-05-02
 
@@ -99,7 +99,7 @@ reviewed (verdict GO after fix arcs). T18-T22 outside-voice review
 deferred — codex CLI hung in implementer's environment when these landed.
 T24 will run integrated review across `phase-1-runtime-complete..HEAD`.
 Test count 320 → 720. See
-`docs/handoffs/2026-05-02-phase2-to-phase3.md` for full close-out summary.
+`docs/internal/handoffs/2026-05-02-phase2-to-phase3.md` for full close-out summary.
 
 | Item | Commits | Review |
 |---|---|---|
@@ -131,7 +131,7 @@ Test count 320 → 720. See
 
 These are the natural Phase 3 candidates surfaced during Phase 2. Phase 3
 mission picks a subset; full list maintained in
-`docs/handoffs/2026-05-02-phase2-to-phase3.md` §"Recommended Phase 3 mission".
+`docs/internal/handoffs/2026-05-02-phase2-to-phase3.md` §"Recommended Phase 3 mission".
 
 - [ ] **`@codex-im/im-telegram`** — real Telegram adapter implementing the closed `ChannelAdapter` interface (uses grammY or native Bot API; respects `TelegramShapeFakeChannelAdapter` constraints).
 - [ ] **Production daemon wire-up** — replace test-only `phase2-e2e-rig.ts` daemon-wireup function with a real `@codex-im/daemon` module subscribing broker.onPendingCreated → projectAsRichBlock → adapter.sendCard → bindActorPolicy.
@@ -202,16 +202,16 @@ mission picks a subset; full list maintained in
   - **Why**: Defense-in-depth against any future code path that accidentally produces a duplicate JSON-RPC response for the same id. Considered as Option A for the T9b blocker fix (2026-05-01) but explicitly **declined as the primary fix** because the duplicate-response bug was owned by `ApprovalBroker`'s split lifecycle, not by the wire layer. Fixing it at the protocol layer would have masked broker-internal bugs. The blocker was instead fixed in `ApprovalBroker` via B-clean (single broker-owned completion promise per pending request).
   - **What**: extend `AppServerClient` with a `Set<JsonRpcId>` of responded ids. `respond(id, ...)` / `reject(id, ...)` on an already-responded id silently drops (and `log.warn`s for visibility — surfacing real broker bugs instead of hiding them). Set is cleared in `stop()`. Consider periodic prune for long-running sessions.
   - **Where to start**: `packages/app-server-client/src/client.ts` — extend `respond` / `reject` methods, add a small unit test in `packages/app-server-client/test/`. Mirrors the Pre-3 modification pattern.
-  - **Source**: T9b blocker fix decision 2026-05-01 (user message). `docs/phase-1/codex-review-t9b.md` finding #1 + plan §"Task 9b blocker-fix" → "Future defensive guardrail".
+  - **Source**: T9b blocker fix decision 2026-05-01 (user message). `docs/internal/phase-1/codex-review-t9b.md` finding #1 + plan §"Task 9b blocker-fix" → "Future defensive guardrail".
   - **Not scheduled**: ship only when there's a concrete second case where the wire-layer guard would catch a real bug. As of 2026-05-01 the `ApprovalBroker` is the only producer of server-request responses, and its B-clean lifecycle prevents duplicates by construction.
 
 ## Phase 3 implementation progress (closed at JAC-64 tag gate, 2026-05-02)
 
 Active branch: `phase-3-implementation`. Plan-of-record:
-`docs/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4. Live status:
-`docs/handoffs/phase3-live-status.md` (always the canonical reference for
+`docs/internal/superpowers/plans/2026-05-02-phase-3-plan.md` v2.4. Live status:
+`docs/internal/handoffs/phase3-live-status.md` (always the canonical reference for
 current state — this index is just a checkpoint). Phase 3 -> Phase 4 handoff:
-`docs/handoffs/2026-05-02-phase3-to-phase4.md`.
+`docs/internal/handoffs/2026-05-02-phase3-to-phase4.md`.
 
 | Item | Commits | Review |
 |---|---|---|
@@ -221,14 +221,14 @@ current state — this index is just a checkpoint). Phase 3 -> Phase 4 handoff:
 | T14-T19 daemon production wire-up | `6d1b4ae` → `83015c0` | mid-phase review closed by `b5c4441` |
 | T20-T28 real Telegram adapter fake/contract slice | `d073ce1` → `fa5909f` | final review scope |
 | T29-T36 ops + launchd + smoke harnesses | `b707f28` → `36d8903` | final review scope |
-| T38 final review fixes | `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, `eb05753` | response recorded in `docs/phase-3/impl-t1-t36-final-review-response.md` |
+| T38 final review fixes | `28adc64`, `f57acc0`, `938a917`, `0b0eb98`, `eb05753` | response recorded in `docs/internal/phase-3/impl-t1-t36-final-review-response.md` |
 
 ## Phase 4 implementation progress (closed at JAC-162 tag gate, 2026-05-02)
 
 Active branch: `codex/phase-4-planning`. Plan-of-record:
-`docs/superpowers/plans/2026-05-02-phase-4-lark-plan.md`. Live status:
-`docs/handoffs/phase4-live-status.md`. Phase 4 -> Phase 5 handoff:
-`docs/handoffs/2026-05-02-phase4-to-phase5.md`.
+`docs/internal/superpowers/plans/2026-05-02-phase-4-lark-plan.md`. Live status:
+`docs/internal/handoffs/phase4-live-status.md`. Phase 4 -> Phase 5 handoff:
+`docs/internal/handoffs/2026-05-02-phase4-to-phase5.md`.
 
 | Item | Commits | Review |
 |---|---|---|
@@ -241,11 +241,11 @@ Active branch: `codex/phase-4-planning`. Plan-of-record:
 ## Phase 5 implementation progress (closed at JAC-90 tag gate, 2026-05-02)
 
 Active branch: `codex/phase-5-dingtalk`. Plan-of-record:
-`docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`. Live status:
-`docs/handoffs/phase5-live-status.md`. Phase 5 -> Phase 6 handoff:
-`docs/handoffs/2026-05-02-phase5-to-phase6.md`.
+`docs/internal/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`. Live status:
+`docs/internal/handoffs/phase5-live-status.md`. Phase 5 -> Phase 6 handoff:
+`docs/internal/handoffs/2026-05-02-phase5-to-phase6.md`.
 
-- [x] **JAC-78 / Phase 5 DingTalk plan gate** — write/review the DingTalk Stream-mode plan-of-record before implementing `@codex-im/im-dingtalk`. Review result: v1 APPROVE_WITH_CHANGES, v1.1 GO. Current docs: `docs/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`, `docs/phase-5/dingtalk-target-verification.md`, and `docs/handoffs/phase5-live-status.md`.
+- [x] **JAC-78 / Phase 5 DingTalk plan gate** — write/review the DingTalk Stream-mode plan-of-record before implementing `@codex-im/im-dingtalk`. Review result: v1 APPROVE_WITH_CHANGES, v1.1 GO. Current docs: `docs/internal/superpowers/plans/2026-05-02-phase-5-dingtalk-plan.md`, `docs/internal/phase-5/dingtalk-target-verification.md`, and `docs/internal/handoffs/phase5-live-status.md`.
 - [x] **JAC-79 / T1** — `@codex-im/im-dingtalk` skeleton + boundary tests after JAC-78 review gate.
 - [x] **JAC-80 / T2** — Stream lifecycle fake test and injected `DWClient` wrapper; no live network or credentials.
 - [x] **JAC-81 / T3** — DingTalk message receive fixtures and normalization; no card send/update or callback action mapping.
@@ -262,9 +262,9 @@ Active branch: `codex/phase-5-dingtalk`. Plan-of-record:
 ## Phase 6 implementation progress (closed at JAC-101 tag gate, 2026-05-03)
 
 Active branch: `codex/phase-6-computer-use`. Plan-of-record:
-`docs/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`. Live status:
-`docs/handoffs/phase6-live-status.md`. Phase 6 -> Phase 7 handoff:
-`docs/handoffs/2026-05-03-phase6-to-phase7.md`.
+`docs/internal/superpowers/plans/2026-05-03-phase-6-computer-use-plan.md`. Live status:
+`docs/internal/handoffs/phase6-live-status.md`. Phase 6 -> Phase 7 handoff:
+`docs/internal/handoffs/2026-05-03-phase6-to-phase7.md`.
 
 - [x] **JAC-91 / T0** — Computer Use plan review gate. Plan v1 returned APPROVE_WITH_CHANGES; v1.1 Codex re-review returned GO with no remaining P0/P1/P2.
 - [x] **JAC-92 / T1** — explicit `/cu` command parser only; no desktop action/provider.
@@ -282,10 +282,10 @@ Active branch: `codex/phase-6-computer-use`. Plan-of-record:
 ## Phase 7 planning progress (closed at JAC-165 tag gate, 2026-05-03)
 
 Active branch: `codex/phase-7-planning`. Plan-of-record:
-`docs/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
-Live status: `docs/handoffs/phase7-live-status.md`. Phase 6 -> Phase 7 handoff:
-`docs/handoffs/2026-05-03-phase6-to-phase7.md`. Phase 7 -> future handoff:
-`docs/handoffs/2026-05-03-phase7-to-future.md`.
+`docs/internal/superpowers/plans/2026-05-03-phase-7-extended-platforms-web-console-plan.md`.
+Live status: `docs/internal/handoffs/phase7-live-status.md`. Phase 6 -> Phase 7 handoff:
+`docs/internal/handoffs/2026-05-03-phase6-to-phase7.md`. Phase 7 -> future handoff:
+`docs/internal/handoffs/2026-05-03-phase7-to-future.md`.
 
 - [x] **JAC-164 / T0** — Phase 7 plan review gate. v1 returned APPROVE_WITH_CHANGES; v1.1 closure review returned GO_WITH_LOW_NITS with no remaining P0/P1/P2.
 - [x] **JAC-104 / T1** — capability matrix across native/future channels, including `Phase 7 verdict` values (`implementable`, `spike-only`, `docs-only`, `blocked`). Codex review returned GO_WITH_LOW_NITS with no P0/P1/P2.
@@ -301,8 +301,8 @@ Live status: `docs/handoffs/phase7-live-status.md`. Phase 6 -> Phase 7 handoff:
 ## Release readiness progress (active, 2026-05-03)
 
 Active branch: `codex/release-readiness`. Plan-of-record:
-`docs/superpowers/plans/2026-05-03-release-readiness-plan.md`.
-Live status: `docs/handoffs/release-readiness-live-status.md`.
+`docs/internal/superpowers/plans/2026-05-03-release-readiness-plan.md`.
+Live status: `docs/internal/handoffs/release-readiness-live-status.md`.
 Linear parent: JAC-166.
 
 - [x] **JAC-167 / RR T0** — release readiness plan and live status.

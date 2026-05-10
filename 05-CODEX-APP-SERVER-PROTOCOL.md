@@ -1,6 +1,6 @@
 # Codex App Server 协议接入设计
 
-> **Phase 0 status**: pinned to `codex-cli 0.125.0` (stable surface, no `--experimental`). All wire facts in this doc were verified by Phase 0 wire spike — see `docs/phase-0/host-environment.md`. When codex upgrades, `pnpm check:codex-version` fails until this doc + `packages/codex-protocol` regeneration are reviewed in lockstep.
+> **Phase 0 status**: pinned to `codex-cli 0.125.0` (stable surface, no `--experimental`). All wire facts in this doc were verified by Phase 0 wire spike — see `docs/internal/phase-0/host-environment.md`. When codex upgrades, `pnpm check:codex-version` fails until this doc + `packages/codex-protocol` regeneration are reviewed in lockstep.
 
 ## 1. 协议原则
 
@@ -301,7 +301,7 @@ pnpm protocol:check
 #   验证两次生成完全等同（确定性）
 ```
 
-> **不带 `--experimental` flag**。Phase 0 Task 0.2 通过 empirical diff 决定：experimental 多出来的 +29 文件（`thread/realtime/*` voice / `fuzzyFileSearch/session*` / `thread/memoryMode/*` / `mock/experimentalMethod` 等）全部不在 Phase 0–6 scope。详见 `docs/phase-0/codex-gen-diff.md`。
+> **不带 `--experimental` flag**。Phase 0 Task 0.2 通过 empirical diff 决定：experimental 多出来的 +29 文件（`thread/realtime/*` voice / `fuzzyFileSearch/session*` / `thread/memoryMode/*` / `mock/experimentalMethod` 等）全部不在 Phase 0–6 scope。详见 `docs/internal/phase-0/codex-gen-diff.md`。
 >
 > **`canonicalize-schema.mjs` 是必要兜底**：codex 0.125 `generate-json-schema` 输出的 v2 bundle JSON 在两次运行间会重排 top-level keys (HashMap iteration order)。canonicalize 后递归 sort keys，确保确定性。
 
