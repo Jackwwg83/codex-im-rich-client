@@ -400,6 +400,41 @@ export class ThreadSessionRepository {
     return this.findByTargetAndThread(target, codexThreadId);
   }
 
+  /**
+   * Slice 3 A3 — set the thread session's lifecycle status without
+   * touching any other column. Returns the updated record (or
+   * `undefined` if no row matched, e.g. the thread session was deleted
+   * concurrently).
+   */
+  setStatus(
+    target: ThreadSessionTarget,
+    codexThreadId: string,
+    status: ThreadSessionStatus,
+    now = new Date().toISOString(),
+  ): ThreadSessionRecord | undefined {
+    this.db
+      .prepare(
+        `
+          UPDATE thread_sessions
+             SET status = @status,
+                 updated_at = @updatedAt
+           WHERE target_platform = @targetPlatform
+             AND target_chat_id = @targetChatId
+             AND target_thread_key IS @targetThreadKey
+             AND target_topic_id IS @targetTopicId
+             AND codex_thread_id = @codexThreadId
+        `,
+      )
+      .run({
+        ...normalizeTarget(target),
+        codexThreadId,
+        status,
+        updatedAt: now,
+      });
+
+    return this.findByTargetAndThread(target, codexThreadId);
+  }
+
   switchCurrent(input: ThreadSessionSwitchCurrent): ThreadSessionSwitchResult {
     const now = input.now ?? new Date().toISOString();
     return this.db.transaction(() => {

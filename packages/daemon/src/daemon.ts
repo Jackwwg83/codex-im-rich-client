@@ -96,6 +96,7 @@ import {
 import { PruneSweep } from "./prune-sweep.js";
 import { MutationRateLimit } from "./rate-limit.js";
 import { type DaemonStatusSnapshot, writeDaemonStatusSnapshot } from "./status.js";
+import { archiveThread, unarchiveThread } from "./thread-lifecycle.js";
 import { renameThread } from "./thread-rename.js";
 import { TurnOutputManager } from "./turn-output.js";
 
@@ -272,6 +273,12 @@ export interface DaemonThreadSessionRepository {
     target: Target,
     codexThreadId: string,
     title: string | undefined,
+    now?: string,
+  ): ThreadSessionRecord | undefined;
+  setStatus?(
+    target: Target,
+    codexThreadId: string,
+    status: "open" | "archived",
     now?: string,
   ): ThreadSessionRecord | undefined;
   switchCurrent?(input: ThreadSessionSwitchCurrent): ThreadSessionSwitchResult;
@@ -2190,6 +2197,16 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "archive") {
+      await this.#routeArchiveCommand(inbound, command);
+      return;
+    }
+
+    if (command.name === "unarchive") {
+      await this.#routeUnarchiveCommand(inbound, command);
+      return;
+    }
+
     if (command.name === "fork") {
       await this.#routeForkCommand(inbound, command);
       return;
@@ -3410,6 +3427,106 @@ export class Daemon {
       metadata: { error: outcome.error, threadId: route.codexThreadId },
     });
     await this.#editInboundMessage(inbound.messageRef, `Thread rename failed: ${outcome.error}`);
+  }
+
+  async #routeArchiveCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    _command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    if (await this.#enforceMutationRateLimit(inbound, "archive")) return;
+    const setup = await this.#resolveLifecycleTarget(inbound);
+    if (setup === undefined) return;
+
+    const outcome = await archiveThread(
+      {
+        runtime: this.#currentRuntime() ?? undefined,
+        capabilities: this.#capabilities,
+        threadSessions: setup.repository,
+        nowIso: () => this.#nowIso(),
+      },
+      inbound.target,
+      setup.codexThreadId,
+    );
+    await this.#renderLifecycleOutcome(inbound, outcome, "archive", setup.codexThreadId);
+  }
+
+  async #routeUnarchiveCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    _command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    if (await this.#enforceMutationRateLimit(inbound, "unarchive")) return;
+    const setup = await this.#resolveLifecycleTarget(inbound);
+    if (setup === undefined) return;
+
+    const outcome = await unarchiveThread(
+      {
+        runtime: this.#currentRuntime() ?? undefined,
+        capabilities: this.#capabilities,
+        threadSessions: setup.repository,
+        nowIso: () => this.#nowIso(),
+      },
+      inbound.target,
+      setup.codexThreadId,
+    );
+    await this.#renderLifecycleOutcome(inbound, outcome, "unarchive", setup.codexThreadId);
+  }
+
+  async #resolveLifecycleTarget(inbound: {
+    target: Target;
+    sender: SecurityPolicySender;
+    messageRef?: DaemonMessageRef;
+  }): Promise<{ repository: DaemonThreadSessionRepository; codexThreadId: string } | undefined> {
+    const route = this.#daemonSessionRouter(this.#sessionRouter)?.resolve(inbound.target);
+    if (route?.kind !== "bound" || route.codexThreadId === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "No current Codex thread.");
+      return undefined;
+    }
+    if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
+      await this.#editInboundMessage(inbound.messageRef, "Project access denied");
+      return undefined;
+    }
+    const repository = this.#threadSessionRepository();
+    if (repository === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+      return undefined;
+    }
+    return { repository, codexThreadId: route.codexThreadId };
+  }
+
+  async #renderLifecycleOutcome(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    outcome:
+      | { kind: "remote_changed" }
+      | { kind: "local_only"; reason: "unsupported" | "no_runtime" | "no_storage" }
+      | { kind: "failed"; error: string },
+    op: "archive" | "unarchive",
+    codexThreadId: string,
+  ): Promise<void> {
+    const verb = op === "archive" ? "archived" : "reopened";
+    const method = op === "archive" ? "thread/archive" : "thread/unarchive";
+    if (outcome.kind === "remote_changed") {
+      await this.#editInboundMessage(inbound.messageRef, `Thread ${verb}.`);
+      return;
+    }
+    if (outcome.kind === "local_only") {
+      const note =
+        outcome.reason === "no_runtime"
+          ? "Codex runtime unavailable"
+          : outcome.reason === "no_storage"
+            ? "thread session store unavailable"
+            : `codex ${method} not supported by this server`;
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `Thread ${verb} locally (${note}; codex-side state unchanged).`,
+      );
+      return;
+    }
+    this.#emitAuditEvent(`thread.${op}_failed`, {
+      target: inbound.target,
+      result: "failed",
+      metadata: { error: outcome.error, threadId: codexThreadId },
+    });
+    await this.#editInboundMessage(inbound.messageRef, `Thread ${op} failed: ${outcome.error}`);
   }
 
   /**
