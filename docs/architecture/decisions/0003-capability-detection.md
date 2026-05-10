@@ -81,3 +81,40 @@ codex does the bridge enable the feature path.
   (frozen) — Layer B precedent.
 - `docs/internal/phase-7/capability-matrix.md` (frozen) — capability
   inventory pattern.
+
+## Retrospective amendment — 2026-05-10 (Slice 3)
+
+The original "Layer B — Runtime" specification asked for an active
+probe at `initialize` handshake. Implementing that against codex
+0.128.0 turned out to require either a dedicated capability-discovery
+RPC the server does not expose, or speculative calls (e.g.
+`thread/setName` with a stub thread) that have surprising side
+effects.
+
+Slice 3 ships Layer B as a **passive observe-and-cache** pattern in
+`packages/codex-runtime/src/capabilities.ts`:
+
+- `CodexCapabilities` records `unsupported` only when a real
+  JSON-RPC call returns code `-32601` (Method Not Found).
+- The default for an un-observed method is "likely supported"
+  because Layer A (compile-time presence in the generated protocol)
+  has already approved it; the bridge would not have compiled
+  otherwise.
+- Mismatches between the generated protocol and the running codex
+  are caught lazily on first invocation; subsequent calls to the
+  same method skip the call and fall back without retrying.
+- A successful call after a `-32601` re-flips the cache to
+  `supported`, since the operator may have upgraded codex while the
+  daemon was still running.
+
+This is a strict subset of the originally-specified active-probe
+pattern: every call site that consults `isLikelySupported(method)`
+still observes Layer A semantics; the only relaxation is when Layer B
+runs (lazily on first call instead of eagerly on handshake). The
+**forbidden shortcuts** above (no main-branch assumptions, no
+version-number inference) remain in force.
+
+If a future codex release exposes an explicit capability-discovery
+RPC, an additional ADR can amend this section to use it as the
+default; the passive observe-and-cache will continue to apply for
+codex versions that lack the RPC.

@@ -20,5 +20,6 @@ export { KNOWN_NOTIFICATION_METHODS, isServerNotificationMethod } from "./method
 export type { ServerNotificationMethod } from "./method-names.js";
 export { EventNormalizer } from "./event-normalizer.js";
 export type { NormalizerOptions } from "./event-normalizer.js";
+export { CodexCapabilities, isMethodNotFoundError } from "./capabilities.js";
 export { CodexRuntime } from "./runtime.js";
 export type { CodexRuntimeOptions } from "./runtime.js";
