@@ -94,6 +94,7 @@ import {
   targetKey,
   textInput,
 } from "./format.js";
+import { PruneSweep } from "./prune-sweep.js";
 import { type DaemonStatusSnapshot, writeDaemonStatusSnapshot } from "./status.js";
 import { TurnOutputManager } from "./turn-output.js";
 
@@ -115,11 +116,6 @@ const TEXT_FALLBACK_APPROVAL_ACTIONS = Object.freeze([
   "decline",
   "abort",
 ] as const satisfies readonly CallbackTokenAction[]);
-const DEFAULT_PRUNE_INTERVAL_MS = 60_000;
-const DEFAULT_TERMINAL_RECORD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const DEFAULT_TERMINAL_RECORD_MAX_COUNT = 10_000;
-const DEFAULT_PRUNE_BATCH_SIZE = 100;
-const DEFAULT_STUCK_ISSUED_GRACE_MS = 5_000;
 const DEFAULT_BIND_RETRY_DELAYS_MS = [50, 150, 350] as const;
 const DEFAULT_COMPUTER_USE_ALLOWED_TOOLS = Object.freeze([
   { namespace: "codex_im.computer_use", tool: "operate" },
@@ -165,7 +161,6 @@ const COMPUTER_USE_DYNAMIC_TOOL_SPEC = Object.freeze({
     required: ["app", "step", "action"],
   },
 } as const satisfies ComputerUseDynamicToolSpec);
-const EAGER_PRUNE_RATIO = 0.8;
 const DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 export interface DaemonBroker {
@@ -575,7 +570,7 @@ export class Daemon {
   #startedAt: Date | undefined;
   #lastFatal: { at: string; message: string } | undefined;
   #supervisorFailureCount = 0;
-  #pruneInFlight = false;
+  #pruneSweep: PruneSweep | undefined;
   readonly #stuckIssuedApprovalIds = new Set<string>();
   readonly #transportLostStuckIssuedApprovalIds = new Set<string>();
   readonly #unsubscribers: Unsubscribe[] = [];
@@ -635,10 +630,32 @@ export class Daemon {
         async (path) => (await this.options.readArtifactFile?.(path)) ?? (await readFile(path)),
         () => (this.options.now?.() ?? new Date()).getTime(),
       );
+      this.#pruneSweep = new PruneSweep(
+        {
+          callbackTokenRepository: this.options.callbackTokenRepository,
+          broker: this.#broker,
+        },
+        {
+          stuckIssuedApprovalIds: this.#stuckIssuedApprovalIds,
+          transportLostStuckIssuedApprovalIds: this.#transportLostStuckIssuedApprovalIds,
+        },
+        (event, detail) => {
+          this.#emitAuditEvent(event, detail as never);
+        },
+        () => this.options.now?.() ?? new Date(),
+        {
+          pruneIntervalMs: this.options.pruneIntervalMs,
+          pruneBatchSize: this.options.pruneBatchSize,
+          stuckIssuedGraceMs: this.options.stuckIssuedGraceMs,
+          terminalRecordMaxAgeMs: this.options.terminalRecordMaxAgeMs,
+          terminalRecordMaxCount: this.options.terminalRecordMaxCount,
+          schedulePrune: this.options.schedulePrune,
+        },
+      );
       this.#revokeStartupCallbackTokens();
       this.#subscribe(
         this.#broker?.onPendingCreated?.((snapshot) => {
-          this.#maybeTriggerEagerPrune();
+          this.#pruneSweep?.maybeTriggerEager();
           void this.#handlePendingCreated(snapshot);
         }),
       );
@@ -646,7 +663,7 @@ export class Daemon {
       this.#subscribe(this.#adapter?.onMessage((message) => this.#handleMessage(message)));
       this.#subscribe(this.options.registerSignalHandler?.("SIGTERM", () => this.#handleSignal()));
       this.#subscribe(this.options.registerSignalHandler?.("SIGINT", () => this.#handleSignal()));
-      this.#subscribe(this.#schedulePruneSweep());
+      this.#subscribe(this.#pruneSweep?.schedule());
       await this.#adapter?.start?.();
       this.#startedAt = this.options.now?.() ?? new Date();
       this.#started = true;
@@ -4114,107 +4131,6 @@ export class Daemon {
         result: "failed",
         metadata: { error: errorMessage(error) },
       });
-    }
-  }
-
-  #schedulePruneSweep(): Unsubscribe | undefined {
-    const intervalMs = this.#positiveInteger(
-      this.options.pruneIntervalMs,
-      DEFAULT_PRUNE_INTERVAL_MS,
-    );
-    const handler = () => this.#runPruneSweep();
-    const scheduled = this.options.schedulePrune?.(handler, intervalMs);
-    if (scheduled !== undefined) {
-      return scheduled;
-    }
-
-    const timer = setInterval(handler, intervalMs);
-    timer.unref?.();
-    return () => clearInterval(timer);
-  }
-
-  #maybeTriggerEagerPrune(): void {
-    const maxCount = this.#nonNegativeInteger(
-      this.options.terminalRecordMaxCount,
-      DEFAULT_TERMINAL_RECORD_MAX_COUNT,
-    );
-    if (maxCount === 0) {
-      this.#runPruneSweep();
-      return;
-    }
-    const count = this.#broker?.approvalRecordCount?.();
-    if (count !== undefined && count >= Math.floor(maxCount * EAGER_PRUNE_RATIO)) {
-      this.#runPruneSweep();
-    }
-  }
-
-  #runPruneSweep(): void {
-    if (this.#pruneInFlight) {
-      return;
-    }
-    this.#pruneInFlight = true;
-    try {
-      const now = this.options.now?.() ?? new Date();
-      const batchSize = this.#positiveInteger(
-        this.options.pruneBatchSize,
-        DEFAULT_PRUNE_BATCH_SIZE,
-      );
-
-      this.options.callbackTokenRepository?.pruneExpired?.(now.toISOString(), batchSize);
-      const flaggedApprovalIds = Array.from(this.#stuckIssuedApprovalIds);
-      if (flaggedApprovalIds.length > 0) {
-        const cutoff = new Date(
-          now.getTime() -
-            this.#positiveInteger(this.options.stuckIssuedGraceMs, DEFAULT_STUCK_ISSUED_GRACE_MS),
-        ).toISOString();
-        const revoked =
-          this.options.callbackTokenRepository?.revokeStuckIssued?.(
-            cutoff,
-            flaggedApprovalIds,
-            batchSize,
-          ) ?? [];
-        const revokedIds = new Set(revoked.map((record) => record.approvalId));
-        for (const record of revoked) {
-          if (!this.#transportLostStuckIssuedApprovalIds.has(record.approvalId)) {
-            this.#broker?.failPendingApprovalAsTransportLost?.(record.approvalId);
-            this.#transportLostStuckIssuedApprovalIds.add(record.approvalId);
-          }
-        }
-        if (revoked.length === 0) {
-          for (const approvalId of flaggedApprovalIds) {
-            this.#stuckIssuedApprovalIds.delete(approvalId);
-            this.#transportLostStuckIssuedApprovalIds.delete(approvalId);
-          }
-        } else if (revoked.length < batchSize) {
-          for (const approvalId of flaggedApprovalIds) {
-            if (!revokedIds.has(approvalId)) {
-              this.#stuckIssuedApprovalIds.delete(approvalId);
-              this.#transportLostStuckIssuedApprovalIds.delete(approvalId);
-            }
-          }
-        }
-      }
-
-      this.#broker?.expirePending?.();
-      this.#broker?.pruneTerminalRecords?.({
-        maxAgeMs: this.#positiveInteger(
-          this.options.terminalRecordMaxAgeMs,
-          DEFAULT_TERMINAL_RECORD_MAX_AGE_MS,
-        ),
-        maxCount: this.#nonNegativeInteger(
-          this.options.terminalRecordMaxCount,
-          DEFAULT_TERMINAL_RECORD_MAX_COUNT,
-        ),
-        batchSize,
-        now,
-      });
-    } catch (error) {
-      this.#emitAuditEvent("approval.prune_sweep_failed", {
-        result: "failed",
-        metadata: { error: errorMessage(error) },
-      });
-    } finally {
-      this.#pruneInFlight = false;
     }
   }
 
