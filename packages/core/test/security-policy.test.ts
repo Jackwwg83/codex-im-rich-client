@@ -282,6 +282,85 @@ describe("SecurityPolicy.checkCommand (T9.4 / D22)", () => {
     });
   });
 
+  it("denies whitespace-evasion variants of a deny pattern (Slice 2.1 hardening)", () => {
+    const policy = new SecurityPolicy(ALLOW_CONFIG);
+    // Each of these is the same command in shell semantics as the deny
+    // pattern "rm -rf /" — under the old String.includes implementation
+    // any of these would have escaped the deny rule.
+    const evasions = [
+      "rm  -rf /", // double space
+      "rm\t-rf /", // tab separator
+      "rm -rf  /", // double space before /
+      "rm   -rf   /", // multiple double spaces
+      "'rm' '-rf' '/'", // single-quoted tokens
+      '"rm" "-rf" "/"', // double-quoted tokens
+      "rm '-rf' /", // mixed quoting
+    ];
+    for (const command of evasions) {
+      expect(policy.checkCommand(command, "/tmp"), `command: ${command}`).toEqual({
+        kind: "deny",
+        reason: "command_denied",
+      });
+    }
+  });
+
+  it("does not over-match: a deny pattern's last token must equal the corresponding command token", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      commands: {
+        denyPatterns: ["rm -rf /"],
+        requireAdminPatterns: [],
+      },
+    });
+    // "/tmp" is not the same token as "/" — must not be a deny match.
+    expect(policy.checkCommand("rm -rf /tmp", "/tmp")).toEqual({ kind: "allow" });
+    // "/etc/foo" is also a distinct token.
+    expect(policy.checkCommand("rm -rf /etc/foo", "/tmp")).toEqual({ kind: "allow" });
+  });
+
+  it("matches a deny pattern that is a contiguous-token subsequence anywhere in the command", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      commands: {
+        denyPatterns: ["chmod 777"],
+        requireAdminPatterns: [],
+      },
+    });
+    expect(policy.checkCommand("sudo chmod 777 /tmp/x", "/tmp")).toEqual({
+      kind: "deny",
+      reason: "command_denied",
+    });
+  });
+
+  it("ignores empty deny patterns", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      commands: {
+        denyPatterns: ["", "   "],
+        requireAdminPatterns: [],
+      },
+    });
+    expect(policy.checkCommand("ls", "/tmp")).toEqual({ kind: "allow" });
+  });
+
+  it("does not honor variable interpolation: literal $x is required, not its expansion", () => {
+    const policy = new SecurityPolicy({
+      ...ALLOW_CONFIG,
+      commands: {
+        denyPatterns: ["rm -rf /"],
+        requireAdminPatterns: [],
+      },
+    });
+    // The user typed `$x rm -rf /` literally; the leading $x is a
+    // separate token that does not appear in the deny pattern, but the
+    // deny pattern is still a contiguous-subsequence match of the
+    // remaining tokens.
+    expect(policy.checkCommand("$x rm -rf /", "/tmp")).toEqual({
+      kind: "deny",
+      reason: "command_denied",
+    });
+  });
+
   it("deny patterns take precedence over require_admin patterns", () => {
     const policy = new SecurityPolicy({
       ...ALLOW_CONFIG,

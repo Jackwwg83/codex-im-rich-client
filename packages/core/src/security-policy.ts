@@ -265,8 +265,121 @@ function platformScoped(platform: string, id: string): string {
   return `${platform}:${id}`;
 }
 
+/**
+ * Match a deny / require-admin pattern against a command using shell-style
+ * tokenization plus contiguous-subsequence matching on the resulting
+ * tokens.
+ *
+ * The previous implementation was `command.includes(pattern)` on the raw
+ * strings, which let a user trivially evade a deny rule by inserting
+ * whitespace differently from the configured pattern (e.g. command
+ * `"rm  -rf /"` with two spaces escapes deny pattern `"rm -rf /"` with
+ * one space). It also failed to match patterns that were "obviously"
+ * the same command in shell semantics — `"rm -rf /"` vs `'rm' '-rf' '/'`.
+ *
+ * Both command and pattern are tokenized with the same minimal shell
+ * tokenizer (whitespace splitting, respect single- and double-quoted
+ * runs, basic backslash escapes). A pattern matches if its token
+ * sequence appears as a contiguous subsequence of the command's token
+ * sequence. Empty patterns never match. Empty (purely-whitespace)
+ * commands never match a non-empty pattern.
+ */
 function matchesAny(command: string, patterns: readonly string[]): boolean {
-  return patterns.some((pattern) => pattern.length > 0 && command.includes(pattern));
+  const cmdTokens = tokenizeShell(command);
+  if (cmdTokens.length === 0) return false;
+  for (const pattern of patterns) {
+    const patTokens = tokenizeShell(pattern);
+    if (patTokens.length === 0) continue;
+    if (containsTokenSubsequence(cmdTokens, patTokens)) return true;
+  }
+  return false;
+}
+
+/**
+ * Minimal shell-style tokenizer for security pattern matching. Not a
+ * full shell parser: it recognizes single-quoted runs (literal), double-
+ * quoted runs (literal — no `$` interpolation, since we are matching
+ * not executing), and `\<char>` escapes outside quotes. Whitespace
+ * (any `\s+`) separates tokens.
+ *
+ * Variable interpolation is not honored on purpose: a deny rule must
+ * apply to the literal command bytes the user typed, not to whatever a
+ * variable might expand to.
+ */
+function tokenizeShell(input: string): string[] {
+  const tokens: string[] = [];
+  let buf = "";
+  let inSingle = false;
+  let inDouble = false;
+  let bufStarted = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i] ?? "";
+    if (inSingle) {
+      if (ch === "'") {
+        inSingle = false;
+      } else {
+        buf += ch;
+      }
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '"') {
+        inDouble = false;
+      } else if (ch === "\\" && i + 1 < input.length) {
+        const next = input[i + 1] ?? "";
+        if (next === '"' || next === "\\") {
+          buf += next;
+          i++;
+        } else {
+          buf += ch;
+        }
+      } else {
+        buf += ch;
+      }
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      bufStarted = true;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      bufStarted = true;
+      continue;
+    }
+    if (ch === "\\" && i + 1 < input.length) {
+      buf += input[i + 1] ?? "";
+      bufStarted = true;
+      i++;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (buf.length > 0 || bufStarted) {
+        tokens.push(buf);
+        buf = "";
+        bufStarted = false;
+      }
+      continue;
+    }
+    buf += ch;
+    bufStarted = true;
+  }
+  if (buf.length > 0 || bufStarted) {
+    tokens.push(buf);
+  }
+  return tokens;
+}
+
+function containsTokenSubsequence(haystack: readonly string[], needle: readonly string[]): boolean {
+  if (needle.length === 0 || needle.length > haystack.length) return false;
+  outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return true;
+  }
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
