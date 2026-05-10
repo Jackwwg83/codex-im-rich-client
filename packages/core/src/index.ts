@@ -104,6 +104,7 @@ export type {
   ComputerUseCommandRejectedResult,
   ComputerUseCommandResult,
 } from "./computer-use-command.js";
+export { parseComputerUsePolicyConfig } from "./computer-use-policy-config-parser.js";
 export {
   ComputerUsePolicy,
   DEFAULT_COMPUTER_USE_APPROVAL_KEYWORDS,

@@ -10,7 +10,6 @@ import {
   type ComputerUseAllowedTool,
   type ComputerUseCommandResult,
   ComputerUsePolicy,
-  type ComputerUsePolicyConfig,
   type ComputerUseProvider,
   ComputerUseSessionRegistry,
   ComputerUseToolGate,
@@ -32,6 +31,7 @@ import {
   type Target,
   UnsupportedComputerUseProvider,
   classifyApprovalRequest,
+  parseComputerUsePolicyConfig,
   redact,
   routeInboundCommand,
   wrapComputerUsePrompt,
@@ -717,7 +717,7 @@ export class Daemon {
 
   #setupComputerUseToolGate(): void {
     const registry = new ComputerUseSessionRegistry();
-    const policyConfig = this.#computerUsePolicyConfig(this.#config);
+    const policyConfig = parseComputerUsePolicyConfig(this.#config);
     const policy =
       policyConfig === undefined ? new ComputerUsePolicy() : new ComputerUsePolicy(policyConfig);
     const audit = this.#computerUseAuditEmitter();
@@ -4438,43 +4438,6 @@ export class Daemon {
     return {
       cwd: partial.cwd,
       ...(typeof partial.defaultModel === "string" ? { defaultModel: partial.defaultModel } : {}),
-    };
-  }
-
-  #computerUsePolicyConfig(config: unknown): ComputerUsePolicyConfig | undefined {
-    if (typeof config !== "object" || config === null) {
-      return undefined;
-    }
-    const raw = (config as { computerUse?: unknown }).computerUse;
-    if (typeof raw !== "object" || raw === null) {
-      return undefined;
-    }
-    const candidate = raw as Partial<{
-      enabled: unknown;
-      requireExplicitPrefix: unknown;
-      defaultApp: unknown;
-      allowedApps: unknown;
-      denyApps: unknown;
-      unknownAppPolicy: unknown;
-      requireApprovalKeywords: unknown;
-      liveSmokeEnabled: unknown;
-    }>;
-
-    return {
-      enabled: candidate.enabled === true,
-      requireExplicitPrefix:
-        typeof candidate.requireExplicitPrefix === "boolean"
-          ? candidate.requireExplicitPrefix
-          : true,
-      ...(typeof candidate.defaultApp === "string" ? { defaultApp: candidate.defaultApp } : {}),
-      allowedApps: stringArray(candidate.allowedApps),
-      ...(candidate.denyApps === undefined ? {} : { denyApps: stringArray(candidate.denyApps) }),
-      unknownAppPolicy: "deny",
-      ...(candidate.requireApprovalKeywords === undefined
-        ? {}
-        : { requireApprovalKeywords: stringArray(candidate.requireApprovalKeywords) }),
-      liveSmokeEnabled:
-        typeof candidate.liveSmokeEnabled === "boolean" ? candidate.liveSmokeEnabled : false,
     };
   }
 
