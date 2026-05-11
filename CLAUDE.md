@@ -128,7 +128,7 @@ in one place when codex bumps versions.
 **Allowed exceptions** (legitimate references; not boundary violations):
 
 - `docs/**` — handoffs, plans, review reports, protocol audits.
-- `TODOS.md` — backlog tracking that may quote method names verbatim.
+- `docs/internal/TODOS.md` — backlog tracking that may quote method names verbatim.
 - `packages/testkit/fixtures/**` and fixture metadata (`metadata.json`).
 - `scripts/**` — audit / verification scripts that read protocol evidence
   (e.g. `scripts/verify-phase1-fixtures.mts`).
@@ -218,8 +218,8 @@ First enter Context Recovery Mode:
    - current phase plan under docs/internal/superpowers/plans/
    - latest handoff under docs/internal/handoffs/
    - docs/internal/handoffs/phase1-live-status.md if present
-   - 09-ROADMAP.md
-   - TODOS.md
+   - docs/internal/design/09-ROADMAP.md
+   - docs/internal/TODOS.md
 
 2. Run:
    - git status --short

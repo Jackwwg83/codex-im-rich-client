@@ -6,6 +6,16 @@ first-use customer onboarding path.
 
 User-facing docs start at [../user/README.md](../user/README.md).
 
+## Original Design Notes
+
+The numbered design documents (`01-PRD.md` through `18-HOOKS-AND-GUARDRAILS.md`)
+that used to live at the repository root were moved under
+[`../internal/design/`](../internal/design/). The agent guidance file
+`AGENTS.md` and the backlog `TODOS.md` moved to
+[`../internal/`](../internal/). Open-source release made repository-root
+internal notes confusing; the user-facing layout is now `README.md`,
+`SECURITY.md`, `LICENSE`, and `docs/user/`.
+
 ## Evidence And Handoffs
 
 - [Phase and live-status handoffs](../handoffs/)

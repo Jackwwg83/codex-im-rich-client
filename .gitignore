@@ -12,3 +12,8 @@ packages/*/dist/
 .claude/scheduled_tasks.lock
 .codex/environments/environment.toml
 docs/phase-*/*.stderr
+
+# Outside-voice guidance packets (e.g. GPT Pro reviews) live locally and
+# are intentionally not committed to keep the repo customer-facing.
+gpt-pro-guidance/
+customer-readiness-audit-report.md
