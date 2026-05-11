@@ -297,9 +297,7 @@ describe("local lifecycle command wrappers", () => {
   });
 
   it("rejects `codex-im:rollback` with an actionable error (rollback is not implemented)", async () => {
-    await expect(main(["rollback"])).rejects.toThrow(
-      /codex-im:rollback: not yet implemented/,
-    );
+    await expect(main(["rollback"])).rejects.toThrow(/codex-im:rollback: not yet implemented/);
   });
 
   it("rejects `codex-im:status --check-updates` and points to the real upgrade check", async () => {

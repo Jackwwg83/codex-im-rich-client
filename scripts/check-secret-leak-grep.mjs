@@ -12,8 +12,8 @@
 // `***REDACTED***`. This catches the resolveSecretEnv-style regression
 // while ignoring legitimate `.length` / `.size` property reads.
 
-import { basename, dirname, join } from "node:path";
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -87,9 +87,7 @@ export function main({ repoRoot = REPO_ROOT } = {}) {
     if (findings.length > 0) failures.push({ file, findings });
   }
   if (failures.length === 0) {
-    console.log(
-      `check-secret-leak-grep: OK (scanned ${files.length} production source files)`,
-    );
+    console.log(`check-secret-leak-grep: OK (scanned ${files.length} production source files)`);
     return 0;
   }
   console.error(

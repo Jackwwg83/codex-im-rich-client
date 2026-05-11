@@ -33,12 +33,7 @@ describe("check-secret-leak-grep", () => {
   });
 
   it("does not flag a `length:` field that is nowhere near ***REDACTED***", () => {
-    const src = [
-      "const config = {",
-      "  cwd: '/home/me/proj',",
-      "  length: 0,",
-      "};",
-    ].join("\n");
+    const src = ["const config = {", "  cwd: '/home/me/proj',", "  length: 0,", "};"].join("\n");
     expect(check(src)).toEqual([]);
   });
 

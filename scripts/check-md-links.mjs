@@ -61,9 +61,8 @@ function listMarkdown(rootAbs, out = []) {
 export function findBrokenLinks(filePath, src) {
   const broken = [];
   const re = /\[[^\]]*\]\(([^)]+)\)/g;
-  let m;
-  while ((m = re.exec(src)) !== null) {
-    let target = m[1].trim();
+  for (const match of src.matchAll(re)) {
+    let target = match[1].trim();
     if (target.startsWith("http://") || target.startsWith("https://")) continue;
     if (target.startsWith("mailto:") || target.startsWith("tel:")) continue;
     if (target.startsWith("#")) continue;
@@ -73,7 +72,7 @@ export function findBrokenLinks(filePath, src) {
     try {
       statSync(resolved);
     } catch {
-      broken.push({ target: m[1], resolved });
+      broken.push({ target: match[1], resolved });
     }
   }
   return broken;
@@ -96,9 +95,7 @@ export function main({ repoRoot = REPO_ROOT } = {}) {
     );
     return 0;
   }
-  console.error(
-    `check-md-links: FAIL — broken local link(s) in ${failures.length} file(s)`,
-  );
+  console.error(`check-md-links: FAIL — broken local link(s) in ${failures.length} file(s)`);
   for (const { file, broken } of failures) {
     const rel = file.startsWith(repoRoot) ? file.slice(repoRoot.length + 1) : file;
     console.error(`  in ${rel}:`);

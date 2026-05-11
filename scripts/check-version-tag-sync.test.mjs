@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  checkVersionTagSync,
-  main,
-  resolveExpectedTag,
-} from "./check-version-tag-sync.mjs";
+import { checkVersionTagSync, main, resolveExpectedTag } from "./check-version-tag-sync.mjs";
 
 describe("check-version-tag-sync", () => {
   it("returns the tag verbatim when --tag is supplied", () => {
@@ -22,19 +18,21 @@ describe("check-version-tag-sync", () => {
   });
 
   it("returns undefined when neither --tag nor a tag GITHUB_REF is present", () => {
-    expect(resolveExpectedTag({ argv: [], env: { GITHUB_REF: "refs/heads/main" } })).toBeUndefined();
+    expect(
+      resolveExpectedTag({ argv: [], env: { GITHUB_REF: "refs/heads/main" } }),
+    ).toBeUndefined();
     expect(resolveExpectedTag({ argv: [], env: {} })).toBeUndefined();
   });
 
   it("accepts a matching tag and version", () => {
-    expect(
-      checkVersionTagSync({ tag: "v0.1.0-alpha.4", packageVersion: "0.1.0-alpha.4" }),
-    ).toEqual({
-      ok: true,
-      expected: "0.1.0-alpha.4",
-      actual: "0.1.0-alpha.4",
-      tag: "v0.1.0-alpha.4",
-    });
+    expect(checkVersionTagSync({ tag: "v0.1.0-alpha.4", packageVersion: "0.1.0-alpha.4" })).toEqual(
+      {
+        ok: true,
+        expected: "0.1.0-alpha.4",
+        actual: "0.1.0-alpha.4",
+        tag: "v0.1.0-alpha.4",
+      },
+    );
   });
 
   it("rejects a mismatched tag and version", () => {

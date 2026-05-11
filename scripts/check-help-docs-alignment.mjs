@@ -82,16 +82,12 @@ export function diff({ router, help, docs }) {
   }
   for (const cmd of help) {
     if (!router.has(cmd) && !NOT_IN_ROUTER.has(cmd) && !ROUTER_SELF.has(cmd)) {
-      errors.push(
-        `/help advertises "/${cmd}" but command-router does not recognise it`,
-      );
+      errors.push(`/help advertises "/${cmd}" but command-router does not recognise it`);
     }
   }
   for (const cmd of docs) {
     if (!router.has(cmd) && !NOT_IN_ROUTER.has(cmd) && !ROUTER_SELF.has(cmd)) {
-      errors.push(
-        `commands.md advertises "/${cmd}" but command-router does not recognise it`,
-      );
+      errors.push(`commands.md advertises "/${cmd}" but command-router does not recognise it`);
     }
   }
   return errors;
@@ -114,7 +110,7 @@ export function main({ repoRoot = REPO_ROOT } = {}) {
     return 0;
   }
   console.error("check-help-docs-alignment: FAIL");
-  for (const e of errors) console.error("  " + e);
+  for (const e of errors) console.error(`  ${e}`);
   return 1;
 }
 

@@ -33,10 +33,7 @@ export function resolveExpectedTag({ argv = [], env = process.env } = {}) {
   return undefined;
 }
 
-export function checkVersionTagSync({
-  tag,
-  packageVersion,
-}) {
+export function checkVersionTagSync({ tag, packageVersion }) {
   const expected = tag.startsWith("v") ? tag.slice(1) : tag;
   if (packageVersion === expected) {
     return { ok: true, expected, actual: packageVersion, tag };
@@ -44,13 +41,15 @@ export function checkVersionTagSync({
   return { ok: false, expected, actual: packageVersion, tag };
 }
 
-export function main({ argv = process.argv.slice(2), env = process.env, repoRoot = REPO_ROOT } = {}) {
+export function main({
+  argv = process.argv.slice(2),
+  env = process.env,
+  repoRoot = REPO_ROOT,
+} = {}) {
   const tag = resolveExpectedTag({ argv, env });
   if (tag === undefined) {
     console.log(
-      "check-version-tag-sync: not a tag push (GITHUB_REF=" +
-        (env.GITHUB_REF ?? "<unset>") +
-        "); skipping",
+      `check-version-tag-sync: not a tag push (GITHUB_REF=${env.GITHUB_REF ?? "<unset>"}); skipping`,
     );
     return 0;
   }
@@ -58,18 +57,14 @@ export function main({ argv = process.argv.slice(2), env = process.env, repoRoot
   const result = checkVersionTagSync({ tag, packageVersion: pkg.version });
   if (result.ok) {
     console.log(
-      "check-version-tag-sync: OK (tag " +
-        result.tag +
-        " matches package.json:version " +
-        result.actual +
-        ")",
+      `check-version-tag-sync: OK (tag ${result.tag} matches package.json:version ${result.actual})`,
     );
     return 0;
   }
   console.error("check-version-tag-sync: FAIL");
-  console.error("  tag:                  " + result.tag);
-  console.error("  expected version:     " + result.expected);
-  console.error("  package.json version: " + result.actual);
+  console.error(`  tag:                  ${result.tag}`);
+  console.error(`  expected version:     ${result.expected}`);
+  console.error(`  package.json version: ${result.actual}`);
   console.error("  ADR 0005 requires these to match before tagging.");
   return 1;
 }
