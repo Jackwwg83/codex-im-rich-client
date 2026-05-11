@@ -9,10 +9,13 @@ import {
   buildLocalUninstallPlan,
   buildLocalUpgradeApplyDryRunPlan,
   buildLocalUpgradePlan,
+  buildUpdateCheckCache,
   clearSensitiveValues,
   detectGitStateFromStatus,
+  main,
   parseRemoteTags,
   runLocalCommandPlan,
+  shortGitSha,
   writeUpdateCheckCache,
 } from "./local-lifecycle.mts";
 
@@ -50,7 +53,8 @@ describe("local lifecycle command wrappers", () => {
       ["launchd-install", "pnpm", ["launchd:install"]],
       ["launchd-status", "pnpm", ["launchd:status"]],
     ]);
-    expect(plan.completionLines.join("\n")).toContain("/use codex-im");
+    expect(plan.completionLines.join("\n")).toContain("/projects");
+    expect(plan.completionLines.join("\n")).toContain("/use 1");
     expect(plan.completionLines.join("\n")).toContain("Reply exactly: OK");
     expect(plan.completionLines.join("\n")).toContain("Computer Use is disabled unless enabled");
   });
@@ -254,5 +258,65 @@ describe("local lifecycle command wrappers", () => {
       latestGitTag: "v0.1.10",
       latestGitSha: "2222222222222222222222222222222222222222",
     });
+  });
+
+  // Regression guard: two distinct commits that share a 7-character prefix
+  // must not be treated as the same revision. detectLocalGitState now
+  // captures the full 40-char SHA; if anyone reverts that, this test fires.
+  it("treats commits with identical 7-char prefix but different full SHA as 'update available'", () => {
+    const cache = buildUpdateCheckCache({
+      gitState: {
+        dirtyWorktree: false,
+        currentGitSha: "abc1234deadbeefcafe1111111111111111111111",
+        currentGitTag: "v0.1.0-alpha.3",
+      },
+      remoteTagInfo: {
+        latestGitTag: "v0.1.0-alpha.4",
+        latestGitSha: "abc1234cafebabe2222222222222222222222222222".slice(0, 40),
+      },
+    });
+    expect(cache.status).toBe("update_available");
+    expect(cache.currentGitSha.length).toBeGreaterThanOrEqual(40);
+    expect(cache.latestGitSha?.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it("recognises an exact full-SHA match as 'current'", () => {
+    const sha = "abc1234deadbeefcafe1111111111111111111111";
+    const cache = buildUpdateCheckCache({
+      gitState: { dirtyWorktree: false, currentGitSha: sha, currentGitTag: "v0.1.0" },
+      remoteTagInfo: { latestGitTag: "v0.1.0", latestGitSha: sha },
+    });
+    expect(cache.status).toBe("current");
+  });
+
+  it("truncates SHA only at display time via shortGitSha()", () => {
+    expect(shortGitSha("abc1234deadbeefcafe1111111111111111111111")).toBe("abc1234");
+    expect(shortGitSha(undefined)).toBe("unknown");
+    expect(shortGitSha("")).toBe("unknown");
+    expect(shortGitSha("abc")).toBe("abc");
+  });
+
+  it("rejects `codex-im:rollback` with an actionable error (rollback is not implemented)", async () => {
+    await expect(main(["rollback"])).rejects.toThrow(
+      /codex-im:rollback: not yet implemented/,
+    );
+  });
+
+  it("rejects `codex-im:status --check-updates` and points to the real upgrade check", async () => {
+    await expect(main(["status", "--check-updates"])).rejects.toThrow(
+      /no-op stub.*pnpm codex-im:upgrade --check/s,
+    );
+  });
+
+  it("rejects real `codex-im:upgrade --apply` and points at --dry-run only in this alpha", async () => {
+    await expect(main(["upgrade", "--apply"])).rejects.toThrow(
+      /apply \(planned for a later release/,
+    );
+  });
+
+  it("rejects `codex-im:upgrade --clear-stale-lock` with a friendly hint", async () => {
+    await expect(main(["upgrade", "--clear-stale-lock"])).rejects.toThrow(
+      /--clear-stale-lock is not yet implemented/,
+    );
   });
 });
