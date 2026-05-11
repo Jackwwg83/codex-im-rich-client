@@ -57,7 +57,6 @@ export interface LocalInstallOptions {
 
 export interface LocalStatusOptions {
   readonly configPath?: string;
-  readonly checkUpdates?: boolean;
 }
 
 export interface LocalUninstallOptions {
@@ -146,7 +145,8 @@ export function buildLocalInstallPlan(options: LocalInstallOptions): LocalComman
       "Codex-IM local install complete.",
       "",
       "Try in your IM chat:",
-      "  /use codex-im",
+      "  /projects",
+      "  /use 1",
       "  Reply exactly: OK",
       "",
       "Useful local commands:",
@@ -182,9 +182,7 @@ export function buildLocalStatusPlan(options: LocalStatusOptions): LocalCommandP
     ],
     completionLines: [
       "Status check complete.",
-      options.checkUpdates === true
-        ? "Update check requested; refresh the update cache with pnpm codex-im:upgrade --check."
-        : "Update check not run; status is local-only by default.",
+      "Status is local-only by default. Run pnpm codex-im:upgrade --check for a remote update probe.",
     ],
   };
 }
@@ -216,16 +214,17 @@ export function buildLocalUpgradePlan(options: LocalUpgradeOptions = {}): LocalC
       : "network: not used",
     `target: ${target}`,
     `repo: ${options.repoPath ?? process.cwd()}`,
-    `current git sha: ${options.currentGitSha ?? "unknown"}`,
+    `current git sha: ${shortGitSha(options.currentGitSha)}`,
     `current git tag: ${options.currentGitTag ?? "unknown"}`,
-    `installed git sha: ${installed?.gitSha ?? "unknown"}`,
+    `installed git sha: ${shortGitSha(installed?.gitSha)}`,
     `installed git tag: ${installed?.gitTag ?? "unknown"}`,
     `installed package version: ${installed?.packageVersion ?? "unknown"}`,
     `installed codex version: ${installed?.codexVersion ?? "unknown"}`,
     dirtyWorktree
       ? "apply: blocked (dirty worktree; commit or stash before --apply)"
       : "apply: allowed by worktree preflight",
-    "next: pnpm codex-im:upgrade --apply --target <tag>",
+    "next: pnpm codex-im:upgrade --apply --dry-run --target <tag>",
+    "note: real --apply is not yet implemented in this alpha; only --apply --dry-run is supported.",
   ];
   return { title: "codex-im upgrade plan", commands: [], completionLines: lines };
 }
@@ -325,7 +324,12 @@ export function detectLocalGitState(repoPath: string = process.cwd()): LocalGitS
   const status = spawnSync("git", ["-C", repoPath, "status", "--short"], {
     encoding: "utf8",
   });
-  const revParse = spawnSync("git", ["-C", repoPath, "rev-parse", "--short", "HEAD"], {
+  // Use full 40-char SHA internally so comparison against `git ls-remote`
+  // output (which is full SHA) is exact. Two distinct commits that share a
+  // 7-char prefix would otherwise be treated as the same revision and
+  // mask a real "update available" state. The display path truncates to
+  // short SHA via `shortGitSha()` at render time only.
+  const revParse = spawnSync("git", ["-C", repoPath, "rev-parse", "HEAD"], {
     encoding: "utf8",
   });
   const describe = spawnSync("git", ["-C", repoPath, "describe", "--tags", "--always"], {
@@ -569,19 +573,19 @@ function parseStatusOptions(args: readonly string[]): {
   readonly dryRun: boolean;
 } {
   const common = parseCommonOptions(args);
-  let checkUpdates = false;
   for (const arg of common.rest) {
     switch (arg) {
       case "--check-updates":
-        checkUpdates = true;
-        break;
+        throw new Error(
+          "codex-im:status: --check-updates was a no-op stub and has been removed. For a real update check run: pnpm codex-im:upgrade --check",
+        );
       default:
         throw new Error(`codex-im:status: unknown argument ${arg}`);
     }
   }
   return {
     dryRun: common.dryRun,
-    plan: buildLocalStatusPlan({ configPath: common.configPath, checkUpdates }),
+    plan: buildLocalStatusPlan({ configPath: common.configPath }),
   };
 }
 
@@ -617,7 +621,9 @@ function parseUpgradeOptions(args: readonly string[]): {
         yes = true;
         break;
       case "--clear-stale-lock":
-        throw new Error("codex-im:upgrade: --clear-stale-lock is planned for Slice 2");
+        throw new Error(
+          "codex-im:upgrade: --clear-stale-lock is not yet implemented; clear ~/.codex-im-bridge/upgrade.lock manually if needed",
+        );
       default:
         throw new Error(`codex-im:upgrade: unknown argument ${arg}`);
     }
@@ -637,7 +643,7 @@ function parseUpgradeOptions(args: readonly string[]): {
   if (mode === "apply") {
     if (!common.dryRun) {
       throw new Error(
-        "codex-im:upgrade: real --apply is not yet implemented; use --apply --dry-run to preview the plan",
+        "codex-im:upgrade: apply (planned for a later release; current alpha only supports --apply --dry-run). To upgrade today: check out the target tag and re-run pnpm codex-im:install.",
       );
     }
     return {
@@ -651,34 +657,13 @@ function parseUpgradeOptions(args: readonly string[]): {
   };
 }
 
-function parseRollbackOptions(args: readonly string[]): {
+function parseRollbackOptions(_args: readonly string[]): {
   readonly plan: LocalCommandPlan;
   readonly dryRun: boolean;
 } {
-  const common = parseCommonOptions(args);
-  let restoreDb = false;
-  for (const arg of common.rest) {
-    switch (arg) {
-      case "--restore-db":
-        restoreDb = true;
-        break;
-      default:
-        throw new Error(`codex-im:rollback: unknown argument ${arg}`);
-    }
-  }
-  return {
-    dryRun: common.dryRun,
-    plan: {
-      title: "codex-im rollback",
-      commands: [],
-      completionLines: [
-        "rollback: planned for Slice 2",
-        restoreDb
-          ? "manual DB restore requested for future rollback"
-          : "manual rollback will not restore DB unless --restore-db",
-      ],
-    },
-  };
+  throw new Error(
+    "codex-im:rollback: not yet implemented; reinstall a previous tag manually (git checkout <tag> && pnpm install && pnpm codex-im:install)",
+  );
 }
 
 function parseUninstallOptions(args: readonly string[]): {
@@ -781,6 +766,16 @@ function updateCheckCachePath(homeDir: string): string {
 function normalizeOptionalLine(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized === undefined || normalized.length === 0 ? undefined : normalized;
+}
+
+/**
+ * Render a git SHA for human display. Internal comparisons use the full
+ * SHA (see `detectLocalGitState`); only the display path truncates to 7
+ * characters. Returns `"unknown"` for missing input.
+ */
+export function shortGitSha(sha: string | undefined): string {
+  if (sha === undefined || sha.length === 0) return "unknown";
+  return sha.length >= 7 ? sha.slice(0, 7) : sha;
 }
 
 async function choosePlatformInteractively(

@@ -130,3 +130,19 @@ pnpm codex-im:uninstall
 This removes the local bridge install path and LaunchAgent. It does not need to
 delete your repository checkout. Delete Keychain services only when you intend
 to remove saved IM credentials.
+
+## Rollback Is Not Yet Wired
+
+In this alpha, `pnpm codex-im:rollback` is rejected with an explanatory
+error. The combined upgrade-and-restart flow under `codex-im:upgrade --apply`
+is also not yet implemented (a real `--apply` without `--dry-run` is
+rejected). To roll back today:
+
+```bash
+git checkout v0.1.0-alpha.3   # or whichever previous tag
+pnpm install
+pnpm codex-im:install --platform <your-platform>
+```
+
+This re-runs the local installer against the older tag. Your config and
+Keychain entries are preserved across the reinstall.

@@ -384,6 +384,14 @@ async function collectAnswersWithPrompts(
   const platform =
     options.platform ?? parsePlatform(await prompt("Platform (telegram/lark/dingtalk/slack): "));
   const projectName = nonEmpty(await prompt("Project name [codex-im]: "), "codex-im");
+  // Guidance for the cwd prompt: many first-time customers run setup from
+  // inside the codex-im repo and accept the default, accidentally pointing
+  // Codex at the bridge codebase instead of their own project. Print to
+  // stderr so the test harness (which asserts on stdout) is unaffected.
+  process.stderr.write(
+    "\nProject cwd: pick the dev directory you want Codex to operate on.\n" +
+      "(Defaults to your shell cwd — usually you want a different repo, NOT codex-im itself.)\n\n",
+  );
   const projectCwd = nonEmpty(await prompt(`Project cwd [${process.cwd()}]: `), process.cwd());
   const allowedUserId = await promptRequired(prompt, "Allowed platform user id: ");
   const allowedChatId = await promptRequired(prompt, "Allowed chat/channel id: ");

@@ -7,6 +7,8 @@ on:
       - main
       - "codex/**"
       - "phase-**"
+    tags:
+      - "v*"
 
 permissions:
   contents: read
@@ -57,6 +59,19 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Contract check — /help vs docs/user/commands.md
+        run: pnpm check:help-docs
+
+      - name: Contract check — markdown link integrity
+        run: pnpm check:md-links
+
+      - name: Contract check — no secret-shape log payloads
+        run: pnpm check:secret-leak
+
+      - name: Contract check — version-tag-sync (tag pushes only, ADR 0005)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: pnpm check:version-tag
 
       - name: Protocol generation check
         run: pnpm protocol:check
