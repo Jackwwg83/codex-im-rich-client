@@ -2299,9 +2299,13 @@ export class Daemon {
         "/new [project] [task] - Start a new Codex conversation in a project.",
         "/threads - List native Codex conversations.",
         "/switch <thread> - Resume and switch to a known Codex conversation.",
-        "/alias <title> - Rename current thread for IM display.",
-        "/fork [thread] - Fork the current or selected Codex thread.",
+        "/alias <title> - Set a local IM-only title for the current thread (never sent to Codex).",
+        "/rename <title> - Rename current thread (synced to Codex when supported).",
+        "/archive - Archive current thread (synced to Codex when supported).",
+        "/unarchive - Reopen an archived thread (synced to Codex when supported).",
+        "/fork [thread] [--exclude-turns] - Fork the current or selected thread; default copies turn history.",
         "/stop - Interrupt the active Codex turn.",
+        "/cu (explicit) - Bounded Computer Use; see commands.md for the accepted scope.",
         "/model [model] - List available Codex models or set this IM thread model.",
         "/compact - Start Codex compaction for the current thread.",
         "/usage - Show Codex account usage/rate-limit status.",
@@ -3890,6 +3894,13 @@ export class Daemon {
     inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
+    if (command.args.includes("--help") || command.args.includes("-h")) {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Usage: /fork [thread] [--exclude-turns]\nDefault copies the full turn history; pass --exclude-turns for a metadata-only fork.",
+      );
+      return;
+    }
     if (await this.#enforceMutationRateLimit(inbound, "fork")) return;
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
     const runtime = this.#currentRuntime();

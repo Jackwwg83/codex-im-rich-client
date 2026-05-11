@@ -90,7 +90,7 @@ export function routeInboundCommand(
     return {
       kind: "rejected",
       reason: "unknown_command",
-      message: `Unknown command: ${command}`,
+      message: `Unknown command: ${command}. Send /help to see available commands.`,
       rawText: text,
     };
   }

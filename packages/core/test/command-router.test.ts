@@ -107,7 +107,7 @@ describe("CommandRouter routeInboundCommand (T12 / D26)", () => {
     expect(routeInboundCommand("/deploy prod")).toEqual({
       kind: "rejected",
       reason: "unknown_command",
-      message: "Unknown command: deploy",
+      message: "Unknown command: deploy. Send /help to see available commands.",
       rawText: "/deploy prod",
     });
   });
