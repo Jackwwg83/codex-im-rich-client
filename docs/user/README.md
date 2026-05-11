@@ -13,14 +13,18 @@ single local installer command. You do not need to modify the code.
 
 1. [Quick start](quickstart.md) - run `pnpm codex-im:install --platform
    telegram` and send the first IM message.
-2. [Platform setup fields](platform-setup.md) - what to collect from Telegram,
+2. [Customer alpha checklist](customer-alpha-checklist.md) - the same flow
+   in checklist form; use this when you are testing as a customer.
+3. [Platform setup fields](platform-setup.md) - what to collect from Telegram,
    Feishu/Lark, DingTalk, or Slack before running setup.
-3. [IM commands](commands.md) - how to use Codex from IM after the daemon is
+4. [IM commands](commands.md) - how to use Codex from IM after the daemon is
    running.
-4. [Admin guide](admin-guide.md) - local config, Keychain, launchd, logs,
+5. [Admin guide](admin-guide.md) - local config, Keychain, launchd, logs,
    backups, upgrades, and uninstall.
-5. [Troubleshooting](troubleshooting.md) - diagnose common setup and runtime
+6. [Troubleshooting](troubleshooting.md) - diagnose common setup and runtime
    failures.
+7. [Bug-report template](customer-bug-report-template.md) - copy this when
+   filing a GitHub issue.
 
 ## Current Product Boundary
 

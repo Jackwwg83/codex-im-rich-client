@@ -93,6 +93,19 @@ release is available, run:
 ```bash
 pnpm codex-im:upgrade --check
 pnpm codex-im:upgrade --plan
+pnpm codex-im:upgrade --apply --dry-run
+```
+
+> Alpha caveat: a real `pnpm codex-im:upgrade --apply` (without `--dry-run`)
+> is not yet implemented in this release; it is rejected with an explanatory
+> error. The three commands above are the supported upgrade-related
+> operations today. `pnpm codex-im:rollback` is similarly rejected; to roll
+> back, check out the previous tag and re-run `pnpm codex-im:install`.
+
+You can also preview the install without making changes:
+
+```bash
+pnpm codex-im:install --platform telegram --dry-run
 ```
 
 `im:doctor` does not send live IM traffic by default. It checks local config,
@@ -133,6 +146,20 @@ current repo status.
 
 ## 8. Next Steps
 
-- Learn commands in [commands.md](commands.md).
+After your first turn works, try these IM commands:
+
+- `/rename <title>` — rename the current thread (synced to Codex when supported).
+- `/archive` and `/unarchive` — manage thread lifecycle.
+- `/fork [--exclude-turns]` — fork the current thread; opt in to a
+  metadata-only fork with the flag.
+- `/status` — see binding, pending approvals, and Codex remote-control status.
+
+Then:
+
+- Learn the full command list in [commands.md](commands.md).
 - Learn local operations in [admin-guide.md](admin-guide.md).
 - Diagnose failures in [troubleshooting.md](troubleshooting.md).
+
+For first-time customer testing, the
+[customer alpha checklist](customer-alpha-checklist.md) walks the full
+pre-install / install / first-message path on one page.

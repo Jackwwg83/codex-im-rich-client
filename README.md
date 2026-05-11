@@ -16,12 +16,19 @@ IM Adapter -> ChannelAdapter -> Core -> CodexRuntime -> AppServerClient -> codex
 
 ## Current Support
 
+> **"Live-accepted" means in this alpha:** smoke-tested on the maintainer's
+> personal Mac with one IM tenant per platform. Customer setup requires you
+> to register your own bot/app per platform (see the per-platform sections
+> in [docs/user/platform-setup.md](docs/user/platform-setup.md)). Expect
+> alpha-grade breakage; please file bugs using
+> [docs/user/customer-bug-report-template.md](docs/user/customer-bug-report-template.md).
+
 | Area | Status |
 |---|---|
-| Telegram | Primary personal entry. Text, approvals, files/images, and direct Codex use are live-accepted. |
-| Feishu/Lark | Primary team entry. Text, cards/approvals, files/images, and direct Codex use are live-accepted. |
-| DingTalk | Compatibility entry. Text, CardKit approvals, files/images, and direct Codex use are live-accepted. |
-| Slack | Bounded workspace support. Socket Mode, slash command, approvals, files, and exact-output UX are live-accepted for the tested workspace path. |
+| Telegram | Primary personal entry. Text, approvals, files/images, and direct Codex use are live-accepted. See [platform-setup.md#telegram](docs/user/platform-setup.md#telegram). |
+| Feishu/Lark | Primary team entry. Text, cards/approvals, files/images, and direct Codex use are live-accepted. See [platform-setup.md#feishu--lark](docs/user/platform-setup.md#feishu--lark). |
+| DingTalk | Compatibility entry. Text, CardKit approvals, files/images, and direct Codex use are live-accepted. See [platform-setup.md#dingtalk](docs/user/platform-setup.md#dingtalk). |
+| Slack | Bounded workspace support. Socket Mode, slash command, approvals, files, and exact-output UX are live-accepted for the tested workspace path. See [platform-setup.md#slack](docs/user/platform-setup.md#slack). |
 | Computer Use | Explicit `/cu` only. Current accepted scope is bounded local macOS Chrome provider behavior, not arbitrary desktop automation. |
 
 ## Installation Mode
@@ -73,10 +80,12 @@ To run those steps manually, follow
 ## User Documentation
 
 - [Quick start](docs/user/quickstart.md)
+- [Customer alpha checklist](docs/user/customer-alpha-checklist.md) — one-page first-time flow
 - [Platform setup fields](docs/user/platform-setup.md)
 - [IM commands](docs/user/commands.md)
 - [Admin guide](docs/user/admin-guide.md)
 - [Troubleshooting](docs/user/troubleshooting.md)
+- [Bug-report template](docs/user/customer-bug-report-template.md)
 
 ## Security Model
 
