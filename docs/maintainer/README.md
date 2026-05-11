@@ -18,32 +18,32 @@ internal notes confusing; the user-facing layout is now `README.md`,
 
 ## Evidence And Handoffs
 
-- [Phase and live-status handoffs](../handoffs/)
-- [Release readiness status](../handoffs/release-readiness-live-status.md)
-- [Live IM acceptance status](../handoffs/live-im-acceptance-status.md)
-- [Direct-use live status](../handoffs/direct-use-live-status.md)
+- [Phase and live-status handoffs](../internal/handoffs/)
+- [Release readiness status](../internal/handoffs/release-readiness-live-status.md)
+- [Live IM acceptance status](../internal/handoffs/live-im-acceptance-status.md)
+- [Direct-use live status](../internal/handoffs/direct-use-live-status.md)
 
 ## Plans And Reviews
 
-- [Superpowers plans](../superpowers/plans/)
-- [Phase 0 evidence](../phase-0/)
-- [Phase 1 reviews](../phase-1/)
-- [Phase 2 reviews](../phase-2/)
-- [Phase 3 reviews](../phase-3/)
-- [Phase 4 reviews](../phase-4/)
-- [Phase 5 reviews](../phase-5/)
-- [Phase 6 reviews](../phase-6/)
-- [Phase 7 reviews](../phase-7/)
-- [Release-readiness review evidence](../release-readiness/)
+- [Superpowers plans](../internal/superpowers/plans/)
+- [Phase 0 evidence](../internal/phase-0/)
+- [Phase 1 reviews](../internal/phase-1/)
+- [Phase 2 reviews](../internal/phase-2/)
+- [Phase 3 reviews](../internal/phase-3/)
+- [Phase 4 reviews](../internal/phase-4/)
+- [Phase 5 reviews](../internal/phase-5/)
+- [Phase 6 reviews](../internal/phase-6/)
+- [Phase 7 reviews](../internal/phase-7/)
+- [Release-readiness review evidence](../internal/release-readiness/)
 
 ## Maintainer Runbooks
 
 - [Launch scope](../ops/launch-scope.md)
 - [Production launch runbook](../ops/production-launch.md)
 - [Release readiness preflight](../ops/release-readiness.md)
-- [Live IM acceptance runbook](../ops/live-im-acceptance.md)
-- [Telegram/Lark/DingTalk/Slack/Computer Use smoke runbooks](../ops/)
-- [Autonomous loop runbook](../automation/codex-app-autonomous-loop-runbook.md)
+- [Live IM acceptance runbook](../internal/ops-smoke/live-im-acceptance.md)
+- [Computer Use, Telegram, Lark, DingTalk, Slack smoke runbooks](../internal/ops-smoke/)
+- [Autonomous loop runbook](../internal/automation/codex-app-autonomous-loop-runbook.md)
 
 ## Maintainer Rules
 
