@@ -515,12 +515,16 @@ function resolveSecretEnv(
     throw new Error(`Missing environment variable ${envName}`);
   }
 
+  // Intentionally omit any size/length/chars field. Even a numeric length
+  // hint can narrow the candidate space of a fixed-format secret (e.g.
+  // a Telegram bot token has a known shape) and is unsafe to log. The
+  // presence signal alone is what callers need.
   opts.logger?.info({
     event: "config.secret_resolved",
     adapter,
     envVar: envName,
     value: "***REDACTED***",
-    length: value.length,
+    present: true,
   });
 
   return value;

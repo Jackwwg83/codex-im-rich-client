@@ -317,6 +317,17 @@ allowed_channel_ids    = ["T_TEST:C_TEST"]
     expect(logLines.join("\n")).toContain("DINGTALK_CLIENT_SECRET");
     expect(logLines.join("\n")).toContain("SLACK_BOT_TOKEN");
     expect(logLines.join("\n")).toContain("SLACK_APP_TOKEN");
+    // No size/length/chars field is allowed in the resolved-secret log
+    // record. A numeric length is a side-channel hint about secret shape.
+    const merged = logLines.join("\n");
+    expect(merged).not.toMatch(/"length"/);
+    expect(merged).not.toMatch(/"size"/);
+    expect(merged).not.toMatch(/"chars"/);
+    expect(merged).not.toMatch(/length=\d+/);
+    expect(merged).not.toMatch(/size=\d+/);
+    // Presence-only signalling is fine.
+    expect(merged).toContain("present");
+    expect(merged).toContain("***REDACTED***");
     expect(() => resolveConfigSecrets(config, { env: {} })).toThrow(/IM_TELEGRAM_BOT_TOKEN/);
   });
 
