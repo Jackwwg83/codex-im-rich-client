@@ -755,7 +755,7 @@ describe("Daemon skeleton (T14)", () => {
       turnInterrupt: vi.fn(),
     };
     const threadSessionRepository = {
-      upsert: vi.fn(() => ({
+      upsert: vi.fn((input) => ({
         id: "ts-default",
         target,
         contextKind: "app_default" as const,
@@ -2179,13 +2179,16 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("/projects");
     expect(body).toContain("/use <project>");
     expect(body).toContain("/status");
-    expect(body).toContain("/new [project] [task]");
+    expect(body).toContain("/new <task>");
+    expect(body).toContain("/new --title <title>");
     expect(body).toContain("/threads");
     expect(body).toContain("/switch <thread>");
     expect(body).toContain("/alias <title>");
     expect(body).toContain("/fork [thread]");
     expect(body).toContain("/stop");
-    expect(body).toContain("Completed file, command, and tool activity may appear as Codex items.");
+    expect(body).toContain(
+      "Normal replies show the assistant answer only; use /status or /diagnostics for technical detail.",
+    );
     expect(body).not.toContain("-100secret-chat");
     expect(body).not.toContain("u-secret-user");
     expect(body).not.toContain("/Users/alice/private/project");
@@ -3069,7 +3072,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).not.toContain("thread-abcdefghijklmnopqrstuvwxyz");
   });
 
-  it("routes /new to threadStart, durable thread session upsert, and current binding update", async () => {
+  it("routes /new text in the current project to a new thread and immediate first turn", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const now = new Date("2026-05-03T12:00:00.000Z");
     const target = { platform: "telegram", chatId: "-allowed" };
@@ -3094,7 +3097,7 @@ describe("Daemon skeleton (T14)", () => {
     };
     const runtime = {
       threadStart: vi.fn(() => ({ thread: { id: "thread-created-1234567890" } })),
-      turnStart: vi.fn(),
+      turnStart: vi.fn(() => ({ turn: { id: "turn-created-1234567890" } })),
       turnSteer: vi.fn(),
       turnInterrupt: vi.fn(),
     };
@@ -3162,10 +3165,112 @@ describe("Daemon skeleton (T14)", () => {
       now: "2026-05-03T12:00:00.000Z",
     });
     expect(sessionRouter.bindThread).toHaveBeenCalledWith(target, "thread-created-1234567890");
-    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(runtime.turnStart).toHaveBeenCalledWith({
+      threadId: "thread-created-1234567890",
+      input: [{ type: "text", text: "Release check", text_elements: [] }],
+    });
     expect(adapter.editText).toHaveBeenCalledWith(
       { target, messageId: "msg-new" },
-      "New Codex thread thread-creat... - Release check",
+      "New Codex conversation thread-creat... in project web\nturn: turn-created...",
+    );
+  });
+
+  it("routes /new --title to title-only thread creation in the current project", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-03T12:30:00.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const sessionRouter = {
+      resolve: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        defaultModel: "gpt-test",
+        codexThreadId: "thread-old",
+      })),
+      bindThread: vi.fn(() => ({
+        kind: "bound" as const,
+        target,
+        projectId: "web",
+        cwd: "/repo/web",
+        defaultModel: "gpt-test",
+        codexThreadId: "thread-title-1234567890",
+      })),
+    };
+    const runtime = {
+      threadStart: vi.fn(() => ({ thread: { id: "thread-title-1234567890" } })),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn(() => ({
+        id: "ts-title",
+        target,
+        projectId: "web",
+        codexThreadId: "thread-title-1234567890",
+        title: "Release check",
+        status: "open" as const,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        lastUsedAt: now.toISOString(),
+      })),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({}),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => sessionRouter,
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/new --title Release check",
+      messageRef: { target, messageId: "msg-new-title" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadStart).toHaveBeenCalledWith({
+      cwd: "/repo/web",
+      model: "gpt-test",
+    });
+    expect(runtime.turnStart).not.toHaveBeenCalled();
+    expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
+      target,
+      projectId: "web",
+      cwd: "/repo/web",
+      codexThreadId: "thread-title-1234567890",
+      title: "Release check",
+      now: "2026-05-03T12:30:00.000Z",
+    });
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-new-title" },
+      "New Codex thread thread-title... - Release check",
     );
   });
 

@@ -47,6 +47,11 @@ function makeConfig(projects: Record<string, { cwd: string; writableRoots: strin
       requireApprovalKeywords: [],
       liveSmokeEnabled: false,
     },
+    im: {
+      output: {
+        mode: "normal",
+      },
+    },
     adapters: {
       telegram: { enabled: false, botTokenEnv: "" },
       lark: {

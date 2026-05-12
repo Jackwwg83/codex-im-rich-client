@@ -67,6 +67,13 @@ The install command:
 - builds and installs the local daemon bundle;
 - installs and checks the current-user launchd service.
 
+During setup, choose the local project directory you actually want to control
+from IM. The default prompt value is your shell's current directory; if you run
+setup from inside `codex-im-rich-client`, change it to your application repo
+unless you are deliberately testing this bridge project. The generated config
+uses normal IM output by default so customer chats do not show internal status,
+token usage, skill-loading commands, or command-log attachments.
+
 ## 5. Manual Install Steps
 
 If you want to see each boundary separately, run the expanded sequence:
@@ -135,6 +142,10 @@ You should receive an exact `OK` response. `/projects` shows the configured
 Codex projects without exposing local paths; choose by number. To create a
 fresh conversation and start immediately, you can also send
 `/new 1 Reply exactly: OK`.
+
+`/new <task>` creates a new conversation and immediately sends `<task>` as the
+first prompt. Use `/new --title <title>` only when you want an empty titled
+conversation without starting a turn.
 
 Project selection is optional. Sending `Reply exactly: OK` or
 `/new Reply exactly: OK` before `/use` creates a Codex default conversation

@@ -56,6 +56,7 @@ import {
 } from "@codex-im/storage-sqlite";
 import { setupComputerUseGate } from "./computer-use-wiring.js";
 import {
+  type ImOutputLanguage,
   actorKey,
   drainShutdown,
   errorMessage,
@@ -70,8 +71,10 @@ import {
   formatSkillsList,
   formatUsage,
   generateRawCallbackToken,
+  imOutputModeFromConfig,
   inboundAttachmentTooLargeMessage,
   isDefined,
+  isLikelyChineseText,
   isRawCwdSelector,
   materializedInboundAttachments,
   optionalMessageRefKind,
@@ -440,6 +443,9 @@ export interface DaemonTurnOutputState {
   readonly threadId: string;
   readonly turnId: string;
   readonly suppressAuxiliarySummaries: boolean;
+  readonly redactLocalPaths: boolean;
+  readonly suppressCommandLogFiles: boolean;
+  readonly language: ImOutputLanguage;
   readonly statusSummaries: string[];
   readonly itemSummaries: string[];
   readonly files: DaemonTurnOutputFile[];
@@ -453,6 +459,7 @@ export interface DaemonTurnOutputFile {
   readonly bytes?: Uint8Array;
   readonly filename: string;
   readonly contentType: string;
+  readonly kind?: "command_log" | "file_patch" | "artifact";
 }
 
 interface DaemonProjectConfig {
@@ -1708,6 +1715,21 @@ export class Daemon {
     return policy?.checkProjectAccess(projectId, target, sender).kind !== "deny";
   }
 
+  #imOutputMode() {
+    return imOutputModeFromConfig(this.#config);
+  }
+
+  #turnOutputOptionsForText(target: Target, text: string) {
+    const outputMode = this.#imOutputMode();
+    const normalMode = outputMode === "normal";
+    return {
+      suppressAuxiliarySummaries: shouldSuppressAuxiliaryTurnSections(target, text, outputMode),
+      redactLocalPaths: normalMode,
+      suppressCommandLogFiles: normalMode,
+      language: isLikelyChineseText(text) ? ("zh" as const) : ("en" as const),
+    };
+  }
+
   async #routePrompt(
     inbound: {
       target: Target;
@@ -1794,7 +1816,7 @@ export class Daemon {
         inbound.target,
         route.codexThreadId,
         activeTurnId,
-        shouldSuppressAuxiliaryTurnSections(inbound.target, text),
+        this.#turnOutputOptionsForText(inbound.target, text),
       );
     }
   }
@@ -2297,7 +2319,8 @@ export class Daemon {
         "/use <project> - Select a project by number or name.",
         "/status - Show current Codex IM status.",
         "/whoami - Show redacted IM identity and current binding.",
-        "/new [project] [task] - Start a new Codex conversation in a project.",
+        "/new <task> - Start a new Codex conversation and send the first prompt.",
+        "/new --title <title> - Start an empty titled conversation.",
         "/threads - List native Codex conversations.",
         "/switch <thread> - Resume and switch to a known Codex conversation.",
         "/alias <title> - Set a local IM-only title for the current thread (never sent to Codex).",
@@ -2318,7 +2341,7 @@ export class Daemon {
         "/mcp [login <server>|reload] - List MCP server status or start native MCP auth.",
         "/approvals - List pending approvals for this chat.",
         "/approve <id> <action> - Text fallback for approval buttons.",
-        "Completed file, command, and tool activity may appear as Codex items.",
+        "Normal replies show the assistant answer only; use /status or /diagnostics for technical detail.",
       ].join("\n"),
     );
   }
@@ -3642,8 +3665,10 @@ export class Daemon {
       return;
     }
 
-    const [firstArg] = command.args;
-    if (firstArg !== undefined && isRawCwdSelector(firstArg)) {
+    const titleOnly = command.args[0] === "--title";
+    const effectiveArgs = titleOnly ? command.args.slice(1) : command.args;
+    const [firstArg] = effectiveArgs;
+    if (!titleOnly && firstArg !== undefined && isRawCwdSelector(firstArg)) {
       await this.#editInboundMessage(
         inbound.messageRef,
         "IM cannot accept raw cwd paths. Use /projects, then /new <number> <task>.",
@@ -3652,17 +3677,17 @@ export class Daemon {
     }
 
     const selectedCwd =
-      firstArg === undefined
+      titleOnly || firstArg === undefined
         ? undefined
         : this.#resolveKnownConfigCwd(firstArg, inbound.target, inbound.sender);
     if (selectedCwd !== undefined) {
-      await this.#routeNewInKnownCwd(inbound, selectedCwd, command.args.slice(1).join(" ").trim());
+      await this.#routeNewInKnownCwd(inbound, selectedCwd, effectiveArgs.slice(1).join(" ").trim());
       return;
     }
 
     const route = sessionRouter.resolve(inbound.target);
     if (route.kind !== "bound") {
-      await this.#routeNewInDefaultContext(inbound, command.args.join(" ").trim());
+      await this.#routeNewInDefaultContext(inbound, effectiveArgs.join(" ").trim(), { titleOnly });
       return;
     }
     if (!this.#projectAllowed(route.projectId, inbound.target, inbound.sender)) {
@@ -3687,7 +3712,8 @@ export class Daemon {
       return;
     }
 
-    const title = this.#threadTitleFromArgs(command.args);
+    const task = effectiveArgs.join(" ").trim();
+    const title = this.#threadTitleFromArgs(effectiveArgs);
     try {
       threadSessions.upsert({
         target: inbound.target,
@@ -3714,10 +3740,41 @@ export class Daemon {
       return;
     }
 
-    await this.#editInboundMessage(
-      inbound.messageRef,
-      `New Codex thread ${this.#shortId(threadId)}${title === undefined ? "" : ` - ${title}`}`,
-    );
+    if (titleOnly || task.length === 0) {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `New Codex thread ${this.#shortId(threadId)}${title === undefined ? "" : ` - ${title}`}`,
+      );
+      return;
+    }
+
+    try {
+      const startedTurn = await runtime.turnStart({
+        threadId,
+        input: promptInput(task, []),
+      });
+      const activeTurnId = this.#turnId(startedTurn);
+      if (activeTurnId !== undefined) {
+        this.#bindActiveTurn(sessionRouter, route, activeTurnId, threadId);
+        await this.#turnOutputManager?.open(
+          inbound.target,
+          threadId,
+          activeTurnId,
+          this.#turnOutputOptionsForText(inbound.target, task),
+        );
+      }
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        `New Codex conversation ${this.#shortId(threadId)} in project ${route.projectId ?? route.projectLabel ?? "current"}${activeTurnId === undefined ? "" : `\nturn: ${this.#shortId(activeTurnId)}`}`,
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.turn_start_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex turn failed to start.");
+    }
   }
 
   async #routeNewInKnownCwd(
@@ -3809,7 +3866,12 @@ export class Daemon {
           ...(entry.defaultModel === undefined ? {} : { defaultModel: entry.defaultModel }),
           activeTurnId,
         });
-        await this.#turnOutputManager?.open(inbound.target, threadId, activeTurnId, false);
+        await this.#turnOutputManager?.open(
+          inbound.target,
+          threadId,
+          activeTurnId,
+          this.#turnOutputOptionsForText(inbound.target, task),
+        );
       }
       await this.#editInboundMessage(
         inbound.messageRef,
@@ -3828,6 +3890,7 @@ export class Daemon {
   async #routeNewInDefaultContext(
     inbound: { target: Target; messageRef?: DaemonMessageRef },
     task: string,
+    opts: { readonly titleOnly?: boolean } = {},
   ): Promise<void> {
     const runtime = this.#currentRuntime();
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
@@ -3892,7 +3955,7 @@ export class Daemon {
       return;
     }
 
-    if (task.length === 0) {
+    if (task.length === 0 || opts.titleOnly === true) {
       await this.#editInboundMessage(
         inbound.messageRef,
         `New Codex conversation ${this.#shortId(threadId)} in project Codex default`,
@@ -3914,7 +3977,12 @@ export class Daemon {
           codexThreadId: threadId,
           activeTurnId,
         });
-        await this.#turnOutputManager?.open(inbound.target, threadId, activeTurnId, false);
+        await this.#turnOutputManager?.open(
+          inbound.target,
+          threadId,
+          activeTurnId,
+          this.#turnOutputOptionsForText(inbound.target, task),
+        );
       }
       await this.#editInboundMessage(
         inbound.messageRef,
@@ -4535,8 +4603,14 @@ export class Daemon {
     sessionRouter: DaemonSessionRouter,
     route: Extract<SessionRoute, { kind: "bound" }>,
     activeTurnId: string,
+    codexThreadId = route.codexThreadId,
   ): void {
-    if (sessionRouter.bind === undefined || route.codexThreadId === undefined) {
+    if (codexThreadId === undefined) {
+      return;
+    }
+
+    if (sessionRouter.bind === undefined) {
+      sessionRouter.bindThread?.(route.target, codexThreadId);
       return;
     }
 
@@ -4545,7 +4619,7 @@ export class Daemon {
       ...(route.projectId !== undefined ? { projectId: route.projectId } : {}),
       ...(route.projectLabel !== undefined ? { projectLabel: route.projectLabel } : {}),
       cwd: route.cwd,
-      codexThreadId: route.codexThreadId,
+      codexThreadId,
       ...(route.defaultModel === undefined ? {} : { defaultModel: route.defaultModel }),
       activeTurnId,
     });

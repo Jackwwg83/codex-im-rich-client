@@ -74,6 +74,27 @@ describe("setup-im wizard planning", () => {
     expect(keychainServiceForSecret("slackAppToken")).toBe("codex-im-bridge-slack-app");
   });
 
+  it("defaults customer IM output to normal mode and warns when setup points at this bridge repo", () => {
+    const plan = buildSetupPlan({
+      now: new Date("2026-05-08T07:30:00.000Z"),
+      home: "/Users/operator",
+      existingConfigPresent: false,
+      answers: baseAnswers({
+        projectName: "bridge",
+        projectCwd: "/Users/operator/src/codex-im-rich-client",
+        telegramBotToken: "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd",
+      }),
+    });
+
+    const config = parseConfigToml(plan.configToml);
+    expect(config.im.output.mode).toBe("normal");
+    expect(plan.configToml).toContain("[im.output]");
+    expect(plan.configToml).toContain('mode = "normal"');
+    expect(plan.warnings).toContain(
+      "Project cwd points at codex-im-rich-client. For customer use, choose the application repo you want Codex to operate on.",
+    );
+  });
+
   it("accepts piped input for dry-run setup without echoing secrets", () => {
     const secret = "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd";
     const result = spawnSync(

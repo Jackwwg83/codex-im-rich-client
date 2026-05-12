@@ -33,6 +33,11 @@ path.
 Raw paths such as `/Users/me/repo` or `~/repo` are rejected from IM. Add or
 change projects locally through setup/config, then select them from `/projects`.
 
+Default IM output is normal mode: ordinary prompts show the assistant answer,
+not token usage, thread lifecycle notices, internal skill-loading commands, or
+automatic command-log attachments. Use `/status`, `/diagnostics`, or local
+admin logs when you need technical detail.
+
 ## Project And Conversation Control
 
 | Command | Use |
@@ -40,7 +45,10 @@ change projects locally through setup/config, then select them from `/projects`.
 | `/projects` | List Codex projects available to this IM chat. |
 | `/cwds` | Technical alias for `/projects`; output does not show local paths. |
 | `/use <number-or-name>` | Select a project for the current IM target. |
-| `/new [number-or-name] [task]` | Start a new Codex conversation in the selected/specified project, or in Codex default when no project is selected; optional task starts the first turn. |
+| `/new` | Start an empty Codex conversation in the current project, or Codex default when no project is selected. |
+| `/new <task>` | Start a new Codex conversation and immediately send `<task>` as the first prompt. |
+| `/new <number-or-name> <task>` | Select a configured project by number/name, start a new conversation there, and immediately send `<task>`. |
+| `/new --title <title>` | Start an empty conversation with an IM-local title; does not start a Codex turn. |
 | `/threads` | List recent native Codex App Server conversations, including conversations created from Codex App or CLI. |
 | `/threads --refresh` | Import recent native Codex App Server conversations into the local IM thread index without promoting their cwd to configured projects. |
 | `/switch <number-or-thread-prefix>` | Resume and bind this IM chat to a listed native Codex conversation. |
@@ -126,6 +134,27 @@ mcp servers: 0
 
 Outputs are summaries. Raw tool arguments, secrets, cookies, tokens, and private
 payloads are redacted or suppressed.
+
+## Output Detail
+
+Customer installs default to:
+
+```toml
+[im.output]
+mode = "normal"
+```
+
+Normal mode keeps ordinary chat clean:
+
+- assistant answer text is shown;
+- local absolute paths are redacted, for example `/Users/alice/projects/web`
+  becomes `<project:web>`;
+- Codex status, token usage, internal command items, and automatic command-log
+  attachments stay hidden.
+
+Maintainers can opt into `"verbose"` or `"debug"` in local config while
+diagnosing a bridge issue. Do not ask customers to run in debug mode unless you
+need a targeted diagnostic capture.
 
 ## Approvals
 

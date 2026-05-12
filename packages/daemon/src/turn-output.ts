@@ -22,7 +22,12 @@ import type {
   DaemonTurnOutputState,
 } from "./daemon.js";
 import {
+  type ImOutputLanguage,
   appendImText,
+  codexTurnCompletedMessage,
+  codexTurnFailedMessage,
+  codexTurnInterruptedMessage,
+  codexWorkingMessage,
   errorMessage,
   extractCodexItemFiles,
   isAppendOnlyTextRef,
@@ -31,6 +36,7 @@ import {
   outputStatusSummaries,
   readRecord,
   readStringField,
+  redactLocalPathsForNormalIm,
   splitImText,
   summarizeCodexItem,
   summarizeCodexRuntimeNotice,
@@ -95,6 +101,13 @@ const MAX_IM_ARTIFACT_FILE_BYTES = 10 * 1024 * 1024;
 const PROGRESS_EDIT_INTERVAL_MS = 1_500;
 const PROGRESS_SIGNAL: TurnOutputHandleSignal = { kind: "progress" };
 
+export interface TurnOutputOpenOptions {
+  readonly suppressAuxiliarySummaries?: boolean;
+  readonly redactLocalPaths?: boolean;
+  readonly suppressCommandLogFiles?: boolean;
+  readonly language?: ImOutputLanguage;
+}
+
 export class TurnOutputManager {
   readonly #adapter: TurnOutputAdapter;
   readonly #audit: TurnOutputAuditEmitter;
@@ -119,13 +132,20 @@ export class TurnOutputManager {
     target: Target,
     threadId: string,
     turnId: string,
-    suppressAuxiliarySummaries = false,
+    options: boolean | TurnOutputOpenOptions = false,
   ): Promise<void> {
+    const normalizedOptions =
+      typeof options === "boolean" ? { suppressAuxiliarySummaries: options } : options;
+    const suppressAuxiliarySummaries = normalizedOptions.suppressAuxiliarySummaries === true;
     const state: DaemonTurnOutputState = {
       target,
       threadId,
       turnId,
       suppressAuxiliarySummaries,
+      redactLocalPaths: normalizedOptions.redactLocalPaths ?? suppressAuxiliarySummaries,
+      suppressCommandLogFiles:
+        normalizedOptions.suppressCommandLogFiles ?? suppressAuxiliarySummaries,
+      language: normalizedOptions.language ?? "en",
       statusSummaries: [],
       itemSummaries: [],
       files: [],
@@ -136,7 +156,7 @@ export class TurnOutputManager {
       return;
     }
     try {
-      state.messageRef = await this.#adapter.sendText(target, "Codex is working...");
+      state.messageRef = await this.#adapter.sendText(target, codexWorkingMessage(state.language));
     } catch (error) {
       this.#audit("runtime.turn_output_send_failed", {
         target,
@@ -221,7 +241,7 @@ export class TurnOutputManager {
       state,
       this.#terminalTurnOutputBody(
         event,
-        state.text,
+        state,
         outputStatusSummaries(state),
         outputItemSummaries(state),
       ),
@@ -246,7 +266,7 @@ export class TurnOutputManager {
       state,
       this.#terminalTurnOutputBody(
         { type: "turn_interrupted", threadId, turnId, raw: {}, terminal: true },
-        state.text,
+        state,
       ),
     );
   }
@@ -394,7 +414,10 @@ export class TurnOutputManager {
   }
 
   async #publishTerminalTurnFiles(state: DaemonTurnOutputState): Promise<void> {
-    if (state.files.length === 0) {
+    const files = state.suppressCommandLogFiles
+      ? state.files.filter((file) => file.kind !== "command_log")
+      : state.files;
+    if (files.length === 0) {
       return;
     }
     if (this.#adapter.sendFile === undefined) {
@@ -405,7 +428,7 @@ export class TurnOutputManager {
       });
       return;
     }
-    for (const file of state.files) {
+    for (const file of files) {
       await this.#sendTurnOutputFile(state, file);
     }
   }
@@ -478,29 +501,41 @@ export class TurnOutputManager {
   #inProgressTurnOutputBody(state: DaemonTurnOutputState): string {
     const statusSummaries = outputStatusSummaries(state);
     const itemSummaries = outputItemSummaries(state);
+    const visibleText = this.#visibleText(state, state.text);
     if (statusSummaries.length === 0 && itemSummaries.length === 0) {
-      return state.text.length === 0 ? "Codex is working..." : truncateImText(state.text);
+      return visibleText.length === 0
+        ? codexWorkingMessage(state.language)
+        : truncateImText(visibleText);
     }
-    return truncateImText(turnOutputBodyWithSections(state.text, statusSummaries, itemSummaries));
+    return truncateImText(turnOutputBodyWithSections(visibleText, statusSummaries, itemSummaries));
   }
 
   #terminalTurnOutputBody(
     event: CodexRichEvent,
-    text: string,
+    state: DaemonTurnOutputState,
     statusSummaries: readonly string[] = [],
     itemSummaries: readonly string[] = [],
   ): string {
+    const text = this.#visibleText(state, state.text);
     let body: string;
     if (event.type === "turn_completed") {
-      body = text.length === 0 ? "Codex turn completed." : text;
+      body = text.length === 0 ? codexTurnCompletedMessage(state.language) : text;
     } else if (event.type === "turn_interrupted") {
-      body = text.length === 0 ? "Codex turn interrupted." : `${text}\n\n[turn interrupted]`;
+      body =
+        text.length === 0
+          ? codexTurnInterruptedMessage(state.language)
+          : `${text}\n\n[turn interrupted]`;
     } else {
-      body = text.length === 0 ? "Codex turn failed." : `${text}\n\n[turn failed]`;
+      body =
+        text.length === 0 ? codexTurnFailedMessage(state.language) : `${text}\n\n[turn failed]`;
     }
     if (statusSummaries.length === 0 && itemSummaries.length === 0) {
       return body;
     }
     return truncateImText(turnOutputBodyWithSections(body, statusSummaries, itemSummaries));
+  }
+
+  #visibleText(state: DaemonTurnOutputState, text: string): string {
+    return state.redactLocalPaths ? redactLocalPathsForNormalIm(text) : text;
   }
 }

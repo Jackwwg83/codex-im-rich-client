@@ -47,6 +47,7 @@ export interface SetupPlan {
   readonly configToml: string;
   readonly keychainWrites: readonly KeychainWritePlan[];
   readonly nextCommands: readonly string[];
+  readonly warnings: readonly string[];
 }
 
 export interface BuildSetupPlanInput {
@@ -101,6 +102,7 @@ export function buildSetupPlan(input: BuildSetupPlanInput): SetupPlan {
     ...(backupPath === undefined ? {} : { backupPath }),
     configToml,
     keychainWrites: keychainWritesFor(input.answers, account),
+    warnings: setupWarnings(input.answers),
     nextCommands: [
       `pnpm im:doctor --config ${shellQuote(configPath)}`,
       "pnpm bridge:build",
@@ -197,6 +199,9 @@ function renderConfigToml(home: string, answers: SetupAnswers): string {
     'require_approval_keywords = ["login", "password", "token", "payment", "checkout", "delete", "send", "submit", "publish", "transfer"]',
     "live_smoke_enabled = false",
     "",
+    "[im.output]",
+    'mode = "normal"',
+    "",
     "[adapters.telegram]",
     `enabled = ${answers.platform === "telegram"}`,
     `bot_token_env = ${tomlString(DEFAULT_ENV_NAMES.telegramBotToken)}`,
@@ -248,6 +253,16 @@ function renderConfigToml(home: string, answers: SetupAnswers): string {
   }
 
   return `${lines.join("\n")}`;
+}
+
+function setupWarnings(answers: SetupAnswers): readonly string[] {
+  const normalizedCwd = answers.projectCwd.replace(/\/+$/u, "");
+  if (basename(normalizedCwd) === "codex-im-rich-client") {
+    return [
+      "Project cwd points at codex-im-rich-client. For customer use, choose the application repo you want Codex to operate on.",
+    ];
+  }
+  return [];
 }
 
 function platformScoped(platform: SetupPlatform, value: string): string {
@@ -517,6 +532,9 @@ function formatPlanSummary(plan: SetupPlan, options: CliOptions): string {
     `backup: ${plan.backupPath ?? "none"}`,
     `write_config: ${options.dryRun ? "dry-run" : "yes"}`,
     `keychain: ${options.noKeychain ? "skipped" : "write redacted secrets"}`,
+    ...(plan.warnings.length === 0
+      ? []
+      : ["warnings:", ...plan.warnings.map((warning) => `  ${warning}`)]),
     "secrets:",
     ...plan.keychainWrites.map(
       (write) =>

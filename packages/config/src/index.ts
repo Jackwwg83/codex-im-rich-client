@@ -40,6 +40,11 @@ export interface CodexImConfig {
     requireApprovalKeywords: string[];
     liveSmokeEnabled: boolean;
   };
+  im: {
+    output: {
+      mode: "normal" | "verbose" | "debug";
+    };
+  };
   adapters: {
     telegram: {
       enabled: boolean;
@@ -144,6 +149,12 @@ const computerUseConfigDefaults = {
   live_smoke_enabled: false,
 };
 
+const imConfigDefaults = {
+  output: {
+    mode: "normal" as const,
+  },
+};
+
 const DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 const rawAccessGroupSchema = z
@@ -223,6 +234,17 @@ const rawConfigSchema = z
       })
       .strict()
       .default(computerUseConfigDefaults),
+    im: z
+      .object({
+        output: z
+          .object({
+            mode: z.enum(["normal", "verbose", "debug"]).default(imConfigDefaults.output.mode),
+          })
+          .strict()
+          .default(imConfigDefaults.output),
+      })
+      .strict()
+      .default(imConfigDefaults),
     adapters: z
       .object({
         telegram: z
@@ -344,6 +366,11 @@ export function parseConfigToml(source: string): CodexImConfig {
       unknownAppPolicy: parsed.computer_use.unknown_app_policy,
       requireApprovalKeywords: parsed.computer_use.require_approval_keywords,
       liveSmokeEnabled: parsed.computer_use.live_smoke_enabled,
+    },
+    im: {
+      output: {
+        mode: parsed.im.output.mode,
+      },
     },
     adapters: {
       telegram: {

@@ -15,6 +15,7 @@ const SLACK_TARGET: Target = {
   threadKey: "1715000000.000000",
 };
 const SENDER: SecurityPolicySender = { userId: "42", displayName: "operator" };
+const DEBUG_OUTPUT_CONFIG = { im: { output: { mode: "debug" } } };
 
 class EventQueue implements AsyncIterableIterator<CodexRichEvent> {
   readonly #queue: CodexRichEvent[] = [];
@@ -55,7 +56,10 @@ describe("daemon turn output projection", () => {
     let route: SessionRoute = { kind: "unbound", target: TARGET };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -112,7 +116,7 @@ describe("daemon turn output projection", () => {
       target,
       messageId: "bot-output-1",
     }));
-    const editText = vi.fn(async () => undefined);
+    const editText = vi.fn(async (_ref: DaemonMessageRef, _body: string) => undefined);
     let messageHandler: ((message: unknown) => void) | undefined;
     let route: Extract<SessionRoute, { kind: "bound" }> = {
       kind: "bound",
@@ -123,7 +127,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -253,6 +260,130 @@ describe("daemon turn output projection", () => {
     await daemon.stop();
   });
 
+  it("defaults ordinary IM turns to normal output without status, internal command items, command logs, or raw local paths", async () => {
+    const queue = new EventQueue();
+    const sendText = vi.fn(async (target: Target, _body: string) => ({
+      target,
+      messageId: "bot-output-1",
+    }));
+    const editText = vi.fn(async (_ref: DaemonMessageRef, _body: string) => undefined);
+    const sendFile = vi.fn(async (target: Target, _file: DaemonOutboundFile) => ({
+      target,
+      messageId: "bot-file-1",
+      kind: "file" as const,
+    }));
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const route: Extract<SessionRoute, { kind: "bound" }> = {
+      kind: "bound",
+      target: TARGET,
+      projectId: "web",
+      cwd: "/Users/alice/projects/web",
+      codexThreadId: "thread-1",
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: { web: { cwd: "/Users/alice/projects/web" } } }),
+      openStorage: () => ({ close: () => undefined }),
+      createBroker: () => ({
+        attach: () => undefined,
+        enablePendingMode: () => undefined,
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: () => ({ kind: "allow" as const }),
+        checkProjectAccess: () => ({ kind: "allow" as const }),
+      }),
+      createSessionRouter: () => ({
+        resolve: () => route,
+      }),
+      createSupervisor: () => ({
+        currentRuntime: () => ({
+          events: { events: () => queue },
+          threadStart: async () => ({ thread: { id: "thread-1" } }),
+          turnStart: async () => ({ turn: { id: "turn-1" } }),
+          turnSteer: async () => undefined,
+        }),
+      }),
+      createAdapter: () => ({
+        onAction: () => () => undefined,
+        onMessage: (handler) => {
+          messageHandler = handler;
+          return () => undefined;
+        },
+        sendText,
+        editText,
+        sendFile,
+        start: async () => undefined,
+        stop: async () => undefined,
+      }),
+      schedulePrune: () => () => undefined,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target: TARGET,
+      sender: SENDER,
+      text: "hi",
+      messageRef: { target: TARGET, messageId: "user-message-1" },
+    });
+    await waitFor(() => sendText.mock.calls.length === 1);
+
+    queue.push({
+      type: "unknown",
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        tokenUsage: { total: { totalTokens: 1234 }, last: { totalTokens: 12 } },
+      },
+    });
+    queue.push({
+      type: "item_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-skill-load",
+      raw: {
+        params: {
+          item: {
+            id: "item-skill-load",
+            type: "commandExecution",
+            status: "completed",
+            command:
+              "sed -n '1,220p' /Users/alice/.codex/plugins/cache/openai-curated/superpowers/1141b764/skills/using-superpowers/SKILL.md",
+            aggregatedOutput: "internal skill context\n".repeat(80),
+            exitCode: 0,
+          },
+        },
+      },
+    });
+    queue.push({
+      type: "agent_message_delta",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "item-agent",
+      deltaText: "I can help in /Users/alice/projects/web and inspect /Users/alice/.codex/config.",
+      raw: {},
+    });
+    queue.push({
+      type: "turn_completed",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      raw: {},
+      terminal: true,
+    });
+
+    await waitFor(() => editText.mock.calls.length >= 1);
+    const body = String(editText.mock.calls.at(-1)?.[1] ?? "");
+    expect(body).toBe("I can help in <project:web> and inspect <home>/.codex/config.");
+    expect(body).not.toContain("Codex status");
+    expect(body).not.toContain("token usage");
+    expect(body).not.toContain("Codex items");
+    expect(body).not.toContain("SKILL.md");
+    expect(body).not.toContain("/Users/alice");
+    expect(sendFile).not.toHaveBeenCalled();
+
+    await daemon.stop();
+  });
+
   it("folds Codex lifecycle status notices into the active IM turn output", async () => {
     const queue = new EventQueue();
     const sendText = vi.fn(async (target: Target, _body: string) => ({
@@ -270,7 +401,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -481,7 +615,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -579,7 +716,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -782,7 +922,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -931,7 +1074,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -1081,7 +1227,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -1221,7 +1370,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,
@@ -1337,7 +1489,10 @@ describe("daemon turn output projection", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: { "codex-im": { cwd: "/tmp/codex-im" } } }),
+      loadConfig: () => ({
+        ...DEBUG_OUTPUT_CONFIG,
+        projects: { "codex-im": { cwd: "/tmp/codex-im" } },
+      }),
       openStorage: () => ({ close: () => undefined }),
       createBroker: () => ({
         attach: () => undefined,

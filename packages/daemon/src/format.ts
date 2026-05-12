@@ -31,6 +31,8 @@ export const MAX_IM_TEXT_BUFFER_CHARS = MAX_IM_TEXT_CHARS * MAX_IM_TEXT_CHUNKS;
 export const MAX_INLINE_COMMAND_OUTPUT_CHARS = 240;
 export const MAX_GENERATED_ATTACHMENT_TEXT_CHARS = 200_000;
 export const RAW_CWD_SELECTOR_RE = /(?:^~(?:\/|$)|\/|(?:^|\/)\.\.(?:\/|$)|\$|\s)/u;
+export type ImOutputMode = "normal" | "verbose" | "debug";
+export type ImOutputLanguage = "en" | "zh";
 
 export function generateRawCallbackToken(): string {
   const bytes = randomBytes(10);
@@ -121,8 +123,35 @@ export function appendImText(base: string, delta: string): string {
   return `${next.slice(0, MAX_IM_TEXT_BUFFER_CHARS - 24)}\n\n[truncated for IM]`;
 }
 
-export function shouldSuppressAuxiliaryTurnSections(target: Target, text: string): boolean {
-  return target.platform === "slack" && /^\s*(reply|respond)\s+exactly\b/i.test(text);
+export function imOutputModeFromConfig(config: unknown): ImOutputMode {
+  if (typeof config !== "object" || config === null) {
+    return "normal";
+  }
+  const im = (config as { im?: unknown }).im;
+  if (typeof im !== "object" || im === null) {
+    return "normal";
+  }
+  const output = (im as { output?: unknown }).output;
+  if (typeof output !== "object" || output === null) {
+    return "normal";
+  }
+  const mode = (output as { mode?: unknown }).mode;
+  return mode === "verbose" || mode === "debug" ? mode : "normal";
+}
+
+export function isLikelyChineseText(text: string): boolean {
+  return /\p{Script=Han}/u.test(text);
+}
+
+export function shouldSuppressAuxiliaryTurnSections(
+  target: Target,
+  text: string,
+  outputMode: ImOutputMode = "normal",
+): boolean {
+  return (
+    outputMode === "normal" ||
+    (target.platform === "slack" && /^\s*(reply|respond)\s+exactly\b/i.test(text))
+  );
 }
 
 export function outputStatusSummaries(state: DaemonTurnOutputState): readonly string[] {
@@ -146,6 +175,28 @@ export function turnOutputBodyWithSections(
     sections.push(`Codex items:\n${itemSummaries.map((summary) => `- ${summary}`).join("\n")}`);
   }
   return sections.join("\n\n");
+}
+
+export function redactLocalPathsForNormalIm(text: string): string {
+  return text
+    .replace(/\/Users\/[^/\s]+\/projects\/([A-Za-z0-9._-]+)/gu, "<project:$1>")
+    .replace(/\/Users\/[^/\s]+/gu, "<home>");
+}
+
+export function codexWorkingMessage(language: ImOutputLanguage): string {
+  return language === "zh" ? "Codex 正在处理..." : "Codex is working...";
+}
+
+export function codexTurnCompletedMessage(language: ImOutputLanguage): string {
+  return language === "zh" ? "Codex 已完成。" : "Codex turn completed.";
+}
+
+export function codexTurnFailedMessage(language: ImOutputLanguage): string {
+  return language === "zh" ? "Codex 执行失败。" : "Codex turn failed.";
+}
+
+export function codexTurnInterruptedMessage(language: ImOutputLanguage): string {
+  return language === "zh" ? "Codex 已停止。" : "Codex turn interrupted.";
 }
 
 export function splitImText(text: string): readonly string[] {
@@ -920,6 +971,7 @@ export function artifactFileFromPath(path: string | undefined): readonly DaemonT
       path,
       filename,
       contentType: contentTypeForPath(path),
+      kind: "artifact",
     },
   ];
 }
@@ -938,6 +990,7 @@ export function commandOutputFile(item: Record<string, unknown>): readonly Daemo
       filename: `codex-command-${id}.log`,
       bytes: encodeGeneratedAttachment(output),
       contentType: "text/plain",
+      kind: "command_log",
     },
   ];
 }
@@ -955,6 +1008,7 @@ export function fileChangePatchFile(
       filename: `codex-filechange-${id}.patch`,
       bytes: encodeGeneratedAttachment(patch),
       contentType: "text/x-patch",
+      kind: "file_patch",
     },
   ];
 }
