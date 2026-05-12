@@ -31,10 +31,10 @@ describe("channels doctor (JAC-237)", () => {
     expect(report.status).toBe("attention");
     expect(output).toContain("im doctor: attention");
     expect(output).toContain(
-      "lifecycle_daemon: info (Codex App Server lifecycle daemon: unavailable in pinned Codex 0.128.0)",
+      "lifecycle_daemon: info (Codex App Server lifecycle daemon: unavailable in current pinned Codex)",
     );
     expect(output).toContain(
-      "writable_roots_enforcement: warn (writable_roots configured but not enforced by current Codex App Server protocol)",
+      "writable_roots_enforcement: warn (writable_roots configured; metadata-only in this alpha)",
     );
     expect(output).toContain("telegram: ready");
     expect(output).toContain("lark: ready");

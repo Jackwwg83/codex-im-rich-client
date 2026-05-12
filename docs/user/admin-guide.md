@@ -38,8 +38,9 @@ sandbox configuration) — the IM bridge does not override it.
 
 `pnpm im:doctor` and `pnpm codex-im:status` warn when
 `writable_roots` are configured but the pinned generated App Server
-protocol still lacks a top-level `permissions` request field. Treat
-that warning as an alpha limitation, not as a runtime failure.
+protocol still lacks a top-level `permissions` request field. In that
+case, `writable_roots` are metadata-only in this alpha; treat the
+warning as setup guidance, not as an install failure.
 
 ## Codex App Server Lifecycle
 

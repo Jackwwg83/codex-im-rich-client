@@ -478,7 +478,7 @@ function writableRootsEnforcementCheck(
   return {
     name: "writable_roots_enforcement",
     status: "warn",
-    detail: "writable_roots configured but not enforced by current Codex App Server protocol",
+    detail: "writable_roots configured; metadata-only in this alpha",
   };
 }
 

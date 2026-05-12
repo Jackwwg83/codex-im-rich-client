@@ -497,7 +497,7 @@ pnpm im:doctor
 Display wording:
 
 ```text
-Codex App Server lifecycle daemon: unavailable in pinned Codex 0.128.0
+Codex App Server lifecycle daemon: unavailable in current pinned Codex
 ```
 
 or if available:
@@ -563,7 +563,7 @@ Do:
 - keep writableRoots metadata-only
 - ensure docs say metadata-only clearly
 - add runtime warning in `im:doctor` or `codex-im:status`:
-  "writable_roots configured but not enforced by current Codex App Server protocol"
+  "writable_roots configured; metadata-only in this alpha"
 - add a test that doctor/status warns when writable_roots is non-empty and enforcement capability is absent
 ```
 

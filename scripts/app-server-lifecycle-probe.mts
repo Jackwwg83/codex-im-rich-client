@@ -63,7 +63,7 @@ export function probeAppServerLifecycle(
 export function formatAppServerLifecycleProbe(result: AppServerLifecycleProbeResult): string {
   if (result.kind === "unavailable") {
     if (result.reason === "command_unavailable") {
-      return "Codex App Server lifecycle daemon: unavailable in pinned Codex 0.128.0";
+      return "Codex App Server lifecycle daemon: unavailable in current pinned Codex";
     }
     return `Codex App Server lifecycle daemon: unavailable (${result.reason})`;
   }
