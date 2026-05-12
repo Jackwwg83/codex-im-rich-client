@@ -33,6 +33,12 @@ describe("Codex runtime schema compatibility", () => {
         clientRequestMethods: [
           "thread/start",
           "thread/resume",
+          "thread/fork",
+          "thread/name/set",
+          "thread/archive",
+          "thread/unarchive",
+          "thread/list",
+          "thread/read",
           "turn/start",
           "plugin/skill/read",
           "plugin/share/save",
@@ -62,6 +68,35 @@ describe("Codex runtime schema compatibility", () => {
       "windows_sandbox_readiness",
     ]);
     expect(formatCodexRuntimeCompatibilityReport(report)).toContain("status: compatible");
+  });
+
+  it("reports degraded native thread features when user-visible thread methods are absent", () => {
+    const report = evaluateCodexRuntimeCompatibility({
+      runtimeVersion: "codex-cli 0.131.0",
+      generatedProtocolVersion: "0.130.0",
+      writableRootsConfigured: false,
+      schema: makeSchemaSummary({
+        clientRequestMethods: [
+          "thread/start",
+          "thread/resume",
+          "turn/start",
+          "thread/list",
+          "thread/read",
+        ],
+      }),
+    });
+
+    expect(report.status).toBe("degraded");
+    expect(report.blockers).toEqual([]);
+    expect(report.degradedFeatures.map((feature) => feature.id)).toEqual([
+      "thread_fork",
+      "thread_name_set",
+      "thread_archive",
+      "thread_unarchive",
+    ]);
+    expect(formatCodexRuntimeCompatibilityReport(report)).toContain(
+      "thread_fork: /fork is unavailable with this Codex runtime",
+    );
   });
 
   it("blocks when a hard-required App Server runtime semantic disappears", () => {
@@ -149,6 +184,11 @@ function makeSchemaSummary(
       "thread/start",
       "thread/resume",
       "thread/fork",
+      "thread/name/set",
+      "thread/archive",
+      "thread/unarchive",
+      "thread/list",
+      "thread/read",
       "thread/turns/list",
       "turn/start",
     ],

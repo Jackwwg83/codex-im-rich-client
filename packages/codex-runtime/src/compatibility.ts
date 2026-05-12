@@ -59,6 +59,39 @@ const REQUIRED_CLIENT_REQUESTS: readonly MethodRequirement[] = [
   },
 ];
 
+const DEGRADABLE_CLIENT_REQUESTS: readonly MethodRequirement[] = [
+  {
+    id: "thread_fork",
+    methodParts: ["thread", "fork"],
+    detail: "/fork is unavailable with this Codex runtime",
+  },
+  {
+    id: "thread_name_set",
+    methodParts: ["thread", "name", "set"],
+    detail: "/rename falls back to the local IM alias only",
+  },
+  {
+    id: "thread_archive",
+    methodParts: ["thread", "archive"],
+    detail: "/archive remote sync is unavailable with this Codex runtime",
+  },
+  {
+    id: "thread_unarchive",
+    methodParts: ["thread", "unarchive"],
+    detail: "/unarchive remote sync is unavailable with this Codex runtime",
+  },
+  {
+    id: "thread_list",
+    methodParts: ["thread", "list"],
+    detail: "/threads --refresh cannot list native Codex conversations",
+  },
+  {
+    id: "thread_read",
+    methodParts: ["thread", "read"],
+    detail: "/threads --refresh cannot read native Codex conversation metadata",
+  },
+];
+
 const REQUIRED_SERVER_NOTIFICATIONS: readonly MethodRequirement[] = [
   {
     id: "assistant_delta",
@@ -144,6 +177,12 @@ export function evaluateCodexRuntimeCompatibility(
       id: "approval_request",
       detail: "an approval ServerRequest method is required for guarded command/file/tool actions",
     });
+  }
+
+  for (const requirement of DEGRADABLE_CLIENT_REQUESTS) {
+    if (!clientMethods.has(methodName(requirement.methodParts))) {
+      degradedFeatures.push({ id: requirement.id, detail: requirement.detail });
+    }
   }
 
   for (const requirement of OPTIONAL_SERVER_NOTIFICATIONS) {
