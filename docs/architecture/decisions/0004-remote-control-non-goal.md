@@ -41,6 +41,14 @@ remote-control WebSocket.
   - relax `SecurityPolicy` decisions;
   - re-route an `ApprovalBroker` request;
   - alter `SessionRouter` actor or target binding.
+  - decide whether to start, stop, restart, or replace the bridge's
+    App Server process.
+
+Future app-server daemon lifecycle diagnostics may report whether
+`codex app-server daemon version` is available. That diagnostic is also
+informational only: it must parse JSON if present, never enable
+remote-control, never call mutating lifecycle commands, and never
+replace the `Supervisor` / stdio lifecycle path in `v0.1.x`.
 
 ## Consequences
 

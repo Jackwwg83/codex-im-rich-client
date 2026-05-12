@@ -3769,6 +3769,122 @@ describe("Daemon skeleton (T14)", () => {
     );
   });
 
+  it("imports native Codex threads on /threads --refresh without promoting cwd to a configured project", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-09T15:20:00.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const nativeThreads = [
+      {
+        id: "thread-refresh-one-abcdefghijklmnopqrstuvwxyz",
+        preview: "Fix docs",
+        cwd: "/Users/alice/private/codex-im",
+        name: "Docs fix",
+        updatedAt: 1778330000,
+      },
+      {
+        id: "thread-refresh-two-abcdefghijklmnopqrstuvwxyz",
+        preview: "Triage logs",
+        cwd: "/Users/alice/private/ops",
+        updatedAt: 1778330100,
+      },
+    ];
+    const runtime = {
+      threadList: vi.fn(() => ({
+        data: nativeThreads,
+        nextCursor: null,
+        backwardsCursor: null,
+      })),
+      threadStart: vi.fn(),
+      threadResume: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const threadSessionRepository = {
+      upsert: vi.fn((input) => ({
+        id: `ts-${input.codexThreadId}`,
+        target: input.target,
+        contextKind: input.contextKind,
+        projectLabel: input.projectLabel,
+        cwd: input.cwd,
+        codexThreadId: input.codexThreadId,
+        title: input.title,
+        status: "open" as const,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        lastUsedAt: now.toISOString(),
+      })),
+      listForTarget: vi.fn(() => []),
+      switchCurrent: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: {} }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => ({ kind: "unbound" as const, target })) }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/threads --refresh",
+      messageRef: { target, messageId: "msg-native-refresh" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadList).toHaveBeenCalledWith({
+      limit: 20,
+      archived: false,
+      sortDirection: "desc",
+    });
+    expect(threadSessionRepository.upsert).toHaveBeenCalledTimes(2);
+    expect(threadSessionRepository.upsert).toHaveBeenNthCalledWith(1, {
+      target,
+      contextKind: "native_thread",
+      projectLabel: "codex-im",
+      cwd: "/Users/alice/private/codex-im",
+      codexThreadId: "thread-refresh-one-abcdefghijklmnopqrstuvwxyz",
+      title: "Docs fix",
+      now: "2026-05-09T15:20:00.000Z",
+    });
+    expect(threadSessionRepository.upsert).toHaveBeenNthCalledWith(2, {
+      target,
+      contextKind: "native_thread",
+      projectLabel: "ops",
+      cwd: "/Users/alice/private/ops",
+      codexThreadId: "thread-refresh-two-abcdefghijklmnopqrstuvwxyz",
+      title: "Triage logs",
+      now: "2026-05-09T15:20:00.000Z",
+    });
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("Imported 2 native Codex threads.");
+    expect(body).toContain("1. Docs fix");
+    expect(body).toContain("2. Triage logs");
+    expect(body).toContain("Use:");
+    expect(body).toContain("/switch 1");
+    expect(body).not.toContain("/Users/alice");
+    expect(body).not.toContain("private");
+  });
+
   it("routes /threads with a project filter through project access policy", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };

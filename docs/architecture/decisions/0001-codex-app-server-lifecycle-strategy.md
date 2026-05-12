@@ -16,11 +16,12 @@ lifecycle modes available at the time of this ADR:
    `packages/codex-protocol` has been pinned and verified against
    (`codex 0.128.0`).
 
-2. **`codex app-server-daemon`** — a longer-lived, bridge-independent
-   server process with a remote-control WebSocket. Introduced in
-   `codex 0.130.x` and currently labelled experimental upstream. The
-   target user is Codex desktop / mobile remote clients, not local
-   IM bridges.
+2. **`codex app-server daemon`** — a longer-lived, bridge-independent
+   server process with machine-readable lifecycle commands and optional
+   remote-control enablement. This surface is present on newer upstream
+   builds but is not exposed by the pinned `codex 0.128.0` binary. The
+   target user is Codex desktop / mobile remote clients, not local IM
+   bridges.
 
 A choice is needed because the bridge's `AppServerClient` / runtime /
 supervisor wiring is bound to one of these models.
@@ -31,17 +32,18 @@ supervisor wiring is bound to one of these models.
 mode. The bridge spawns `codex app-server --listen stdio://` as a
 child process and owns its lifecycle (start, restart, drain, stop).
 
-`v0.2.x` will re-evaluate switching to `codex app-server-daemon` once
-the upstream lifecycle contract is stable and the remote-control
-WebSocket protocol is finalized. The re-evaluation will produce a
-follow-up ADR; this one is not amended in place.
+`v0.2.x` will re-evaluate an optional lifecycle provider only after the
+upstream lifecycle contract is stable on a pinned Codex release. If that
+provider is adopted, lifecycle commands must be parsed as JSON only and
+must remain separate from authorization decisions. The re-evaluation
+will produce a follow-up ADR; this one is not amended in place.
 
 ## Consequences
 
 - The `Supervisor` (per project root `CLAUDE.md` "Phase 2 redlines")
   remains the production wire-up. `runtime-send` stays a dev/operator
   tool only.
-- `codex app-server-daemon` and its remote-control WebSocket are
+- `codex app-server daemon` and its remote-control WebSocket are
   explicitly non-goals for `v0.1.x`. See ADR 0004.
 - Capability detection (ADR 0003) is sized for the stdio process
   model: probes happen at `initialize` handshake on each spawn, not
@@ -55,6 +57,6 @@ follow-up ADR; this one is not amended in place.
 
 - Upstream `codex` `0.128.0` — pinned by `package.json`
   `codexIm.codexVersion`.
-- Upstream `codex` `0.130.x` `app-server-daemon` — out-of-scope until
-  follow-up ADR.
+- Upstream `codex app-server daemon` lifecycle commands — out-of-scope
+  until a follow-up ADR pins a release where they are available.
 - ADR 0004 — remote-control non-goal.

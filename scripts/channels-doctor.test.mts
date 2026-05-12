@@ -7,6 +7,7 @@ describe("channels doctor (JAC-237)", () => {
     const report = evaluateChannelsDoctor({
       config: makeConfig(),
       configPath: "/Users/operator/.codex-im-bridge/config.toml",
+      lifecycle: { kind: "unavailable", reason: "command_unavailable" },
       env: {
         IM_TELEGRAM_BOT_TOKEN: "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd",
         IM_LARK_APP_SECRET: "sk-testsecret1234567890abcdef",
@@ -27,8 +28,14 @@ describe("channels doctor (JAC-237)", () => {
 
     const output = formatChannelsDoctorReport(report);
 
-    expect(report.status).toBe("ready");
-    expect(output).toContain("im doctor: ready");
+    expect(report.status).toBe("attention");
+    expect(output).toContain("im doctor: attention");
+    expect(output).toContain(
+      "lifecycle_daemon: info (Codex App Server lifecycle daemon: unavailable in pinned Codex 0.128.0)",
+    );
+    expect(output).toContain(
+      "writable_roots_enforcement: warn (writable_roots configured but not enforced by current Codex App Server protocol)",
+    );
     expect(output).toContain("telegram: ready");
     expect(output).toContain("lark: ready");
     expect(output).toContain("dingtalk: ready");
@@ -74,6 +81,7 @@ describe("channels doctor (JAC-237)", () => {
     const report = evaluateChannelsDoctor({
       config,
       configPath: "/tmp/config.toml",
+      lifecycle: { kind: "unavailable", reason: "command_unavailable" },
       env: {},
       keychainSecretPresent: () => false,
       installed: { plistPresent: false },
@@ -110,6 +118,7 @@ describe("channels doctor (JAC-237)", () => {
     const report = evaluateChannelsDoctor({
       config,
       configPath: "/tmp/config.toml",
+      lifecycle: { kind: "unavailable", reason: "command_unavailable" },
       env: { SLACK_BOT_TOKEN: "xoxb-secret-never-log" },
       keychainSecretPresent: () => false,
       installed: { plistPresent: false },

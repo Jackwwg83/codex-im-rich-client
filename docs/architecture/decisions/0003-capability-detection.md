@@ -55,6 +55,12 @@ codex does the bridge enable the feature path.
 - **No "OpenAI main" assumptions.** Fields that exist only on
   upstream `main` but not in the pinned generated surface must not
   be referenced by production code, even speculatively.
+- **No schema smuggling.** If a field is absent from
+  `packages/codex-protocol/schema/**` and
+  `packages/codex-protocol/src/generated/**`, production code must not
+  tunnel it through an untyped `config` payload or object spread. This
+  applies especially to future `permissions` / `additionalWritableRoot`
+  work.
 - **No version-number inference.** Code must not branch on
   `codex --version` or `codexIm.codexVersion` to decide whether a
   capability exists. A user's local codex may legitimately be
@@ -118,3 +124,22 @@ If a future codex release exposes an explicit capability-discovery
 RPC, an additional ADR can amend this section to use it as the
 default; the passive observe-and-cache will continue to apply for
 codex versions that lack the RPC.
+
+## Semantic guardrail — 2026-05-12
+
+`scripts/check-app-server-semantics.mjs` is a fast local contract check
+for the protocol assumptions that are easy to forget during a Codex pin
+bump:
+
+- native thread methods required by the IM bridge must remain present;
+- `remoteControl/status/changed` may be parsed as informational status;
+- `ThreadResumeParams` and `ThreadForkParams` must continue exposing
+  `excludeTurns` for metadata-only resume/fork paths;
+- `ThreadStartParams`, `ThreadResumeParams`, and `ThreadForkParams`
+  must not silently gain a top-level `permissions` field without
+  forcing a reviewed writable-roots enforcement plan.
+
+The current pin still exposes `thread/turns/list`. Upstream evidence
+shows that method may drift in newer Codex builds, so any future Codex
+pin bump must audit every `thread/turns/list` runtime wrapper and daemon
+call before release.

@@ -36,6 +36,29 @@ If you need a writable scope outside `cwd` enforced today, configure
 that on Codex's side directly (per-codex `~/.codex/config.toml`
 sandbox configuration) — the IM bridge does not override it.
 
+`pnpm im:doctor` and `pnpm codex-im:status` warn when
+`writable_roots` are configured but the pinned generated App Server
+protocol still lacks a top-level `permissions` request field. Treat
+that warning as an alpha limitation, not as a runtime failure.
+
+## Codex App Server Lifecycle
+
+This release keeps the local launchd / bridge / stdio App Server
+lifecycle. It does not run Codex remote-control WebSocket and does not
+switch to `codex app-server daemon` as its provider.
+
+`im:doctor` performs a read-only lifecycle probe:
+
+```bash
+codex app-server daemon version
+```
+
+If the command exists, the probe parses JSON only and reports a short
+status line. If it does not exist on the pinned Codex binary, doctor
+prints that the lifecycle daemon is unavailable. The probe never starts,
+stops, restarts, bootstraps, enables remote-control, or authorizes any
+IM action.
+
 ## Install Modes
 
 | Mode | Status |

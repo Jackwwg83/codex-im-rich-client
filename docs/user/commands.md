@@ -42,6 +42,7 @@ change projects locally through setup/config, then select them from `/projects`.
 | `/use <number-or-name>` | Select a project for the current IM target. |
 | `/new [number-or-name] [task]` | Start a new Codex conversation in the selected/specified project, or in Codex default when no project is selected; optional task starts the first turn. |
 | `/threads` | List recent native Codex App Server conversations, including conversations created from Codex App or CLI. |
+| `/threads --refresh` | Import recent native Codex App Server conversations into the local IM thread index without promoting their cwd to configured projects. |
 | `/switch <number-or-thread-prefix>` | Resume and bind this IM chat to a listed native Codex conversation. |
 | `/alias <name>` | Give the current conversation a local title (IM only; never sent to Codex). |
 | `/rename <title>` | Rename the current thread. Synced to Codex App Server when supported; otherwise updates the local alias and tells you Codex was not changed. |

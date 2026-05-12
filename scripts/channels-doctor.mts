@@ -10,6 +10,11 @@ import { DINGTALK_CAPABILITIES } from "../packages/im-dingtalk/src/index.js";
 import { LARK_CAPABILITIES } from "../packages/im-lark/src/index.js";
 import { SLACK_CAPABILITIES } from "../packages/im-slack/src/index.js";
 import { TELEGRAM_CAPABILITIES } from "../packages/im-telegram/src/index.js";
+import {
+  type AppServerLifecycleProbeResult,
+  formatAppServerLifecycleProbe,
+  probeAppServerLifecycle,
+} from "./app-server-lifecycle-probe.mts";
 
 type DoctorStatus = "ready" | "attention" | "blocked";
 type PlatformStatus = DoctorStatus | "disabled";
@@ -45,6 +50,7 @@ export interface ChannelsDoctorReport {
   readonly status: DoctorStatus;
   readonly configPath: string;
   readonly liveNetwork: "disabled";
+  readonly codex: readonly DoctorCheck[];
   readonly installed: readonly DoctorCheck[];
   readonly platforms: readonly PlatformDoctorReport[];
 }
@@ -55,6 +61,8 @@ export interface EvaluateChannelsDoctorInput {
   readonly env?: Record<string, string | undefined>;
   readonly keychainSecretPresent?: (service: string) => boolean;
   readonly installed?: InstalledBridgeDoctorInput;
+  readonly lifecycle?: AppServerLifecycleProbeResult;
+  readonly writableRootsEnforced?: boolean;
 }
 
 const DEFAULT_CONFIG_PATH = join(homedir(), ".codex-im-bridge", "config.toml");
@@ -86,13 +94,23 @@ export function evaluateChannelsDoctor(input: EvaluateChannelsDoctorInput): Chan
     evaluateDingTalk(input.config, env, keychainSecretPresent),
     evaluateSlack(input.config, env, keychainSecretPresent),
   ];
+  const codexChecks = formatCodexChecks({
+    config: input.config,
+    lifecycle: input.lifecycle ?? { kind: "unavailable", reason: "not_checked" },
+    writableRootsEnforced: input.writableRootsEnforced === true,
+  });
   const installedChecks = formatInstalledChecks(installed);
-  const allChecks = [...installedChecks, ...platformReports.flatMap((platform) => platform.checks)];
+  const allChecks = [
+    ...codexChecks,
+    ...installedChecks,
+    ...platformReports.flatMap((platform) => platform.checks),
+  ];
 
   return {
     status: overallStatus(allChecks),
     configPath: input.configPath,
     liveNetwork: "disabled",
+    codex: codexChecks,
     installed: installedChecks,
     platforms: platformReports,
   };
@@ -103,6 +121,9 @@ export function formatChannelsDoctorReport(report: ChannelsDoctorReport): string
     `im doctor: ${report.status}`,
     `config: ${report.configPath}`,
     `live_network: ${report.liveNetwork} (set explicit platform live gates for real IM traffic)`,
+    "",
+    "codex app server:",
+    ...report.codex.map(formatCheck),
     "",
     "installed bridge:",
     ...report.installed.map(formatCheck),
@@ -421,6 +442,50 @@ function capabilitiesCheck(platform: Platform): DoctorCheck {
   };
 }
 
+function formatCodexChecks(input: {
+  readonly config: CodexImConfig;
+  readonly lifecycle: AppServerLifecycleProbeResult;
+  readonly writableRootsEnforced: boolean;
+}): readonly DoctorCheck[] {
+  return [
+    {
+      name: "lifecycle_daemon",
+      status: "info",
+      detail: formatAppServerLifecycleProbe(input.lifecycle),
+    },
+    writableRootsEnforcementCheck(input.config, input.writableRootsEnforced),
+  ];
+}
+
+function writableRootsEnforcementCheck(
+  config: CodexImConfig,
+  writableRootsEnforced: boolean,
+): DoctorCheck {
+  if (!hasConfiguredWritableRoots(config)) {
+    return {
+      name: "writable_roots_enforcement",
+      status: "info",
+      detail: "no writable_roots configured",
+    };
+  }
+  if (writableRootsEnforced) {
+    return {
+      name: "writable_roots_enforcement",
+      status: "pass",
+      detail: "writable_roots forwarded to Codex App Server permissions",
+    };
+  }
+  return {
+    name: "writable_roots_enforcement",
+    status: "warn",
+    detail: "writable_roots configured but not enforced by current Codex App Server protocol",
+  };
+}
+
+function hasConfiguredWritableRoots(config: CodexImConfig): boolean {
+  return Object.values(config.projects).some((project) => project.writableRoots.length > 0);
+}
+
 function formatInstalledChecks(installed: InstalledBridgeDoctorInput): readonly DoctorCheck[] {
   return [
     {
@@ -538,7 +603,11 @@ async function main(): Promise<void> {
     throw new Error(`im doctor: config missing at ${configPath}`);
   }
   const config = parseConfigToml(readFileSync(configPath, "utf8"));
-  const report = evaluateChannelsDoctor({ config, configPath });
+  const report = evaluateChannelsDoctor({
+    config,
+    configPath,
+    lifecycle: probeAppServerLifecycle(),
+  });
   console.log(formatChannelsDoctorReport(report));
   if (report.status === "blocked") {
     process.exitCode = 2;

@@ -93,6 +93,7 @@ import {
   targetKey,
   textInput,
 } from "./format.js";
+import { importNativeThreads } from "./native-thread-refresh.js";
 import { PruneSweep } from "./prune-sweep.js";
 import { MutationRateLimit } from "./rate-limit.js";
 import {
@@ -2425,11 +2426,39 @@ export class Daemon {
     command: Extract<CommandRouterResult, { kind: "command" }>,
   ): Promise<void> {
     const runtime = this.#currentRuntime();
+    const refreshRequested = command.args.includes("--refresh") || command.args.includes("refresh");
     if (runtime?.threadList !== undefined) {
       try {
         const nativeThreads = this.#nativeThreadEntries(
           await runtime.threadList({ limit: 20, archived: false, sortDirection: "desc" }),
         );
+        if (refreshRequested) {
+          const repository = this.#threadSessionRepository();
+          if (repository?.upsert === undefined) {
+            await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+            return;
+          }
+          const importedCount = importNativeThreads({
+            repository,
+            target: inbound.target,
+            threads: nativeThreads,
+            nowIso: this.#nowIso(),
+          });
+          await this.#editInboundMessage(
+            inbound.messageRef,
+            [
+              `Imported ${importedCount} native Codex threads.`,
+              ...(importedCount === 0
+                ? ["No native Codex threads found."]
+                : nativeThreads.map((thread, index) =>
+                    this.#formatNativeThreadListLine(index + 1, thread),
+                  )),
+              "Use:",
+              "/switch 1",
+            ].join("\n"),
+          );
+          return;
+        }
         if (nativeThreads.length > 0) {
           await this.#editInboundMessage(
             inbound.messageRef,
@@ -2450,7 +2479,18 @@ export class Daemon {
           result: "failed",
           metadata: { error: errorMessage(error) },
         });
+        if (refreshRequested) {
+          await this.#editInboundMessage(
+            inbound.messageRef,
+            "Codex native thread list unavailable.",
+          );
+          return;
+        }
       }
+    }
+    if (refreshRequested) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex native thread list unavailable.");
+      return;
     }
 
     const repository = this.#threadSessionRepository();
