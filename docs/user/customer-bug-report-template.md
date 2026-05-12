@@ -10,7 +10,7 @@ Copy this into a new GitHub Issue when reporting an alpha bug. Fields with
 
 ---
 
-**Alpha version (required):** e.g. `v0.1.0-alpha.4`
+**Alpha version (required):** e.g. `v0.1.0-alpha.5`
 
 **IM platform (required):** Telegram / Feishu / Lark / DingTalk / Slack
 
