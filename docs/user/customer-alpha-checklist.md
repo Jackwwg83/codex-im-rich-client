@@ -27,6 +27,7 @@ alpha.
 ```bash
 git clone https://github.com/Jackwwg83/codex-im-rich-client.git
 cd codex-im-rich-client
+git checkout v0.1.0-alpha.6
 pnpm install
 pnpm codex-im:install
 ```
@@ -94,7 +95,9 @@ check out the previous tag and re-run `pnpm codex-im:install`.
 ## What Counts as a Successful Customer Alpha Test
 
 - [ ] Install command finished without manual intervention.
-- [ ] `pnpm im:doctor` reports `ready` for the platform you configured.
+- [ ] `pnpm im:doctor` reports `ready` for the platform you configured, or
+  the only `attention` item is the documented `writable_roots` metadata-only
+  alpha warning.
 - [ ] `/projects → /use 1 → Reply exactly: OK` completed end-to-end.
 - [ ] No raw absolute path, no token-shaped value, and no internal stack
   trace appeared in any IM message you received.

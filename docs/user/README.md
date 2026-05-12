@@ -11,8 +11,9 @@ single local installer command. You do not need to modify the code.
 
 ## Read In This Order
 
-1. [Quick start](quickstart.md) - run `pnpm codex-im:install --platform
-   telegram` and send the first IM message.
+1. [Quick start](quickstart.md) - run `pnpm codex-im:install` and send the
+   first IM message. You can pass `--platform telegram` for non-interactive
+   Telegram setup.
 2. [Customer alpha checklist](customer-alpha-checklist.md) - the same flow
    in checklist form; use this when you are testing as a customer.
 3. [Platform setup fields](platform-setup.md) - what to collect from Telegram,

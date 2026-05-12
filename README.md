@@ -74,7 +74,8 @@ Reply exactly: OK
 For the full user path, read [docs/user/README.md](docs/user/README.md).
 
 The install command asks which first platform to configure, then remains a
-transparent wrapper around the safety boundaries: Codex version check,
+transparent wrapper around the safety boundaries: Codex App Server runtime
+compatibility check,
 `setup:im`, `im:doctor`, bridge build/install, and launchd install/status.
 To run those steps manually, follow
 [docs/user/quickstart.md](docs/user/quickstart.md).

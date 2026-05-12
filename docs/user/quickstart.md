@@ -23,8 +23,9 @@ checkout so the installer can build the daemon bundle, write local config, store
 IM secrets in macOS Keychain, and install the current-user launchd service.
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Jackwwg83/codex-im-rich-client.git
 cd codex-im-rich-client
+git checkout v0.1.0-alpha.6
 pnpm install
 ```
 
