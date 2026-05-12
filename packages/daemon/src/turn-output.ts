@@ -22,12 +22,7 @@ import type {
   DaemonTurnOutputState,
 } from "./daemon.js";
 import {
-  type ImOutputLanguage,
   appendImText,
-  codexTurnCompletedMessage,
-  codexTurnFailedMessage,
-  codexTurnInterruptedMessage,
-  codexWorkingMessage,
   errorMessage,
   extractCodexItemFiles,
   isAppendOnlyTextRef,
@@ -36,7 +31,6 @@ import {
   outputStatusSummaries,
   readRecord,
   readStringField,
-  redactLocalPathsForNormalIm,
   splitImText,
   summarizeCodexItem,
   summarizeCodexRuntimeNotice,
@@ -46,6 +40,14 @@ import {
   turnOutputFileKey,
   turnOutputKey,
 } from "./format.js";
+import {
+  type ImOutputLanguage,
+  codexTurnCompletedMessage,
+  codexTurnFailedMessage,
+  codexTurnInterruptedMessage,
+  codexWorkingMessage,
+  redactLocalPathsForNormalIm,
+} from "./im-output-policy.js";
 
 /** Audit hook. Called fire-and-forget; must not throw. */
 export type TurnOutputAuditEmitter = (event: string, detail: object) => void;

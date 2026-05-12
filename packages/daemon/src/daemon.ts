@@ -56,7 +56,6 @@ import {
 } from "@codex-im/storage-sqlite";
 import { setupComputerUseGate } from "./computer-use-wiring.js";
 import {
-  type ImOutputLanguage,
   actorKey,
   drainShutdown,
   errorMessage,
@@ -71,10 +70,8 @@ import {
   formatSkillsList,
   formatUsage,
   generateRawCallbackToken,
-  imOutputModeFromConfig,
   inboundAttachmentTooLargeMessage,
   isDefined,
-  isLikelyChineseText,
   isRawCwdSelector,
   materializedInboundAttachments,
   optionalMessageRefKind,
@@ -89,13 +86,13 @@ import {
   redactMetadata,
   safeDisplayCwd,
   selectModelIdentifier,
-  shouldSuppressAuxiliaryTurnSections,
   sleep,
   stringArray,
   targetEqual,
   targetKey,
   textInput,
 } from "./format.js";
+import { type ImOutputLanguage, resolveTurnOutputPolicy } from "./im-output-policy.js";
 import { importNativeThreads } from "./native-thread-refresh.js";
 import { PruneSweep } from "./prune-sweep.js";
 import { MutationRateLimit } from "./rate-limit.js";
@@ -1715,21 +1712,6 @@ export class Daemon {
     return policy?.checkProjectAccess(projectId, target, sender).kind !== "deny";
   }
 
-  #imOutputMode() {
-    return imOutputModeFromConfig(this.#config);
-  }
-
-  #turnOutputOptionsForText(target: Target, text: string) {
-    const outputMode = this.#imOutputMode();
-    const normalMode = outputMode === "normal";
-    return {
-      suppressAuxiliarySummaries: shouldSuppressAuxiliaryTurnSections(target, text, outputMode),
-      redactLocalPaths: normalMode,
-      suppressCommandLogFiles: normalMode,
-      language: isLikelyChineseText(text) ? ("zh" as const) : ("en" as const),
-    };
-  }
-
   async #routePrompt(
     inbound: {
       target: Target;
@@ -1816,7 +1798,7 @@ export class Daemon {
         inbound.target,
         route.codexThreadId,
         activeTurnId,
-        this.#turnOutputOptionsForText(inbound.target, text),
+        resolveTurnOutputPolicy({ config: this.#config, target: inbound.target, text }),
       );
     }
   }
@@ -3760,7 +3742,7 @@ export class Daemon {
           inbound.target,
           threadId,
           activeTurnId,
-          this.#turnOutputOptionsForText(inbound.target, task),
+          resolveTurnOutputPolicy({ config: this.#config, target: inbound.target, text: task }),
         );
       }
       await this.#editInboundMessage(
@@ -3870,7 +3852,7 @@ export class Daemon {
           inbound.target,
           threadId,
           activeTurnId,
-          this.#turnOutputOptionsForText(inbound.target, task),
+          resolveTurnOutputPolicy({ config: this.#config, target: inbound.target, text: task }),
         );
       }
       await this.#editInboundMessage(
@@ -3981,7 +3963,7 @@ export class Daemon {
           inbound.target,
           threadId,
           activeTurnId,
-          this.#turnOutputOptionsForText(inbound.target, task),
+          resolveTurnOutputPolicy({ config: this.#config, target: inbound.target, text: task }),
         );
       }
       await this.#editInboundMessage(
