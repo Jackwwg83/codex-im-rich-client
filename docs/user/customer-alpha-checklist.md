@@ -9,8 +9,9 @@ alpha.
 - [ ] macOS (latest two majors). Linux/Windows are not customer targets.
 - [ ] Node.js `>=24` available (`node --version`).
 - [ ] pnpm `>=10 <11` available (`pnpm --version`).
-- [ ] Codex CLI installed and logged in (`codex --version`). The pinned
-  version for this release lives in `CODEX_VERSION`.
+- [ ] Codex CLI installed and logged in (`codex --version`). The generated
+  protocol pin for maintainers lives in `CODEX_VERSION`; customer installs run
+  a runtime compatibility check instead of requiring an exact version match.
 - [ ] One IM bot / app already registered in the platform's own console
   (Telegram BotFather, Feishu/Lark developer console, DingTalk app, Slack
   app). The setup wizard does **not** create the bot for you.
@@ -37,7 +38,7 @@ any local changes with `--dry-run`.
 
 The installer:
 
-1. checks Node, pnpm, and the pinned Codex version;
+1. checks Node, pnpm, and Codex App Server runtime compatibility;
 2. runs the setup wizard (writes `~/.codex-im-bridge/config.toml`, backs up
    any prior config, stores secrets in macOS Keychain);
 3. runs `pnpm im:doctor`;

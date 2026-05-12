@@ -5,6 +5,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ChannelCapabilities } from "../packages/channel-core/src/index.js";
+import type {
+  CodexRuntimeCompatibilityFinding,
+  CodexRuntimeCompatibilityReport,
+} from "../packages/codex-runtime/src/index.js";
 import { type CodexImConfig, parseConfigToml } from "../packages/config/src/index.js";
 import { DINGTALK_CAPABILITIES } from "../packages/im-dingtalk/src/index.js";
 import { LARK_CAPABILITIES } from "../packages/im-lark/src/index.js";
@@ -15,6 +19,7 @@ import {
   formatAppServerLifecycleProbe,
   probeAppServerLifecycle,
 } from "./app-server-lifecycle-probe.mts";
+import { probeCodexRuntimeCompatibility } from "./check-codex-runtime-compatibility.mts";
 
 type DoctorStatus = "ready" | "attention" | "blocked";
 type PlatformStatus = DoctorStatus | "disabled";
@@ -62,6 +67,7 @@ export interface EvaluateChannelsDoctorInput {
   readonly keychainSecretPresent?: (service: string) => boolean;
   readonly installed?: InstalledBridgeDoctorInput;
   readonly lifecycle?: AppServerLifecycleProbeResult;
+  readonly runtimeCompatibility?: CodexRuntimeCompatibilityReport;
   readonly writableRootsEnforced?: boolean;
 }
 
@@ -97,6 +103,7 @@ export function evaluateChannelsDoctor(input: EvaluateChannelsDoctorInput): Chan
   const codexChecks = formatCodexChecks({
     config: input.config,
     lifecycle: input.lifecycle ?? { kind: "unavailable", reason: "not_checked" },
+    runtimeCompatibility: input.runtimeCompatibility,
     writableRootsEnforced: input.writableRootsEnforced === true,
   });
   const installedChecks = formatInstalledChecks(installed);
@@ -445,16 +452,51 @@ function capabilitiesCheck(platform: Platform): DoctorCheck {
 function formatCodexChecks(input: {
   readonly config: CodexImConfig;
   readonly lifecycle: AppServerLifecycleProbeResult;
+  readonly runtimeCompatibility?: CodexRuntimeCompatibilityReport;
   readonly writableRootsEnforced: boolean;
 }): readonly DoctorCheck[] {
-  return [
+  const checks: DoctorCheck[] = [
     {
       name: "lifecycle_daemon",
       status: "info",
       detail: formatAppServerLifecycleProbe(input.lifecycle),
     },
-    writableRootsEnforcementCheck(input.config, input.writableRootsEnforced),
   ];
+  if (input.runtimeCompatibility !== undefined) {
+    checks.push(runtimeCompatibilityCheck(input.runtimeCompatibility));
+  }
+  checks.push(writableRootsEnforcementCheck(input.config, input.writableRootsEnforced));
+  return checks;
+}
+
+function runtimeCompatibilityCheck(report: CodexRuntimeCompatibilityReport): DoctorCheck {
+  const detailParts = [
+    `runtime=${report.runtimeVersion}`,
+    `generated=${report.generatedProtocolVersion}`,
+    `status=${report.status}`,
+    findingIds("blockers", report.blockers),
+    findingIds("degraded", report.degradedFeatures),
+    findingIds("warnings", report.warnings),
+  ].filter((part): part is string => part !== undefined);
+  return {
+    name: "codex_runtime_compatibility",
+    status: report.status === "blocked" ? "fail" : report.status === "degraded" ? "warn" : "pass",
+    detail: detailParts.slice(0, 3).join(" ") + formatFindingSuffix(detailParts.slice(3)),
+  };
+}
+
+function findingIds(
+  label: string,
+  findings: readonly CodexRuntimeCompatibilityFinding[],
+): string | undefined {
+  if (findings.length === 0) {
+    return undefined;
+  }
+  return `${label}=${findings.map((finding) => finding.id).join(",")}`;
+}
+
+function formatFindingSuffix(parts: readonly string[]): string {
+  return parts.length === 0 ? "" : `; ${parts.join("; ")}`;
 }
 
 function writableRootsEnforcementCheck(
@@ -607,6 +649,9 @@ async function main(): Promise<void> {
     config,
     configPath,
     lifecycle: probeAppServerLifecycle(),
+    runtimeCompatibility: probeCodexRuntimeCompatibility({
+      writableRootsConfigured: hasConfiguredWritableRoots(config),
+    }),
   });
   console.log(formatChannelsDoctorReport(report));
   if (report.status === "blocked") {

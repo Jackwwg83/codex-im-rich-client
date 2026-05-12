@@ -58,7 +58,7 @@ pnpm codex-im:install --platform slack
 
 The install command:
 
-- checks Node, pnpm, and the pinned Codex version;
+- checks Node, pnpm, and Codex App Server runtime compatibility;
 - writes `~/.codex-im-bridge/config.toml`;
 - backs up an existing config before replacing it;
 - writes IM secrets to macOS Keychain;
@@ -79,7 +79,7 @@ token usage, skill-loading commands, or command-log attachments.
 If you want to see each boundary separately, run the expanded sequence:
 
 ```bash
-pnpm check:codex-version
+pnpm check:codex-runtime-compatibility
 pnpm setup:im --platform telegram
 pnpm im:doctor
 pnpm bridge:build

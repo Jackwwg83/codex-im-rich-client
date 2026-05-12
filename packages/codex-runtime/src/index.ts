@@ -21,5 +21,18 @@ export type { ServerNotificationMethod } from "./method-names.js";
 export { EventNormalizer } from "./event-normalizer.js";
 export type { NormalizerOptions } from "./event-normalizer.js";
 export { CodexCapabilities, isMethodNotFoundError } from "./capabilities.js";
+export {
+  evaluateCodexRuntimeCompatibility,
+  formatCodexRuntimeCompatibilityReport,
+  readCodexRuntimeSchemaDir,
+  summarizeCodexRuntimeSchemas,
+} from "./compatibility.js";
+export type {
+  CodexRuntimeCompatibilityFinding,
+  CodexRuntimeCompatibilityInput,
+  CodexRuntimeCompatibilityReport,
+  CodexRuntimeCompatibilityStatus,
+  CodexRuntimeSchemaSummary,
+} from "./compatibility.js";
 export { CodexRuntime } from "./runtime.js";
 export type { CodexRuntimeOptions } from "./runtime.js";

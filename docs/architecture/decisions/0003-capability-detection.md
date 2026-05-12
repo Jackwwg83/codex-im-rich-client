@@ -7,9 +7,9 @@
 ## Context
 
 Codex App Server's wire surface evolves between releases. The bridge
-ships against a pinned codex version (`codexIm.codexVersion` in
-`package.json`), but in practice the codex binary on a user's machine
-may be:
+generates and tests protocol types against a pinned codex version
+(`codexIm.codexVersion` in `package.json`), but in practice the codex
+binary on a user's machine may be:
 
 - exactly the pinned version;
 - an older version the user has not upgraded yet;
@@ -125,6 +125,32 @@ RPC, an additional ADR can amend this section to use it as the
 default; the passive observe-and-cache will continue to apply for
 codex versions that lack the RPC.
 
+## User runtime compatibility preflight — 2026-05-12
+
+The exact `CODEX_VERSION` / `codexIm.codexVersion` pin remains the
+maintainer and CI authority for generated protocol code. It is still
+used by `pnpm check:codex-version`, `pnpm protocol:generate`, and
+release protocol checks.
+
+Customer installs do **not** require the user's local `codex --version`
+string to exactly match that pin. Instead,
+`pnpm check:codex-runtime-compatibility` and `pnpm im:doctor` ask the
+current local Codex CLI to generate its App Server JSON schema into a
+temporary directory, then classify the schema:
+
+- `compatible` — hard-required IM runtime semantics are present;
+- `degraded` — hard requirements are present but optional conveniences
+  such as `thread/turns/list` or `excludeTurns` are missing, so the
+  bridge must use fallbacks;
+- `blocked` — a hard requirement such as conversation start/resume,
+  turn start, assistant output, turn completion, status tracking, or
+  approval request semantics is absent.
+
+This preserves the "schema is authority, version is hint" rule without
+shipping a private, isolated Codex runtime. Users can keep their normal
+Codex CLI, while maintainers still get deterministic generated protocol
+diffs.
+
 ## Semantic guardrail — 2026-05-12
 
 `scripts/check-app-server-semantics.mjs` is a fast local contract check
@@ -134,12 +160,13 @@ bump:
 - native thread methods required by the IM bridge must remain present;
 - `remoteControl/status/changed` may be parsed as informational status;
 - `ThreadResumeParams` and `ThreadForkParams` must continue exposing
-  `excludeTurns` for metadata-only resume/fork paths;
+  `excludeTurns` in the maintainer pin until those paths are audited;
 - `ThreadStartParams`, `ThreadResumeParams`, and `ThreadForkParams`
   must not silently gain a top-level `permissions` field without
   forcing a reviewed writable-roots enforcement plan.
 
-The current pin still exposes `thread/turns/list`. Upstream evidence
-shows that method may drift in newer Codex builds, so any future Codex
-pin bump must audit every `thread/turns/list` runtime wrapper and daemon
-call before release.
+The current pin still exposes `thread/turns/list` and `excludeTurns`.
+Upstream evidence shows both may drift in newer Codex builds. User
+runtime compatibility treats their absence as degraded, not blocked;
+future Codex pin bumps must still audit wrappers and daemon call sites
+before release.

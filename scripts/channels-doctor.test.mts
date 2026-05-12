@@ -8,6 +8,25 @@ describe("channels doctor (JAC-237)", () => {
       config: makeConfig(),
       configPath: "/Users/operator/.codex-im-bridge/config.toml",
       lifecycle: { kind: "unavailable", reason: "command_unavailable" },
+      runtimeCompatibility: {
+        status: "degraded",
+        runtimeVersion: "codex-cli 0.130.0",
+        generatedProtocolVersion: "0.128.0",
+        blockers: [],
+        degradedFeatures: [
+          {
+            id: "thread_turns_list",
+            detail: "thread history refresh falls back to metadata-only behavior",
+          },
+        ],
+        optionalFeatures: [],
+        warnings: [
+          {
+            id: "writable_roots_metadata_only",
+            detail: "writable_roots configured; metadata-only in this alpha",
+          },
+        ],
+      },
       env: {
         IM_TELEGRAM_BOT_TOKEN: "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd",
         IM_LARK_APP_SECRET: "sk-testsecret1234567890abcdef",
@@ -31,7 +50,10 @@ describe("channels doctor (JAC-237)", () => {
     expect(report.status).toBe("attention");
     expect(output).toContain("im doctor: attention");
     expect(output).toContain(
-      "lifecycle_daemon: info (Codex App Server lifecycle daemon: unavailable in current pinned Codex)",
+      "lifecycle_daemon: info (Codex App Server lifecycle daemon: unavailable in current Codex runtime)",
+    );
+    expect(output).toContain(
+      "codex_runtime_compatibility: warn (runtime=codex-cli 0.130.0 generated=0.128.0 status=degraded; degraded=thread_turns_list; warnings=writable_roots_metadata_only)",
     );
     expect(output).toContain(
       "writable_roots_enforcement: warn (writable_roots configured; metadata-only in this alpha)",
@@ -137,6 +159,38 @@ describe("channels doctor (JAC-237)", () => {
     );
     expect(output).toContain("project.allowlist: fail (no project allows slack user/chat)");
     expect(output).not.toContain("xoxb-secret");
+  });
+
+  it("blocks when the local Codex runtime misses hard-required App Server semantics", () => {
+    const report = evaluateChannelsDoctor({
+      config: makeConfig({
+        telegramEnabled: false,
+        larkEnabled: false,
+        dingtalkEnabled: false,
+        slackEnabled: false,
+      }),
+      configPath: "/tmp/config.toml",
+      lifecycle: { kind: "unavailable", reason: "not_checked" },
+      runtimeCompatibility: {
+        status: "blocked",
+        runtimeVersion: "codex-cli 0.131.0",
+        generatedProtocolVersion: "0.128.0",
+        blockers: [{ id: "turn_start", detail: "turn/start is required" }],
+        degradedFeatures: [],
+        optionalFeatures: [],
+        warnings: [],
+      },
+      env: {},
+      keychainSecretPresent: () => false,
+      installed: { plistPresent: false },
+    });
+
+    const output = formatChannelsDoctorReport(report);
+
+    expect(report.status).toBe("blocked");
+    expect(output).toContain(
+      "codex_runtime_compatibility: fail (runtime=codex-cli 0.131.0 generated=0.128.0 status=blocked; blockers=turn_start)",
+    );
   });
 });
 

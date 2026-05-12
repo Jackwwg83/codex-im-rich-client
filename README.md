@@ -44,7 +44,9 @@ Supported scope:
 - secrets live in macOS Keychain;
 - background service uses launchd under the current macOS user;
 - Node.js `>=24` and pnpm `>=10 <11` are required;
-- Codex version is pinned by `CODEX_VERSION`;
+- Codex generated protocol is pinned by `CODEX_VERSION`; user installs run a
+  schema-based runtime compatibility check so newer compatible Codex CLIs do
+  not fail solely because their version number differs;
 - Linux and Windows are not production deployment targets for this release.
 
 There is no hosted SaaS credential store, no binary installer, and no automated

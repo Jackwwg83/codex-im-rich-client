@@ -45,7 +45,7 @@ describe("app-server lifecycle probe", () => {
     expect(missing).toEqual({ kind: "unavailable", reason: "command_unavailable" });
     expect(nonJson).toEqual({ kind: "unavailable", reason: "invalid_json" });
     expect(formatAppServerLifecycleProbe(missing)).toBe(
-      "Codex App Server lifecycle daemon: unavailable in current pinned Codex",
+      "Codex App Server lifecycle daemon: unavailable in current Codex runtime",
     );
   });
 });

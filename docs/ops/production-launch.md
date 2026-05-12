@@ -21,7 +21,9 @@ Required local baseline:
 - macOS user account that owns the LaunchAgent.
 - Node.js 24 or newer.
 - pnpm 10.x.
-- Codex CLI pinned to `0.128.0`.
+- Codex CLI installed and logged in. Maintainer codegen is pinned by
+  `CODEX_VERSION`; launch uses schema-based runtime compatibility instead of
+  exact version matching.
 - `codex login` completed for the operator account.
 - Repository branch/tag chosen for launch.
 - IM bot/app credentials available only in the operator shell/Keychain.
@@ -33,12 +35,13 @@ node --version
 pnpm --version
 codex --version
 git status --short
-pnpm check:codex-version
+pnpm check:codex-runtime-compatibility
 ```
 
 Expected:
 
-- `codex --version` prints `codex-cli 0.128.0`.
+- `pnpm check:codex-runtime-compatibility` reports `compatible` or `degraded`
+  with fallbacks; `blocked` must be resolved before launch.
 - `git status --short` contains no tracked changes.
 - Untracked local runtime/review artifacts are not copied into docs, Linear, or
   review packets.

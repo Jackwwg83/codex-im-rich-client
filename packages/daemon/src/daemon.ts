@@ -2615,7 +2615,6 @@ export class Daemon {
         try {
           await runtime.threadResume({
             threadId: selected.record.codexThreadId,
-            excludeTurns: true,
           });
         } catch (error) {
           this.#emitAuditEvent("runtime.thread_resume_failed", {
@@ -2684,7 +2683,6 @@ export class Daemon {
           threadId: selected.record.codexThreadId,
           cwd: project.cwd,
           ...(project.defaultModel === undefined ? {} : { model: project.defaultModel }),
-          excludeTurns: true,
         });
       } catch (error) {
         this.#emitAuditEvent("runtime.thread_resume_failed", {
@@ -4041,11 +4039,10 @@ export class Daemon {
       return;
     }
 
-    // Slice 3 A5: /fork accepts an optional `--exclude-turns` flag.
-    // Default behavior matches the codex protocol default (include
-    // turns). The flag opts in to excluding the turn array from the
-    // forked thread metadata, which is the path callers use when they
-    // plan to call thread/turns/list immediately after.
+    // `/fork` accepts an optional `--exclude-turns` flag for older App
+    // Server schemas that expose it. The default path omits the field
+    // entirely so newer schemas that removed it can still accept fork
+    // requests.
     const excludeTurns = command.args.includes("--exclude-turns");
 
     let forkedThreadId: string | undefined;
@@ -4055,7 +4052,7 @@ export class Daemon {
           threadId: source.codexThreadId,
           cwd: project.cwd,
           ...(project.defaultModel === undefined ? {} : { model: project.defaultModel }),
-          excludeTurns,
+          ...(excludeTurns ? { excludeTurns } : {}),
         }),
       );
     } catch (error) {
@@ -4279,7 +4276,7 @@ export class Daemon {
     }
 
     try {
-      await runtime.threadResume({ threadId: thread.threadId, excludeTurns: true });
+      await runtime.threadResume({ threadId: thread.threadId });
       const projectLabel = projectDisplayNameFromCwd(thread.cwd);
       sessionRouter.bind(inbound.target, {
         contextKind: "native_thread",

@@ -118,7 +118,7 @@ export function buildLocalInstallPlan(options: LocalInstallOptions): LocalComman
   const commands: LocalCommand[] = [
     command("node-version", "node", ["--version"]),
     command("pnpm-version", "pnpm", ["--version"]),
-    command("codex-version", "pnpm", ["check:codex-version"]),
+    command("codex-runtime-compatibility", "pnpm", ["check:codex-runtime-compatibility"]),
     command("setup-im", "pnpm", setupArgs),
   ];
 
@@ -247,7 +247,7 @@ export function buildLocalUpgradeApplyDryRunPlan(
     "would: git fetch --tags",
     "would: checkout target tag",
     "would: pnpm install --frozen-lockfile",
-    "would: pnpm check:codex-version",
+    "would: pnpm check:codex-runtime-compatibility",
     "would: pnpm bridge:build",
     "would: install bridge staging/release",
     "would: pnpm launchd:install",

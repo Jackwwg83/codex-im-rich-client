@@ -36,11 +36,17 @@ If you need a writable scope outside `cwd` enforced today, configure
 that on Codex's side directly (per-codex `~/.codex/config.toml`
 sandbox configuration) — the IM bridge does not override it.
 
-`pnpm im:doctor` and `pnpm codex-im:status` warn when
-`writable_roots` are configured but the pinned generated App Server
-protocol still lacks a top-level `permissions` request field. In that
-case, `writable_roots` are metadata-only in this alpha; treat the
-warning as setup guidance, not as an install failure.
+`pnpm im:doctor` and `pnpm codex-im:status` run a schema-based Codex
+runtime compatibility check. The generated protocol pin in `CODEX_VERSION`
+is still the maintainer/codegen source of truth, but customer machines may run
+a newer compatible Codex CLI. Doctor reports that as `compatible`,
+`degraded`, or `blocked` based on App Server schema features, not on exact
+version text.
+
+When `writable_roots` are configured but the current runtime schema still lacks
+a top-level `permissions` request field, doctor warns that `writable_roots`
+are metadata-only in this alpha. Treat that warning as setup guidance, not as
+an install failure.
 
 ## Codex App Server Lifecycle
 
@@ -55,7 +61,7 @@ codex app-server daemon version
 ```
 
 If the command exists, the probe parses JSON only and reports a short
-status line. If it does not exist on the pinned Codex binary, doctor
+status line. If it does not exist on the current Codex binary, doctor
 prints that the lifecycle daemon is unavailable. The probe never starts,
 stops, restarts, bootstraps, enables remote-control, or authorizes any
 IM action.
@@ -134,7 +140,7 @@ Back up before risky local changes, upgrades, or platform reconfiguration.
 ```bash
 git pull
 pnpm install
-pnpm check:codex-version
+pnpm check:codex-runtime-compatibility
 pnpm im:doctor
 pnpm bridge:build
 pnpm bridge:install

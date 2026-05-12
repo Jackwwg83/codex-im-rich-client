@@ -3850,7 +3850,6 @@ describe("Daemon skeleton (T14)", () => {
 
     expect(runtime.threadResume).toHaveBeenCalledWith({
       threadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
-      excludeTurns: true,
     });
     expect(bindings.upsert).toHaveBeenCalledWith({
       target,
@@ -4159,7 +4158,6 @@ describe("Daemon skeleton (T14)", () => {
       threadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
       cwd: "/repo/web",
       model: "gpt-test",
-      excludeTurns: true,
     });
     expect(threadSessionRepository.switchCurrent).toHaveBeenCalledWith({
       target,
@@ -4277,7 +4275,6 @@ describe("Daemon skeleton (T14)", () => {
 
     expect(runtime.threadResume).toHaveBeenCalledWith({
       threadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
-      excludeTurns: true,
     });
     expect(threadSessionRepository.switchCurrent).toHaveBeenCalledWith({
       target,
@@ -4671,7 +4668,6 @@ describe("Daemon skeleton (T14)", () => {
       threadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
       cwd: "/repo/web",
       model: "gpt-test",
-      excludeTurns: false,
     });
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,
@@ -4785,7 +4781,6 @@ describe("Daemon skeleton (T14)", () => {
     expect(runtime.threadFork).toHaveBeenCalledWith({
       threadId: "thread-selected-abcdefghijklmnopqrstuvwxyz",
       cwd: "/repo/api",
-      excludeTurns: false,
     });
     expect(threadSessionRepository.upsert).toHaveBeenCalledWith({
       target,

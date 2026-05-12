@@ -30,7 +30,7 @@ describe("local lifecycle command wrappers", () => {
     expect(plan.commands.map((command) => [command.label, command.command, command.args])).toEqual([
       ["node-version", "node", ["--version"]],
       ["pnpm-version", "pnpm", ["--version"]],
-      ["codex-version", "pnpm", ["check:codex-version"]],
+      ["codex-runtime-compatibility", "pnpm", ["check:codex-runtime-compatibility"]],
       [
         "setup-im",
         "pnpm",
@@ -70,7 +70,7 @@ describe("local lifecycle command wrappers", () => {
     expect(plan.commands.map((command) => command.label)).toEqual([
       "node-version",
       "pnpm-version",
-      "codex-version",
+      "codex-runtime-compatibility",
       "setup-im",
       "bridge-build",
       "bridge-install",
@@ -123,7 +123,7 @@ describe("local lifecycle command wrappers", () => {
   it("stops at the first failing command", () => {
     const output: string[] = [];
     const runner = vi.fn((command: string, args: readonly string[]) => ({
-      status: args.includes("check:codex-version") ? 1 : 0,
+      status: args.includes("check:codex-runtime-compatibility") ? 1 : 0,
     }));
     const exitCode = runLocalCommandPlan(buildLocalInstallPlan({ platform: "telegram" }), {
       runner,
@@ -132,7 +132,7 @@ describe("local lifecycle command wrappers", () => {
 
     expect(exitCode).toBe(1);
     expect(runner).toHaveBeenCalledTimes(3);
-    expect(output.join("\n")).toContain("failed: codex-version exit=1");
+    expect(output.join("\n")).toContain("failed: codex-runtime-compatibility exit=1");
   });
 
   it("keeps upgrade plan local-only and blocks apply on dirty worktrees", () => {
@@ -176,6 +176,8 @@ describe("local lifecycle command wrappers", () => {
     expect(rendered).toContain("mode: apply --dry-run");
     expect(rendered).toContain("would: git fetch --tags");
     expect(rendered).toContain("would: pnpm install --frozen-lockfile");
+    expect(rendered).toContain("would: pnpm check:codex-runtime-compatibility");
+    expect(rendered).not.toContain("would: pnpm check:codex-version");
     expect(rendered).toContain("did not: git fetch");
     expect(rendered).toContain("did not: checkout");
     expect(rendered).toContain("did not: stop launchd");

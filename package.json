@@ -27,6 +27,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "check:codex-version": "node scripts/check-codex-version.mjs",
+    "check:codex-runtime-compatibility": "tsx scripts/check-codex-runtime-compatibility.mts",
     "check:help-docs": "node scripts/check-help-docs-alignment.mjs",
     "check:md-links": "node scripts/check-md-links.mjs",
     "check:secret-leak": "node scripts/check-secret-leak-grep.mjs",
