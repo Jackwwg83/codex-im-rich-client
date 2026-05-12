@@ -13,13 +13,13 @@ lifecycle modes available at the time of this ADR:
 1. **stdio mode** — invoked as `codex app-server --listen stdio://`,
    spawned per-bridge as a child process. The protocol is JSON-RPC
    over stdio. This mode is GA and the surface this project's
-   `packages/codex-protocol` has been pinned and verified against
-   (`codex 0.128.0`).
+  `packages/codex-protocol` has been pinned and verified against
+   (`codex 0.130.0`).
 
 2. **`codex app-server daemon`** — a longer-lived, bridge-independent
    server process with machine-readable lifecycle commands and optional
    remote-control enablement. This surface is present on newer upstream
-   builds but is not exposed by the pinned `codex 0.128.0` binary. The
+   builds but is not used by the pinned `codex 0.130.0` bridge. The
    target user is Codex desktop / mobile remote clients, not local IM
    bridges.
 
@@ -55,7 +55,7 @@ will produce a follow-up ADR; this one is not amended in place.
 
 ## References
 
-- Upstream `codex` `0.128.0` — pinned by `package.json`
+- Upstream `codex` `0.130.0` — pinned by `package.json`
   `codexIm.codexVersion`.
 - Upstream `codex app-server daemon` lifecycle commands — out-of-scope
   until a follow-up ADR pins a release where they are available.

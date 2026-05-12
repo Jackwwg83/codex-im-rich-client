@@ -506,6 +506,10 @@ export class EventNormalizer {
       // model — codex's per-turn model events.
       case "model/rerouted":
       case "model/verification":
+      // process — codex 0.130 process events. Rendering decisions live
+      // downstream; normalizer preserves them as unknown rich events for now.
+      case "process/exited":
+      case "process/outputDelta":
       // rawResponseItem — raw underlying model response items.
       case "rawResponseItem/completed":
       // serverRequest/resolved — fires after we respond to a server-initiated

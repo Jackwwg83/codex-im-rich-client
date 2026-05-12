@@ -29,7 +29,7 @@ function makeConfig(projects: Record<string, { cwd: string; writableRoots: strin
   return {
     daemon: { dataDir: "/tmp", logDir: "/tmp", maxInboundAttachmentBytes: 1 },
     storage: { sqlitePath: "/tmp/db.sqlite", autoMigrate: true },
-    codex: { binary: "codex", versionPin: "0.128.0" },
+    codex: { binary: "codex", versionPin: "0.130.0" },
     security: {
       allowedUsers: [],
       allowedChats: [],

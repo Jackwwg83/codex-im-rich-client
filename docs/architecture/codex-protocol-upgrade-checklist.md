@@ -45,28 +45,31 @@ Inspect:
   - `thread/unarchive`
 - `ServerNotification` still includes:
   - `remoteControl/status/changed`
-- `ThreadResumeParams` and `ThreadForkParams` still expose
-  `excludeTurns`, or every metadata-only resume/fork path is rewritten
-  before release.
+- `ThreadResumeParams` and `ThreadForkParams` remain compatible with
+  the bridge's resume/fork call sites. The `0.130.0` pin no longer
+  exposes `excludeTurns`; do not reintroduce metadata-only resume/fork
+  unless the generated protocol exposes a reviewed request field.
 - If `ThreadStartParams`, `ThreadResumeParams`, or `ThreadForkParams`
   now expose top-level `permissions`, stop and review the
   writable-roots enforcement plan before release.
 - If `permissions` is implemented, prove no request combines
   `sandbox` and `permissions`.
 
-## Known Drift Risks From 2026-05-12 Evidence
+## Known Drift Risks From 2026-05-12 / 0.130 Evidence
 
-- `thread/turns/list` exists in the `0.128.0` pin but was absent from
-  the latest upstream default schema inspected on 2026-05-12. Audit
-  every runtime wrapper and daemon call before bumping.
-- Newer upstream methods such as `plugin/share/save`,
+- `thread/turns/list` and `ThreadResumeParams` / `ThreadForkParams`
+  `excludeTurns` existed in the `0.128.0` pin but are absent from the
+  `0.130.0` generated protocol. The bridge must not call those
+  removed paths.
+- Upstream methods such as `plugin/share/save`,
   `plugin/share/list`, `plugin/share/updateTargets`,
   `plugin/share/delete`, `plugin/skill/read`, and
-  `windowsSandbox/readiness` must not be used until they appear in the
-  local generated protocol and have a reviewed product/security plan.
-- Newer upstream notifications such as `process/outputDelta` and
-  `process/exited` need explicit rendering decisions before they are
-  considered supported by the IM bridge.
+  `windowsSandbox/readiness` now appear in the local generated
+  protocol, but must not be productized until they have a reviewed
+  product/security plan.
+- Notifications such as `process/outputDelta` and `process/exited`
+  are classified by the runtime, but still need explicit rendering
+  decisions before they are considered a user-visible IM feature.
 
 ## Guardrails And Gates
 

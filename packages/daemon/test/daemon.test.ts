@@ -4688,6 +4688,74 @@ describe("Daemon skeleton (T14)", () => {
     );
   });
 
+  it("does not send removed excludeTurns fork params to Codex App Server", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const now = new Date("2026-05-03T12:45:00.000Z");
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const runtime = {
+      threadStart: vi.fn(),
+      threadFork: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({
+        projects: {
+          web: { cwd: "/repo/web", defaultModel: "gpt-test" },
+        },
+      }),
+      openStorage: () => ({}),
+      createBroker: () => ({
+        attach: vi.fn(),
+        enablePendingMode: vi.fn(),
+        listPending: vi.fn(() => []),
+      }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+        checkProjectAccess: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({
+        resolve: vi.fn(() => ({
+          kind: "bound" as const,
+          target,
+          projectId: "web",
+          cwd: "/repo/web",
+          codexThreadId: "thread-current-abcdefghijklmnopqrstuvwxyz",
+        })),
+      }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      now: () => now,
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/fork --exclude-turns",
+      messageRef: { target, messageId: "msg-fork-exclude-turns" },
+      receivedAt: now,
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadFork).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-fork-exclude-turns" },
+      "Metadata-only fork is unavailable in the current Codex App Server protocol. Send /fork to copy the conversation.",
+    );
+  });
+
   it("routes /fork selector with optional title to the selected known thread", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const now = new Date("2026-05-03T12:50:00.000Z");

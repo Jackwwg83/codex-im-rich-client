@@ -73,7 +73,7 @@ function makeConfig(input: {
   return {
     daemon: { dataDir: "/tmp/codex-im", logDir: "/tmp/codex-im/logs" },
     storage: { sqlitePath: "/tmp/codex-im/state.db", autoMigrate: true },
-    codex: { binary: "codex", versionPin: "0.128.0" },
+    codex: { binary: "codex", versionPin: "0.130.0" },
     security: {
       allowedUsers: input.securityAllowedUsers,
       allowedChats: input.securityAllowedChats,

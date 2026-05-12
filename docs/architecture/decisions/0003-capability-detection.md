@@ -140,8 +140,7 @@ temporary directory, then classify the schema:
 
 - `compatible` — hard-required IM runtime semantics are present;
 - `degraded` — hard requirements are present but optional conveniences
-  such as `thread/turns/list` or `excludeTurns` are missing, so the
-  bridge must use fallbacks;
+  or metadata-only warnings require reduced behavior;
 - `blocked` — a hard requirement such as conversation start/resume,
   turn start, assistant output, turn completion, status tracking, or
   approval request semantics is absent.
@@ -159,14 +158,14 @@ bump:
 
 - native thread methods required by the IM bridge must remain present;
 - `remoteControl/status/changed` may be parsed as informational status;
-- `ThreadResumeParams` and `ThreadForkParams` must continue exposing
-  `excludeTurns` in the maintainer pin until those paths are audited;
+- `ThreadResumeParams` and `ThreadForkParams` must not be sent fields
+  absent from the local generated protocol;
 - `ThreadStartParams`, `ThreadResumeParams`, and `ThreadForkParams`
   must not silently gain a top-level `permissions` field without
   forcing a reviewed writable-roots enforcement plan.
 
-The current pin still exposes `thread/turns/list` and `excludeTurns`.
-Upstream evidence shows both may drift in newer Codex builds. User
-runtime compatibility treats their absence as degraded, not blocked;
-future Codex pin bumps must still audit wrappers and daemon call sites
-before release.
+The `0.130.0` pin removes `thread/turns/list` and `excludeTurns` from
+the generated protocol. The bridge has no production wrapper for
+`thread/turns/list`, and `/fork --exclude-turns` is rejected before any
+runtime request is sent. Future Codex pin bumps must still audit
+wrappers and daemon call sites before release.

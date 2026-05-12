@@ -45,8 +45,6 @@ import type {
   ThreadResumeResponse,
   ThreadStartParams,
   ThreadStartResponse,
-  ThreadTurnsListParams,
-  ThreadTurnsListResponse,
   TurnInterruptParams,
   TurnInterruptResponse,
   TurnStartParams,
@@ -200,27 +198,6 @@ describe("CodexRuntime — thread/* wrappers (T8)", () => {
     const r = await h.runtime.threadFork(params);
     expect(received).toEqual(params);
     expect(r.thread.id).toBe("thread-forked");
-
-    await teardown(h);
-  });
-
-  it("threadTurnsList forwards params and returns typed response", async () => {
-    const h = await harness();
-    let received: unknown;
-    h.fake.respondTo("thread/turns/list", (params) => {
-      received = params;
-      return {
-        data: [],
-        nextCursor: null,
-        backwardsCursor: null,
-      } as ThreadTurnsListResponse;
-    });
-
-    const params: ThreadTurnsListParams = { threadId: "thread-1" };
-    const r = await h.runtime.threadTurnsList(params);
-    expect(received).toEqual(params);
-    expect(r.data).toEqual([]);
-    expect(r.nextCursor).toBeNull();
 
     await teardown(h);
   });

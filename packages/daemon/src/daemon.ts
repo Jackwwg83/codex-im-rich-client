@@ -493,14 +493,12 @@ interface DaemonThreadResumeParams {
   readonly threadId: string;
   readonly cwd?: string | null;
   readonly model?: string | null;
-  readonly excludeTurns?: boolean;
 }
 
 interface DaemonThreadForkParams {
   readonly threadId: string;
   readonly cwd?: string | null;
   readonly model?: string | null;
-  readonly excludeTurns?: boolean;
 }
 
 interface DaemonTurnStartParams {
@@ -2309,7 +2307,7 @@ export class Daemon {
         "/rename <title> - Rename current thread (synced to Codex when supported).",
         "/archive - Archive current thread (synced to Codex when supported).",
         "/unarchive - Reopen an archived thread (synced to Codex when supported).",
-        "/fork [thread] [--exclude-turns] - Fork the current or selected thread; default copies turn history.",
+        "/fork [thread] - Fork the current or selected thread.",
         "/stop - Interrupt the active Codex turn.",
         "/cu (explicit) - Bounded Computer Use; see commands.md for the accepted scope.",
         "/model [model] - List available Codex models or set this IM thread model.",
@@ -3985,7 +3983,14 @@ export class Daemon {
     if (command.args.includes("--help") || command.args.includes("-h")) {
       await this.#editInboundMessage(
         inbound.messageRef,
-        "Usage: /fork [thread] [--exclude-turns]\nDefault copies the full turn history; pass --exclude-turns for a metadata-only fork.",
+        "Usage: /fork [thread]\nFork the current or selected Codex conversation.",
+      );
+      return;
+    }
+    if (command.args.includes("--exclude-turns")) {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Metadata-only fork is unavailable in the current Codex App Server protocol. Send /fork to copy the conversation.",
       );
       return;
     }
@@ -4039,12 +4044,6 @@ export class Daemon {
       return;
     }
 
-    // `/fork` accepts an optional `--exclude-turns` flag for older App
-    // Server schemas that expose it. The default path omits the field
-    // entirely so newer schemas that removed it can still accept fork
-    // requests.
-    const excludeTurns = command.args.includes("--exclude-turns");
-
     let forkedThreadId: string | undefined;
     try {
       forkedThreadId = this.#threadId(
@@ -4052,7 +4051,6 @@ export class Daemon {
           threadId: source.codexThreadId,
           cwd: project.cwd,
           ...(project.defaultModel === undefined ? {} : { model: project.defaultModel }),
-          ...(excludeTurns ? { excludeTurns } : {}),
         }),
       );
     } catch (error) {

@@ -81,8 +81,6 @@ export type {
   ThreadSetNameResponse,
   ThreadStartParams,
   ThreadStartResponse,
-  ThreadTurnsListParams,
-  ThreadTurnsListResponse,
   ThreadUnarchiveParams,
   ThreadUnarchiveResponse,
   TurnInterruptParams,

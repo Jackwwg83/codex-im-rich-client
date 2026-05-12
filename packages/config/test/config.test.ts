@@ -13,7 +13,7 @@ auto_migrate = false
 
 [codex]
 binary = "codex"
-version_pin = "0.128.0"
+version_pin = "0.130.0"
 
 [security]
 allowed_users = ["telegram:123456789"]
@@ -132,7 +132,7 @@ describe("@codex-im/config (T7-T8)", () => {
 
         [codex]
         binary = "codex"
-        version_pin = "0.128.0"
+        version_pin = "0.130.0"
 
         [security]
         allowed_users = []
@@ -343,7 +343,7 @@ allowed_channel_ids    = ["T_TEST:C_TEST"]
 
       [codex]
       binary = "codex"
-      version_pin = "0.128.0"
+      version_pin = "0.130.0"
 
       [security]
       allowed_users = ["telegram:explicit-user"]

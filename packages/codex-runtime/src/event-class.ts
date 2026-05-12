@@ -101,6 +101,10 @@ export const METHOD_CLASS = {
   "model/rerouted": "lifecycle",
   "model/verification": "lifecycle",
 
+  // ─── Process events (codex 0.130) ───────────────────────────────
+  "process/exited": "lifecycle",
+  "process/outputDelta": "delta",
+
   // ─── Raw response item ──────────────────────────────────────────
   "rawResponseItem/completed": "lifecycle",
 

@@ -11,14 +11,9 @@ describe("channels doctor (JAC-237)", () => {
       runtimeCompatibility: {
         status: "degraded",
         runtimeVersion: "codex-cli 0.130.0",
-        generatedProtocolVersion: "0.128.0",
+        generatedProtocolVersion: "0.130.0",
         blockers: [],
-        degradedFeatures: [
-          {
-            id: "thread_turns_list",
-            detail: "thread history refresh falls back to metadata-only behavior",
-          },
-        ],
+        degradedFeatures: [],
         optionalFeatures: [],
         warnings: [
           {
@@ -53,7 +48,7 @@ describe("channels doctor (JAC-237)", () => {
       "lifecycle_daemon: info (Codex App Server lifecycle daemon: unavailable in current Codex runtime)",
     );
     expect(output).toContain(
-      "codex_runtime_compatibility: warn (runtime=codex-cli 0.130.0 generated=0.128.0 status=degraded; degraded=thread_turns_list; warnings=writable_roots_metadata_only)",
+      "codex_runtime_compatibility: warn (runtime=codex-cli 0.130.0 generated=0.130.0 status=degraded; warnings=writable_roots_metadata_only)",
     );
     expect(output).toContain(
       "writable_roots_enforcement: warn (writable_roots configured; metadata-only in this alpha)",
@@ -174,7 +169,7 @@ describe("channels doctor (JAC-237)", () => {
       runtimeCompatibility: {
         status: "blocked",
         runtimeVersion: "codex-cli 0.131.0",
-        generatedProtocolVersion: "0.128.0",
+        generatedProtocolVersion: "0.130.0",
         blockers: [{ id: "turn_start", detail: "turn/start is required" }],
         degradedFeatures: [],
         optionalFeatures: [],
@@ -189,7 +184,7 @@ describe("channels doctor (JAC-237)", () => {
 
     expect(report.status).toBe("blocked");
     expect(output).toContain(
-      "codex_runtime_compatibility: fail (runtime=codex-cli 0.131.0 generated=0.128.0 status=blocked; blockers=turn_start)",
+      "codex_runtime_compatibility: fail (runtime=codex-cli 0.131.0 generated=0.130.0 status=blocked; blockers=turn_start)",
     );
   });
 });
@@ -237,7 +232,7 @@ function makeConfig(
       logDir: "/Users/operator/.codex-im-bridge/logs",
     },
     storage: { sqlitePath: "/Users/operator/.codex-im-bridge/state.db", autoMigrate: true },
-    codex: { binary: "codex", versionPin: "0.128.0" },
+    codex: { binary: "codex", versionPin: "0.130.0" },
     security: {
       allowedUsers: securityAllowedUsers,
       allowedChats: securityAllowedChats,

@@ -70,6 +70,7 @@ describe("METHOD_CLASS coverage", () => {
       "item/fileChange/patchUpdated",
       "item/reasoning/textDelta",
       "item/plan/delta",
+      "process/outputDelta",
     ];
     for (const m of deltaSamples) {
       expect(METHOD_CLASS[m as keyof typeof METHOD_CLASS]).toBe("delta");
@@ -89,6 +90,7 @@ describe("METHOD_CLASS coverage", () => {
       "guardianWarning",
       "thread/tokenUsage/updated",
       "model/rerouted",
+      "process/exited",
       "turn/diff/updated",
       "turn/plan/updated",
     ];

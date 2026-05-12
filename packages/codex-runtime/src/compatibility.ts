@@ -86,7 +86,7 @@ const OPTIONAL_CLIENT_REQUESTS: readonly MethodRequirement[] = [
   {
     id: "thread_turns_list",
     methodParts: ["thread", "turns", "list"],
-    detail: "native history refresh can fall back when thread turns listing is unavailable",
+    detail: "legacy turn listing is no longer required by the 0.130 runtime path",
   },
   {
     id: "plugin_skill_read",
@@ -143,28 +143,6 @@ export function evaluateCodexRuntimeCompatibility(
     blockers.push({
       id: "approval_request",
       detail: "an approval ServerRequest method is required for guarded command/file/tool actions",
-    });
-  }
-
-  const threadTurnsList = methodName(["thread", "turns", "list"]);
-  if (!clientMethods.has(threadTurnsList)) {
-    degradedFeatures.push({
-      id: "thread_turns_list",
-      detail: "thread history refresh falls back to metadata-only thread list/read behavior",
-    });
-  }
-  if (!input.schema.threadResumeFields.includes("excludeTurns")) {
-    degradedFeatures.push({
-      id: "thread_resume_exclude_turns",
-      detail:
-        "resume cannot request metadata-only payloads; runtime must tolerate full resume payloads",
-    });
-  }
-  if (!input.schema.threadForkFields.includes("excludeTurns")) {
-    degradedFeatures.push({
-      id: "thread_fork_exclude_turns",
-      detail:
-        "fork cannot request metadata-only payloads; runtime must tolerate full fork payloads",
     });
   }
 

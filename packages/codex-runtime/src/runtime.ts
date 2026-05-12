@@ -3,8 +3,8 @@
 // Wraps `client.request<R>(method, params)` for the 9 ClientRequest
 // methods Phase 1 needs:
 //
-//   thread/start, thread/resume, thread/fork, thread/turns/list,
-//   thread/read, turn/start, turn/steer, turn/interrupt, review/start
+//   thread/start, thread/resume, thread/fork, thread/read,
+//   turn/start, turn/steer, turn/interrupt, review/start
 //
 // (Codex outside-voice B8 fix: thread/interrupt is NOT a real method —
 // only turn/interrupt is. Earlier plan drafts incorrectly listed both.)
@@ -78,8 +78,6 @@ import type {
   ThreadSetNameResponse,
   ThreadStartParams,
   ThreadStartResponse,
-  ThreadTurnsListParams,
-  ThreadTurnsListResponse,
   ThreadUnarchiveParams,
   ThreadUnarchiveResponse,
   TurnInterruptParams,
@@ -102,7 +100,6 @@ const REQUEST_METHODS = {
   threadFork: "thread/fork",
   threadCompactStart: "thread/compact/start",
   threadList: "thread/list",
-  threadTurnsList: "thread/turns/list",
   threadRead: "thread/read",
   threadSetName: "thread/name/set",
   threadArchive: "thread/archive",
@@ -172,10 +169,6 @@ export class CodexRuntime {
 
   threadList(params: ThreadListParams): Promise<ThreadListResponse> {
     return this.#client.request<ThreadListResponse>(REQUEST_METHODS.threadList, params);
-  }
-
-  threadTurnsList(params: ThreadTurnsListParams): Promise<ThreadTurnsListResponse> {
-    return this.#client.request<ThreadTurnsListResponse>(REQUEST_METHODS.threadTurnsList, params);
   }
 
   threadRead(params: ThreadReadParams): Promise<ThreadReadResponse> {

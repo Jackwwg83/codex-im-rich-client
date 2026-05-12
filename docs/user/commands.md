@@ -56,7 +56,7 @@ admin logs when you need technical detail.
 | `/rename <title>` | Rename the current thread. Synced to Codex App Server when supported; otherwise updates the local alias and tells you Codex was not changed. |
 | `/archive` | Archive the current thread. Synced to Codex when supported; otherwise marks the thread archived locally. |
 | `/unarchive` | Reopen an archived thread. Synced to Codex when supported; otherwise marks the thread open locally. |
-| `/fork [--exclude-turns]` | Fork the current conversation when supported by Codex App Server. By default the fork copies turn history; pass `--exclude-turns` for a metadata-only fork. |
+| `/fork [thread]` | Fork the current or selected Codex conversation. |
 | `/stop` | Interrupt the active turn. |
 
 ## Status And Diagnostics

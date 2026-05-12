@@ -1,10 +1,18 @@
 #!/usr/bin/env -S pnpm exec tsx
 
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type Interface, createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
 
 export type SetupPlatform = "telegram" | "lark" | "dingtalk" | "slack";
 
@@ -84,6 +92,7 @@ const SECRET_SERVICES = {
 } as const satisfies Record<SetupSecretKind, string>;
 
 const DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const DEFAULT_CODEX_VERSION = readDefaultCodexVersion();
 
 export function keychainServiceForSecret(secret: SetupSecretKind): string {
   return SECRET_SERVICES[secret];
@@ -173,7 +182,7 @@ function renderConfigToml(home: string, answers: SetupAnswers): string {
     "",
     "[codex]",
     `binary = ${tomlString(nonEmpty(answers.codexBinary, "codex"))}`,
-    `version_pin = ${tomlString(nonEmpty(answers.codexVersion, "0.128.0"))}`,
+    `version_pin = ${tomlString(nonEmpty(answers.codexVersion, DEFAULT_CODEX_VERSION))}`,
     "",
     "[security]",
     `allowed_users = ${tomlArray([platformUser])}`,
@@ -418,7 +427,10 @@ async function collectAnswersWithPrompts(
     allowedUserId,
     allowedChatId,
     codexBinary: nonEmpty(await prompt("Codex binary [codex]: "), "codex"),
-    codexVersion: nonEmpty(await prompt("Codex version pin [0.128.0]: "), "0.128.0"),
+    codexVersion: nonEmpty(
+      await prompt(`Codex version pin [${DEFAULT_CODEX_VERSION}]: `),
+      DEFAULT_CODEX_VERSION,
+    ),
     telegramBotToken: platform === "telegram" ? await promptSecret("Telegram bot token: ") : "",
     larkAppId: platform === "lark" ? await promptRequired(prompt, "Lark app id: ") : "",
     larkAppSecret: platform === "lark" ? await promptSecret("Lark app secret: ") : "",
@@ -584,7 +596,7 @@ function templateAnswers(platform: SetupPlatform, cwd: string): SetupAnswers {
     allowedUserId: platform === "slack" ? "T_WORKSPACE:U_USER" : `${platform}-user-id`,
     allowedChatId: platform === "slack" ? "T_WORKSPACE:C_CHANNEL" : `${platform}-chat-id`,
     codexBinary: "codex",
-    codexVersion: "0.128.0",
+    codexVersion: DEFAULT_CODEX_VERSION,
     telegramBotToken: "<IM_TELEGRAM_BOT_TOKEN>",
     larkAppId: platform === "lark" ? "cli_xxx" : "disabled",
     larkAppSecret: "<IM_LARK_APP_SECRET>",
@@ -595,6 +607,17 @@ function templateAnswers(platform: SetupPlatform, cwd: string): SetupAnswers {
     slackBotToken: "<SLACK_BOT_TOKEN>",
     slackAppToken: "<SLACK_APP_TOKEN>",
   };
+}
+
+function readDefaultCodexVersion(): string {
+  try {
+    return readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "CODEX_VERSION"),
+      "utf8",
+    ).trim();
+  } catch {
+    return "0.130.0";
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -18,7 +18,7 @@
 //     lazily on first invocation and cached; subsequent calls fall
 //     back without retrying.
 //
-// This intentionally avoids speculative startup probing: codex 0.128.0
+// This intentionally avoids speculative startup probing: the pinned codex
 // has no dedicated capability-discovery RPC, and synthesizing a probe
 // (e.g. sending a thread/setName with a stub thread) has surprising
 // side effects. Lazy passive detection is good enough for the IM bridge

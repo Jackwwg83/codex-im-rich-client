@@ -38,7 +38,6 @@ function fixtureRepo({ includePermissions = false } = {}) {
       request("thread/name/set"),
       request("thread/archive"),
       request("thread/unarchive"),
-      request("thread/turns/list"),
     ],
   });
   writeJson(join(schemaRoot, "ServerNotification.json"), {
@@ -47,16 +46,13 @@ function fixtureRepo({ includePermissions = false } = {}) {
 
   const commonFields = includePermissions ? ["permissions"] : [];
   writeJson(join(v2Root, "ThreadStartParams.json"), threadParams(commonFields));
-  writeJson(
-    join(v2Root, "ThreadResumeParams.json"),
-    threadParams([...commonFields, "excludeTurns"]),
-  );
-  writeJson(join(v2Root, "ThreadForkParams.json"), threadParams([...commonFields, "excludeTurns"]));
+  writeJson(join(v2Root, "ThreadResumeParams.json"), threadParams(commonFields));
+  writeJson(join(v2Root, "ThreadForkParams.json"), threadParams(commonFields));
   return root;
 }
 
 describe("check-app-server-semantics", () => {
-  test("accepts the pinned schema shape and warns about thread/turns/list", () => {
+  test("accepts the pinned 0.130 schema shape without thread turns list or excludeTurns", () => {
     const messages = [];
     const result = checkAppServerSemantics({
       repoRoot: fixtureRepo(),
@@ -64,9 +60,7 @@ describe("check-app-server-semantics", () => {
     });
 
     expect(result).toBe(0);
-    expect(messages.join("\n")).toContain(
-      "thread/turns/list present in current pin; audit before Codex pin bump.",
-    );
+    expect(messages.join("\n")).not.toContain("thread/turns/list present");
   });
 
   test("fails when thread params expose top-level permissions", () => {

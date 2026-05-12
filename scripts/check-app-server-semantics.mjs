@@ -56,12 +56,6 @@ function requireMethods({ label, methods, required, failures }) {
   }
 }
 
-function requireField({ label, fields, field, failures }) {
-  if (!fields.has(field)) {
-    failures.push(`${label} is missing required field: ${field}`);
-  }
-}
-
 function forbidPermissions({ label, fields, failures }) {
   if (fields.has("permissions")) {
     failures.push("permissions now present; review writableRoots enforcement plan before release.");
@@ -101,19 +95,6 @@ export function checkAppServerSemantics({
     label: "ServerNotification",
     methods: serverNotifications,
     required: REQUIRED_SERVER_NOTIFICATIONS,
-    failures,
-  });
-
-  requireField({
-    label: "ThreadResumeParams",
-    fields: threadResumeFields,
-    field: "excludeTurns",
-    failures,
-  });
-  requireField({
-    label: "ThreadForkParams",
-    fields: threadForkFields,
-    field: "excludeTurns",
     failures,
   });
 

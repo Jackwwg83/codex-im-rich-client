@@ -11,7 +11,7 @@ import {
 } from "../src/compatibility.js";
 
 describe("Codex runtime schema compatibility", () => {
-  it("accepts the current pinned-style schema when required runtime semantics are present", () => {
+  it("accepts a legacy pinned-style schema when required runtime semantics are present", () => {
     const report = evaluateCodexRuntimeCompatibility({
       runtimeVersion: "codex-cli 0.128.0",
       generatedProtocolVersion: "0.128.0",
@@ -24,11 +24,11 @@ describe("Codex runtime schema compatibility", () => {
     expect(report.degradedFeatures).toEqual([]);
   });
 
-  it("treats a newer schema without thread turns list or excludeTurns as degraded, not blocked", () => {
+  it("accepts the 0.130 schema without legacy thread turns list or excludeTurns", () => {
     const report = evaluateCodexRuntimeCompatibility({
       runtimeVersion: "codex-cli 0.130.0",
-      generatedProtocolVersion: "0.128.0",
-      writableRootsConfigured: true,
+      generatedProtocolVersion: "0.130.0",
+      writableRootsConfigured: false,
       schema: makeSchemaSummary({
         clientRequestMethods: [
           "thread/start",
@@ -51,13 +51,9 @@ describe("Codex runtime schema compatibility", () => {
       }),
     });
 
-    expect(report.status).toBe("degraded");
+    expect(report.status).toBe("compatible");
     expect(report.blockers).toEqual([]);
-    expect(report.degradedFeatures.map((feature) => feature.id)).toEqual([
-      "thread_turns_list",
-      "thread_resume_exclude_turns",
-      "thread_fork_exclude_turns",
-    ]);
+    expect(report.degradedFeatures).toEqual([]);
     expect(report.optionalFeatures.map((feature) => feature.id)).toEqual([
       "process_output_delta",
       "process_exited",
@@ -65,10 +61,7 @@ describe("Codex runtime schema compatibility", () => {
       "plugin_share",
       "windows_sandbox_readiness",
     ]);
-    expect(report.warnings.map((warning) => warning.id)).toContain("writable_roots_metadata_only");
-    expect(formatCodexRuntimeCompatibilityReport(report)).toContain(
-      "status: degraded (compatible with fallbacks)",
-    );
+    expect(formatCodexRuntimeCompatibilityReport(report)).toContain("status: compatible");
   });
 
   it("blocks when a hard-required App Server runtime semantic disappears", () => {

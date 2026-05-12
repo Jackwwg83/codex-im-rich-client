@@ -148,7 +148,7 @@ describe("local lifecycle command wrappers", () => {
         packageVersion: "0.1.0-phase7",
         gitSha: "abc123",
         gitTag: "v0.1.0",
-        codexVersion: "0.128.0",
+        codexVersion: "0.130.0",
         installedAt: "2026-05-09T12:00:00.000Z",
       },
     });

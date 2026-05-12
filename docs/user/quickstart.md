@@ -161,8 +161,7 @@ After your first turn works, try these IM commands:
 
 - `/rename <title>` — rename the current thread (synced to Codex when supported).
 - `/archive` and `/unarchive` — manage thread lifecycle.
-- `/fork [--exclude-turns]` — fork the current thread; opt in to a
-  metadata-only fork with the flag.
+- `/fork [thread]` — fork the current or selected conversation.
 - `/status` — see binding, pending approvals, and Codex remote-control status.
 
 Then:

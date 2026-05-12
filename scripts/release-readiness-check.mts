@@ -564,7 +564,7 @@ auto_migrate = true
 
 [codex]
 binary = "codex"
-version_pin = "0.128.0"
+version_pin = "0.130.0"
 
 [security]
 allowed_users = []

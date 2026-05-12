@@ -8,7 +8,7 @@ import {
 } from "./check-codex-runtime-compatibility.mts";
 
 describe("check-codex-runtime-compatibility", () => {
-  it("returns success for degraded-but-compatible schemas and exit 2 for blocked schemas", () => {
+  it("returns success for warning-only schemas and exit 2 for blocked schemas", () => {
     const schemaDir = mkdtempSync(join(tmpdir(), "codex-im-runtime-check-"));
     try {
       writeSchemaBundle(schemaDir, {
@@ -27,7 +27,7 @@ describe("check-codex-runtime-compatibility", () => {
       const report = checkCodexRuntimeCompatibilityFromSchemaDir({
         schemaDir,
         runtimeVersion: "codex-cli 0.130.0",
-        generatedProtocolVersion: "0.128.0",
+        generatedProtocolVersion: "0.130.0",
         writableRootsConfigured: true,
       });
 
