@@ -82,6 +82,7 @@ import {
   promptInput,
   readArrayField,
   readNumberField,
+  readRecord,
   readStringField,
   redactMetadata,
   safeDisplayCwd,
@@ -92,7 +93,11 @@ import {
   targetKey,
   textInput,
 } from "./format.js";
-import { type ImOutputLanguage, resolveTurnOutputPolicy } from "./im-output-policy.js";
+import {
+  type ImOutputLanguage,
+  redactLocalPathsForNormalIm,
+  resolveTurnOutputPolicy,
+} from "./im-output-policy.js";
 import { importNativeThreads } from "./native-thread-refresh.js";
 import { PruneSweep } from "./prune-sweep.js";
 import { MutationRateLimit } from "./rate-limit.js";
@@ -428,6 +433,10 @@ interface DaemonCodexRuntime {
     readonly limit?: number | null;
     readonly archived?: boolean | null;
     readonly sortDirection?: string | null;
+  }): MaybePromise<unknown>;
+  threadRead?(params: {
+    readonly threadId: string;
+    readonly includeTurns: boolean;
   }): MaybePromise<unknown>;
 }
 
@@ -2182,6 +2191,11 @@ export class Daemon {
       return;
     }
 
+    if (command.name === "thread") {
+      await this.#routeThreadCommand(inbound, command);
+      return;
+    }
+
     if (command.name === "status") {
       await this.#routeStatusCommand(inbound);
       return;
@@ -2302,6 +2316,7 @@ export class Daemon {
         "/new <task> - Start a new Codex conversation and send the first prompt.",
         "/new --title <title> - Start an empty titled conversation.",
         "/threads - List native Codex conversations.",
+        "/thread <thread> - Show native Codex conversation details before switching.",
         "/switch <thread> - Resume and switch to a known Codex conversation.",
         "/alias <title> - Set a local IM-only title for the current thread (never sent to Codex).",
         "/rename <title> - Rename current thread (synced to Codex when supported).",
@@ -2530,6 +2545,77 @@ export class Daemon {
         ...records.map((record, index) => this.#formatThreadListLine(index + 1, record, route)),
       ].join("\n"),
     );
+  }
+
+  async #routeThreadCommand(
+    inbound: { target: Target; sender: SecurityPolicySender; messageRef?: DaemonMessageRef },
+    command: Extract<CommandRouterResult, { kind: "command" }>,
+  ): Promise<void> {
+    const [selector] = command.args;
+    if (selector === undefined || selector === "--help" || selector === "-h") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Usage: /thread <thread>\nShow details for a Codex conversation before switching.",
+      );
+      return;
+    }
+
+    const runtime = this.#currentRuntime();
+    if (runtime?.threadRead === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread details unavailable.");
+      return;
+    }
+
+    if (runtime.threadList !== undefined) {
+      try {
+        const nativeThreads = this.#nativeThreadEntries(
+          await runtime.threadList({ limit: 20, archived: false, sortDirection: "desc" }),
+        );
+        const nativeSelected = this.#selectNativeThread(nativeThreads, selector);
+        if (nativeSelected.kind === "ambiguous") {
+          await this.#editInboundMessage(
+            inbound.messageRef,
+            "Ambiguous thread selector. Use the number from /threads.",
+          );
+          return;
+        }
+        if (nativeSelected.kind === "selected") {
+          await this.#showNativeThreadDetail(inbound, nativeSelected.thread, nativeSelected.index);
+          return;
+        }
+      } catch (error) {
+        this.#emitAuditEvent("runtime.thread_list_failed", {
+          target: inbound.target,
+          result: "failed",
+          metadata: { error: errorMessage(error) },
+        });
+      }
+    }
+
+    const repository = this.#threadSessionRepository();
+    if (repository?.listForTarget === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Thread session store unavailable.");
+      return;
+    }
+    const records = repository
+      .listForTarget(inbound.target, { limit: 20 })
+      .filter((record) => this.#projectAllowed(record.projectId, inbound.target, inbound.sender));
+    const selected = this.#selectThreadRecord(records, selector);
+    if (selected.kind === "missing") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Unknown thread selector. Send /threads first.",
+      );
+      return;
+    }
+    if (selected.kind === "ambiguous") {
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        "Ambiguous thread selector. Use the number from /threads.",
+      );
+      return;
+    }
+    await this.#showStoredThreadDetail(inbound, selected.record, selected.index);
   }
 
   async #routeSwitchCommand(
@@ -4231,6 +4317,149 @@ export class Daemon {
     return `${selector}. ${thread.title}\nproject: ${projectDisplayNameFromCwd(thread.cwd)}${updated}\nid: ${this.#shortId(
       thread.threadId,
     )}`;
+  }
+
+  async #showNativeThreadDetail(
+    inbound: { target: Target; messageRef?: DaemonMessageRef },
+    thread: DaemonNativeThreadEntry,
+    index: number,
+  ): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.threadRead === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread details unavailable.");
+      return;
+    }
+    try {
+      const response = await runtime.threadRead({
+        threadId: thread.threadId,
+        includeTurns: true,
+      });
+      const detailInput = {
+        selector: index + 1,
+        threadId: thread.threadId,
+        title: thread.title,
+        projectLabel: projectDisplayNameFromCwd(thread.cwd),
+        response,
+        ...(thread.updatedAt === undefined ? {} : { updatedAt: thread.updatedAt }),
+      };
+      await this.#editInboundMessage(inbound.messageRef, this.#formatThreadDetail(detailInput));
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_read_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: thread.threadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread details unavailable.");
+    }
+  }
+
+  async #showStoredThreadDetail(
+    inbound: { target: Target; messageRef?: DaemonMessageRef },
+    record: ThreadSessionRecord,
+    index: number,
+  ): Promise<void> {
+    const runtime = this.#currentRuntime();
+    if (runtime?.threadRead === undefined) {
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread details unavailable.");
+      return;
+    }
+    try {
+      const response = await runtime.threadRead({
+        threadId: record.codexThreadId,
+        includeTurns: true,
+      });
+      await this.#editInboundMessage(
+        inbound.messageRef,
+        this.#formatThreadDetail({
+          selector: index + 1,
+          threadId: record.codexThreadId,
+          title: record.title ?? this.#sessionProjectLabel(record),
+          projectLabel: this.#sessionProjectLabel(record),
+          response,
+        }),
+      );
+    } catch (error) {
+      this.#emitAuditEvent("runtime.thread_read_failed", {
+        target: inbound.target,
+        result: "failed",
+        metadata: { error: errorMessage(error), threadId: record.codexThreadId },
+      });
+      await this.#editInboundMessage(inbound.messageRef, "Codex thread details unavailable.");
+    }
+  }
+
+  #formatThreadDetail(input: {
+    readonly selector: number;
+    readonly threadId: string;
+    readonly title: string;
+    readonly projectLabel: string;
+    readonly response: unknown;
+    readonly updatedAt?: number;
+  }): string {
+    const thread = readRecord(readRecord(input.response)?.thread);
+    const title = this.#sanitizeThreadTitle(
+      readStringField(thread, "name") ??
+        readStringField(thread, "preview") ??
+        input.title ??
+        input.threadId,
+    );
+    const status = readStringField(thread, "status");
+    const updatedAt = readNumberField(thread, "updatedAt") ?? input.updatedAt;
+    const lines = [
+      `Thread ${input.selector}: ${title}`,
+      `project: ${input.projectLabel}`,
+      status === undefined ? undefined : `status: ${status}`,
+      updatedAt === undefined ? undefined : `updated: ${this.#formatThreadTimestamp(updatedAt)}`,
+      `id: ${this.#shortId(input.threadId)}`,
+    ].filter(isDefined);
+    const snippets = this.#threadDetailSnippets(thread);
+    if (snippets.length > 0) {
+      lines.push("Recent content:", ...snippets.map((snippet) => `- ${snippet}`));
+    } else {
+      lines.push("Recent content: unavailable in this Codex response.");
+    }
+    lines.push("Use:", `/switch ${input.selector}`);
+    return lines.join("\n");
+  }
+
+  #threadDetailSnippets(thread: Record<string, unknown> | undefined): string[] {
+    const turns = readArrayField(thread, "turns");
+    const snippets: string[] = [];
+    for (const turn of turns) {
+      for (const item of readArrayField(turn, "items")) {
+        const itemRecord = readRecord(item);
+        const type = readStringField(itemRecord, "type");
+        if (type === "userMessage") {
+          const text = readArrayField(itemRecord, "content")
+            .map((content) =>
+              readStringField(content, "type") === "text" ? readStringField(content, "text") : "",
+            )
+            .filter((part): part is string => part !== undefined && part.length > 0)
+            .join(" ");
+          if (text.length > 0) {
+            snippets.push(`user: ${this.#threadSnippet(text)}`);
+          }
+          continue;
+        }
+        if (type === "agentMessage") {
+          const text = readStringField(itemRecord, "text");
+          if (text !== undefined && text.length > 0) {
+            snippets.push(`assistant: ${this.#threadSnippet(text)}`);
+          }
+        }
+      }
+    }
+    return snippets.slice(-6);
+  }
+
+  #threadSnippet(text: string): string {
+    const normalized = redactLocalPathsForNormalIm(text).replace(/\s+/gu, " ").trim();
+    return normalized.length <= 180 ? normalized : `${normalized.slice(0, 177)}...`;
+  }
+
+  #formatThreadTimestamp(seconds: number): string {
+    const millis = seconds > 10_000_000_000 ? seconds : seconds * 1000;
+    return Number.isFinite(millis) ? new Date(millis).toISOString() : String(seconds);
   }
 
   #selectNativeThread(

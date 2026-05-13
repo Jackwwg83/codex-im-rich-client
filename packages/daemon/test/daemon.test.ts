@@ -3873,6 +3873,116 @@ describe("Daemon skeleton (T14)", () => {
     );
   });
 
+  it("routes /thread to native Codex thread details without exposing cwd", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const nativeThread = {
+      id: "thread-native-abcdefghijklmnopqrstuvwxyz",
+      preview: "Fix login test",
+      cwd: "/Users/alice/dev/web",
+      name: "Login fix",
+      updatedAt: 1778252400,
+      createdAt: 1778250000,
+      status: "idle",
+      source: { kind: "appServer" },
+    };
+    const runtime = {
+      threadList: vi.fn(() => ({
+        data: [nativeThread],
+        nextCursor: null,
+        backwardsCursor: null,
+      })),
+      threadRead: vi.fn(() => ({
+        thread: {
+          ...nativeThread,
+          turns: [
+            {
+              id: "turn-1",
+              status: "completed",
+              itemsView: "full",
+              items: [
+                {
+                  type: "userMessage",
+                  id: "item-user",
+                  content: [{ type: "text", text: "请修一下登录测试", text_elements: [] }],
+                },
+                {
+                  type: "agentMessage",
+                  id: "item-agent",
+                  text: "我更新了登录测试并跑过验证。",
+                  phase: null,
+                  memoryCitation: null,
+                },
+              ],
+            },
+          ],
+        },
+      })),
+      threadStart: vi.fn(),
+      threadResume: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: {} }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({ resolve: vi.fn(() => ({ kind: "unbound" as const, target })) }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository: {
+        upsert: vi.fn(),
+        listForTarget: vi.fn(() => []),
+        switchCurrent: vi.fn(),
+      },
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/thread 1",
+      messageRef: { target, messageId: "msg-native-thread-detail" },
+      receivedAt: new Date("2026-05-08T15:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadList).toHaveBeenCalledWith({
+      limit: 20,
+      archived: false,
+      sortDirection: "desc",
+    });
+    expect(runtime.threadRead).toHaveBeenCalledWith({
+      threadId: "thread-native-abcdefghijklmnopqrstuvwxyz",
+      includeTurns: true,
+    });
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("Thread 1: Login fix");
+    expect(body).toContain("project: web");
+    expect(body).toContain("status: idle");
+    expect(body).toContain("user: 请修一下登录测试");
+    expect(body).toContain("assistant: 我更新了登录测试并跑过验证。");
+    expect(body).toContain("Use:");
+    expect(body).toContain("/switch 1");
+    expect(body).not.toContain("/Users/alice");
+    expect(body).not.toContain("dev/web");
+    expect(body).not.toContain("thread-native-abcdefghijklmnopqrstuvwxyz");
+  });
+
   it("imports native Codex threads on /threads --refresh without promoting cwd to a configured project", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const now = new Date("2026-05-09T15:20:00.000Z");

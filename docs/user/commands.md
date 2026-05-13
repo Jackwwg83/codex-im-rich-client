@@ -51,6 +51,7 @@ admin logs when you need technical detail.
 | `/new --title <title>` | Start an empty conversation with an IM-local title; does not start a Codex turn. |
 | `/threads` | List recent native Codex App Server conversations, including conversations created from Codex App or CLI. |
 | `/threads --refresh` | Import recent native Codex App Server conversations into the local IM thread index without promoting their cwd to configured projects. |
+| `/thread <number-or-thread-prefix>` | Show redacted details and recent content for a listed native Codex conversation before switching. |
 | `/switch <number-or-thread-prefix>` | Resume and bind this IM chat to a listed native Codex conversation. |
 | `/alias <name>` | Give the current conversation a local title (IM only; never sent to Codex). |
 | `/rename <title>` | Rename the current thread. Synced to Codex App Server when supported; otherwise updates the local alias and tells you Codex was not changed. |
