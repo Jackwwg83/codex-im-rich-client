@@ -64,7 +64,8 @@ pnpm codex-im:upgrade --plan
   no mutation, no git fetch unless --refresh is explicit
 
 pnpm codex-im:upgrade --apply
-  mutating path, requires clean worktree
+  mutating path, requires clean worktree, activates the current checkout and
+  restarts launchd
 
 pnpm codex-im:rollback
   manual rollback, no DB restore unless --restore-db
@@ -81,15 +82,12 @@ Allowed:
 - `upgrade --check`;
 - `upgrade --plan`;
 - `upgrade --apply --dry-run`.
+- `upgrade --apply` current-checkout activation.
 
 Forbidden:
 
-- real upgrade apply;
 - real rollback restore;
 - git checkout;
-- `pnpm install` from an upgrade command;
-- bridge install mutation;
-- launchd mutation;
 - DB backup/restore mutation;
 - Keychain secret reads/writes outside existing setup wizard.
 

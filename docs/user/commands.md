@@ -69,19 +69,22 @@ pnpm codex-im:status
 pnpm codex-im:upgrade --check
 pnpm codex-im:upgrade --plan
 pnpm codex-im:upgrade --apply --dry-run
+pnpm codex-im:upgrade --apply
 ```
 
 `codex-im:status` is local-only by default. `upgrade --check` may contact the
 git remote and refresh `~/.codex-im-bridge/update-check.json`; the cache is
 advisory and never contains IM secrets.
 
-In this alpha release, the upgrade and rollback flows are not fully wired up:
+In this alpha release, source-checkout upgrade apply is wired up:
 
 - `pnpm codex-im:upgrade --apply --dry-run` previews the upgrade plan but does
-  not actually upgrade. A real `--apply` (no `--dry-run`) is rejected with an
-  explanatory error.
+  not actually upgrade.
+- `pnpm codex-im:upgrade --apply` activates the current checkout, rebuilds and
+  installs the daemon bundle, restarts launchd, and runs local status/doctor
+  checks. It requires a clean worktree.
 - `pnpm codex-im:rollback` is rejected with an explanatory error. To roll back
-  today, check out the previous tag and re-run `pnpm codex-im:install`.
+  today, check out the previous tag and run `pnpm codex-im:upgrade --apply`.
 
 | Command | Use |
 |---|---|

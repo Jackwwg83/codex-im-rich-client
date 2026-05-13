@@ -570,7 +570,7 @@ pnpm lint
 pnpm protocol:check
 ```
 
-## Slice 1
+## Original Slice 1
 
 Implement only non-mutating lifecycle expansion:
 
@@ -583,18 +583,15 @@ Implement only non-mutating lifecycle expansion:
 6. Add `codex-im:upgrade --plan`.
 7. Add `codex-im:upgrade --apply --dry-run`.
 
-Forbidden in Slice 1:
+Forbidden in the original Slice 1:
 
-- no real upgrade apply;
 - no real rollback restore;
 - no git checkout;
-- no `pnpm install` from upgrade command;
-- no bridge install mutation;
-- no launchd mutation;
 - no DB backup/restore mutation;
 - no Keychain secret read/write beyond existing setup wizard;
 - no secret values in logs/docs/tests.
 
-Stop after Slice 1 with a completion report that includes files changed, tests,
-gates, unresolved design gaps, and the exact Slice 2 plan for real
-apply/backup/rollback.
+Follow-up on 2026-05-13 implemented current-checkout `upgrade --apply`: it
+installs dependencies, rebuilds/installs the bridge bundle, restarts launchd,
+and runs local status/doctor checks. It still does not fetch or checkout target
+tags by itself.

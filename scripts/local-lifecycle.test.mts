@@ -8,6 +8,7 @@ import {
   buildLocalStatusPlan,
   buildLocalUninstallPlan,
   buildLocalUpgradeApplyDryRunPlan,
+  buildLocalUpgradeApplyPlan,
   buildLocalUpgradePlan,
   buildUpdateCheckCache,
   clearSensitiveValues,
@@ -174,14 +175,44 @@ describe("local lifecycle command wrappers", () => {
     const rendered = plan.completionLines.join("\n");
     expect(plan.commands).toEqual([]);
     expect(rendered).toContain("mode: apply --dry-run");
-    expect(rendered).toContain("would: git fetch --tags");
+    expect(rendered).toContain("would: activate current checkout only");
     expect(rendered).toContain("would: pnpm install --frozen-lockfile");
     expect(rendered).toContain("would: pnpm check:codex-runtime-compatibility");
+    expect(rendered).toContain("would: pnpm launchd:restart");
     expect(rendered).not.toContain("would: pnpm check:codex-version");
-    expect(rendered).toContain("did not: git fetch");
-    expect(rendered).toContain("did not: checkout");
+    expect(rendered).not.toContain("would: git fetch");
+    expect(rendered).not.toContain("would: checkout");
+    expect(rendered).not.toContain("would: create SQLite-safe backup");
+    expect(rendered).not.toContain("would: acquire");
+    expect(rendered).not.toContain("upgrade-preflight");
     expect(rendered).toContain("did not: stop launchd");
+    expect(rendered).not.toContain("did not: backup");
     expect(rendered).toContain("did not: read/write Keychain");
+  });
+
+  it("plans a real current-checkout upgrade apply that refreshes the installed IM daemon", () => {
+    const plan = buildLocalUpgradeApplyPlan({
+      homeDir: "/Users/operator",
+      repoPath: "/repo/codex-im-rich-client",
+      dirtyWorktree: false,
+      target: "current-checkout",
+      currentGitSha: "abc123",
+    });
+
+    expect(plan.commands.map((command) => [command.label, command.command, command.args])).toEqual([
+      ["install-dependencies", "pnpm", ["install", "--frozen-lockfile"]],
+      ["codex-runtime-compatibility", "pnpm", ["check:codex-runtime-compatibility"]],
+      ["bridge-build", "pnpm", ["bridge:build"]],
+      ["bridge-install", "pnpm", ["bridge:install"]],
+      ["launchd-restart", "pnpm", ["launchd:restart"]],
+      ["launchd-status", "pnpm", ["launchd:status"]],
+      ["im-doctor", "pnpm", ["im:doctor"]],
+    ]);
+    const rendered = plan.completionLines.join("\n");
+    expect(rendered).toContain("mode: apply");
+    expect(rendered).toContain("installed bridge refreshed from current checkout");
+    expect(rendered).toContain("launchd restarted");
+    expect(rendered).toContain("IM traffic now uses the upgraded daemon bundle");
   });
 
   it("writes a redacted update-check cache", () => {
@@ -308,9 +339,9 @@ describe("local lifecycle command wrappers", () => {
     );
   });
 
-  it("rejects real `codex-im:upgrade --apply` and points at --dry-run only in this alpha", async () => {
-    await expect(main(["upgrade", "--apply"])).rejects.toThrow(
-      /apply \(planned for a later release/,
+  it("rejects target-based real apply because apply only activates the current checkout", async () => {
+    await expect(main(["upgrade", "--apply", "--target", "v0.1.1"])).rejects.toThrow(
+      /activates the current checkout/,
     );
   });
 

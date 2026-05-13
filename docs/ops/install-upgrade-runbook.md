@@ -39,11 +39,17 @@ Dry-run apply:
 pnpm codex-im:upgrade --apply --dry-run
 ```
 
+Apply the current checkout:
+
+```bash
+pnpm codex-im:upgrade --apply
+```
+
 Manual rollback:
 
 ```bash
-pnpm codex-im:rollback
-pnpm codex-im:rollback --restore-db
+git checkout <previous-tag>
+pnpm codex-im:upgrade --apply
 ```
 
 ## Default Semantics
@@ -53,10 +59,11 @@ pnpm codex-im:rollback --restore-db
 - `upgrade` defaults to `--plan`.
 - `upgrade --plan` does not mutate machine state and does not run `git fetch`
   unless `--refresh` is explicit.
-- `upgrade --apply` is the first command allowed to fetch, checkout, install,
-  build, backup, or change launchd state.
+- `upgrade --apply` activates the current checkout. It installs dependencies,
+  builds and installs the bridge bundle, restarts launchd, and runs local
+  status/doctor checks. It does not fetch or checkout by itself.
 - `upgrade --apply` requires a clean worktree in v1.
-- v1 normal upgrade targets are git tags only.
+- v1 normal source upgrades are tag-based: check out the tag first, then apply.
 - `--yes` skips confirmation only; it does not skip safety gates.
 
 ## Secret Rules
@@ -154,6 +161,7 @@ pnpm codex-im:status --check-updates
 pnpm codex-im:upgrade --check
 pnpm codex-im:upgrade --plan
 pnpm codex-im:upgrade --apply --dry-run
+pnpm codex-im:upgrade --apply
 ```
 
 Expected properties:
@@ -164,5 +172,6 @@ Expected properties:
 - `upgrade --check` writes only redacted cache;
 - `upgrade --plan` makes no filesystem changes;
 - `upgrade --apply --dry-run` makes no filesystem changes;
-- dirty worktree blocks real apply in the plan;
+- dirty worktree blocks real apply;
+- real apply refreshes the installed daemon bundle and restarts launchd;
 - logs and output are redacted.

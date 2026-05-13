@@ -139,14 +139,14 @@ Back up before risky local changes, upgrades, or platform reconfiguration.
 
 ```bash
 git pull
-pnpm install
-pnpm check:codex-runtime-compatibility
-pnpm im:doctor
-pnpm bridge:build
-pnpm bridge:install
-launchctl kickstart -k gui/$(id -u)/io.codex-im-bridge
-pnpm launchd:status
+pnpm codex-im:upgrade --apply
 ```
+
+`upgrade --apply` activates the current checkout: it installs dependencies,
+checks Codex runtime compatibility, rebuilds and installs the bridge bundle,
+restarts launchd, and runs status/doctor checks. This matters because launchd
+runs the installed bundle in `~/.codex-im-bridge/app/daemon.mjs`, not the source
+tree directly.
 
 If `CODEX_VERSION` changed, upgrade Codex first and let maintainers review
 protocol-generation changes before using the new runtime.
@@ -164,14 +164,11 @@ to remove saved IM credentials.
 ## Rollback Is Not Yet Wired
 
 In this alpha, `pnpm codex-im:rollback` is rejected with an explanatory
-error. The combined upgrade-and-restart flow under `codex-im:upgrade --apply`
-is also not yet implemented (a real `--apply` without `--dry-run` is
-rejected). To roll back today:
+error. To roll back today:
 
 ```bash
 git checkout v0.1.0-alpha.3   # or whichever previous tag
-pnpm install
-pnpm codex-im:install --platform <your-platform>
+pnpm codex-im:upgrade --apply
 ```
 
 This re-runs the local installer against the older tag. Your config and

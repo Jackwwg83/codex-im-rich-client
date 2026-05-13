@@ -223,8 +223,8 @@ export function buildLocalUpgradePlan(options: LocalUpgradeOptions = {}): LocalC
     dirtyWorktree
       ? "apply: blocked (dirty worktree; commit or stash before --apply)"
       : "apply: allowed by worktree preflight",
-    "next: pnpm codex-im:upgrade --apply --dry-run --target <tag>",
-    "note: real --apply is not yet implemented in this alpha; only --apply --dry-run is supported.",
+    "next: check out the target tag or pull the desired commit, then run pnpm codex-im:upgrade --apply",
+    "note: real --apply activates the current checkout; it does not fetch or checkout targets.",
   ];
   return { title: "codex-im upgrade plan", commands: [], completionLines: lines };
 }
@@ -240,30 +240,46 @@ export function buildLocalUpgradeApplyDryRunPlan(
     dirtyWorktree
       ? "apply: blocked (dirty worktree; dry-run only)"
       : "apply: would pass worktree preflight",
-    "would: acquire ~/.codex-im-bridge/upgrade.lock",
-    "would: run upgrade-preflight doctor",
-    "would: stop launchd if needed",
-    "would: create SQLite-safe backup",
-    "would: git fetch --tags",
-    "would: checkout target tag",
+    "would: activate current checkout only",
     "would: pnpm install --frozen-lockfile",
     "would: pnpm check:codex-runtime-compatibility",
     "would: pnpm bridge:build",
-    "would: install bridge staging/release",
-    "would: pnpm launchd:install",
+    "would: pnpm bridge:install",
+    "would: pnpm launchd:restart",
     "would: pnpm launchd:status",
-    "would: pnpm im:doctor --scope upgrade-preflight",
-    "did not: git fetch",
-    "did not: checkout",
+    "would: pnpm im:doctor",
     "did not: pnpm install",
     "did not: build",
-    "did not: backup",
     "did not: stop launchd",
     "did not: install bridge",
-    "did not: install launchd",
+    "did not: restart launchd",
     "did not: read/write Keychain",
   ];
   return { title: "codex-im upgrade apply dry-run", commands: [], completionLines: lines };
+}
+
+export function buildLocalUpgradeApplyPlan(options: LocalUpgradeOptions = {}): LocalCommandPlan {
+  const target =
+    options.target ?? options.currentGitTag ?? options.currentGitSha ?? "current-checkout";
+  return {
+    title: "codex-im upgrade apply",
+    commands: [
+      command("install-dependencies", "pnpm", ["install", "--frozen-lockfile"]),
+      command("codex-runtime-compatibility", "pnpm", ["check:codex-runtime-compatibility"]),
+      command("bridge-build", "pnpm", ["bridge:build"]),
+      command("bridge-install", "pnpm", ["bridge:install"]),
+      command("launchd-restart", "pnpm", ["launchd:restart"]),
+      command("launchd-status", "pnpm", ["launchd:status"]),
+      command("im-doctor", "pnpm", ["im:doctor"]),
+    ],
+    completionLines: [
+      "mode: apply",
+      `target: ${target}`,
+      "installed bridge refreshed from current checkout",
+      "launchd restarted",
+      "IM traffic now uses the upgraded daemon bundle.",
+    ],
+  };
 }
 
 export function writeUpdateCheckCache(options: WriteUpdateCheckCacheOptions): string {
@@ -631,6 +647,11 @@ function parseUpgradeOptions(args: readonly string[]): {
   if (yes && common.dryRun) {
     throw new Error("codex-im:upgrade: --yes is ignored for --dry-run and cannot skip gates");
   }
+  if (mode === "apply" && !common.dryRun && target !== undefined) {
+    throw new Error(
+      "codex-im:upgrade: --apply activates the current checkout only; check out the target tag first, then run pnpm codex-im:upgrade --apply without --target",
+    );
+  }
   const installedMetadata = readInstalledMetadata();
   const gitState = detectLocalGitState();
   if (mode === "check") {
@@ -641,14 +662,20 @@ function parseUpgradeOptions(args: readonly string[]): {
     };
   }
   if (mode === "apply") {
-    if (!common.dryRun) {
+    if (common.dryRun) {
+      return {
+        dryRun: false,
+        plan: buildLocalUpgradeApplyDryRunPlan({ target, installedMetadata, ...gitState }),
+      };
+    }
+    if (gitState.dirtyWorktree) {
       throw new Error(
-        "codex-im:upgrade: apply (planned for a later release; current alpha only supports --apply --dry-run). To upgrade today: check out the target tag and re-run pnpm codex-im:install.",
+        "codex-im:upgrade: apply blocked by dirty worktree; commit or stash local changes, then rerun pnpm codex-im:upgrade --apply",
       );
     }
     return {
       dryRun: false,
-      plan: buildLocalUpgradeApplyDryRunPlan({ target, installedMetadata, ...gitState }),
+      plan: buildLocalUpgradeApplyPlan({ target, installedMetadata, ...gitState }),
     };
   }
   return {
@@ -662,7 +689,7 @@ function parseRollbackOptions(_args: readonly string[]): {
   readonly dryRun: boolean;
 } {
   throw new Error(
-    "codex-im:rollback: not yet implemented; reinstall a previous tag manually (git checkout <tag> && pnpm install && pnpm codex-im:install)",
+    "codex-im:rollback: not yet implemented; check out the previous tag manually, then run pnpm codex-im:upgrade --apply",
   );
 }
 

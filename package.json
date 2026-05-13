@@ -43,6 +43,7 @@
     "release:check": "tsx scripts/release-readiness-check.mts",
     "launchd:prepare": "node bin/prepare-launchd-runtime.mjs",
     "launchd:install": "node bin/install-launchd.mjs",
+    "launchd:restart": "node bin/restart-launchd.mjs",
     "launchd:status": "node bin/launchd-status.mjs",
     "launchd:uninstall": "node bin/uninstall-launchd.mjs",
     "setup:im": "tsx scripts/setup-im.mts",

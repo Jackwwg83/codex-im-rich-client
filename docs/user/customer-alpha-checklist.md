@@ -73,12 +73,15 @@ If something fails, run `pnpm codex-im:status` locally before reporting.
 pnpm codex-im:status               # local-only readiness summary
 pnpm codex-im:upgrade --check      # remote tag check (writes a redacted cache)
 pnpm codex-im:upgrade --plan       # show planned upgrade target
+pnpm codex-im:upgrade --apply      # activate the current checkout, reinstall, restart daemon
 pnpm codex-im:uninstall            # remove daemon + LaunchAgent (keeps config)
 ```
 
-In this alpha, `pnpm codex-im:upgrade --apply` (without `--dry-run`) and
-`pnpm codex-im:rollback` are rejected with explanatory errors. To roll back,
-check out the previous tag and re-run `pnpm codex-im:install`.
+In this alpha, `pnpm codex-im:upgrade --apply` activates the current source
+checkout: it installs dependencies, rebuilds the daemon bundle, installs it
+under `~/.codex-im-bridge`, restarts launchd, then runs status/doctor checks.
+It requires a clean worktree. `pnpm codex-im:rollback` is still rejected; to
+roll back, check out the previous tag and run `pnpm codex-im:upgrade --apply`.
 
 ## When You Get Stuck
 

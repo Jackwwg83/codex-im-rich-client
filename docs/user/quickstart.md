@@ -104,11 +104,17 @@ pnpm codex-im:upgrade --plan
 pnpm codex-im:upgrade --apply --dry-run
 ```
 
-> Alpha caveat: a real `pnpm codex-im:upgrade --apply` (without `--dry-run`)
-> is not yet implemented in this release; it is rejected with an explanatory
-> error. The three commands above are the supported upgrade-related
-> operations today. `pnpm codex-im:rollback` is similarly rejected; to roll
-> back, check out the previous tag and re-run `pnpm codex-im:install`.
+After you update the source checkout to a new tag or commit, run:
+
+```bash
+pnpm codex-im:upgrade --apply
+```
+
+This activates the current checkout by installing dependencies, rebuilding and
+installing the daemon bundle, restarting launchd, and running local status and
+doctor checks. It requires a clean worktree. `pnpm codex-im:rollback` is still
+rejected; to roll back, check out the previous tag and run
+`pnpm codex-im:upgrade --apply`.
 
 You can also preview the install without making changes:
 
