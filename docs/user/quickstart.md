@@ -75,6 +75,11 @@ unless you are deliberately testing this bridge project. The generated config
 uses normal IM output by default so customer chats do not show internal status,
 token usage, skill-loading commands, or command-log attachments.
 
+Setup also asks for native thread visibility. Keep the default
+`project_limited` for shared, group, or team bots. Choose `personal` only for a
+private single-user IM bot when you want that bot to view and switch all local
+Codex App conversations on this Mac.
+
 ## 5. Manual Install Steps
 
 If you want to see each boundary separately, run the expanded sequence:

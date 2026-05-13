@@ -51,6 +51,7 @@ function makeConfig(projects: Record<string, { cwd: string; writableRoots: strin
       output: {
         mode: "normal",
       },
+      nativeThreadVisibility: "project_limited",
     },
     adapters: {
       telegram: { enabled: false, botTokenEnv: "" },

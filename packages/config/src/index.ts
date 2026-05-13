@@ -44,6 +44,7 @@ export interface CodexImConfig {
     output: {
       mode: "normal" | "verbose" | "debug";
     };
+    nativeThreadVisibility: "project_limited" | "personal";
   };
   adapters: {
     telegram: {
@@ -153,6 +154,7 @@ const imConfigDefaults = {
   output: {
     mode: "normal" as const,
   },
+  native_thread_visibility: "project_limited" as const,
 };
 
 const DEFAULT_MAX_INBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024;
@@ -242,6 +244,9 @@ const rawConfigSchema = z
           })
           .strict()
           .default(imConfigDefaults.output),
+        native_thread_visibility: z
+          .enum(["project_limited", "personal"])
+          .default(imConfigDefaults.native_thread_visibility),
       })
       .strict()
       .default(imConfigDefaults),
@@ -371,6 +376,7 @@ export function parseConfigToml(source: string): CodexImConfig {
       output: {
         mode: parsed.im.output.mode,
       },
+      nativeThreadVisibility: parsed.im.native_thread_visibility,
     },
     adapters: {
       telegram: {

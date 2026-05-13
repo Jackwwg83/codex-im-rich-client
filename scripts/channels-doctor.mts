@@ -466,6 +466,7 @@ function formatCodexChecks(input: {
     checks.push(runtimeCompatibilityCheck(input.runtimeCompatibility));
   }
   checks.push(writableRootsEnforcementCheck(input.config, input.writableRootsEnforced));
+  checks.push(nativeThreadVisibilityCheck(input.config));
   return checks;
 }
 
@@ -526,6 +527,22 @@ function writableRootsEnforcementCheck(
 
 function hasConfiguredWritableRoots(config: CodexImConfig): boolean {
   return Object.values(config.projects).some((project) => project.writableRoots.length > 0);
+}
+
+function nativeThreadVisibilityCheck(config: CodexImConfig): DoctorCheck {
+  if (config.im.nativeThreadVisibility === "project_limited") {
+    return {
+      name: "native_thread_visibility",
+      status: "pass",
+      detail: "project_limited; native thread content is limited to configured projects",
+    };
+  }
+  return {
+    name: "native_thread_visibility",
+    status: "warn",
+    detail: "personal; allowlisted IM actors can view and switch all local Codex App threads",
+    fixes: ["Use project_limited for shared, group, or team IM bots."],
+  };
 }
 
 function formatInstalledChecks(installed: InstalledBridgeDoctorInput): readonly DoctorCheck[] {

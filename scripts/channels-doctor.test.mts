@@ -53,6 +53,9 @@ describe("channels doctor (JAC-237)", () => {
     expect(output).toContain(
       "writable_roots_enforcement: warn (writable_roots configured; metadata-only in this alpha)",
     );
+    expect(output).toContain(
+      "native_thread_visibility: pass (project_limited; native thread content is limited to configured projects)",
+    );
     expect(output).toContain("telegram: ready");
     expect(output).toContain("lark: ready");
     expect(output).toContain("dingtalk: ready");
@@ -156,6 +159,31 @@ describe("channels doctor (JAC-237)", () => {
     expect(output).not.toContain("xoxb-secret");
   });
 
+  it("warns when personal native thread visibility is enabled", () => {
+    const report = evaluateChannelsDoctor({
+      config: makeConfig({ nativeThreadVisibility: "personal" }),
+      configPath: "/tmp/config.toml",
+      lifecycle: { kind: "unavailable", reason: "not_checked" },
+      env: {
+        IM_TELEGRAM_BOT_TOKEN: "present",
+        IM_LARK_APP_SECRET: "present",
+        DINGTALK_CLIENT_SECRET: "present",
+        SLACK_BOT_TOKEN: "present",
+        SLACK_APP_TOKEN: "present",
+      },
+      keychainSecretPresent: () => false,
+      installed: { plistPresent: false },
+    });
+
+    const output = formatChannelsDoctorReport(report);
+
+    expect(report.status).toBe("attention");
+    expect(output).toContain(
+      "native_thread_visibility: warn (personal; allowlisted IM actors can view and switch all local Codex App threads)",
+    );
+    expect(output).toContain("fix: Use project_limited for shared, group, or team IM bots.");
+  });
+
   it("blocks when the local Codex runtime misses hard-required App Server semantics", () => {
     const report = evaluateChannelsDoctor({
       config: makeConfig({
@@ -199,6 +227,7 @@ function makeConfig(
     readonly securityAllowedChats?: string[];
     readonly projectAllowedUsers?: string[];
     readonly projectAllowedChats?: string[];
+    readonly nativeThreadVisibility?: "project_limited" | "personal";
   } = {},
 ): CodexImConfig {
   const securityAllowedUsers = input.securityAllowedUsers ?? [
@@ -248,6 +277,10 @@ function makeConfig(
       unknownAppPolicy: "deny",
       requireApprovalKeywords: [],
       liveSmokeEnabled: false,
+    },
+    im: {
+      output: { mode: "normal" },
+      nativeThreadVisibility: input.nativeThreadVisibility ?? "project_limited",
     },
     adapters: {
       telegram: { enabled: input.telegramEnabled ?? true, botTokenEnv: "IM_TELEGRAM_BOT_TOKEN" },

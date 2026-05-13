@@ -2156,7 +2156,10 @@ describe("Daemon skeleton (T14)", () => {
       createSecurityPolicy: () => ({
         checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
       }),
-      createSessionRouter: () => ({ resolve: vi.fn(() => ({ kind: "unbound" as const, target })) }),
+      createSessionRouter: () => ({
+        resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
+        replaceCachedBinding: vi.fn(),
+      }),
       createSupervisor: () => ({}),
       createAdapter: () => adapter,
     });
@@ -3802,7 +3805,7 @@ describe("Daemon skeleton (T14)", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: {} }),
+      loadConfig: () => ({ projects: { web: { cwd: "/Users/alice/dev/web" } } }),
       openStorage: () => ({}),
       createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
       createSecurityPolicy: () => ({
@@ -3873,6 +3876,161 @@ describe("Daemon skeleton (T14)", () => {
     );
   });
 
+  it("hides native Codex thread metadata by default when cwd is not configured", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const runtime = {
+      threadList: vi.fn(() => ({
+        data: [
+          {
+            id: "thread-hidden-abcdefghijklmnopqrstuvwxyz",
+            preview: "Private payroll refactor",
+            cwd: "/Users/alice/private/payroll",
+            name: "Private payroll thread",
+            updatedAt: 1778252400,
+          },
+        ],
+        nextCursor: null,
+        backwardsCursor: null,
+      })),
+      threadRead: vi.fn(),
+      threadResume: vi.fn(),
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: {} }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({
+        resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
+        replaceCachedBinding: vi.fn(),
+      }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository: {
+        upsert: vi.fn(),
+        listForTarget: vi.fn(() => []),
+        switchCurrent: vi.fn(),
+      },
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/threads",
+      messageRef: { target, messageId: "msg-native-threads-limited" },
+      receivedAt: new Date("2026-05-08T15:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    const [, body] = adapter.editText.mock.calls[0] as [unknown, string];
+    expect(body).toContain("No visible native Codex threads.");
+    expect(body).toContain("Hidden 1 native Codex thread outside configured projects.");
+    expect(body).not.toContain("Private payroll");
+    expect(body).not.toContain("payroll");
+    expect(body).not.toContain("thread-hidden");
+  });
+
+  it("blocks project-limited native /thread and /switch before reading or resuming", async () => {
+    let messageHandler: ((message: unknown) => void) | undefined;
+    const target = { platform: "telegram", chatId: "-allowed" };
+    const sender = { userId: "u-alice" };
+    const nativeThread = {
+      id: "thread-hidden-abcdefghijklmnopqrstuvwxyz",
+      preview: "Private payroll refactor",
+      cwd: "/Users/alice/private/payroll",
+      name: "Private payroll thread",
+      updatedAt: 1778252400,
+    };
+    const runtime = {
+      threadList: vi.fn(() => ({
+        data: [nativeThread],
+        nextCursor: null,
+        backwardsCursor: null,
+      })),
+      threadRead: vi.fn(),
+      threadResume: vi.fn(),
+      threadStart: vi.fn(),
+      turnStart: vi.fn(),
+      turnSteer: vi.fn(),
+      turnInterrupt: vi.fn(),
+    };
+    const adapter = {
+      onAction: vi.fn(() => () => {}),
+      onMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
+        return () => {};
+      }),
+      editText: vi.fn(),
+    };
+
+    const daemon = new Daemon({
+      loadConfig: () => ({ projects: {} }),
+      openStorage: () => ({}),
+      createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
+      createSecurityPolicy: () => ({
+        checkUserAndChat: vi.fn(() => ({ kind: "allow" as const })),
+      }),
+      createSessionRouter: () => ({
+        resolve: vi.fn(() => ({ kind: "unbound" as const, target })),
+        replaceCachedBinding: vi.fn(),
+      }),
+      createSupervisor: () => ({ currentRuntime: () => runtime }),
+      createAdapter: () => adapter,
+      threadSessionRepository: {
+        upsert: vi.fn(),
+        listForTarget: vi.fn(() => []),
+        switchCurrent: vi.fn(),
+      },
+    });
+
+    await daemon.start();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/thread 1",
+      messageRef: { target, messageId: "msg-native-thread-limited" },
+      receivedAt: new Date("2026-05-08T15:00:00.000Z"),
+    });
+    await flushDaemonHandlers();
+    messageHandler?.({
+      target,
+      sender,
+      text: "/switch 1",
+      messageRef: { target, messageId: "msg-native-switch-limited" },
+      receivedAt: new Date("2026-05-08T15:01:00.000Z"),
+    });
+    await flushDaemonHandlers();
+
+    expect(runtime.threadRead).not.toHaveBeenCalled();
+    expect(runtime.threadResume).not.toHaveBeenCalled();
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-native-thread-limited" },
+      "This Codex conversation is outside configured projects. Use personal native thread visibility only for a private single-user IM bot, or add the project during setup.",
+    );
+    expect(adapter.editText).toHaveBeenCalledWith(
+      { target, messageId: "msg-native-switch-limited" },
+      "This Codex conversation is outside configured projects. Use personal native thread visibility only for a private single-user IM bot, or add the project during setup.",
+    );
+  });
+
   it("routes /thread to native Codex thread details without exposing cwd", async () => {
     let messageHandler: ((message: unknown) => void) | undefined;
     const target = { platform: "telegram", chatId: "-allowed" };
@@ -3910,7 +4068,7 @@ describe("Daemon skeleton (T14)", () => {
                 {
                   type: "agentMessage",
                   id: "item-agent",
-                  text: "我更新了登录测试并跑过验证。",
+                  text: "我更新了登录测试并跑过验证。Authorization: Bearer live-token-secret-value-1234567890",
                   phase: null,
                   memoryCitation: null,
                 },
@@ -3935,7 +4093,7 @@ describe("Daemon skeleton (T14)", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: {} }),
+      loadConfig: () => ({ im: { nativeThreadVisibility: "personal" }, projects: {} }),
       openStorage: () => ({}),
       createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
       createSecurityPolicy: () => ({
@@ -3976,6 +4134,7 @@ describe("Daemon skeleton (T14)", () => {
     expect(body).toContain("status: idle");
     expect(body).toContain("user: 请修一下登录测试");
     expect(body).toContain("assistant: 我更新了登录测试并跑过验证。");
+    expect(body).not.toContain("live-token-secret-value");
     expect(body).toContain("Use:");
     expect(body).toContain("/switch 1");
     expect(body).not.toContain("/Users/alice");
@@ -4042,7 +4201,7 @@ describe("Daemon skeleton (T14)", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: {} }),
+      loadConfig: () => ({ im: { nativeThreadVisibility: "personal" }, projects: {} }),
       openStorage: () => ({}),
       createBroker: () => ({ attach: vi.fn(), enablePendingMode: vi.fn() }),
       createSecurityPolicy: () => ({
@@ -4356,7 +4515,7 @@ describe("Daemon skeleton (T14)", () => {
     };
 
     const daemon = new Daemon({
-      loadConfig: () => ({ projects: {} }),
+      loadConfig: () => ({ im: { nativeThreadVisibility: "personal" }, projects: {} }),
       openStorage: () => ({}),
       createBroker: () => ({
         attach: vi.fn(),

@@ -115,6 +115,10 @@ describe("@codex-im/config (T7-T8)", () => {
       requireApprovalKeywords: ["login", "password", "token"],
       liveSmokeEnabled: false,
     });
+    expect(config.im).toEqual({
+      output: { mode: "normal" },
+      nativeThreadVisibility: "project_limited",
+    });
     expect(config.projects.web).toMatchObject({
       cwd: "/Users/mini/code/web",
       writableRoots: ["/Users/mini/code/web"],
@@ -220,6 +224,49 @@ allowed_channel_ids    = ["T_TEST:C_TEST"]
       appTokenEnv: "SLACK_APP_TOKEN",
       allowedChannelIds: [],
     });
+  });
+
+  it("parses explicit personal native thread visibility opt-in", () => {
+    const config = parseConfigToml(`
+      [daemon]
+      data_dir = "~/.codex-im-bridge"
+      log_dir = "~/.codex-im-bridge/logs"
+
+      [storage]
+      sqlite_path = "~/.codex-im-bridge/state.db"
+      auto_migrate = true
+
+      [codex]
+      binary = "codex"
+      version_pin = "0.130.0"
+
+      [security]
+      allowed_users = ["telegram:123456789"]
+      allowed_chats = ["telegram:123456789"]
+      admin_users = ["telegram:123456789"]
+
+      [security.commands]
+      deny_patterns = []
+      require_admin_patterns = []
+
+      [im]
+      native_thread_visibility = "personal"
+
+      [adapters.telegram]
+      enabled = true
+      bot_token_env = "IM_TELEGRAM_BOT_TOKEN"
+
+      [adapters.lark]
+      enabled = false
+      app_id = "disabled"
+      app_secret_env = "LARK_APP_SECRET"
+      domain = "feishu"
+      allowed_chat_ids = []
+
+      [projects]
+    `);
+
+    expect(config.im.nativeThreadVisibility).toBe("personal");
   });
 
   it("defaults daemon inbound attachment size cap for older configs", () => {

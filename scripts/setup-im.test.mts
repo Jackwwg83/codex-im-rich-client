@@ -88,6 +88,9 @@ describe("setup-im wizard planning", () => {
 
     const config = parseConfigToml(plan.configToml);
     expect(config.im.output.mode).toBe("normal");
+    expect(config.im.nativeThreadVisibility).toBe("project_limited");
+    expect(plan.configToml).toContain("[im]");
+    expect(plan.configToml).toContain('native_thread_visibility = "project_limited"');
     expect(plan.configToml).toContain("[im.output]");
     expect(plan.configToml).toContain('mode = "normal"');
     expect(plan.warnings).toContain(
@@ -118,6 +121,7 @@ describe("setup-im wizard planning", () => {
           "/Users/operator/src/codex-im",
           "user-123",
           "chat-456",
+          "project_limited",
           "codex",
           "0.130.0",
           secret,
@@ -145,6 +149,7 @@ function baseAnswers(input: Partial<SetupAnswers> = {}): SetupAnswers {
     projectCwd: "/Users/operator/src/codex-im",
     allowedUserId: "user-123",
     allowedChatId: "chat-456",
+    nativeThreadVisibility: "project_limited",
     codexBinary: "codex",
     codexVersion: "0.130.0",
     telegramBotToken: "",

@@ -36,6 +36,24 @@ If you need a writable scope outside `cwd` enforced today, configure
 that on Codex's side directly (per-codex `~/.codex/config.toml`
 sandbox configuration) — the IM bridge does not override it.
 
+## Native Thread Visibility
+
+The setup wizard writes:
+
+```toml
+[im]
+native_thread_visibility = "project_limited"
+```
+
+`project_limited` is the default. `/threads`, `/thread`, and `/switch` only
+show or attach to native Codex App conversations whose cwd belongs to a
+configured project that the IM actor can use.
+
+`personal` is an explicit opt-in for a private single-user IM bot. It lets
+allowlisted IM actors view and switch all local Codex App conversations on this
+Mac. Keep `project_limited` for shared bots, group chats, team Slack/Lark
+workspaces, or any setup with multiple allowlisted people.
+
 `pnpm im:doctor` and `pnpm codex-im:status` run a schema-based Codex
 runtime compatibility check. The generated protocol pin in `CODEX_VERSION`
 is still the maintainer/codegen source of truth, but customer machines may run

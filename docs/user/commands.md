@@ -49,10 +49,10 @@ admin logs when you need technical detail.
 | `/new <task>` | Start a new Codex conversation and immediately send `<task>` as the first prompt. |
 | `/new <number-or-name> <task>` | Select a configured project by number/name, start a new conversation there, and immediately send `<task>`. |
 | `/new --title <title>` | Start an empty conversation with an IM-local title; does not start a Codex turn. |
-| `/threads` | List recent native Codex App Server conversations, including conversations created from Codex App or CLI. |
-| `/threads --refresh` | Import recent native Codex App Server conversations into the local IM thread index without promoting their cwd to configured projects. |
-| `/thread <number-or-thread-prefix>` | Show redacted details and recent content for a listed native Codex conversation before switching. |
-| `/switch <number-or-thread-prefix>` | Resume and bind this IM chat to a listed native Codex conversation. |
+| `/threads` | List visible native Codex App Server conversations, including conversations created from Codex App or CLI. Visibility depends on `native_thread_visibility`. |
+| `/threads --refresh` | Import visible native Codex App Server conversations into the local IM thread index without promoting their cwd to configured projects. |
+| `/thread <number-or-thread-prefix>` | Show redacted details and recent content for a visible native Codex conversation before switching. |
+| `/switch <number-or-thread-prefix>` | Resume and bind this IM chat to a visible native Codex conversation. |
 | `/alias <name>` | Give the current conversation a local title (IM only; never sent to Codex). |
 | `/rename <title>` | Rename the current thread. Synced to Codex App Server when supported; otherwise updates the local alias and tells you Codex was not changed. |
 | `/archive` | Archive the current thread. Synced to Codex when supported; otherwise marks the thread archived locally. |
@@ -144,9 +144,18 @@ payloads are redacted or suppressed.
 Customer installs default to:
 
 ```toml
+[im]
+native_thread_visibility = "project_limited"
+
 [im.output]
 mode = "normal"
 ```
+
+`native_thread_visibility = "project_limited"` means native Codex conversations
+are visible only when their cwd belongs to a configured project available to the
+IM actor. `personal` is an explicit opt-in for a private single-user bot; it
+allows allowlisted IM actors to view and switch all local Codex App
+conversations on this Mac.
 
 Normal mode keeps ordinary chat clean:
 

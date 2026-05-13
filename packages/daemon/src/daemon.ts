@@ -129,6 +129,9 @@ const TEXT_FALLBACK_APPROVAL_ACTIONS = Object.freeze([
   "decline",
   "abort",
 ] as const satisfies readonly CallbackTokenAction[]);
+const DEFAULT_NATIVE_THREAD_VISIBILITY = "project_limited" as const;
+const NATIVE_THREAD_ACCESS_DENIED_MESSAGE =
+  "This Codex conversation is outside configured projects. Use personal native thread visibility only for a private single-user IM bot, or add the project during setup.";
 const DEFAULT_BIND_RETRY_DELAYS_MS = [50, 150, 350] as const;
 type ComputerUseDynamicToolSpec = {
   readonly namespace?: string;
@@ -485,6 +488,14 @@ interface DaemonNativeThreadEntry {
   readonly title: string;
   readonly cwd: string;
   readonly updatedAt?: number;
+}
+
+type DaemonNativeThreadVisibility = "project_limited" | "personal";
+
+interface DaemonNativeThreadAccess {
+  readonly visible: boolean;
+  readonly projectLabel: string;
+  readonly projectId?: string;
 }
 
 interface DaemonThreadStartParams {
@@ -2450,6 +2461,12 @@ export class Daemon {
         const nativeThreads = this.#nativeThreadEntries(
           await runtime.threadList({ limit: 20, archived: false, sortDirection: "desc" }),
         );
+        const visibleNativeThreads = this.#visibleNativeThreads(
+          nativeThreads,
+          inbound.target,
+          inbound.sender,
+        );
+        const hiddenNativeCount = nativeThreads.length - visibleNativeThreads.length;
         if (refreshRequested) {
           const repository = this.#threadSessionRepository();
           if (repository?.upsert === undefined) {
@@ -2459,7 +2476,7 @@ export class Daemon {
           const importedCount = importNativeThreads({
             repository,
             target: inbound.target,
-            threads: nativeThreads,
+            threads: visibleNativeThreads,
             nowIso: this.#nowIso(),
           });
           await this.#editInboundMessage(
@@ -2467,26 +2484,46 @@ export class Daemon {
             [
               `Imported ${importedCount} native Codex threads.`,
               ...(importedCount === 0
-                ? ["No native Codex threads found."]
-                : nativeThreads.map((thread, index) =>
-                    this.#formatNativeThreadListLine(index + 1, thread),
+                ? ["No visible native Codex threads found."]
+                : visibleNativeThreads.map((thread, index) =>
+                    this.#formatNativeThreadListLine(
+                      index + 1,
+                      thread,
+                      this.#nativeThreadAccess(thread, inbound.target, inbound.sender).projectLabel,
+                    ),
                   )),
+              ...this.#nativeThreadHiddenLines(hiddenNativeCount),
               "Use:",
               "/switch 1",
             ].join("\n"),
           );
           return;
         }
-        if (nativeThreads.length > 0) {
+        if (visibleNativeThreads.length > 0) {
           await this.#editInboundMessage(
             inbound.messageRef,
             [
               "Recent Codex threads:",
-              ...nativeThreads.map((thread, index) =>
-                this.#formatNativeThreadListLine(index + 1, thread),
+              ...visibleNativeThreads.map((thread, index) =>
+                this.#formatNativeThreadListLine(
+                  index + 1,
+                  thread,
+                  this.#nativeThreadAccess(thread, inbound.target, inbound.sender).projectLabel,
+                ),
               ),
+              ...this.#nativeThreadHiddenLines(hiddenNativeCount),
               "Use:",
               "/switch 1",
+            ].join("\n"),
+          );
+          return;
+        }
+        if (hiddenNativeCount > 0) {
+          await this.#editInboundMessage(
+            inbound.messageRef,
+            [
+              "No visible native Codex threads.",
+              ...this.#nativeThreadHiddenLines(hiddenNativeCount),
             ].join("\n"),
           );
           return;
@@ -2531,7 +2568,7 @@ export class Daemon {
       projectId === undefined ? { limit: 20 } : { projectId, limit: 20 };
     const records = repository
       .listForTarget(inbound.target, listOptions)
-      .filter((record) => this.#projectAllowed(record.projectId, inbound.target, inbound.sender));
+      .filter((record) => this.#threadSessionVisible(record, inbound.target, inbound.sender));
 
     if (records.length === 0) {
       await this.#editInboundMessage(inbound.messageRef, "No known Codex threads.");
@@ -2571,7 +2608,15 @@ export class Daemon {
         const nativeThreads = this.#nativeThreadEntries(
           await runtime.threadList({ limit: 20, archived: false, sortDirection: "desc" }),
         );
-        const nativeSelected = this.#selectNativeThread(nativeThreads, selector);
+        const visibleNativeThreads = this.#visibleNativeThreads(
+          nativeThreads,
+          inbound.target,
+          inbound.sender,
+        );
+        const nativeSelected = this.#selectNativeThread(
+          /^\d+$/u.test(selector) ? visibleNativeThreads : nativeThreads,
+          selector,
+        );
         if (nativeSelected.kind === "ambiguous") {
           await this.#editInboundMessage(
             inbound.messageRef,
@@ -2580,8 +2625,29 @@ export class Daemon {
           return;
         }
         if (nativeSelected.kind === "selected") {
-          await this.#showNativeThreadDetail(inbound, nativeSelected.thread, nativeSelected.index);
+          const access = this.#nativeThreadAccess(
+            nativeSelected.thread,
+            inbound.target,
+            inbound.sender,
+          );
+          if (!access.visible) {
+            await this.#editInboundMessage(inbound.messageRef, NATIVE_THREAD_ACCESS_DENIED_MESSAGE);
+            return;
+          }
+          await this.#showNativeThreadDetail(
+            inbound,
+            nativeSelected.thread,
+            nativeSelected.index,
+            access.projectLabel,
+          );
           return;
+        }
+        if (/^\d+$/u.test(selector) && visibleNativeThreads.length === 0) {
+          const hiddenSelected = this.#selectNativeThread(nativeThreads, selector);
+          if (hiddenSelected.kind === "selected") {
+            await this.#editInboundMessage(inbound.messageRef, NATIVE_THREAD_ACCESS_DENIED_MESSAGE);
+            return;
+          }
         }
       } catch (error) {
         this.#emitAuditEvent("runtime.thread_list_failed", {
@@ -2599,7 +2665,7 @@ export class Daemon {
     }
     const records = repository
       .listForTarget(inbound.target, { limit: 20 })
-      .filter((record) => this.#projectAllowed(record.projectId, inbound.target, inbound.sender));
+      .filter((record) => this.#threadSessionVisible(record, inbound.target, inbound.sender));
     const selected = this.#selectThreadRecord(records, selector);
     if (selected.kind === "missing") {
       await this.#editInboundMessage(
@@ -2649,7 +2715,15 @@ export class Daemon {
       const nativeThreads = this.#nativeThreadEntries(
         await runtime.threadList({ limit: 20, archived: false, sortDirection: "desc" }),
       );
-      const nativeSelected = this.#selectNativeThread(nativeThreads, selector);
+      const visibleNativeThreads = this.#visibleNativeThreads(
+        nativeThreads,
+        inbound.target,
+        inbound.sender,
+      );
+      const nativeSelected = this.#selectNativeThread(
+        /^\d+$/u.test(selector) ? visibleNativeThreads : nativeThreads,
+        selector,
+      );
       if (nativeSelected.kind === "ambiguous") {
         await this.#editInboundMessage(
           inbound.messageRef,
@@ -2658,14 +2732,35 @@ export class Daemon {
         return;
       }
       if (nativeSelected.kind === "selected") {
-        await this.#switchNativeThread(inbound, nativeSelected.thread, nativeSelected.index);
+        const access = this.#nativeThreadAccess(
+          nativeSelected.thread,
+          inbound.target,
+          inbound.sender,
+        );
+        if (!access.visible) {
+          await this.#editInboundMessage(inbound.messageRef, NATIVE_THREAD_ACCESS_DENIED_MESSAGE);
+          return;
+        }
+        await this.#switchNativeThread(
+          inbound,
+          nativeSelected.thread,
+          nativeSelected.index,
+          access.projectLabel,
+        );
         return;
+      }
+      if (/^\d+$/u.test(selector) && visibleNativeThreads.length === 0) {
+        const hiddenSelected = this.#selectNativeThread(nativeThreads, selector);
+        if (hiddenSelected.kind === "selected") {
+          await this.#editInboundMessage(inbound.messageRef, NATIVE_THREAD_ACCESS_DENIED_MESSAGE);
+          return;
+        }
       }
     }
 
     const records = repository
       .listForTarget(inbound.target, { limit: 20 })
-      .filter((record) => this.#projectAllowed(record.projectId, inbound.target, inbound.sender));
+      .filter((record) => this.#threadSessionVisible(record, inbound.target, inbound.sender));
     const selected = this.#selectThreadRecord(records, selector);
     if (selected.kind === "missing") {
       await this.#editInboundMessage(
@@ -4312,17 +4407,94 @@ export class Daemon {
     });
   }
 
-  #formatNativeThreadListLine(selector: number, thread: DaemonNativeThreadEntry): string {
+  #formatNativeThreadListLine(
+    selector: number,
+    thread: DaemonNativeThreadEntry,
+    projectLabel = projectDisplayNameFromCwd(thread.cwd),
+  ): string {
     const updated = thread.updatedAt === undefined ? "" : `\nupdated: ${thread.updatedAt}`;
-    return `${selector}. ${thread.title}\nproject: ${projectDisplayNameFromCwd(thread.cwd)}${updated}\nid: ${this.#shortId(
+    return `${selector}. ${thread.title}\nproject: ${projectLabel}${updated}\nid: ${this.#shortId(
       thread.threadId,
     )}`;
+  }
+
+  #nativeThreadVisibility(): DaemonNativeThreadVisibility {
+    if (typeof this.#config !== "object" || this.#config === null) {
+      return DEFAULT_NATIVE_THREAD_VISIBILITY;
+    }
+    const im = (this.#config as { im?: unknown }).im;
+    if (typeof im !== "object" || im === null) {
+      return DEFAULT_NATIVE_THREAD_VISIBILITY;
+    }
+    const value = (im as { nativeThreadVisibility?: unknown }).nativeThreadVisibility;
+    return value === "personal" ? "personal" : DEFAULT_NATIVE_THREAD_VISIBILITY;
+  }
+
+  #visibleNativeThreads(
+    threads: readonly DaemonNativeThreadEntry[],
+    target: Target,
+    sender: SecurityPolicySender,
+  ): DaemonNativeThreadEntry[] {
+    return threads.filter((thread) => this.#nativeThreadAccess(thread, target, sender).visible);
+  }
+
+  #nativeThreadAccess(
+    thread: DaemonNativeThreadEntry,
+    target: Target,
+    sender: SecurityPolicySender,
+  ): DaemonNativeThreadAccess {
+    if (this.#nativeThreadVisibility() === "personal") {
+      return {
+        visible: true,
+        projectLabel: projectDisplayNameFromCwd(thread.cwd),
+      };
+    }
+    const entry = this.#knownConfigCwds(target, sender).find(
+      (candidate) => candidate.cwd === thread.cwd,
+    );
+    if (entry === undefined) {
+      return {
+        visible: false,
+        projectLabel: projectDisplayNameFromCwd(thread.cwd),
+      };
+    }
+    return {
+      visible: true,
+      projectId: entry.alias,
+      projectLabel: entry.alias,
+    };
+  }
+
+  #threadSessionVisible(
+    record: ThreadSessionRecord,
+    target: Target,
+    sender: SecurityPolicySender,
+  ): boolean {
+    if (record.projectId !== undefined) {
+      return this.#projectAllowed(record.projectId, target, sender);
+    }
+    if (this.#nativeThreadVisibility() === "personal") {
+      return true;
+    }
+    if (record.cwd === undefined) {
+      return false;
+    }
+    return this.#knownConfigCwds(target, sender).some((entry) => entry.cwd === record.cwd);
+  }
+
+  #nativeThreadHiddenLines(count: number): string[] {
+    if (count <= 0) {
+      return [];
+    }
+    const noun = count === 1 ? "thread" : "threads";
+    return [`Hidden ${count} native Codex ${noun} outside configured projects.`];
   }
 
   async #showNativeThreadDetail(
     inbound: { target: Target; messageRef?: DaemonMessageRef },
     thread: DaemonNativeThreadEntry,
     index: number,
+    projectLabel: string,
   ): Promise<void> {
     const runtime = this.#currentRuntime();
     if (runtime?.threadRead === undefined) {
@@ -4338,7 +4510,7 @@ export class Daemon {
         selector: index + 1,
         threadId: thread.threadId,
         title: thread.title,
-        projectLabel: projectDisplayNameFromCwd(thread.cwd),
+        projectLabel,
         response,
         ...(thread.updatedAt === undefined ? {} : { updatedAt: thread.updatedAt }),
       };
@@ -4453,7 +4625,7 @@ export class Daemon {
   }
 
   #threadSnippet(text: string): string {
-    const normalized = redactLocalPathsForNormalIm(text).replace(/\s+/gu, " ").trim();
+    const normalized = redactLocalPathsForNormalIm(redact(text)).replace(/\s+/gu, " ").trim();
     return normalized.length <= 180 ? normalized : `${normalized.slice(0, 177)}...`;
   }
 
@@ -4494,6 +4666,7 @@ export class Daemon {
     inbound: { target: Target; messageRef?: DaemonMessageRef },
     thread: DaemonNativeThreadEntry,
     index: number,
+    projectLabel: string,
   ): Promise<void> {
     const runtime = this.#currentRuntime();
     const sessionRouter = this.#daemonSessionRouter(this.#sessionRouter);
@@ -4504,7 +4677,6 @@ export class Daemon {
 
     try {
       await runtime.threadResume({ threadId: thread.threadId });
-      const projectLabel = projectDisplayNameFromCwd(thread.cwd);
       sessionRouter.bind(inbound.target, {
         contextKind: "native_thread",
         projectLabel,
@@ -4522,7 +4694,7 @@ export class Daemon {
       });
       await this.#editInboundMessage(
         inbound.messageRef,
-        `Switched to ${index + 1} ${thread.title} (${this.#shortId(thread.threadId)})\nproject: ${projectDisplayNameFromCwd(thread.cwd)}`,
+        `Switched to ${index + 1} ${thread.title} (${this.#shortId(thread.threadId)})\nproject: ${projectLabel}`,
       );
     } catch (error) {
       this.#emitAuditEvent("runtime.thread_resume_failed", {

@@ -15,6 +15,7 @@ import { type Interface, createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 export type SetupPlatform = "telegram" | "lark" | "dingtalk" | "slack";
+export type SetupNativeThreadVisibility = "project_limited" | "personal";
 
 export type SetupSecretKind =
   | "telegramBotToken"
@@ -29,6 +30,7 @@ export interface SetupAnswers {
   readonly projectCwd: string;
   readonly allowedUserId: string;
   readonly allowedChatId: string;
+  readonly nativeThreadVisibility: SetupNativeThreadVisibility;
   readonly codexBinary: string;
   readonly codexVersion: string;
   readonly telegramBotToken: string;
@@ -197,6 +199,9 @@ function renderConfigToml(home: string, answers: SetupAnswers): string {
     "[security.commands]",
     "deny_patterns = []",
     "require_admin_patterns = []",
+    "",
+    "[im]",
+    `native_thread_visibility = ${tomlString(answers.nativeThreadVisibility)}`,
     "",
     "[computer_use]",
     "enabled = false",
@@ -378,6 +383,14 @@ function parsePlatform(value: string | undefined): SetupPlatform {
   throw new Error("setup:im: --platform must be telegram, lark, dingtalk, or slack");
 }
 
+function parseNativeThreadVisibility(value: string | undefined): SetupNativeThreadVisibility {
+  const normalized = nonEmpty(value ?? "", "project_limited");
+  if (normalized === "project_limited" || normalized === "personal") {
+    return normalized;
+  }
+  throw new Error("setup:im: native thread visibility must be project_limited or personal");
+}
+
 async function collectAnswers(options: CliOptions): Promise<SetupAnswers> {
   if (!process.stdin.isTTY) {
     const lines = await readPipedLines();
@@ -419,6 +432,11 @@ async function collectAnswersWithPrompts(
   const projectCwd = nonEmpty(await prompt(`Project cwd [${process.cwd()}]: `), process.cwd());
   const allowedUserId = await promptRequired(prompt, "Allowed platform user id: ");
   const allowedChatId = await promptRequired(prompt, "Allowed chat/channel id: ");
+  const nativeThreadVisibility = parseNativeThreadVisibility(
+    await prompt(
+      "Native thread visibility [project_limited] (personal only for a private single-user IM bot): ",
+    ),
+  );
 
   return {
     platform,
@@ -426,6 +444,7 @@ async function collectAnswersWithPrompts(
     projectCwd,
     allowedUserId,
     allowedChatId,
+    nativeThreadVisibility,
     codexBinary: nonEmpty(await prompt("Codex binary [codex]: "), "codex"),
     codexVersion: nonEmpty(
       await prompt(`Codex version pin [${DEFAULT_CODEX_VERSION}]: `),
